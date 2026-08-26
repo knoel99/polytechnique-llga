@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multimodal Generative AI — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M1 · Période 2 › Option recommandée</div>
+    <div class="code-line">CSC_52002_EP</div>
+    <h1>Multimodal Generative AI</h1>
+    <div class="tags"><span class="badge recommended">Recommandé — track LLGA</span></div>
+    <div class="facts">Enseignante&nbsp;: Vicky Kalogeiton (École Polytechnique, CVLab/ECL) · 36&nbsp;h · 4,5 ECTS · VAE, GAN, diffusion, CLIP et text-to-image — comment les modèles génératifs croisent texte, image et données structurées.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: le paysage génératif</a></li>
+    <li><a href="#ch1">VAE et espaces latents</a></li>
+    <li><a href="#ch2">GAN et adversarial</a></li>
+    <li><a href="#ch3">Diffusion&nbsp;: DDPM</a></li>
+    <li><a href="#ch4">Échantillonnage guidé et latent</a></li>
+    <li><a href="#ch5">CLIP et l'alignement vision-langage</a></li>
+    <li><a href="#ch6">Multimodalité&nbsp;: au-delà de l'image</a></li>
+    <li><a href="#ch7">Évaluation, coûts, éthique</a></li>
+    <li><a href="#ex">Exercices</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: le paysage génératif</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappels des modules précédents</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>ELBO / VAE</strong> (Deep Learning, ch. 7)&nbsp;:
+    \(\mathbb{E}_q[\log p_\theta(x\mid z)] - \mathrm{KL}(q_\phi(z\mid x) \| p(z))\)&nbsp;;
+    reparametrization trick&nbsp;;</li>
+    <li><strong>CNN</strong>&nbsp;: convolutions, U-Net (skip connections encodeur-décodeur)&nbsp;;</li>
+    <li><strong>Transformers &amp; cross-attention</strong>&nbsp;: requêtes image, clés/valeurs
+    texte — le mécanisme qui «&nbsp;injecte&nbsp;» le prompt dans un générateur&nbsp;;</li>
+    <li><strong>Gaussiennes</strong>&nbsp;: bruit additif, \(\mathcal{N}(0,1)\), reparamétrage —
+    la diffusion n'est qu'une chaîne de bruits gaussiens (Refresher Statistics, chaînes).</li>
+  </ul>
+</div>
+
+<table class="tbl">
+<thead><tr><th>Famille</th><th>Apprentissage</th><th>Forces</th><th>Faiblesses</th></tr></thead>
+<tbody>
+<tr><td>VAE</td><td>vraisemblance (ELBO)</td><td>latent structuré, rapide</td><td>flou, ELBO lâche</td></tr>
+<tr><td>GAN</td><td>adversaire</td><td>net, réaliste</td><td>instable, modes perdus</td></tr>
+<tr><td>Diffusion</td><td>débruitage (score)</td><td>SOTA qualité/diversité, guidance</td><td>lent (multi-pas), coûteux</td></tr>
+<tr><td>Autorégressif</td><td>cross-entropy séquentielle</td><td>probabiliste exact</td><td>séquentiel lent</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. VAE et espaces latents</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — VAE conditionnel &amp; hiérarchique</span>
+  Conditionner la génération&nbsp;: \(p_\theta(x \mid c)\) avec \(c\) une classe, un texte
+  (encodé), une autre modalité. Les <strong>VAE hiérarchiques</strong> empilent des latents&nbsp;;
+  les <strong>VQ-VAE</strong> quantifient le latent en un dictionnaire appris (codes discrets —
+  l'ancêtre des tokens d'images&nbsp;; <em>vector quantization</em> = K-means_dur dans la
+  boucle)&nbsp;; VQ-VAE-2 atteint la fidélité d'image avant la diffusion.
+</div>
+
+<div class="prop">
+  <span class="tag">Ce que le latent achète</span>
+  Compresser \(512 \times 512 \times 3\) en \(64 \times 64\) latents = \(\times 64\) moins de
+  calculs&nbsp;; tous les gros modèles génératifs d'images (Stable Diffusion, DALL·E&nbsp;2/3)
+  génèrent en espace latent — l'autoencodeur (léger) et le générateur (lourd) sont découplés.
+  Le même principe s'applique aux <em>graphes</em>&nbsp;: graphe latent, codes discrets
+  (module Graph ML, ch. 7).
+</div>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. GAN et adversarial</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Rappel du minimax et ses raffinements</span>
+  $$\min_G \max_D\ \mathbb{E}_x[\log D(x)] + \mathbb{E}_{z}[\log(1 - D(G(z)))]$$
+  Pertes alternatives&nbsp;: <em>least-squares GAN</em>, <em>hinge</em>&nbsp;;
+  <strong>conditionnel</strong>&nbsp;: \(G(z, c)\), \(D(x, c)\) — Pix2Pix (image à image avec
+  contrainte de reconstruction L1)&nbsp;; CycleGAN (sans paires, cycle de consistence&nbsp;:
+  \(G_{XY}(G_{YX}(y)) \approx y\)).
+</div>
+
+<ul>
+  <li><strong>StyleGAN</strong>&nbsp;: injection de style par couche (AdaIN), mapping network —
+  contrôle fin du style (coarse→fine)&nbsp;; the «&nbsp;style&nbsp;» latent découple contenu/style&nbsp;;</li>
+  <li><strong>Diagnostic industriel</strong>&nbsp;: mode collapse (le générateur produit
+  \(\sqrt{\;}\) toujours la même chose), oscillations&nbsp;; monitoring par diversité
+  (LPIPS) et FID&nbsp;;</li>
+  <li><strong>Pourquoi la diffusion a gagné</strong>&nbsp;: perte stable (simple MSE de
+  débruitage), pas d'équilibre à maintenir, diversité naturelle — mais les GAN restent
+  rapides (1 pas) et vivent dans la super-résolution et l'éditing.</li>
+</ul>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Diffusion&nbsp;: DDPM</h2>
+
+<div class="thm">
+  <span class="tag">Modèle 3.1 — Processus avant (bruitage)</span>
+  Chaîne de Markov qui ajoute du bruit gaussien&nbsp;:
+  $$q(x_t \mid x_{t-1}) = \mathcal{N}\big(\sqrt{1 - \beta_t}\, x_{t-1},\ \beta_t I\big),
+  \qquad t = 1, \dots, T,$$
+  avec variance calendar \(\beta_t\) croissante&nbsp;; propriété clé (composition de
+  gaussiennes)&nbsp;:
+  $$q(x_t \mid x_0) = \mathcal{N}\big(\sqrt{\bar\alpha_t}\, x_0,\ (1 - \bar\alpha_t) I\big),
+  \qquad \bar\alpha_t = \prod_{s \leq t}(1 - \beta_s).$$
+  Pour \(T = 1000\), \(\bar\alpha_T \approx 0\) : l'image est devenue du bruit pur.
+</div>
+
+<div class="thm">
+  <span class="tag">Modèle 3.2 — Processus inverse appris (débruitage, Ho et al., 2020)</span>
+  $$p_\theta(x_{t-1} \mid x_t) = \mathcal{N}\big(\mu_\theta(x_t, t),\ \sigma_t^2 I\big),$$
+  et l'entraînement se réduit à <strong>une simple MSE</strong>&nbsp;:
+  $$\mathcal{L} = \mathbb{E}_{x_0, \epsilon, t}\big[\|\epsilon - \epsilon_\theta(x_t, t)\|^2\big],
+  \qquad x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1 - \bar\alpha_t}\,\epsilon.$$
+  Le réseau \(\epsilon_\theta\) (U-Net ou Transformer — DiT) apprend à <em>prédire le
+  bruit</em>. Échantillonnage&nbsp;: partir de \(x_T \sim \mathcal{N}(0, I)\) et débruiter
+  \(T\) fois&nbsp;; <strong>DDIM</strong>&nbsp;: sous-échantillonner les pas (déterministe,
+  20-50 pas)&nbsp;; les <em>score-based / SDE</em> (Song et al.) unifient le point de vue
+  (prédire \(\nabla_x \log p_t(x)\), le «&nbsp;score&nbsp;»).
+</div>
+
+<pre class="code"><code>import torch
+
+def forward_diffusion(x0, t, alphas_bar, eps=None):
+    """x_t = sqrt(a_bar_t) x0 + sqrt(1 - a_bar_t) * eps   (en une etape !)"""
+    if eps is None: eps = torch.randn_like(x0)
+    return alphas_bar[t].sqrt()[:, None, None, None] * x0 \
+         + (1 - alphas_bar[t]).sqrt()[:, None, None, None] * eps, eps
+
+# Entrainement (boucle typique DDPM) :
+# x0 = batch d'images ; t ~ U{1..T}
+xt, eps = forward_diffusion(x0, t, alphas_bar)
+loss = torch.nn.functional.mse_loss(unet(xt, t), eps)   # predire le bruit
+loss.backward()</code></pre>
+
+<div class="note">
+  <span class="tag">Analogies LLGA</span> Le U-Net de diffusion utilise la <em>self-attention</em>
+  (transformer sur grille)&nbsp;; les DiT remplacent tout par des transformers sur patches&nbsp;;
+  et la <em>diffusion sur graphes</em> (DiGress) bruite/débruite types de nœuds et arêtes —
+  le même algorithme, un autre espace (module Graph ML, ch. 7).
+</div>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Échantillonnage guidé et latent</h2>
+
+<div class="thm">
+  <span class="tag">Classifier-free guidance (CFG)</span>
+  Entraîner \(\epsilon_\theta(x_t, t, c)\) avec \(c\) parfois remplacé par \(\varnothing\)
+  (dropout de condition, ~10&nbsp;%)&nbsp;; à la génération, <em>exagérer</em> la direction
+  conditionnelle&nbsp;:
+  $$\tilde\epsilon = \epsilon_\theta(x_t, t, \varnothing) + w\big(\epsilon_\theta(x_t, t, c)
+  - \epsilon_\theta(x_t, t, \varnothing)\big), \qquad w &gt; 1.$$
+  \(w\) règle le compromis fidélité/diversité — le curseur «&nbsp;créativité&nbsp;» de tous
+  les outils text-to-image.
+</div>
+
+<ul>
+  <li><strong>Latent diffusion (Rombach et al., 2022)</strong>&nbsp;: autoencodeur + diffusion
+  <em>dans le latent</em>&nbsp;; cross-attention sur les tokens du prompt (text encoder
+  CLIP)&nbsp;; c'est l'architecture de Stable Diffusion&nbsp;;</li>
+  <li><strong>Contrôle</strong>&nbsp;: ControlNet (conditionner par contours/profondeur/pose)&nbsp;;
+  inpainting, img2img (départ partiellement bruité)&nbsp;;</li>
+  <li><strong>Accélération</strong>&nbsp;: distillation (1-few pas&nbsp;; LCM), solveurs
+  rapides (DPM-Solver)&nbsp;; quantification — panorama engineering repris en M2 ML Ops.</li>
+</ul>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. CLIP et l'alignement vision-langage</h2>
+
+<div class="thm">
+  <span class="tag">CLIP (Radford et al., 2021)</span>
+  Encoder <em>conjointement</em> images et textes dans un espace partagé&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>encodeur image (ViT) et encodeur texte (transformer)&nbsp;; 400M paires
+    (image, légende) collectées sur le web&nbsp;;</li>
+    <li>apprentissage <strong>contrastif</strong>&nbsp;: dans un batch de \(N\) paires,
+    maximiser les diagonales de la matrice de similarité
+    \(S_{ij} = \langle v_i, t_j\rangle / \tau\) (softmax croisé = classification
+    «&nbsp;la bonne légende parmi N&nbsp;»)&nbsp;;</li>
+    <li>résultat&nbsp;: <em>zero-shot</em>&nbsp;: classifier en comparant l'image aux
+    embeddings des libellés textuels — plus de classes fixes.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">CLIP, le couteau suisse multimodal</span> CLIP sert partout&nbsp;:
+  text encoder des diffusion models&nbsp;; juge de similarité (R-Precision)&nbsp;; retrieval
+  image-texte&nbsp;; modération. Le pont avec le master&nbsp;: on peut aussi aligner
+  <em>graphes</em> et texte dans un espace commun (embeddings GNN ↔ LLM, Graph ML ch. 8) —
+  la «&nbsp;modalité&nbsp;» graphe entre dans la même machinerie d'alignement contrastif.
+</div>
+
+<pre class="code"><code>from PIL import Image
+from transformers import CLIPProcessor, CLIPModel
+import torch
+
+model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+proc  = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+img = Image.open("graphe.png")
+texts = ["a graph drawing", "a cat", "a molecule", "a city map"]
+inputs = proc(text=texts, images=img, return_tensors="pt", padding=True)
+with torch.no_grad():
+    out = model(**inputs)
+probs = out.logits_per_image.softmax(dim=1)   # zero-shot classification
+print(dict(zip(texts, probs[0].tolist())))</code></pre>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Multimodalité&nbsp;: au-delà de l'image</h2>
+
+<ul>
+  <li><strong>Captioning / VQA</strong>&nbsp;: encodeur image (ViT) + décodeur texte
+  (transformer)&nbsp;; entraînés sur des paires&nbsp;; les VQA graphiques («&nbsp;quel est le
+  plus court chemin&nbsp;?&nbsp;») — raisonnement visuel&nbsp;;</li>
+  <li><strong>LLMs multimodaux</strong>&nbsp;: tokens d'images (VQ) ou projecteurs de patches
+  injectés dans le contexte du LLM (vision-language models)&nbsp;; même patron pour
+  l'audio&nbsp;; module M2 pour la suite&nbsp;;</li>
+  <li><strong>Vidéo</strong>&nbsp;: latents spatio-temporels, attention 3D&nbsp;;
+  <strong>3D/objets</strong>&nbsp;: diffusion sur points/meshes (lien M2 Geometric DL)&nbsp;;</li>
+  <li><strong>Données structurées génératives</strong>&nbsp;: text-to-graph
+  (générer le schéma d'un réseau), graph-to-text (rapport depuis un graphe de connaissances) —
+  l'intersection exacte des modules Graph ML et NLP&nbsp;;</li>
+  <li><strong>Agents multimodaux</strong>&nbsp;: percevoir (screenshot) et agir (clic, code) —
+  les agents GUI combinent vision + LLM + outils (module RL, ch. 7).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Évaluation, coûts, éthique</h2>
+
+<ul>
+  <li><strong>Métriques</strong>&nbsp;: FID (Fréchet distance entre gaussiennes fitted sur
+  features Inception — une application directe de la distance de Wasserstein-Bures du module
+  OT&nbsp;!), LPIPS (diversité), CLIPScore (alignement), études humaines&nbsp;;</li>
+  <li><strong>Coûts</strong>&nbsp;: entraînement diffusion = milliers de GPU-heures&nbsp;;
+  inférence = N pas de U-Net&nbsp;; le compromis qualité/latence gouverne le choix
+  industriel&nbsp;;</li>
+  <li><strong>Éthique</strong>&nbsp;: deepfakes, watermarks (C2PA), biais des données
+  web&nbsp;; droits d'auteur et entraînement&nbsp;; le cadre légal européen (AI Act) —
+  croisé avec le séminaire d'éthique du M2.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Projet</span> Pipeline complet&nbsp;: fine-tuner léger d'un modèle latent
+  diffusion sur un petit jeu thématique (LoRA sur l'attention croisée), avec CFG
+  paramétrable&nbsp;; évaluer FID/CLIPScore avant/après et analyser l'effet du poids de
+  guidance \(w\).
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Composition des bruits.</strong> Montrer par récurrence que
+  \(q(x_t \mid x_0) = \mathcal{N}(\sqrt{\bar\alpha_t} x_0, (1-\bar\alpha_t) I)\)&nbsp;;
+  pourquoi cette forme fermée rend l'entraînement efficace&nbsp;?</li>
+
+  <li><strong>ELBO DDPM.</strong> Décomposer la log-vraisemblance
+  \(\log p_\theta(x_0) = \mathrm{ELBO}\) en termes par pas et montrer que la MSE de bruit
+  domine (les KL entre gaussiennes sont fermées).</li>
+
+  <li><strong>Mode collapse.</strong> Simuler un GAN 2D gaussien→anneau&nbsp;; observer le
+  collapse&nbsp;; comparer à une diffusion entraînée sur le même jeu (diversité par LPIPS).</li>
+
+  <li><strong>CFG.</strong> Montrer que \(w = 1\) redonne la prédiction conditionnelle et
+  \(w = 0\) l'inconditionnelle&nbsp;; générer une grille \(w \in \{0, 1, 5, 10\}\) et
+  commenter le compromis.</li>
+
+  <li><strong>CLIP zero-shot.</strong> Mesurer l'accuracy zero-shot d'un CLIP fine-tuné vs
+  ResNet entraîné sur 10 classes personnalisées en fonction de la taille d'entraînement&nbsp;;
+  où se croisent les courbes&nbsp;?</li>
+
+  <li><strong>FID et Wasserstein.</strong> Rappeler la formule de \(W_2^2\) entre gaussiennes
+  (module OT) et montrer que le FID en est une estimation (features&nbsp;; biais d'échantillon).</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>J. Ho, A. Jain, P. Abbeel, <a href="https://arxiv.org/abs/2006.11239">Denoising Diffusion Probabilistic Models</a>, NeurIPS 2020.</li>
+  <li>R. Rombach et al., <a href="https://arxiv.org/abs/2112.10752">High-Resolution Image Synthesis with Latent Diffusion Models</a>, CVPR 2022 — Stable Diffusion.</li>
+  <li>A. Radford et al., <a href="https://arxiv.org/abs/2103.00020">Learning Transferable Visual Models From Natural Language Supervision</a> (CLIP), ICML 2021.</li>
+  <li>I. Goodfellow et al., GAN, NIPS 2014&nbsp;; T. Karras et al., <a href="https://arxiv.org/abs/1812.04948">A Style-Based Generator Architecture</a> (StyleGAN), CVPR 2019.</li>
+  <li>A. van den Oord et al., VQ-VAE, NeurIPS 2017&nbsp;; D. Kingma &amp; M. Welling, VAE, ICLR 2014.</li>
+  <li>Y. Song et al., <a href="https://arxiv.org/abs/2011.13456">Score-Based Generative Modeling through SDEs</a>, ICLR 2021&nbsp;; J. Song et al., DDIM, ICLR 2021.</li>
+  <li>L. Zhang, V. Kalogeiton et al. — travaux du CVLab (vidéo, action recognition)&nbsp;; W. Peebles &amp; S. Xie, <a href="https://arxiv.org/abs/2212.09748">DiT</a>, ICCV 2023.</li>
+  <li>S. Luo et al., <a href="https://github.com/rotot0/tab-ddpm">TabDDPM</a> / Vignac et al., <a href="https://arxiv.org/abs/2302.01542">DiGress</a> — diffusion sur données tabulaires/graphes (pont LLGA).</li>
+  <li><a href="https://huggingface.co/docs/diffusers">HuggingFace Diffusers</a> — l'outil des TP.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p2-optimal-transport.html"><span class="dir">← Précédent</span> Computational Optimal Transport</a>
+  <a class="next" href="m2-large-language-models.html"><span class="dir">Suivant</span> Large Language Models (M2)</a>
+</nav>
+
+</div>
+</body>
+</html>
