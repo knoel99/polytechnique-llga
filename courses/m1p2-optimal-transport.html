@@ -98,7 +98,7 @@
   <span class="tag">Proposition 0.2 — Mesure image (pushforward) et lemme de transfert (démontré)</span>
   Pour \(T : \mathbb{R}^d \to \mathbb{R}^d\) mesurable, la <strong>mesure image</strong>
   est \(T_\#\mu(A) = \mu\big(T^{-1}(A)\big)\) («&nbsp;la masse de ce qui part dans
-  \(A\)</strong>&nbsp;»). <strong>Lemme de transfert</strong>&nbsp;: pour toute \(f\)
+  \(A\)&nbsp;»). <strong>Lemme de transfert</strong>&nbsp;: pour toute \(f\)
   mesurable positive ou bornée,
   $$\int f\,d(T_\#\mu) = \int f \circ T\,d\mu.$$
   <div class="proof">
@@ -531,7 +531,855 @@ print("sliced  :", ot.sliced_wasserstein_distance(xs, xt, n_projections=500))
 print("W2 1d :", ot.wasserstein1d(xs[:,0], xt[:,0])**0.5)</code></pre>
 </section>
 
-<!-- A_COMPLETER -->
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. OT et machine learning</h2>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Adaptation de domaine (domain adaptation), dérive de covariates</span>
+  Un problème d'<strong>adaptation de domaine</strong> fournit une <em>source</em> étiquetée
+  \((x_i, y_i)_{i \leq n} \sim \mu_S\) sur \(\mathcal{X} \times \mathcal{Y}\) et une
+  <em>cible</em> non étiquetée \((z_j)_{j \leq m} \sim \mu_T\) sur \(\mathcal{X}\).
+  Hypothèse de travail (<em>covariate shift</em>)&nbsp;: la règle d'étiquetage
+  \(P(Y\,|\,X)\) est la même dans les deux domaines, mais les marginales
+  \(\mu_S \neq \mu_T\) (capteurs, populations, styles d'images…). Un classifieur
+  entraîné sur la source subit le décalage des distributions&nbsp;; l'idée OT&nbsp;:
+  <strong>transporter la source sur la cible</strong> avant d'apprendre — exactement le
+  problème de Monge du ch. 1, appliqué aux nuages de features.
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithme OTDA — transporter, propager les étiquettes, prédire (Courty, Flamary et al., IEEE TPAMI 2016)</span>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li><strong>Coûts</strong>&nbsp;: \(C_{ij} = \|x_i - z_j\|^2\) (features centrées-réduites,
+    éventuellement noyau ou deep features, cf. module Deep Learning M1P1, chapitre 8
+    «&nbsp;transfer learning&nbsp;»).</li>
+    <li><strong>Régularisation des classes</strong>&nbsp;: on sait de plus que les \(x_i\)
+    portent des étiquettes — on pénalise les plans qui éparpillent une même classe,
+    par une pénalité convexe de type group-lasso sur les lignes de \(\Gamma\) (les points
+    d'une même classe sont transportés <em>au même endroit</em>). Coût final&nbsp;:
+    \(\langle C, \Gamma\rangle\) + pénalité de classes, résolu par LP (ch. 1) ou par
+    Sinkhorn régularisé (ch. 3).</li>
+    <li><strong>Transport barycentrique</strong>&nbsp;: chaque point source est envoyé sur
+    la moyenne de ses images pondérée par le plan&nbsp;:
+    $$\hat T(x_i) \;=\; \frac{1}{a_i}\sum_j\ \Gamma_{ij}\, z_j,$$
+    et son étiquette \(y_i\) suit (le plan est un <em>couplage doux</em>, pas une
+    application&nbsp;: c'est la barycentrique de Monge, optimale pour \(c = \|\cdot\|^2\)
+    d'après le corollaire 2.3). La <strong>propagation d'étiquettes</strong> s'en
+    déduit&nbsp;: l'étiquette prédite pour \(z_j\) est la majorité (pondérée par
+    \(\Gamma\)) des classes arrivant en \(z_j\).</li>
+    <li><strong>Apprentissage</strong>&nbsp;: entraîner le classifieur sur les couples
+    transportés \((\hat T(x_i),\, y_i)\) — qui vivent dans l'espace <em>cible</em> — puis
+    prédire sur la cible.</li>
+    <li><strong>Out-of-sample</strong>&nbsp;: un nouveau point \(z\) se prédit directement
+    (il est déjà dans l'espace cible)&nbsp;; pour transporter un nouveau point <em>source</em>
+    sans recalculer le plan, on interpole la ligne du plan des \(k\) plus proches voisins
+    de \(x\) dans la source, ou l'on apprend une application \(T_\theta \approx \hat T\)
+    (réseau, module Deep Learning).</li>
+  </ol>
+  <em>Positionnement</em>&nbsp;: l'enseignant du module est co-auteur du papier —
+  détaillé au ch. 7. L'extension <strong>JDOT</strong> (Courty, Flamary et al., NeurIPS
+  2017) transporte la loi <em>jointe</em> \((X, Y)\) avec un coût
+  \(c\big((x,y),(z,y')\big) = \alpha\|x - z\|^2 + \mathcal{L}(y, y')\) qui inclut la perte
+  d'étiquette&nbsp;: adaptation non supervisée <em>et</em> semi-supervisée dans le même
+  cadre.
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 4.2 — Dualité de Kantorovich-Rubinstein, ou pourquoi les GAN s'appellent «&nbsp;Wasserstein&nbsp;» (esquisse démontrée)</span>
+  Pour \(c = d\) (une distance),
+  $$W_1(\mu, \nu) \;=\; \sup_{\|f\|_{\mathrm{Lip}} \leq 1}\ \int f\, d\mu - \int f\, d\nu,$$
+  le sup étant pris sur les fonctions <strong>1-lipschitziennes</strong>.
+  <div class="proof">
+  Partons de la dualité du th. 2.1 avec \(c = d\) et remplaçons \(g\) par la
+  c-transformée \(g = f^c\) (déf. 2.2&nbsp;: cela ne diminue pas l'objectif). Pour un
+  coût distance,
+  \(f^c(y) = \inf_x\,[\,d(x,y) - f(x)\,]\). Si \(f\) est 1-lipschitzienne, prendre
+  \(x = y\) donne \(f^c(y) = -f(y)\) (l'infimum est atteint en \(x = y\) puisque
+  \(f(x) \geq f(y) - d(x,y)\)), et le dual vaut
+  \(\int f\,d\mu - \int f\, d\nu\). Réciproquement, la contrainte
+  \(f(x) + f^c(y) \leq d(x,y)\) avec \(y \to x\) force
+  \(|f(x) - f(x')| \leq d(x, x')\)&nbsp;: tout couple dual admissible s'écrit (à
+  normalisation près) avec \(f\) 1-lipschitzienne — d'où la formule
+  (preuve complète&nbsp;: Villani 2009, th. 5.10).<span class="qed">∎</span></div>
+  Le <strong>WGAN</strong> (Arjovsky, Chintala &amp; Bottou, ICML 2017) minimise
+  précisément cette quantité entre la loi des données et celle d'un générateur
+  \(G_\theta\)&nbsp;:
+  $$\min_\theta\ \max_{D_\phi\ \mathrm{1\!-\!Lip}}\ \mathbb{E}_{x \sim \mathrm{donnees}}[D_\phi(x)]
+  \ -\ \mathbb{E}_{z \sim p(z)}[D_\phi(G_\theta(z))],$$
+  le «&nbsp;critic&nbsp;» \(D_\phi\) jouant le rôle d'un potentiel de Kantorovich
+  paramétré (le dual du th. 2.1 rend la perte <em>différentiable en \(\theta\)</em>).
+  Contrainte 1-Lipschitz en pratique&nbsp;: rognage des poids, pénalité de gradient
+  (Gulrajani et al., 2017), normalisation spectrale (Miyato et al., 2018) —
+  cf. module Deep Learning M1P1, chapitre 7 (modèles génératifs). Alternative moderne
+  calculable&nbsp;: la perte de Sinkhorn débiasée du ch. 3 (th. 3.4&nbsp;: on
+  rétro-propage le potentiel), disponible avec backends PyTorch/JAX dans POT.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.3 — Barycentre de Wasserstein (Agueh &amp; Carlier, 2011)</span>
+  Pour des mesures \(\mu_1, \dots, \mu_K\) et des poids \(w \in \Delta_K\) (le
+  <em>simplexe</em>)&nbsp;:
+  $$\mathrm{Bar}(\mu_1, \dots, \mu_K; w) \;=\; \arg\min_{\nu}\ \sum_{k=1}^{K} w_k\, W_2^2(\nu, \mu_k).$$
+  Le cas gaussien 1D est résolu explicitement par le corollaire 2.8 (quantiles
+  barycentriques). Cas généraux&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Support fixé</strong> (une grille de \(p\) points)&nbsp;: le problème est
+    convexe en les poids du barycentre — programmation quadratique (Agueh-Carlier) ou
+    Sinkhorn <em>itératif</em>&nbsp;;</li>
+    <li><strong>Projections de Bregman itératives (IBP)</strong>&nbsp;: version entropique
+    (Benamou et al., 2015)&nbsp;: initialiser \(\Gamma_k\) indépendamment pour chaque
+    \(k\), puis répéter pour chaque \(k\) une étape de mise à l'échelle de Sinkhorn
+    (th. 3.2) vers la masse commune du barycentre, puis une remise à l'échelle vers la
+    marginale \(\mu_k\) — une itération «&nbsp;carrée&nbsp;» de Sinkhorn, parallélisable&nbsp;;</li>
+    <li><strong>Support libre</strong> (Cuturi &amp; Doucet, 2014)&nbsp;: optimiser
+    <em>positions et poids</em> des points du barycentre en alternant&nbsp;: (i) plans
+    \(\Gamma_k\) vers chaque mesure (OT), (ii) déplacement des points du barycentre vers
+    la barycentrique de leurs images — l'extension multi-mesures de la formule de
+    transport barycentrique de l'algorithme OTDA.</li>
+  </ul>
+  Applications&nbsp;: interpolation de formes et de distributions, transfert de couleur
+  (histogrammes), atlas et moyennes en imagerie médicale, normalisation de signaux
+  (ch. 7&nbsp;: Convolutional Monge Mapping), barycentres de graphes (ch. 5, FGW).
+  POT&nbsp;: <code>ot.bregman.barycenter</code>, <code>ot.lp.free_support_barycenter</code>.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.4 — Word Mover's Distance&nbsp;: la distance entre documents comme OT (Kusner et al., ICML 2015)</span>
+  Un document est une <strong>distribution sur les embeddings de ses mots</strong>&nbsp;:
+  \(a_i \propto\) fréquence (ou fréquence \(\times\) idf) du mot \(i\), point \(x_i \in
+  \mathbb{R}^d\) son plongement (word2vec/GloVe — cf. module Text Mining and NLP M1P2,
+  chapitre 3). La <strong>WMD</strong> entre deux documents est simplement
+  \(W_1\) entre ces deux distributions discrètes, au coût euclidien entre plongements&nbsp;:
+  le plan de transport «&nbsp;explique&nbsp;» la proximité sémantique&nbsp;: «&nbsp;Obama&nbsp;»
+  parle à «&nbsp;président&nbsp;», «&nbsp;France&nbsp;» à «&nbsp;Allemagne&nbsp;». Pour la
+  recherche de plus proches voisins à grande échelle, on précalcule des bornes inférieures
+  (distances entre centroïdes relaxées) pour ne résoudre l'OT exacte que sur les
+  candidats.
+<pre class="code"><code>import numpy as np, ot
+# deux "documents" partiellement partages, embeddings fictifs
+X = np.array([[0., 0.], [1., 0.], [10., 0.]])     # roi, reine, chat (source)
+Y = np.array([[0.1, 0.], [1.2, 0.], [10.4, 0.]])  # queen, king, dog  (cible)
+a = np.array([.5, .3, .2]); b = np.array([.4, .4, .2])
+C = ot.dist(X, Y)                                  # couts euclidiens carres
+print("WMD :", ot.emd2(a, b, C) ** 0.5)            # plan exact : ot.emd(a, b, C)</code></pre>
+</div>
+
+<div class="note">
+  <span class="tag">Spectral loss&nbsp;: le \(W_2\) gaussien comme perte fermée et différentiable</span>
+  Comparer deux <em>batches</em> de données génératives (images, audio) en ajustant une
+  gaussienne sur leurs features et en évaluant \(W_2^2\) par la formule fermée du
+  théorème 2.7 (métrique de Bures)&nbsp;: c'est la FID des générateurs d'images et la
+  «&nbsp;Fréchet audio distance&nbsp;» des générateurs audio — une perte <em>sans
+  solveur</em>, différentiable, utilisable comme loss d'entraînement (spectral loss).
+  C'est exactement le pont annoncé avec le module Signal Processing M1P1&nbsp;:
+  chapitre 8 (FID et Bures y sont présentés) et chapitre 9 (TP de liaison). En 1D
+  (spectres, signaux), revenir aux quantiles (prop. 2.6)&nbsp;;
+  <code>ot.gaussian.wass2</code> fournit l'estimation empirique gaussienne.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.5 — Estimation statistique de \(W\) : le fléau de la dimension, et l'exception Sinkhorn (énoncé)</span>
+  Soit \(\mu_n\) la mesure empirique de \(n\) points i.i.d. \(\sim \mu\) sur
+  \(\mathbb{R}^d\). Alors&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>OT exacte</strong>&nbsp;: \(\mathbb{E}\,W_p(\mu_n, \mu) \asymp n^{-1/d}\)
+    pour \(d \geq 3\) (Dudley&nbsp;; bornes fines de Fournier &amp; Guillin, 2015). En
+    grande dimension, la distance \(W_p\) empirique entre <em>deux échantillons de la
+    même loi</em> reste d'ordre constant — le «&nbsp;bruit&nbsp;» ne diminue pas&nbsp;:
+    utiliser \(W_p\) exacte comme perte en grande dimension est statistiquement
+    fragile&nbsp;;</li>
+    <li><strong>Sinkhorn débiasée</strong>&nbsp;: la divergence \(S_\varepsilon\) du ch. 3
+    (débiaisée) s'estime à la vitesse <strong>paramétrique \(n^{-1/2}\)</strong> sous
+    hypothèses de régularité (Genevay, Chizat, Bach, Peyré &amp; Rigollet, AISTATS
+    2019)&nbsp;; il en va de même pour la distance sliced (déf. 3.5, projections 1D).</li>
+  </ul>
+  <table class="tbl">
+  <thead><tr><th>Comparateur</th><th>Vitesse empirique</th><th>Coût \(n\) points</th><th>Différentiable&nbsp;?</th></tr></thead>
+  <tbody>
+  <tr><td>\(W_p\) exacte</td><td>\(n^{-1/d}\)</td><td>\(\mathcal{O}(n^3 \log n)\)</td><td>sous-gradients only</td></tr>
+  <tr><td>Sinkhorn \(W_\varepsilon\), \(S_\varepsilon\)</td><td>\(n^{-1/2}\) (débiaisée)</td><td>\(\mathcal{O}(n^2)\) / itération</td><td>oui (potentiel, th. 3.4)</td></tr>
+  <tr><td>sliced \(\mathrm{SW}_p\)</td><td>\(n^{-1/2}\)</td><td>\(\mathcal{O}(L\, n\log n)\)</td><td>oui (tris)</td></tr>
+  <tr><td>\(W_2\) gaussien (Bures)</td><td>paramétrique (si gaussien)</td><td>\(\mathcal{O}(d^3)\)</td><td>oui (fermée)</td></tr>
+  </tbody>
+  </table>
+  <em>Lecture</em>&nbsp;: en petite dimension ou en 1D, l'OT exacte (quantiles)&nbsp;; en
+  grande dimension, régulariser (entropie, projections, gaussien). C'est la règle
+  appliquée dans tous les TP de ce module.
+</div>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Gromov-Wasserstein et au-delà</h2>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — Transport de Gromov-Wasserstein (Mémoli, 2011)</span>
+  Les deux nuages vivent dans des espaces <em>incomparables</em>&nbsp;: on ne dispose
+  d'aucun coût croisé \(c(x, y)\), seulement de structures <em>internes</em> — des
+  matrices de distances \(D \in \mathbb{R}^{n \times n}\) (source) et
+  \(D' \in \mathbb{R}^{m \times m}\) (cible). Le problème quadratique&nbsp;:
+  $$\mathrm{GW}_2^2(D, D'; a, b) \;=\; \min_{\Gamma \in U(a,b)}\ \sum_{i,k,j,l}
+  \big(D_{ik} - D'_{jl}\big)^2\ \Gamma_{ij}\,\Gamma_{kl},$$
+  c'est-à-dire \(\min_\gamma \mathbb{E}\big[\,\big(\mathcal{D}(X, X') -
+  \mathcal{D}'(Y, Y')\big)^2\,\big]\)
+  où \((X, Y)\) et \((X', Y')\) sont i.i.d. de loi \(\gamma\)&nbsp;: on cherche le
+  couplage qui rend les <strong>paires de distances internes aussi égales que
+  possible</strong>. Interprétation&nbsp;: préserver les voisinages, les triangles, la
+  «&nbsp;forme&nbsp;» — pas les positions. Le problème est <em>non convexe</em> en
+  \(\Gamma\) (quadratique)&nbsp;: minima locaux, initialisation importante — contrast
+  complet avec le ch. 1.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Invariance isométrique de GW (démontrée en esquisse)</span>
+  Soit \(\varphi\) une <strong>isométrie</strong> entre les espaces structurés
+  (\(\mathcal{D}'(\varphi(x), \varphi(x')) = \mathcal{D}(x, x')\) pour tous \(x, x'\),
+  et \(\varphi_\#\mu = \nu\)). Alors \(\mathrm{GW}_2(\mu, \nu) = 0\). Réciproquement
+  (Mémoli)&nbsp;: \(\mathrm{GW}_2(\mu, \nu) = 0\) si et seulement s'il existe une telle
+  isométrie préservant la mesure.
+  <div class="proof">
+  Le plan diagonal \(\gamma^\star = (\mathrm{Id}, \varphi)_\#\mu\) est admissible
+  (marginales \(\mu\) et \(\varphi_\#\mu = \nu\)). Pour deux copies
+  \((X, \varphi(X))\) et \((X', \varphi(X'))\) i.i.d. de \(\gamma^\star\), chaque
+  terme de la somme quadratique est
+  \(\big(\mathcal{D}(X, X') - \mathcal{D}'(\varphi(X), \varphi(X'))\big)^2 = 0\)
+  <em>point par point</em>, par définition d'une isométrie&nbsp;: le coût vaut 0, et
+  0 est la borne inférieure (somme de carrés). La réciproque&nbsp;: un coût nul force
+  \(\mathcal{D}(X, X') = \mathcal{D}'(Y, Y')\) \(\gamma\)-presque sûrement&nbsp;; le
+  support de \(\gamma^\star\) (compact, fermé) définit alors l'isométrie cherchée
+  entre les supports (argument de fermeture, admis).<span class="qed">∎</span></div>
+  Conséquence pratique&nbsp;: GW est <strong>invariant par rotations, translations,
+  réflexions, changements de repère</strong> — là où \(W_2\) «&nbsp;voit&nbsp;» le
+  décalage absolu des nuages (et vaut \(\|\text{translation}\|\) même pour deux copies
+  isométriques). C'est la bonne distance pour aligner des objets définis à une
+  isométrie près&nbsp;: graphes, protéines, surfaces, espaces d'embeddings hétérogènes.
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithmes GW&nbsp;: projeté (PGW), entropique, sliced (SGW)</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>GW projeté — PGW</strong> (Peyré, Solomon, Gramfort &amp; Ferrand, ICML
+    2016)&nbsp;: linéariser le problème quadratique autour du plan courant
+    \(\Gamma^{(t)}\). Le gradient de la fonction objectif en \(\Gamma\) s'écrit
+    $$c^{(t)}_{ij} \;=\; \sum_{k,l}\ \big(D_{ik} - D'_{jl}\big)^2\ \Gamma^{(t)}_{kl}
+    \;=\; \big[\,D^2\,\Gamma^{(t)}\,\mathbf{1} + \mathbf{1}\,{D'}^2\!\top\Gamma^{(t)\top}
+    - 2\,D\,\Gamma^{(t)}\,D'\,\big]_{ij},$$
+    (matriciel&nbsp;: deux produits matrice-matrice, \(\mathcal{O}(n^2 m)\)) et l'on
+    itère&nbsp;: <em>résoudre l'OT linéaire de coût \(c^{(t)}\)</em> (LP exacte ou
+    Sinkhorn) → nouveau plan \(\Gamma^{(t+1)}\). C'est un algorithme de point fixe /
+    gradient projeté&nbsp;: convergence vers un <em>minimum local</em>, décente garantie
+    de la valeur GW (chaque OT linéarise sous-estime la quadratique — technique de
+    majoration-minimisation).</li>
+    <li><strong>GW entropique</strong> (Solomon et al., ICML 2015)&nbsp;: régulariser
+    chaque sous-problème linéarisé par \(\varepsilon\,\mathrm{KL}\) et le résoudre par
+    Sinkhorn (ch. 3)&nbsp;: plans denses et lisses, GPU, mais flou entropique — on
+    recourt à l'ε-scaling. C'est la version <code>ot.gromov.gromov_wasserstein</code>
+    par défaut (paramètre <code>epsilon</code>).</li>
+    <li><strong>SGW</strong> (Vayer et al., NeurIPS 2019)&nbsp;: projeter les structures
+    sur des lignes 1D et moyenner — l'analogue sliced du ch. 3, vitesses
+    \(\mathcal{O}(L n\log n)\) et pas de fléau statistique.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 5.3 — Fused Gromov-Wasserstein&nbsp;: features <em>et</em> structure (Vayer, Chapel, Flamary, Tavenard &amp; Courty, ICML 2019)</span>
+  Quand les objets portent <em>en plus</em> des attributs comparables (features
+  \(F \in \mathbb{R}^{n \times d}\), \(F' \in \mathbb{R}^{m \times d'}\) avec un coût
+  croisé \(C_F(x_i, y_j)\), typiquement \(\|F_i - F'_j\|^2\) après alignement des
+  dimensions)&nbsp;:
+  $$\mathrm{FGW}_{\alpha} \;=\; \min_{\Gamma \in U(a,b)}\ (1-\alpha)\sum_{i,k,j,l}
+  \big(D_{ik} - D'_{jl}\big)^2 \Gamma_{ij}\Gamma_{kl}
+  \;+\; \alpha \sum_{i,j} C_F(x_i, y_j)\,\Gamma_{ij}.$$
+  Le paramètre <strong>\(\alpha \in [0, 1]\)</strong> arbitre entre fidélité aux
+  <em>attributs</em> (\(\alpha = 1\)&nbsp;: Wasserstein pur sur les features) et
+  fidélité à la <strong>structure</strong> (\(\alpha = 0\)&nbsp;: GW pur)&nbsp;; le
+  papier montre une forme de continuité de la distance en \(\alpha\) et des bornes
+  entre FGW et ses deux extrêmes. L'algorithme&nbsp;: PGW appliqué au coût combiné
+  (même itération de linéarisation). C'est <em>la</em> distance des <strong>graphes
+  attribués</strong>&nbsp;: molécules (atomes&nbsp;: features&nbsp;; liaisons&nbsp;:
+  structure), réseaux sociaux, cerveaux — cf. module Graph ML M1P2, chapitre 5
+  (GNN&nbsp;: message passing combine exactement attributs et structure) et chapitre 9
+  (génération/évaluation de graphes)&nbsp;; le barycentre FGW de plusieurs graphes
+  définit une «&nbsp;moyenne&nbsp;» de graphes (Vayer et al.).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 5.4 — COOT&nbsp;: transport co-optimal en lignes et colonnes (Redko, Vayer, Flamary &amp; Courty, NeurIPS 2020)</span>
+  Deux <em>matrices de données</em> \(X \in \mathbb{R}^{n \times d}\) (objets en lignes,
+  variables en colonnes) et \(Y \in \mathbb{R}^{m \times p}\) — dimensions d'objets
+  <em>et</em> de variables potentiellement différentes. COOT cherche <strong>deux
+  couplages</strong>&nbsp;: \(\pi \in U(a, c)\) entre les lignes et
+  \(\sigma \in U(b, d)\) entre les colonnes&nbsp;:
+  $$\min_{\pi, \sigma}\ \sum_{i,j,k,l}\ \big(X_{ik} - Y_{jl}\big)^2\ \pi_{ij}\,
+  \sigma_{kl},$$
+  résolu par <strong>alternance</strong>&nbsp;: \(\sigma\) fixé, le problème en \(\pi\)
+  est une OT linéaire de coût \(\sum_{kl}(X_{ik} - Y_{jl})^2\sigma_{kl}\) (et
+  symétriquement). COOT unifie et généralise&nbsp;: OT classique (une seule matrice de
+  coûts croisés), GW (quand \(X\) et \(Y\) sont elles-mêmes des matrices de distances
+  internes \(D, D'\)), le co-clustering et l'<strong>adaptation de domaine
+  hétérogène</strong> (aligner simultanément échantillons <em>et</em> capteurs/features
+  — par exemple deux jeux de données EEG à électrodes différentes). Là encore&nbsp;:
+  alternance non convexe, minimum local, initialisation par OT ou k-means.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 5.5 — Alignement de graphes et de graphes de connaissances (application LLGA), en POT</span>
+  Aligner deux graphes (noeuds sans correspondance donnée)&nbsp;: GW sur les matrices
+  d'adjacence/distances&nbsp;; si les noeuds portent des attributs, FGW. Cas
+  d'usage typiques du master&nbsp;: alignement de <strong>graphes de connaissances</strong>
+  (entités/relations de deux bases, cf. module Graph ML, chapitre 11 sur
+  GraphRAG&nbsp;: désambiguïser les entités communes), alignement de deux espaces
+  d'embeddings de mots <em> sans dictionnaire</em> — Gromov-Wasserstein alignment of
+  word embedding spaces (Alvarez-Melis &amp; Jaakkola, EMNLP 2018)&nbsp;: GW entre les
+  matrices de similarités internes de deux langues aligne les espaces de façon non
+  supervisée (le plan relie les mots aux mêmes voisinages) — lien direct avec le
+  module Text Mining and NLP, chapitre 3.
+<pre class="code"><code>import numpy as np, ot                          # POT : ot.gromov
+
+# deux graphes : adjacences (structure) + attributs de noeuds
+A1 = np.array([[0., 1., 1.], [1., 0., 0.], [1., 0., 0.]])   # etoile
+A2 = np.array([[0., 1., 0.], [1., 0., 1.], [0., 1., 0.]])   # chemin
+D1 = 1.0 - A1                                   # distances courtes = aretes
+D2 = 1.0 - A2
+a = np.ones(3) / 3 ; b = np.ones(3) / 3
+
+# GW exact (PGW sans regularisation) : plan d'alignement des noeuds
+G = ot.gromov.gromov_wasserstein(D1, D2, a, b, loss_fun='square_loss')
+print("GW2^2 :", ot.gromov.gromov_wasserstein2(D1, D2, a, b))
+
+# FGW : ajouter des attributs de noeuds (meme dimension ici)
+F1 = np.array([[0., 0.], [1., 0.], [0., 1.]])
+F2 = np.array([[0.1, 0.], [0.9, 0.1], [0.2, 0.8]])
+Cf = ot.dist(F1, F2)
+Gf, log = ot.gromov.fused_gromov_wasserstein(Cf, D1, D2, a, b,
+                                             loss_fun='square_loss', alpha=0.5,
+                                             log=True)
+print("FGW(a=0.5) :", log['fgw_dist'])</code></pre>
+  Remarque TP&nbsp;: tester plusieurs initialisations (GW non convexe), tracer la
+  distance en fonction de \(\alpha\) (continuité FGW), comparer à l'alignement exact
+  connu (jeux synthétiques de graphes isomorphes&nbsp;: GW = 0, th. 5.2).
+</div>
+
+<div class="note">
+  <span class="tag">Le bestiaire GW du CMAP/POT</span>
+  L'écosystème développé autour de l'enseignant&nbsp;: GW semi-relâché (un seul côté
+  préservé — ICLR 2022), GW fusé <em>non équilibré</em> pour l'alignement de cerveaux
+  (fugw, NeurIPS 2022), GW sliced, barycentres de graphes pour la prédiction (NeurIPS
+  2022), et l'intégration complète dans POT (<code>ot.gromov</code>&nbsp;:
+  <code>gromov_wasserstein</code>, <code>fused_gromov_wasserstein</code>,
+  <code>co_optimal_transport</code>…). Positionnement par rapport au cours&nbsp;:
+  le ch. 5 pose les définitions&nbsp;; ces variantes corrigent chacune une limite
+  pratique (masses inégales, taille, attributs) — détails au ch. 7.
+</div>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Fairness par le transport</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Le cadre&nbsp;: attribut sensible, parité démographique, equalized odds</span>
+  Données \((X, S, Y)\)&nbsp;: features, <strong>attribut sensible</strong> \(S\)
+  (genre, origine…), étiquette \(Y\)&nbsp;; prédicteur \(\hat Y = h(X)\) (éventuellement
+  randomisé). Deux critères emblématiques&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Parité démographique</strong> (DP)&nbsp;: \(\hat Y\) indépendant de
+    \(S\) — mêmes taux de décision positifs par groupe&nbsp;;</li>
+    <li><strong>Equalized odds</strong> (EO, Hardt, Price &amp; Srebro, 2016)&nbsp;:
+    \(\hat Y\) indépendant de \(S\) <em>sachant</em> \(Y\) — mêmes taux de vrais
+    positifs <em>et</em> de faux positifs par groupe.</li>
+  </ul>
+  L'OT entre dans les deux scénarios&nbsp;: (i) <em>pré-traitement</em> — réparer la
+  distribution des features par barycentre de Wasserstein&nbsp;; (ii)
+  <em>post-traitement</em> — coupler les lois de scores par groupes. Dans les deux
+  cas, l'objet central est un <strong>couplage</strong>, c'est-à-dire un plan de
+  transport du ch. 1.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.2 — Repair par barycentre de Wasserstein (Gordaliza, Del Barrio, Gamboa &amp; Loubes, ICML 2019)</span>
+  <strong>Algorithme (repair complet, cas scalaire puis multivarié).</strong>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li>Estimer les lois conditionnelles \(\mu_s = \mathcal{L}(X \,|\, S = s)\) par les
+    quantiles empiriques \(Q_s = \hat F_s^{-1}\) (tri, prop. 2.6).</li>
+    <li>Former le <strong>barycentre</strong> des \(\mu_s\) pondérées par les proportions
+    \(p_s = \mathbb{P}(S = s)\)&nbsp;; en 1D, le corollaire 2.8 donne sa fonction quantile
+    point par point&nbsp;:
+    $$Q^\star(u) \;=\; \sum_s\ p_s\, Q_s(u).$$</li>
+    <li><strong>Repair</strong>&nbsp;: remplacer chaque observation par son homologue au
+    même niveau de quantile dans le barycentre&nbsp;:
+    \(\tilde X_i = Q^\star\big(\hat F_s(X_i)\big)\) pour \(S_i = s\). En multivarié,
+    remplacer le transport 1D par un plan de Sinkhorn entre chaque nuage et un
+    barycentre entropique commun (déf. 4.3), puis utiliser la projection barycentrique
+    de l'algorithme OTDA (ch. 4).</li>
+    <li>Réentraîner le modèle sur les \((\tilde X_i, Y_i)\) <em>sans</em> l'attribut
+    sensible.</li>
+  </ol>
+  <div class="proof">
+  <em>Le repair complet garantit la parité démographique.</em> Soit
+  \(U_s = \hat F_s(X)\) pour \(X \sim \mu_s\)&nbsp;: \(U_s\) est (asymptotiquement)
+  uniforme sur \([0,1]\), et \(\tilde X = Q^\star(U_s)\). Donc \(\mathcal{L}(\tilde X\,|\,S = s)
+  = \mathcal{L}\big(Q^\star(U)\big)\) <em>est la même loi pour tout \(s\)</em> — le
+  barycentre. Des conditionnelles identiques donnent l'indépendance&nbsp;:
+  \(\mathbb{P}(\tilde X \in A, S = s) = \mathbb{P}(\tilde X \in A\,|\,S = s)\,
+  \mathbb{P}(S = s) = \mathbb{P}(\tilde X \in A)\,\mathbb{P}(S = s)\). Tout prédicteur
+  \(h(\tilde X)\) hérite alors de l'indépendance avec \(S\)&nbsp;: DP, quel que soit le
+  classifieur aval.<span class="qed">∎</span></div>
+  <strong>Repair partiel</strong>&nbsp;: interpoler les quantiles,
+  \(\tilde X^{(\lambda)} = (1-\lambda)\, Q_s(U_s) + \lambda\, Q^\star(U_s)\) avec
+  \(\lambda \in [0, 1]\) — \(\lambda = 0\)&nbsp;: données intactes&nbsp;;
+  \(\lambda = 1\)&nbsp;: repair complet. <strong>Compromis utility/fairness</strong>&nbsp;:
+  en balayant \(\lambda\), l'écart de parité démographique décroît (les conditionnelles
+  se rapprochent en distance de Wasserstein, linéairement en \(\lambda\) pour le
+  transport interpolé) tandis que l'accuracy décroît d'autant plus vite que \(X\)
+  porte du signal <em>corrélé</em> à \(S\)&nbsp;: la courbe (écart de DP en abscisse,
+  accuracy en ordonnée) est typiquement décroissante avec un «&nbsp;genou&nbsp;» —
+  on choisit \(\lambda\) au coude, où l'on a acheté beaucoup d'équité pour peu
+  d'utilité. C'est la courbe tracée dans le TP ci-dessous.
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 6.3 — OT bicausale, contre-factuels et post-traitement EO optimal par couplage (cas simple démontré)</span>
+  <strong>OT bicausale.</strong> Pour comparer deux individus «&nbsp;jumeaux&nbsp;» ne
+  différant que par l'attribut sensible, on couple les lois <em>jointes</em>
+  \(\mathcal{L}(S, X)\) par un plan \(\pi\) <em>respectant la structure causale
+  \(S \to X\)</em> (couplage <strong>bicausal</strong>&nbsp;: la copie de \(X\) ne
+  dépend de la copie de \(S\) que par le couplage des conditionnelles
+  \(\mathcal{L}(X\,|\,S = s)\) — de Lara, González-Sanz, Asher, Risser &amp; Loubes,
+  JMLR 2024). Le <strong>contre-factuel</strong> \(X^\star(s')\) — «&nbsp;la valeur
+  qu'aurait prise \(X\) si \(S\) valait \(s'\)&nbsp;» — est le point couplé&nbsp;:
+  construit par OT entre \(\mathcal{L}(X\,|\,S = s)\) et \(\mathcal{L}(X\,|\,S = s')\).
+  Applications&nbsp;: mesurer la discrimination
+  \(\mathbb{E}\big[c(X, X^\star)\big]\), prédire sur le contre-factuel
+  (fairness «&nbsp;counterfactual&nbsp;»).
+  <div class="proof">
+  <em>Post-traitement EO&nbsp;: le couplage optimal est le couplage croissant.</em>
+  Cadre simple&nbsp;: \(Y \in \{0,1\}\), score réel \(R_s = f(X)\) par groupe, et un
+  post-traitement <em>randomisé</em> \(\hat Y_s = g_s(R_s, U)\), \(U \sim
+  \mathcal{U}[0,1]\) commun. (i)&nbsp;Un tel post-traitement est exactement un
+  <strong>couplage</strong> entre la loi de \(R_s\,|\,Y = y\) et une loi de Bernoulli
+  cible — le bruit \(U\) réalise le plan. (ii)&nbsp;EO impose que la loi de
+  \(\hat Y_s\,|\,Y = y\) soit la même pour les deux groupes&nbsp;: on couple donc
+  <em>simultanément</em> les deux lois de scores conditionnelles à une cible commune.
+  (iii)&nbsp;Parmi ces couplages, celui qui maximise l'utilité (l'accuracy, croissante
+  en le score dans chaque classe) est le <strong>couplage croissant</strong> —
+  appariement des quantiles&nbsp;: l'argument de <em>décroisement</em> de la preuve de
+  la prop. 2.6 s'applique mot pour mot&nbsp;: décroiser deux paires (rendre le couplage
+  plus comonotone) ne peut pas diminuer une utilité croissante des deux scores.
+  Concrètement&nbsp;: ramener chaque score à son rang \(U_s = \hat F_s(R_s)\) (quantile
+  dans son groupe), puis appliquer la <em>même</em> règle de décision aux
+  \(U_s\) — l'égalisation des lois conditionnelles se fait sur les quantiles, et le
+  choix du point de fonctionnement (TPR, FPR) commun maximise l'utilité linéaire
+  \(\mathbb{P}(Y{=}1)\,\mathrm{TPR} + \mathbb{P}(Y{=}0)\,(1 - \mathrm{FPR})\) sur
+  l'ensemble réalisable (intersection des deux régions convexifiées par la
+  randomisation — la procédure «&nbsp;mélange de prédicteurs&nbsp;» de Hardt et al.,
+  relue comme couplage OT).<span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Limites et débat&nbsp;: métriques incompatibles, utilité, hypothèses causales</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Incompatibilités théoriques</strong>&nbsp;: quand les taux de base
+    \(\mathbb{P}(Y = 1\,|\,S = s)\) diffèrent entre groupes, calibration <em>et</em>
+    equalized odds sont mutuellement exclusifs (Kleinberg, Mullainathan &amp; Raghavan
+    2016&nbsp;; Chouldechova 2017)&nbsp;: aucune méthode — OT comprise — ne peut
+    satisfaire tous les critères&nbsp;; choisir la métrique, c'est choisir le
+    compromis.</li>
+    <li><strong>Coût en utilité</strong>&nbsp;: le repair DP peut détruire un signal
+    légitime (si \(S\) prédit réellement \(Y\), l'indépendance force une perte)&nbsp;;
+    le repair «&nbsp;aveugle&nbsp;» n'est pas toujours équitable au sens individuel.</li>
+    <li><strong>Hypothèses causales</strong>&nbsp;: les contre-factuels par OT bicausale
+    supposent une structure \(S \to X\) et l'absence de confusion non mesurée&nbsp;;
+    deux couplages bicausaux optimaux différents (non-unicité, cf. exemple 1.2) peuvent
+    donner des contre-factuels différents — l'OT fournit une <em>famille</em> de
+    modèles, à auditer (le papier JMLR 2024 en propose des tests statistiques).</li>
+    <li><strong>Position du cours</strong>&nbsp;: l'OT n'est pas une réponse à la
+    question de justice, mais un <em>langage géométrique</em> pour chiffrer les
+    compromis&nbsp;: distances entre groupes, barycentres, couplages optimaux — les
+    mêmes objets qu'aux ch. 1-5.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">TP guidé — repair et courbes de compromis sur Adult (UCI)</span>
+<pre class="code"><code>import numpy as np, ot
+from sklearn.linear_model import LogisticRegression
+# Adult : X = variables numeriques, S = genre, Y = revenu &gt; 50k
+# (charger pandas.read_csv("adult.data"), encoder les categorielles)
+
+def repair_1d(x, s, lam):
+    """Repair quantile partiel, feature par feature (th. 6.2)."""
+    xR = x.copy()
+    qs = {sv: np.sort(x[s == sv]) for sv in np.unique(s)}
+    n = min(len(v) for v in qs.values())          # rangs communs
+    bary = np.mean([v[np.linspace(0, len(v)-1, n).astype(int)]
+                    for v in qs.values()], axis=0)  # Q* : moyenne des quantiles
+    for sv in np.unique(s):
+        v, idx = np.sort(x[s == sv]), np.argsort(x[s == sv])
+        ranks = np.linspace(0, len(v)-1, n)
+        rep = (1-lam) * np.interp(ranks, range(len(v)), v) + lam * bary
+        xR[s == sv] = np.interp(np.argsort(np.argsort(x[s == sv])),
+                                ranks, rep)[np.argsort(idx)]
+    return xR
+
+for lam in np.linspace(0, 1, 11):                  # courbe lambda -&gt; compromis
+    Xr = repair_1d(X_num, S, lam)
+    clf = LogisticRegression().fit(Xr, Y)
+    acc = clf.score(Xr, Y)
+    dp = abs(clf.predict_proba(Xr[S==0])[:,1].mean()
+           - clf.predict_proba(Xr[S==1])[:,1].mean())
+    print(f"lambda={lam:.1f}  accuracy={acc:.3f}  ecart_DP={dp:.3f}")
+# Tracer accuracy vs ecart_DP : genou de la courbe, discussion en TP</code></pre>
+  Questions du TP&nbsp;: (i)&nbsp;où est le genou, et que dit-il&nbsp;? (ii)&nbsp;comparer
+  repair 1D margina­­l et repair multivarié par Sinkhorn&nbsp;; (iii)&nbsp;mesurer aussi
+  l'écart EO avant/après&nbsp;; (iv)&nbsp;le repair préserve-t-il la calibration&nbsp;?
+  (relier au débat ci-dessus).
+</div>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Les travaux de l'enseignant</h2>
+
+<div class="note">
+  <span class="tag">Qui enseigne ce module, et pourquoi ces chapitres</span>
+  Rémi Flamary (CNRS, CMAP, École Polytechnique) est co-directeur du master LLGA et
+  co-créateur de la bibliothèque <a href="https://pythonot.github.io">POT</a>. Les
+  méthodes présentées dans ce module — adaptation de domaine par OT (ch. 4),
+  Gromov-Wasserstein et FGW (ch. 5) — sortent en partie de ses propres articles&nbsp;:
+  ce chapitre les présente tels que publiés, avec leurs liens. Toutes les références
+  ci-dessous sont réelles et vérifiables.
+</div>
+
+<div class="thm">
+  <span class="tag">POT&nbsp;— Python Optimal Transport (Flamary et al., JMLR 2021)&nbsp;: la bibliothèque du cours</span>
+  <a href="https://jmlr.org/papers/v22/20-451.html">POT&nbsp;: Python Optimal
+  Transport</a>, Journal of Machine Learning Research 22(78), 2021 —
+  <a href="https://pythonot.github.io">pythonot.github.io</a>.
+  <strong>Principe</strong>&nbsp;: une bibliothèque unifiée des solveurs OT, avec une
+  API à trois entrées (mesures, coûts, solveur)&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Solveurs exacts</strong>&nbsp;: <code>ot.emd</code>,
+    <code>ot.emd2</code> (simplexe de réseau, ch. 1)&nbsp;; 1D par quantiles
+    (<code>ot.wasserstein_1d</code>)&nbsp;;</li>
+    <li><strong>Régularisés</strong>&nbsp;: <code>ot.sinkhorn</code>,
+    <code>ot.sinkhorn_log</code> (ch. 3), divergences débiasées
+    <code>ot.sinkhorn_divergence</code>&nbsp;; barycentres exacts et entropiques
+    (ch. 4)&nbsp;;</li>
+    <li><strong>Structurés</strong>&nbsp;: <code>ot.gromov</code> — GW, FGW, COOT
+    (ch. 5)&nbsp;; gaussien (<code>ot.gaussian.wass2</code>, th. 2.7)&nbsp;;
+    sliced&nbsp;;</li>
+    <li><strong>Application</strong>&nbsp;: <code>ot.da</code> — le transporteur de
+    l'algorithme OTDA du ch. 4, empaqueté avec propagation d'étiquettes et
+    out-of-sample.</li>
+  </ul>
+  <strong>Résultat</strong>&nbsp;: une soixantaine de solveurs issus de la
+  littérature, des backends NumPy/PyTorch/JAX (différentiation du potentiel, th. 3.4),
+  une galerie d'exemples — l'outil de référence de l'OT numérique, utilisé du médical
+  au génératif. <strong>Positionnement</strong>&nbsp;: tous les TP de ce module
+  l'utilisent&nbsp;; l'architecture du ch. 3 (solveurs, régularisation, GPU) est
+  exactement son architecture.
+</div>
+
+<div class="thm">
+  <span class="tag">Optimal Transport for Domain Adaptation (Courty, Flamary, Tuia &amp; Rakotomamonjy, IEEE TPAMI 2016)</span>
+  <a href="https://arxiv.org/abs/1507.00504">Optimal Transport for Domain
+  Adaptation</a>, IEEE Transactions on Pattern Analysis and Machine Intelligence
+  39(9), 2016. <strong>Principe</strong>&nbsp;: celui de l'algorithme OTDA du ch. 4 —
+  couplage régularisé (entropie + <em>régularisation des classes</em> par group-lasso)
+  entre les nuages source/cible, transport barycentrique des points étiquetés,
+  apprentissage dans l'espace cible. <strong>Résultat</strong>&nbsp;: théorie (bornes
+  d'erreur liant Wasserstein source-cible et risque cible) et gains expérimentaux sur
+  images et textes&nbsp;; l'extension <a href="https://arxiv.org/abs/1705.08848">JDOT</a>
+  (Courty, Flamary, Habrard &amp; Rakotomamonjy, NeurIPS 2017) transporte la loi jointe
+  \((X, Y)\) en incluant la perte d'étiquette dans le coût — l'ancêtre direct des
+  pertes OT d'entraînement. <strong>Positionnement</strong>&nbsp;: c'est le
+  ch. 4 du cours&nbsp;; le benchmark moderne SKADA-Bench (TMLR 2025) en mesure les
+  successeurs.
+</div>
+
+<div class="thm">
+  <span class="tag">Fused Gromov-Wasserstein (Vayer, Chapel, Flamary, Tavenard &amp; Courty, ICML 2019)</span>
+  <a href="https://proceedings.mlr.press/v97/titouan19a.html">Optimal Transport for
+  structured data with application on graphs</a>, ICML 2019 (PMLR 97).
+  <strong>Principe</strong>&nbsp;: la distance FGW du ch. 5 — combiner coût des
+  <em>features</em> et coût de <em>structure</em> sous un paramètre \(\alpha\), avec
+  continuité et bornes par rapport aux deux extrêmes&nbsp;; algorithme de type
+  linéarisation (PGW). <strong>Résultat</strong>&nbsp;: classification et
+  <em>barycentres</em> de graphes attribués (la «&nbsp;moyenne&nbsp;» de plusieurs
+  graphes existe&nbsp;: on l'utilise en classification par plus proche barycentre)&nbsp;;
+  applications molécules/time series. <strong>Positionnement</strong>&nbsp;: déf. 5.3
+  du cours&nbsp;; le versant «&nbsp;graphes&nbsp;» se prolonge en M1P2 (module Graph
+  ML, ch. 5 et 9) et jusqu'aux GNN à templates FGW (NeurIPS 2022).
+</div>
+
+<div class="thm">
+  <span class="tag">CO-Optimal Transport (Redko, Vayer, Flamary &amp; Courty, NeurIPS 2020)</span>
+  <a href="https://arxiv.org/abs/2002.03731">CO-Optimal Transport</a>, NeurIPS 2020 —
+  code <a href="https://github.com/PythonOT/COOT">github.com/PythonOT/COOT</a>.
+  <strong>Principe</strong>&nbsp;: la déf. 5.4 — transporter <em>simultanément</em> les
+  échantillons (lignes) et les variables (colonnes) de deux matrices de données par
+  deux couplages alternés. <strong>Résultat</strong>&nbsp;: cadre unifiant qui
+  englobe OT, GW et le co-clustering&nbsp;; gains marqués en adaptation de domaine
+  <em>hétérogène</em> (jeux de données à features différentes&nbsp;: textes de
+  langues différentes, capteurs distincts). <strong>Positionnement</strong>&nbsp;:
+  la «&nbsp;double alternance&nbsp;» du ch. 5&nbsp;; disponible dans POT
+  (<code>ot.gromov.co_optimal_transport</code>).
+</div>
+
+<div class="note">
+  <span class="tag">Deux pistes récentes&nbsp;: le sliced sous la loupe, l'OT pour les biosignaux</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Théorie du sliced</strong>&nbsp;: E. Tanguy, R. Flamary &amp; J. Delon,
+    <a href="https://arxiv.org/abs/2304.12029">Reconstructing discrete measures from
+    projections. Consequences on the empirical Sliced Wasserstein Distance</a>,
+    Comptes Rendus Mathématique 362, 2024 — quelles projections déterminent une mesure
+    discrète, et ce que cela implique sur la distance sliced empirique (déf. 3.5)&nbsp;:
+    la vitesse \(n^{-1/2}\) du th. 4.5 est ici décortiquée. <strong>Positionnement</strong>&nbsp;
+    l'analyse fine de l'estimateur préféré du ML grande dimension.</li>
+    <li><strong>OT et signaux physiologiques</strong>&nbsp;: T. Gnassounou, R. Flamary
+    &amp; A. Gramfort, <a href="https://arxiv.org/abs/2305.18831">Convolutional Monge
+    Mapping Normalization for learning on biosignals</a>, NeurIPS 2023 — normaliser
+    les EEG de chaque sujet <em>vers un barycentre de Wasserstein commun</em> (déf.
+    4.3) par une application convolutive&nbsp;: des gains nets en décodage
+    cérébral. <strong>Positionnement</strong>&nbsp;: le pont exact entre ce module et
+    le module Signal Processing M1P1 (ch. 9)&nbsp;: spectres, transport, normalisation.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Dualité en dimension 2 (corrigé).</strong> Source \(a = (1/2, 1/2)\) en
+  \(x_1 = 0\), \(x_2 = 1\) (dans \(\mathbb{R}\)), cible \(b = (1/2, 1/2)\) en
+  \(y_1 = 0\), \(y_2 = 2\), coût \(|x - y|\). Écrire le primal, deviner le plan
+  optimal, en déduire les potentiels duaux par la complémentarité du th. 2.1 et
+  vérifier l'égalité des valeurs.
+  <em>Corrigé (esquisse).</em> \(C = \begin{pmatrix}0 &amp; 2\\ 1 &amp; 1\end{pmatrix}\)&nbsp;;
+  plans admissibles extrêmaux&nbsp;: \(\Gamma_1 = \big(\begin{smallmatrix}1/2 &amp; 0\\ 0 &amp; 1/2\end{smallmatrix}\big)\)
+  (coût \(1/2\)) et \(\Gamma_2 = \big(\begin{smallmatrix}0 &amp; 1/2\\ 1/2 &amp; 0\end{smallmatrix}\big)\)
+  (coût \(3/2\))&nbsp;: optimum \(\Gamma_1\), \(W_1 = 1/2\). Complémentarité&nbsp;:
+  \(\Gamma_{12}^\star = \Gamma_{21}^\star = 0\) ne contraint que \(\Gamma_{11},
+  \Gamma_{22} &gt; 0\)&nbsp;: \(f_1 + g_1 = 0\), \(f_2 + g_2 = 0\) et inégalités
+  \(f_1 + g_2 \leq 2\), \(f_2 + g_1 \leq 1\)&nbsp;; prendre \(f = (0, 1)\),
+  \(g = (0, -1)\)&nbsp;: valeur \(\langle a, f\rangle + \langle b, g\rangle = 1/2\).
+  = primal&nbsp;: dualité forte vérifiée à la main.</li>
+
+  <li><strong>Kantorovich-Rubinstein (corrigé).</strong> Dans le cadre de la prop. 4.2,
+  montrer que si \(f\) est 1-lipschitzienne alors \(f^c = -f\) pour le coût
+  \(c = |\cdot|\) (en dimension 1), et conclure que
+  \(W_1(\mu, \nu) = \sup_{\mathrm{Lip}(f) \leq 1} \int f\,d(\mu - \nu)\).
+  <em>Corrigé (clé).</em> \(f^c(y) = \inf_x [|x - y| - f(x)]\). Le choix \(x = y\)
+  donne \(f^c(y) \leq -f(y)\)&nbsp;; pour tout \(x\),
+  \(f(x) \geq f(y) - |x - y|\) (1-lipschitz), donc \(|x - y| - f(x) \leq -f(y)\)&nbsp;:
+  infimum atteint en \(x = y\), \(f^c = -f\). Le dual de la prop. 2.1 devient
+  \(\int f\,d\mu + \int (-f)\,d\nu\) sur les couples \((f, -f)\) admissibles, qui sont
+  exactement (à constante additive près) les 1-lipsitziennes — d'où la formule.</li>
+
+  <li><strong>Sinkhorn 2×2 à la main (corrigé).</strong> Avec \(a = b = (1/2, 1/2)\),
+  \(C = \begin{pmatrix}0 &amp; 1\\ 1 &amp; 0\end{pmatrix}\), \(\varepsilon = 1\)&nbsp;:
+  calculer \(K\), initialiser \(v = \mathbf{1}\), effectuer deux itérations complètes
+  de \(u \leftarrow a/(Kv)\), \(v \leftarrow b/(K^\top u)\), et vérifier que les
+  marginales lignes convergent vers \(a\).
+  <em>Corrigé (valeurs).</em> \(K = \big(\begin{smallmatrix}1 &amp; e^{-1}\\ e^{-1} &amp; 1\end{smallmatrix}\big)\).
+  Itération 1&nbsp;: \(Kv = (1 + e^{-1}, 1 + e^{-1})^\top\), \(u = \frac{1}{2(1+e^{-1})}(1,1)^\top\)&nbsp;;
+  \(K^\top u\) identique, \(v = u\). Par symétrie le point fixe est
+  \(u = v = \frac{1}{2(1+e^{-1})}\mathbf{1}\)&nbsp;: \(\Gamma =
+  \mathrm{diag}(u)K\,\mathrm{diag}(u)\) a bien lignes et colonnes de somme
+  \(1/2\) — après une seule itération complète ici (cas symétrique)&nbsp;; le plan
+  entropique «&nbsp;brume&nbsp;» la diagonale vers l'anti-diagonale (biais entropique,
+  ch. 3).</li>
+
+  <li><strong>Bures en simulation (TP).</strong> Tirer \(n = 5000\) points de deux
+  gaussiennes 2D anisotropes (\(\Sigma_1 = \mathrm{diag}(4, 1)\) tournée,
+  \(\Sigma_2 = \mathrm{diag}(1, 4)\)), comparer le \(W_2^2\) empirique (Sinkhorn sur
+  les échantillons) à la formule fermée du th. 2.7 et à
+  <code>ot.gaussian.wass2</code>. Observer l'effet de \(\varepsilon\).
+  <em>Indication.</em> Le gap vient du biais entropique (utiliser
+  <code>ot.sinkhorn_divergence</code>) et du bruit d'échantillonnage
+  (\(n^{-1/d}\), th. 4.5&nbsp;: sévère en dimension 2 si \(n\) petit).</li>
+
+  <li><strong>Sommets du polytope de transport (corrigé) — promis au ch. 1.</strong>
+  Montrer qu'un plan optimal peut être choisi avec au plus \(n + m - 1\) coefficients
+  non nuls (th. 1.3), construire un exemple où le plan optimal <em>n'est pas</em>
+  déterministe, et relier à l'exemple 1.2.
+  <em>Corrigé (esquisse).</em> Sommet&nbsp;: \(nm\) variables, contraintes de rang
+  \(\leq n + m - 1\) (somme des lignes = somme des colonnes)&nbsp;; un sommet exige
+  \(nm\) contraintes actives indépendantes, dont au moins \(nm - (n+m-1)\) sont des
+  \(\Gamma_{ij} = 0\). Exemple non déterministe&nbsp;: \(a = (1)\) en \(x_1\),
+  \(b = (1/2, 1/2)\) — tout plan est de la forme \((1/2, 1/2)\), une ligne vers deux
+  colonnes&nbsp;: aucun sommet n'est une permutation partielle. Lien&nbsp;: c'est
+  l'exemple 1.2 (une masse, deux demi-masses)&nbsp;; en revanche si \(a\) est à
+  coefficients uniformes \(1/n\) et les coûts génériques, les sommets «&nbsp;presque
+  déterministes&nbsp;» ont \(\leq n + m - 1\) non-zéros — chaque ligne porte au plus
+  \(m\) destinations, et la parcimonie limite le partage.</li>
+
+  <li><strong>Barycentre gaussien pondéré (indication).</strong> Redémontrer le
+  corollaire 2.8 avec des poids quelconques, puis dans le cas de deux lois
+  \(\mathcal{N}(0, 1)\) et \(\mathcal{N}(0, 9)\)&nbsp;: montrer que l'écart-type du
+  barycentre à poids égaux vaut \(2\) (et non \(\sqrt{5}\)), et commenter («&nbsp;la
+  moyenne des variances&nbsp;» n'est pas le barycentre).
+  <em>Indication.</em> Minimiser point par point en \(u\) la fonction quantile
+  (dérivée nulle), puis identifier le quantile gaussien obtenu&nbsp;:
+  \(\sigma = \sum_k w_k \sigma_k\).</li>
+
+  <li><strong>WMD sur deux phrases (corrigé).</strong> Avec des embeddings
+  word2vec réels (module Text Mining and NLP, ch. 3), calculer la WMD entre
+  «&nbsp;le président s'adresse au congrès&nbsp;» et «&nbsp;Obama parle au
+  parlement&nbsp;», puis entre deux phrases sans rapport&nbsp;; afficher le plan
+  (<code>ot.emd</code>) et commenter les appariements de mots.
+  <em>Corrigé (clé).</em> Documents = distributions uniformes sur les mots (moins les
+  mots vides)&nbsp;; coût = distance euclidienne entre plongements (pas son carré&nbsp;:
+  WMD utilise \(W_1\))&nbsp;; le plan relie «&nbsp;président&nbsp;»↔«&nbsp;Obama&nbsp;»,
+  «&nbsp;congrès&nbsp;»↔«&nbsp;parlement&nbsp;» (voisins en espace)&nbsp;: la distance
+  reste petite là où la distance centroïde serait trompée par les mots-outils.</li>
+
+  <li><strong>Repair partiel et vitesse de réparation (indication).</strong> Dans le
+  cadre 1D du th. 6.2, montrer que le repair partiel de niveau \(\lambda\) envoie les
+  conditionnelles vers des lois à distance
+  \(W_2\big(\mathcal{L}(\tilde X^{(\lambda)}|S{=}0), \mathcal{L}(\tilde X^{(\lambda)}|S{=}1)\big)
+  = (1-\lambda)\, W_2(\mu_0, \mu_1)\).
+  <em>Indication.</em> Écrire les fonctions quantiles interpolées
+  \(Q^{(\lambda)}_s = (1-\lambda)Q_s + \lambda Q^\star\) et utiliser la prop. 2.6&nbsp;;
+  la différence \(Q^{(\lambda)}_0(u) - Q^{(\lambda)}_1(u) =
+  (1-\lambda)(Q_0(u) - Q_1(u))\) se factorise.</li>
+
+  <li><strong>GW invariante, W non (corrigé).</strong> Soit \(\mu\) uniforme sur trois
+  points non alignés du plan et \(\nu = \tau_\#\mu\) sa translatée par un vecteur de
+  norme \(r\), avec les distances euclidiennes internes. Montrer
+  \(\mathrm{GW}_2(\mu, \nu) = 0\) et \(W_2(\mu, \nu) = r\). Que se passe-t-il pour
+  une rotation&nbsp;?
+  <em>Corrigé.</em> La translation \(\tau\) préserve toutes les distances internes
+  (isométrie au sens du th. 5.2)&nbsp;: plan diagonal de coût nul. Pour \(W_2\), le
+  plan \((\mathrm{Id}, \tau)_\#\mu\) coûte
+  \(\big(\int \|x - (x + \tau)\|^2 d\mu\big)^{1/2} = r\), et aucun couplage ne peut
+  faire mieux que la translation de moyenne (inégalité triangulaire pour \(W_2\),
+  th. 2.5). Rotation&nbsp;: toujours GW = 0 (isométrie)&nbsp;; \(W_2 &gt; 0\) dès que
+  les points bougent réellement — c'est la motivation des ch. 5 (objets définis à
+  une isométrie près).</li>
+
+  <li><strong>Limites de FGW (indication).</strong> Vérifier que
+  \(\mathrm{FGW}_{\alpha=1}\) redonne la OT des features et
+  \(\mathrm{FGW}_{\alpha=0}\) la GW pure, puis construire deux graphes où le
+  classement par FGW change de l'un à l'autre (features cohérentes mais structures
+  opposées). <em>Indication.</em> Prendre deux graphes 3-noeuds&nbsp;: même
+  étoile&nbsp;; features échangées entre centre et feuilles&nbsp;; tracer FGW en
+  fonction de \(\alpha\) (continuité, déf. 5.3) sur un jeu synthétique en POT.</li>
+
+  <li><strong>Equalized odds binaire (indication).</strong> Deux groupes de tailles
+  égales, \(Y\) binaire équilibré dans chacun, scores parfaits pour le groupe 0
+  (\(\hat Y = Y\)) et scores aléatoires (monnaie) pour le groupe 1. Déterminer le
+  post-traitement randomisé de la prop. 6.3 qui réalise EO, et son accuracy.
+  <em>Indication.</em> EO force un point (TPR, FPR) commun&nbsp;; les régions
+  réalisables des deux groupes sont \(\{(1,0)\}\) et le segment
+  \([(\tfrac12, \tfrac12), (\tfrac12, \tfrac12)]\) élargi par mélange&nbsp;: le seul
+  point commun réalisable du groupe parfait sous randomisation est obtenu en
+  «&nbsp;bruitant&nbsp;» le groupe 0 jusqu'au (1/2, 1/2) du groupe 1 — accuracy
+  finale 1/2, symétrique&nbsp;; discuter le coût (débat du ch. 6).</li>
+
+  <li><strong>TP de synthèse — OTDA + FGW dans POT.</strong>
+  (a)&nbsp;Générer deux nuages 2D «&nbsp;source/cible&nbsp;» (moons décalés)&nbsp;:
+  OTDA complet du ch. 4 avec <code>ot.da.OTDA</code> (transport + propagation),
+  accuracy avant/après. (b)&nbsp;Deux graphes attribués 15-noeuds (stochastic block
+  models)&nbsp;: alignement FGW (<code>ot.gromov.fused_gromov_wasserstein</code>),
+  matrice de permutation retrouvée (f-score)&nbsp;; balayer \(\alpha\) et
+  \(\varepsilon\), initialisations multiples (GW non convexe, th. 5.2). Livrables&nbsp;:
+  courbes, plan de transport visualisé (<code>ot.plot.plot1D_mat</code>), courte
+  analyse.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>G. Peyré, M. Cuturi, <a href="https://arxiv.org/abs/1803.00567">Computational
+  Optimal Transport</a>, Foundations and Trends in Machine Learning 11(5-6), 2019 —
+  la référence du cours&nbsp;: ch. 2 (fondements théoriques&nbsp;: Kantorovich,
+  dualité, c-transformée), ch. 4 (régularisation entropique et Sinkhorn), ch. 8
+  (divergences statistiques, formulations minimax&nbsp;: WGAN), ch. 9 (problèmes
+  variationnels&nbsp;: barycentres), ch. 10 (extensions&nbsp;: Gromov-Wasserstein,
+  sliced, non-équilibré).</li>
+  <li>C. Villani, <em>Optimal Transport&nbsp;: Old and New</em>, Grundlehren 338,
+  Springer, 2009 — pour les preuves générales (Brenier, Kantorovich-Rubinstein).</li>
+  <li>F. Santambrogio, <em>Optimal Transport for Applied Mathematicians</em>,
+  Birkhäuser, 2015 — calcul des variations, formule de Monge-Ampère.</li>
+  <li>M. Cuturi, <a href="https://arxiv.org/abs/1306.0895">Sinkhorn Distances&nbsp;:
+  Lightspeed Computation of Optimal Transport</a>, NIPS 2013 — la régularisation
+  entropique (ch. 3).</li>
+  <li>J. Franklin, J. Lorenz, «&nbsp;On the scaling of algorithm for transportation
+  problems&nbsp;», <em>SIAM J. Sci. Stat. Comput.</em>, 1989 — convergence
+  géométrique de Sinkhorn (th. 3.3).</li>
+  <li>J. Feydy et al., <a href="https://arxiv.org/abs/1810.11477">Interpolating between
+  Optimal Transport and MMD using Sinkhorn Divergences</a>, AISTATS 2019 — les
+  divergences débiasées (ch. 3).</li>
+  <li>A. Genevay, L. Chizat, M. Bach, G. Peyré, R. Rigollet, <a href="https://arxiv.org/abs/1810.02733">Sample
+  Complexity of Sinkhorn Divergences</a>, AISTATS 2019 — la vitesse \(n^{-1/2}\)
+  (th. 4.5).</li>
+  <li>N. Fournier, A. Guillin, «&nbsp;On the rate of convergence in Wasserstein
+  distance of the empirical measure&nbsp;», <em>Probab. Theory Relat. Fields</em> 162,
+  2015 — le fléau \(n^{-1/d}\) (th. 4.5).</li>
+  <li>M. Arjovsky, S. Chintala, L. Bottou, <a href="https://arxiv.org/abs/1701.07875">Wasserstein
+  GAN</a>, ICML 2017 (proposition 4.2)&nbsp;; I. Gulrajani et al., <a href="https://arxiv.org/abs/1704.00028">Improved
+  Training of Wasserstein GANs</a>, NeurIPS 2017 (pénalité de gradient)&nbsp;;
+  T. Miyato et al., <a href="https://arxiv.org/abs/1802.05957">Spectral Normalization</a>,
+  ICLR 2018.</li>
+  <li>M. Agueh, G. Carlier, «&nbsp;Barycenters in the Wasserstein space&nbsp;»,
+  <em>SIAM J. Math. Anal.</em> 43, 2011&nbsp;; M. Cuturi, A. Doucet, <a href="https://arxiv.org/abs/1310.4375">Fast
+  Computation of Wasserstein Barycenters</a>, ICML 2014&nbsp;; J.-D. Benamou, G. Carlier,
+  M. Cuturi, L. Nenna, G. Peyré, <a href="https://arxiv.org/abs/1412.5154">Iterative
+  Bregman Projections for Regularized Transportation Problems</a>, 2015 — barycentres
+  (déf. 4.3).</li>
+  <li>N. Courty, R. Flamary, D. Tuia, A. Rakotomamonjy, <a href="https://arxiv.org/abs/1507.00504">Optimal
+  Transport for Domain Adaptation</a>, IEEE TPAMI 39(9), 2016 (ch. 4, algorithme
+  OTDA)&nbsp;; N. Courty, R. Flamary, A. Habrard, A. Rakotomamonjy, <a href="https://arxiv.org/abs/1705.08848">Joint
+  Distribution Optimal Transportation for Domain Adaptation</a>, NeurIPS 2017
+  (JDOT).</li>
+  <li>M. Kusner, Y. Sun, N. Kolkin, K. Weinberger, <a href="https://arxiv.org/abs/1502.06919">From
+  Word Embeddings to Document Distances</a>, ICML 2015 — la WMD (exemple 4.4).</li>
+  <li>F. Mémoli, «&nbsp;Gromov-Wasserstein distances and the metric approach to object
+  matching&nbsp;», <em>Found. Comput. Math.</em> 11, 2011 — GW (déf. 5.1)&nbsp;;
+  G. Peyré, M. Solomon, A. Gramfort, G. Ferrand, <a href="https://arxiv.org/abs/1606.04270">Gromov-Wasserstein
+  Averaging of Kernel and Distance Matrices</a>, ICML 2016 (PGW)&nbsp;; J. Solomon
+  et al., <a href="https://arxiv.org/abs/1503.00533">Convolutional Wasserstein
+  Distances</a>, ICML 2015 (GW entropique).</li>
+  <li>T. Vayer, L. Chapel, R. Flamary, R. Tavenard, N. Courty, <a href="https://proceedings.mlr.press/v97/titouan19a.html">Optimal
+  Transport for Structured Data with Application on Graphs</a>, ICML 2019 (FGW,
+  déf. 5.3)&nbsp;; T. Vayer et al., <a href="https://arxiv.org/abs/1905.10124">Sliced
+  Gromov-Wasserstein</a>, NeurIPS 2019 (SGW).</li>
+  <li>I. Redko, T. Vayer, R. Flamary, N. Courty, <a href="https://arxiv.org/abs/2002.03731">CO-Optimal
+  Transport</a>, NeurIPS 2020 (COOT, déf. 5.4).</li>
+  <li>D. Alvarez-Melis, T. Jaakkola, <a href="https://aclanthology.org/D18-1214/">Gromov-Wasserstein
+  Alignment of Word Embedding Spaces</a>, EMNLP 2018 — alignement non supervisé
+  d'embeddings (exemple 5.5).</li>
+  <li>M. Feldman et al., <a href="https://arxiv.org/abs/1412.3756">Certifying and
+  Removing Disparate Impact</a>, KDD 2015 (repair)&nbsp;; M. Hardt, E. Price,
+  N. Srebro, <a href="https://arxiv.org/abs/1610.02413">Equality of Opportunity in
+  Supervised Learning</a>, NeurIPS 2016 (equalized odds).</li>
+  <li>P. Gordaliza, E. Del Barrio, F. Gamboa, J.-M. Loubes, <a href="https://arxiv.org/abs/1806.03195">Obtaining
+  Fairness using Optimal Transport Theory</a>, ICML 2019 (repair par barycentre,
+  th. 6.2).</li>
+  <li>L. de Lara, A. González-Sanz, N. Asher, L. Risser, J.-M. Loubes, <a href="https://arxiv.org/abs/2108.13025">Transport-based
+  Counterfactual Models</a>, JMLR 25(136), 2024 (OT bicausale et contre-factuels,
+  prop. 6.3).</li>
+  <li>J. Kleinberg, S. Mullainathan, M. Raghavan, <a href="https://arxiv.org/abs/1609.05807">Inherent
+  Trade-offs in the Fair Determination of Risk Scores</a>, ITCS 2017&nbsp;;
+  A. Chouldechova, «&nbsp;Fair prediction with disparate impact&nbsp;»,
+  <em>Big Data</em> 5(2), 2017 — l'incompatibilité des métriques (ch. 6).</li>
+  <li>R. Flamary et al., <a href="https://jmlr.org/papers/v22/20-451.html">POT&nbsp;:
+  Python Optimal Transport</a>, JMLR 22(78), 2021 — <a href="https://pythonot.github.io">pythonot.github.io</a>&nbsp;:
+  l'outil de tous les TP (ch. 7).</li>
+  <li>E. Tanguy, R. Flamary, J. Delon, <a href="https://arxiv.org/abs/2304.12029">Reconstructing
+  discrete measures from projections</a>, C.&nbsp;R. Mathématique 362, 2024&nbsp;;
+  T. Gnassounou, R. Flamary, A. Gramfort, <a href="https://arxiv.org/abs/2305.18831">Convolutional
+  Monge Mapping Normalization for learning on biosignals</a>, NeurIPS 2023 — les
+  travaux récents du ch. 7.</li>
+</ul>
+</section>
+
 <nav class="pager">
   <a href="m1p2-nlp-text-mining.html"><span class="dir">← Précédent</span> Text Mining and NLP</a>
   <a class="next" href="m1p2-multimodal-genai.html"><span class="dir">Suivant</span> Multimodal Generative AI</a>
