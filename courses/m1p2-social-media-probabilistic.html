@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Social Media and Communication: Probabilistic Models and Algorithms — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M1 · Période 2 › Option — groupe de choix</div>
+    <div class="code-line">APM_51058_EP</div>
+    <h1>Social Media and Communication: Probabilistic Models and Algorithms</h1>
+    <div class="tags"><span class="badge option">Option P2</span><span class="badge position">Hors track recommandé</span></div>
+    <div class="facts">Enseignant&nbsp;: Laurent Massoulié (Inria) · 36&nbsp;h · 4,5 ECTS · une théorie probabiliste des réseaux sociaux&nbsp;: graphes aléatoires, épidémies et rumeurs, modèles à blocs stochastiques, et les algorithmes distribués qui font tourner les plateformes — le cours où la physique statistique rencontre les réseaux.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: probabilités et graphes</a></li>
+    <li><a href="#ch1">Graphes aléatoires&nbsp;: Erdős–Rényi</a></li>
+    <li><a href="#ch2">Degrés prescrits, petits mondes, scale-free</a></li>
+    <li><a href="#ch3">Processus épidémiques sur graphes</a></li>
+    <li><a href="#ch4">Rumeurs, push-pull et influence</a></li>
+    <li><a href="#ch5">Le stochastic block model</a></li>
+    <li><a href="#ch6">Détection de communautés et applications</a></li>
+    <li><a href="#ch7">Systèmes distribués à grande échelle</a></li>
+    <li><a href="#ch8">Travaux de l'équipe pédagogique</a></li>
+    <li><a href="#ch9">Mise en œuvre&nbsp;: simulations networkx</a></li>
+    <li><a href="#ex">Exercices</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: probabilités et graphes</h2>
+
+<p>Le fil conducteur du module&nbsp;: un réseau social est un <strong>graphe aléatoire</strong>
+(qui suit qui&nbsp;?), traversé par des <strong>processus stochastiques</strong> (que se
+propage-t-il, et à quelle vitesse&nbsp;?). Les deux piliers mathématiques sont donc la
+probabilité discrète — lois, moments, convergence — et la théorie des graphes. Ce chapitre
+remet en place les définitions et les trois outils de base&nbsp;: méthode des premier et
+second moments, processus de branchement, et marches aléatoires.</p>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 — boîte à outils probabiliste (cf. module Refresher Statistics)</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Lois usuelles</strong> (ch. 3)&nbsp;: binomiale
+    \(\mathrm{Bin}(n, p)\) d'espérance \(np\)&nbsp;; Poisson \(\mathrm{Pois}(c)\) avec
+    \(\mathbb{P}(X = k) = e^{-c} c^k / k!\), variance = moyenne&nbsp;; exponentielle de
+    paramètre \(\lambda\), sans mémoire — le temps d'attente des processus de Poisson.</li>
+    <li><strong>Convergences et concentration</strong> (ch. 4)&nbsp;: loi faible des grands
+    nombres, TCL, inégalités de Markov \(\mathbb{P}(X \geq a) \leq \mathbb{E}[X]/a\) et de
+    Tchebychev&nbsp;; c'est <em>la</em> machinerie des seuils du ch. 1.</li>
+    <li><strong>Estimation</strong> (ch. 5)&nbsp;: maximum de vraisemblance, biais,
+    consistances — on en usera sur le SBM (ch. 5) et les lois de puissance (ch. 2).</li>
+    <li><strong>Tests</strong> (ch. 6)&nbsp;: tests d'hypothèses, erreurs de type I/II — le
+    seuil de détection du ch. 5 est exactement la frontière où tout test devient
+    impuissant.</li>
+  </ul>
+</div>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 — boîte à outils graphes (cf. module Graph ML, ch. 0)</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Vocabulaire</strong>&nbsp;: \(G = (V, E)\), degrés \(d_v\), voisins
+    \(\mathcal{N}(v)\), matrice d'adjacence \(A\), chemins, composantes connexes,
+    diamètre, coefficient de clustering
+    \(c_v = \frac{2\,|\text{arêtes dans } \mathcal{N}(v)|}{d_v(d_v - 1)}\).</li>
+    <li><strong>Spectre</strong> (module Graph ML, ch. 4)&nbsp;: valeurs propres de \(A\),
+    rayon spectral \(\rho(A)\) = plus grande valeur propre en module (graphe connexe&nbsp;:
+    simple, positive, vecteur de Perron–Frobenius à coordonnées strictement positives).</li>
+    <li><strong>Marches aléatoires</strong> (module Graph ML, ch. 3)&nbsp;: \(P = D^{-1}A\),
+    distribution stationnaire \(\pi_v = d_v / 2m\), temps de mélange — le support des
+    protocoles de rumeur (ch. 4) et des algorithmes distribués (ch. 7).</li>
+    <li><strong>Algorithmes de graphes</strong> (module Refresher CS, ch. 5)&nbsp;: BFS/DFS
+    en \(O(n + m)\), composantes connexes — brique de base des simulations du ch. 9.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 0.1 — Graphe aléatoire</span>
+  Un <strong>graphe aléatoire</strong> est une variable aléatoire à valeurs dans l'ensemble
+  des graphes (simples, non orientés, sauf mention contraire) sur un ensemble fixé de
+  \(n\) sommets. Deux spécifications équivalentes dominent&nbsp;: par <strong>mesure</strong>
+  (une distribution sur les \(2^{\binom{n}{2}}\) graphes possibles) ou par
+  <strong>procédure générative</strong> (un algorithme aléatoire qui construit le graphe
+  arête par arête, ou sommet par sommet). Les chapitres 1, 2 et 5 donnent les trois
+  modèles génératifs canoniques&nbsp;: Erdős–Rényi, configuration/Barabási–Albert, et
+  stochastic block model.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 0.2 — Processus de branchement (Galton–Watson)</span>
+  Partant d'un individu initial, chaque individu a une descendance aléatoire i.i.d. de loi
+  \((p_k)\), de moyenne \(m = \sum_k k\, p_k\). Si \(Z_t\) désigne la taille de la
+  génération \(t\)&nbsp;: \(\mathbb{E}[Z_t] = m^t\). Le processus s'éteint presque
+  sûrement si \(m \leq 1\) et survit avec probabilité strictement positive si \(m &gt; 1\)
+  (l'événement de survie a pour probabilité la plus petite solution non nulle de
+  \(s = G(s)\), \(G\) étant la fonction génératrice de la descendance). C'est l'outil
+  universel des «&nbsp;débuts de processus&nbsp;»&nbsp;: composante géante (ch. 1),
+  épidémie (ch. 3), diffusion de rumeur (ch. 4).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 0.3 — Méthode du premier moment</span>
+  Pour toute variable aléatoire \(X \geq 0\) entière&nbsp;:
+  \(\mathbb{P}(X \geq 1) \leq \mathbb{E}[X]\) (Markov). En conséquence, si
+  \(\mathbb{E}[X_n] \to 0\) alors \(X_n = 0\) avec probabilité tendant vers 1&nbsp;; et si
+  \(\mathrm{Var}(X_n) = o(\mathbb{E}[X_n]^2)\) avec \(\mathbb{E}[X_n] \to \infty\), alors
+  \(X_n &gt; 0\) avec probabilité tendant vers 1 (second moment, via Tchebychev&nbsp;:
+  \(\mathbb{P}(X_n = 0) \leq \mathbb{P}(|X_n - \mathbb{E}X_n| \geq \mathbb{E}X_n) \leq
+  \mathrm{Var}(X_n)/\mathbb{E}[X_n]^2 \to 0\)). Tout le ch. 1 repose sur ce duo.
+</div>
+
+<div class="note">
+  <span class="tag">Le positionnement LLGA</span>
+  Ce module est le pendant <em>probabiliste</em> du module Graph ML (M1 P2), qui est le
+  pendant <em>algorithmique et apprentissage</em>. Graph ML demande «&nbsp;étant donné ce
+  graphe, que prédire&nbsp;?&nbsp;»&nbsp;; ici on demande «&nbsp;d'où vient ce graphe, et
+  que peut-on dire de ses processus&nbsp;?&nbsp;». Les deux convergent au ch. 5&nbsp;: le
+  stochastic block model est à la fois le modèle génératif de référence et le cadre
+  théorique du spectral clustering (module Machine Learning, ch. 6&nbsp;; module Graph ML,
+  ch. 4). Le ch. 8 présente les travaux de L. Massoulié (Inria)&nbsp;; le ch. 9 relie aux
+  simulations, et le pont vers le M2 se fait par les encodages de position (module
+  Advanced GNN, ch. 3) — où les mêmes spectres reviennent.
+</div>
+
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Graphes aléatoires&nbsp;: Erdős–Rényi</h2>
+
+<p>Le modèle \(G(n, p)\) de Gilbert–Erdős–Rényi est l'atome primitif&nbsp;: \(n\) sommets,
+chaque paire reliée indépendamment avec probabilité \(p\). Il n'a aucune structure —
+et c'est précisément ce qui en fait la pierre de touche&nbsp;: un phénomène observé sur un
+réseau réel n'est «&nbsp;significatif&nbsp;» que s'il est improbable sous \(G(n, p)\)
+à mêmes taille et densité (c'est le rôle du modèle nul dans la modularité, ch. 6).</p>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Les deux modèles d'Erdős–Rényi</span>
+  \(G(n, p)\)&nbsp;: chacune des \(\binom{n}{2}\) arêtes présente indépendamment avec
+  probabilité \(p\). \(G(n, m)\)&nbsp;: un choix uniforme parmi les graphes à exactement
+  \(m\) arêtes. Pour \(m \approx p \binom{n}{2}\), les deux sont interchangeable à
+  \(o(m)\) arêtes près (on passera de l'un à l'autre sans préavis). Espérances
+  immédiates&nbsp;:
+  $$\mathbb{E}[|E|] = p \binom{n}{2}, \qquad \mathbb{E}[\text{deg}(v)] = (n-1) p =: d \quad (\text{degré moyen }).$$
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — Loi des degrés&nbsp;: binomiale, puis Poisson</span>
+  Dans \(G(n, p)\), le degré \(D_v\) suit la loi \(\mathrm{Bin}(n-1, p)\). Dans le régime
+  creux \(p = c/n\) (degré moyen \(c\) constant), \(D_v\) converge en loi vers
+  \(\mathrm{Pois}(c)\)&nbsp;:
+  $$\binom{n-1}{k} \Big( \frac{c}{n} \Big)^k \Big( 1 - \frac{c}{n} \Big)^{n-1-k} \xrightarrow[n \to \infty]{} e^{-c}\, \frac{c^k}{k!}.$$
+  <div class="proof">
+  Premier facteur&nbsp;:
+  \(\binom{n-1}{k} \sim \frac{(n-1)^k}{k!}\), et \((n-1)^k (c/n)^k \to c^k\). Second&nbsp;:
+  \((1 - c/n)^{n-1-k} = \exp\big( (n - 1 - k) \ln(1 - c/n) \big) = \exp\big( -(n-1-k)
+  (c/n + O(1/n^2)) \big) \to e^{-c}\), car \(k\) est fixé et \((n-1-k)/n \to 1\).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.3 (émergence de la composante géante, \(p = c/n\))</span>
+  Soit \(C_1\) la plus grande composante connexe de \(G(n, c/n)\).
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>si \(c \leq 1\)&nbsp;: \(|C_1| = O(\log n)\) avec grande probabilité&nbsp;;
+    toutes les composantes sont des arbres ou des «&nbsp;arbres + une arête&nbsp;»&nbsp;;</li>
+    <li>si \(c &gt; 1\)&nbsp;: \(|C_1| = \rho\, n + o(n)\) avec grande probabilité, où
+    \(\rho \in (0, 1]\) est l'unique solution de
+    $$\rho = 1 - e^{-c\rho},$$
+    et toutes les autres composantes sont de taille \(O(\log n)\).</li>
+  </ol>
+  On appelle \(c = 1\) le <strong>seuil de percolation</strong> — la transition de phase
+  la plus célèbre des réseaux.
+  <div class="proof">
+  (Esquisse par exploration et branchement.) Explorons la composante d'un sommet \(v\)
+  par file (BFS)&nbsp;: chaque sommet découvert présente \(X\) voisins non encore vus, où
+  \(X \sim \mathrm{Bin}(n - O(\text{vu}), c/n) \approx \mathrm{Pois}(c)\), et ces lois
+  restent quasi indépendantes tant que l'exploration reste petite devant \(n\). La
+  composante de \(v\) se comporte donc comme un processus de Galton–Watson de moyenne
+  \(c\) (définition 0.2)&nbsp;: extinction p.s. si \(c \leq 1\) (composantes
+  \(O(\log n)\), dans le régime critique \(c = 1\) la taille est \(n^{2/3}\)&nbsp;;
+  hors programme)&nbsp;; survie avec probabilité \(\rho\) si \(c &gt; 1\), où \(\rho\) est
+  la probabilité de survie du branchement&nbsp;: \(\rho = 1 - G(1 - \rho)\) avec \(G\) la
+  génératrice de \(\mathrm{Pois}(c)\), c'est-à-dire \(\rho = 1 - e^{-c\rho}\). La
+  fraction de sommets dans des composantes «&nbsp;infinies&nbsp;» vaut \(\rho\) — c'est
+  la taille relative de \(C_1\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.4 (seuil de connexité) — démontré en esquisse</span>
+  Pour \(p = (\ln n + \omega(1))/n\) (i.e. \(np = \ln n + \omega(1)\)), \(G(n, p)\) est
+  connexe avec probabilité tendant vers 1. Pour \(p = (\ln n - \omega(1))/n\), il est
+  non connexe avec probabilité tendant vers 1. Plus précisément, pour
+  \(p = (\ln n + t)/n\) avec \(t\) fixé&nbsp;:
+  $$\mathbb{P}(G(n,p) \text{ connexe}) \longrightarrow \exp\big( -e^{-t} \big).$$
+  Le <strong>seuil de connexité coïncide avec le seuil de disparition des sommets
+  isolés</strong>&nbsp;: au moment où le dernier sommet isolé disparaît, le graphe devient
+  connexe.
+  <div class="proof">
+  (Esquisse, premier et second moments — cf. proposition 0.3.) Soit \(X\) le nombre de
+  sommets isolés&nbsp;:
+  $$\mathbb{E}[X] = n (1 - p)^{n-1} = n \exp\big( (n-1)\ln(1 - p) \big) \approx n\, e^{-np} = e^{-t} \quad \text{pour } np = \ln n + t.$$
+  <strong>Régime \(np = \ln n - \omega(1)\) (donc \(t = -\omega(1)\), \(\mathbb{E}[X] =
+  e^{-t} \to \infty\))&nbsp;: il existe un isolé.</strong> Les événements «\(v\) isolé&nbsp;»
+  ne sont pas indépendants, mais presque&nbsp;: \(\mathrm{Var}(X) = \mathbb{E}[X](1 -
+  o(1)) + \text{termes croisés}\, o(\mathbb{E}[X]^2)\) (les covariances
+  \(\mathbb{P}(u, v \text{ tous deux isolés}) \leq (1-p)^{2(n-1)-1}\) ne contribuent
+  qu'en \(O(\mathbb{E}[X]^2/n)\)). Tchebychev donne \(\mathbb{P}(X = 0) \leq
+  \mathrm{Var}(X)/\mathbb{E}[X]^2 \to 0\)&nbsp;: un sommet isolé existe, le graphe n'est
+  pas connexe.
+  <br><br>
+  <strong>Régime \(np = \ln n + \omega(1)\) (\(\mathbb{E}[X] \to 0\))&nbsp;: plus
+  d'isolés.</strong> Par Markov, \(\mathbb{P}(X \geq 1) \leq \mathbb{E}[X] \to 0\). Il
+  reste à voir qu'«&nbsp;aucun isolé&nbsp;» \(\Rightarrow\) «&nbsp;connexe&nbsp;» —
+  c'est le théorème structurel&nbsp;: si toutes les composantes ont au moins 2 sommets,
+  chacune contient un chemin ou un cycle, et le <em>deficit</em> arithmétique force
+  des composantes \(O(\log n)\)&nbsp;; leur nombre est alors \(O(n/\log n) \cdot
+  (1-p)^{\Omega(\log n)} \to 0\) (chaque paire de composantes de taille \(\geq 2\) non
+  reliée coûte un facteur \((1-p)^{s s'}\) énorme quand \(s, s' \geq 2\))&nbsp;: une seule
+  composante subsiste. La limite \(\exp(-e^{-t})\) est la loi de Gumbel classique des
+  extrêmes — le premier isolé à disparaître est un événement extrémal.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.5 — Diamètre dans le régime dense</span>
+  Si \(np \geq \ln n \cdot \omega(1)\) (en particulier \(np = n^{a}\), \(a &gt; 0\)), le
+  diamètre de \(G(n, p)\) vaut
+  $$\mathrm{diam} = (1 + o(1)) \frac{\ln n}{\ln (np)}$$
+  avec grande probabilité. <em>Intuition</em>&nbsp;: le voisinage d'un sommet croît comme
+  \((np)^r\) après \(r\) pas de BFS (chaque nouveau sommet apporte \(\approx np\)
+  voisins), et couvre \(n\) sommets quand \((np)^r \approx n\). Pour \(p = c/n\),
+  \(c &gt; 1\), la composante géante a un diamètre \(\Theta(\log n)\) et des distances
+  typiques \(\frac{\log n}{\log c}\) — le phénomène «&nbsp;six degrés de
+  séparation&nbsp;» (ch. 2).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.6 (seuils d'apparition de sous-graphes — triangles)</span>
+  Pour \(p = o(1/n)\)&nbsp;: \(G(n,p)\) ne contient aucun triangle avec probabilité
+  tendant vers 1. Pour \(p = \omega(1/n)\)&nbsp;: il en contient au moins un avec
+  probabilité tendant vers 1. Plus généralement (Erdős–Rényi 1960), pour \(H\) strictement
+  équilibré, le seuil d'apparition d'une copie de \(H\) est
+  \(n^{-1/m(H)}\), où \(m(H) = \max_{J \subseteq H} e_J / v_J\) (densité maximale d'un
+  sous-graphe)&nbsp;; pour le triangle \(m = 1\), pour le \(K_4\), \(m = 3/2\).
+  <div class="proof">
+  (Premier moment, entièrement.) Soit \(T\) le nombre de triangles&nbsp;:
+  \(\mathbb{E}[T] = \binom{n}{3} p^3 \sim \frac{(np)^3}{6}\). Si
+  \(np \to 0\), alors \(\mathbb{E}[T] \to 0\) et Markov conclut&nbsp;:
+  \(\mathbb{P}(T \geq 1) \to 0\).
+  <br><br>
+  (Second moment, esquisse.) Si \(np \to \infty\), on calcule
+  \(\mathrm{Var}(T) = \sum_{T_1, T_2} \big( \mathbb{P}(T_1 \wedge T_2) - p^6 \big)\)&nbsp;:
+  les paires de triangles disjoints ou partageant un sommet sont indépendantes ou presque
+  (contribution nulle ou \(\binom{n}{3}\binom{n}{2} p^5 = O(\mathbb{E}[T] \cdot n^2 p^2
+  / np) \ldots\))&nbsp;; seules les paires partageant une arête contribuent, en
+  \(\binom{n}{3} O(n) p^5 = o(\mathbb{E}[T]^2)\) dès que \(np \to \infty\). Tchebychev
+  conclut&nbsp;: \(T \geq 1\) avec probabilité tendant vers 1. L'exercice 3 demande
+  le calcul complet. <span class="qed">∎</span>
+  </div>
+</div>
+
+<table class="tbl">
+<thead><tr><th>Régime de \(p\)</th><th>Structure de \(G(n,p)\)</th><th>Analogie réseau</th></tr></thead>
+<tbody>
+<tr><td>\(p = c/n\), \(c &lt; 1\)</td><td>composantes \(O(\log n)\), arborescentes</td><td>graphe fragmenté, sous-critique</td></tr>
+<tr><td>\(p = 1/n\)</td><td>critique&nbsp;: composante \(n^{2/3}\), étendue</td><td>point de percolation</td></tr>
+<tr><td>\(p = c/n\), \(c &gt; 1\)</td><td>géante \(\rho n\), diamètre \(\Theta(\log n)\)</td><td>réseau connexe en pratique</td></tr>
+<tr><td>\(p = (\ln n + c)/n\)</td><td>connexité&nbsp;: \(\mathbb{P} \to e^{-e^{-c}}\)</td><td>plus de sommets isolés</td></tr>
+<tr><td>\(np = n^{a}\), \(0 &lt; a &lt; 1\)</td><td>diamètre \(\approx \ln n / \ln(np)\)</td><td>«&nbsp;petit monde&nbsp;» extrême</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <span class="tag">Ce que \(G(n,p)\) ne sait pas faire</span>
+  Trois écarts systématiques avec les réseaux sociaux réels, qui motivent le
+  ch. 2&nbsp;: (i) les degrés réels sont <em>hétérogènes</em> (queues lourdes), pas
+  poissonniens&nbsp;; (ii) le <em>clustering</em> réel est élevé (mes amis se connaissent),
+  alors que dans \(G(n,c/n)\) le coefficient de clustering vaut \(p = c/n \to 0\)&nbsp;;
+  (iii) les réseaux réels croissent (les arêtes n'apparaissent pas toutes en même temps).
+  Mais pour tester une heuristique, générer un nul, ou calibrer un seuil, \(G(n,p)\)
+  reste le premier réflexe — c'est aussi le générateur des TME (module Graph ML, ch. 9).
+</div>
+
+</section>
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. Degrés prescrits, petits mondes, scale-free</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Configuration model (Bollobás&nbsp;; Molloy–Reed)</span>
+  Donnons-nous une <strong>séquence de degrés</strong> \(d_1, \dots, d_n\) de somme paire
+  \(2m\). Le modèle de configuration attache \(d_i\) <strong>demi-arêtes</strong>
+  (stubs) au sommet \(i\), puis apparie les \(2m\) demi-arêtes uniformément au hasard
+  (\((2m - 1)!!\) appariements possibles). Le résultat est un multigraphe&nbsp;:
+  boucles et arêtes multiples possibles, en nombre \(O(1)\) en moyenne lorsque les
+  \(d_i\) restent \(o(\sqrt n)\)&nbsp;; en pratique on les efface. L'intérêt&nbsp;: la loi
+  des degrés est <em>imposée</em> — on peut la caler sur un réseau réel — tandis que
+  tout le reste reste «&nbsp;maximalement aléatoire&nbsp;».
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.2 (critère de Molloy–Reed, énoncé)</span>
+  Soit \(D\) la loi des degrés (limite empirique \(p_k = \frac{1}{n}|\{i : d_i = k\}|\)).
+  Le graphe de configuration admet une composante géante de fraction strictement positive
+  si et seulement si
+  $$\sum_{k} k (k - 2)\, p_k &gt; 0 \qquad \Longleftrightarrow \qquad \mathbb{E}[D^2] &gt; 2\, \mathbb{E}[D].$$
+  L'heuristique&nbsp;: en explorant la composante d'un sommet, chaque arête parcourue
+  mène à un nouveau sommet dont le <em>degré excédentaire</em> suit la loi biaisée
+  \(\tilde p_k = \frac{(k+1) p_{k+1}}{\mathbb{E}[D]}\) (biais de taille&nbsp;: une arête
+  arrive plus souvent à un sommet de fort degré)&nbsp;; le branchement d'exploration a
+  pour moyenne \(\frac{\mathbb{E}[D(D-1)]}{\mathbb{E}[D]}\), et le seuil est le passage
+  de cette moyenne au-dessus de 1. Ce même \(\frac{\mathbb{E}[D(D-1)]}{\mathbb{E}[D]}\)
+  sera le \(R_0\) des épidémies sur graphes à degrés hétérogènes (ch. 3).
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.3 — Loi de puissance&nbsp;: \(p_k \sim C k^{-\gamma}\)</span>
+  Pour \(\gamma \in (2, 3)\) (le régime des réseaux sociaux réels — Twitter, web,
+  collaborations)&nbsp;: \(\mathbb{E}[D]\) est finie mais \(\mathbb{E}[D^2]\) diverge —
+  le critère 2.2 est largement positif&nbsp;: composante géante robuste. Conséquences en
+  cascade (ch. 3)&nbsp;: seuil épidémique qui tend vers 0, robustesse aux pannes aléatoires
+  mais fragilité aux attaques ciblées sur les hubs. Pour \(\gamma &gt; 3\), tout est
+  fini et le monde redevient poissonnien en première approximation.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.4 — Small-world de Watts–Strogatz (1998)</span>
+  Partons d'un anneau à \(n\) sommets, chacun relié à ses \(K\) plus proches voisins
+  (graphe très <em>clusté</em>, très «&nbsp;large&nbsp;»&nbsp;: diamètre \(\Theta(n/K)\)).
+  Chaque arête est <strong>recâblée</strong> indépendamment avec probabilité \(\beta\),
+  vers une destination uniforme (sans doublon). Le modèle interpole&nbsp;:
+  \(\beta = 0\) donne le monde «&nbsp;cercle&nbsp;», \(\beta = 1\) donne un graphe
+  proche d'Erdős–Rényi. Le résultat spectaculaire de Watts et Strogatz&nbsp;: dès
+  \(\beta \approx 0{,}01\), le diamètre chute à \(\Theta(\log n)\) alors que le
+  coefficient de clustering reste proche de sa valeur \(\beta = 0\) — les deux grandeurs
+  se <em>découplent</em>. C'est la formalisation des expériences de Milgram (1967)&nbsp;:
+  des réseaux très locaux, traversés en quelques liens aléatoires — «&nbsp;six degrés de
+  séparation&nbsp;». Kleinberg (2000) montre la condition fine pour qu'un tel réseau soit
+  <em>navigable</em> (trouver un chemin court de façon décentralisée, sans carte
+  globale)&nbsp;: la distribution des liens raccourcis doit être en \(r^{-2}\) —
+  exactement ce que les réseaux sociaux reconstruisent.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.5 — Barabási–Albert&nbsp;: l'attachement préférentiel produit \(p_k \sim k^{-3}\) (équation maîtresse)</span>
+  Le modèle&nbsp;: on ajoute les sommets un à un&nbsp;; le sommet \(t\) arrive avec \(m\)
+  arêtes, chacune raccordée à un sommet existant \(i\) avec probabilité
+  \(\Pi(i) = d_i(t) / \sum_j d_j(t)\) — «&nbsp;les riches deviennent plus riches&nbsp;»
+  (Matthew effect). Alors la loi des degrés converge vers
+  $$p_k \;\sim\; \frac{2 m^2}{k^{3}} \qquad (k \geq m),$$
+  indépendamment de \(m\) pour l'exposant.
+  <div class="proof">
+  (Méthode continue — l'équation maîtresse esquisse.) Notons \(d_i(t)\) le degré du
+  sommet \(i\) (arrivé au temps \(t_i\)) à l'instant \(t\), avec \(\sum_j d_j(t) = 2mt\).
+  L'équation maîtresse s'écrit, en pas de temps unitaires,
+  $$\mathbb{E}[d_i(t+1) - d_i(t)] = m \cdot \frac{d_i(t)}{2 m t},$$
+  d'où l'équation différentielle \(\frac{\partial d_i}{\partial t} = \frac{d_i}{2t}\),
+  de solution
+  $$d_i(t) = m \Big( \frac{t}{t_i} \Big)^{1/2}.$$
+  Les sommets anciens (\(t_i\) petit) sont donc proportionnellement plus riches —
+  exactement l'hétérogénéité manquante d'Erdős–Rényi. Passons à la loi&nbsp;: pour
+  \(k \geq m\),
+  $$\mathbb{P}(d_i(t) &lt; k) = \mathbb{P}\Big( t_i &gt; \frac{m^2 t}{k^2} \Big) = 1 - \frac{m^2 t}{k^2 (t - m)} \approx 1 - \frac{m^2}{k^2},$$
+  en utilisant que le temps d'arrivée \(t_i\) est (asymptotiquement) uniforme sur
+  \([0, t]\). En dérivant&nbsp;:
+  $$p_k = -\frac{\mathrm{d}}{\mathrm{d} k} \Big( 1 - \frac{m^2}{k^2} \Big) \Big/ 1 = \frac{2 m^2}{k^3},$$
+  exposant \(\gamma = 3\), cutoff naturel \(k_{\max} \sim \sqrt n\) (le degré du sommet
+  le plus ancien \(d_1(n) = m \sqrt n\)). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Estimer un exposant — le piège</span>
+  Régresser \(\log p_k\) contre \(\log k\) sur un diagramme log-log est biaisé (queues
+  bruitées, bins vides)&nbsp;; la référence est Clauset, Shalizi et Newman (SIAM Review
+  2009)&nbsp;: estimateur de Hill sur le seuil \(k_{\min}\) choisi par test KS, puis test
+  de vraisemblance contre l'alternative log-normale/exponentielle (module Refresher
+  Statistics, ch. 5). Beaucoup de «&nbsp;lois de puissance&nbsp;» publiées ne survivent
+  pas à ce protocole.
+</div>
+
+<table class="tbl">
+<thead><tr><th>Modèle</th><th>Loi des degrés</th><th>Clustering</th><th>Diamètre</th><th>Idée clé</th></tr></thead>
+<tbody>
+<tr><td>Erdős–Rényi \(G(n, c/n)\)</td><td>Poisson(\(c\))</td><td>\(\approx c/n \to 0\)</td><td>\(\Theta(\log n)\) si \(c &gt; 1\)</td><td>aucune structure — nul</td></tr>
+<tr><td>Configuration</td><td>imposée (\(p_k\))</td><td>faible</td><td>dépend de \(p_k\)</td><td>contrôle exact des degrés</td></tr>
+<tr><td>Watts–Strogatz</td><td>concentrée autour de \(K\)</td><td><strong>élevé</strong></td><td>\(\Theta(\log n)\)</td><td>découplage clustering/diamètre</td></tr>
+<tr><td>Barabási–Albert</td><td>\(\sim k^{-3}\)</td><td>faible</td><td>\(\Theta(\log n / \log\log n)\)</td><td>croissance + attachement préférentiel</td></tr>
+</tbody>
+</table>
+
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Processus épidémiques sur graphes</h2>
+
+<p>Un mème, un virus, une rumeur&nbsp;: la même mathématique. Le modèle canonique est
+l'épidémie <strong>SIR</strong> (Sensible → Infectieux → Rétabli) ou sa version à
+rechute <strong>SIS</strong>, posée non plus sur une population homogène mais sur un
+<em>graphe de contacts</em>. La question centrale&nbsp;: y a-t-il un <strong>seuil</strong>
+sous lequel l'épidémie s'éteint vite — et que devient ce seuil quand le graphe est
+hétérogène&nbsp;?</p>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — SIR et SIS sur graphe</span>
+  Chaque sommet est dans un état&nbsp;; les horloges d'infection et de guérison sont
+  exponentielles indépendantes&nbsp;:
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>SIR</strong>&nbsp;: un infecté transmet l'infection à chaque voisin
+    sain au taux \(\beta\), et se rétablit au taux \(\delta\) (immunité définitive).
+    Paramètre clé&nbsp;: le rapport \(\tau = \beta / \delta\).</li>
+    <li><strong>SIS</strong>&nbsp;: même transmission, mais le sommet redevient sensible
+    au taux \(\delta\) — l'épidémie peut devenir <em>endémique</em> (survivre
+    indéfiniment).</li>
+    <li><strong>Version à temps discret</strong> (TME)&nbsp;: chaque arête \(uv\) avec
+    \(u\) infecté transmet à chaque pas avec probabilité \(p = 1 - e^{-\beta}\), chaque
+    infecté guérit avec probabilité \(1 - e^{-\delta}\).</li>
+  </ul>
+  Sur une population <em>homogène</em> (mélange parfait, sans graphe), le SIR
+  classique donne le nombre de reproduction de base \(R_0 = \beta S_0 / \delta\) et le
+  seuil \(R_0 &gt; 1\) — c'est le modèle des cours d'épidémiologie&nbsp;; le graphe
+  remplace le terme de masse \(S_0\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.2 — Approximation de branchement&nbsp;: le seuil sur \(G(n, c/n)\)</span>
+  Sur \(G(n, c/n)\) avec un unique infecté initial, si \(c \tau \leq 1\)
+  (\(\tau = \beta/\delta\)), l'épidémie touche \(o(n)\) sommets&nbsp;; si \(c \tau &gt; 1\),
+  elle touche une fraction strictement positive des sommets avec probabilité strictement
+  positive (épidémie «&nbsp;massive&nbsp;»), et la fraction finale est la taille de la
+  composante géante d'un \(G(n, c\tau/n)\) (cf. théorème 3.4).
+  <div class="proof">
+  (Esquisse.) Au tout début, les tentatives d'infection sur arêtes distinctes sont des
+  courses exponentielles indépendantes&nbsp;: sur une arête \((u, v)\) avec \(u\)
+  infecté, l'infection de \(v\) gagne la course contre la guérison de \(u\) avec
+  probabilité \(\frac{\beta}{\beta + \delta}\). Chaque infecté a donc, en première
+  approximation (aucune collision — les cibles sont toutes distinctes), une descendance
+  infectieuse \(\mathrm{Bin}\big( \mathrm{Pois}(c), \frac{\beta}{\beta+\delta} \big)
+  \approx \mathrm{Pois}\big( c \frac{\beta}{\beta + \delta} \big)\), de moyenne
+  $$R_0^{\text{graphe}} = c\, \frac{\beta}{\beta + \delta} = \frac{c \tau}{1 + \tau},$$
+  seuil \(R_0^{\text{graphe}} = 1\), i.e. \(\tau = \frac{1}{c - 1}\) — à constantes
+  près, \(c\tau = 1\). En régime creux, la précision de la constante importe peu&nbsp;:
+  le branchement sous-critique éteint l'épidémie en \(O(\log n)\) infectés&nbsp;; le
+  surcritique la laisse survivre assez longtemps pour voir \(n\) sommets.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 (Ganesh, Massoulié, Towsley, INFOCOM 2005) — le seuil spectral du SIS</span>
+  Pour le SIS sur un graphe fixe \(G\) d'adjacence \(A\), de rayon spectral
+  \(\rho(A)\)&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>si \(\beta / \delta &lt; 1 / \rho(A)\)&nbsp;: l'épidémie s'éteint en un temps
+    \(O(\log n)\) avec probabilité tendant vers 1 (extinction rapide)&nbsp;;</li>
+    <li>réciproquement, dès que \(\beta/\delta\) excède \(1/\rho(A)\) d'un facteur
+    dépendant de la géométrie du graphe, le temps de survie est exponentiel en \(n\)&nbsp;:
+    l'épidémie devient <strong>endémique</strong>. Les travaux ultérieurs (Chakrabarti
+    et al., 2008) identifient \(1/\rho(A)\) comme le seuil de l'approximation
+    en champ moyen&nbsp;: <strong>le seuil épidémique d'un réseau est spectral</strong>.</li>
+  </ol>
+  <div class="proof">
+  (Preuve du (i), esquisse — supermartingale spectrale.) Soit \(u\) le vecteur de
+  Perron–Frobenius de \(A\) (\(u &gt; 0\), \(A u = \rho u\)) et
+  \(\Phi_t = \sum_i u_i x_i(t)\) où \(x_i(t) \in \{0, 1\}\) est l'indicateur
+  d'infection. Chaque infecté \(i\) guérit au taux \(\delta\) (drift
+  \(-\delta u_i\)) et infecte chaque voisin \(j\) au taux \(\beta\) (drift
+  \(+\beta u_j\))&nbsp;; en notant \(x\) le vecteur d'état&nbsp;:
+  $$\frac{\mathrm{d}}{\mathrm{d}t} \mathbb{E}[\Phi_t \mid x] \;\leq\; \sum_i x_i \big( -\delta u_i + \beta \sum_{j \sim i} u_j \big) = \big( \beta \rho(A) - \delta \big) \sum_i x_i u_i = \big( \beta \rho - \delta \big)\, \mathbb{E}[\Phi_t \mid x].$$
+  Si \(\beta \rho &lt; \delta\), \(\mathbb{E}[\Phi_t] \leq \Phi_0\, e^{-(\delta - \beta \rho) t}\)&nbsp;;
+  comme \(\Phi_t = 0\) dès que l'épidémie est éteinte et que \(\Phi_t \geq
+  (\min_i u_i) \cdot \mathbf{1}_{\{\text{au moins un infecté}\}}\),
+  $$\mathbb{P}(\text{non éteinte à } t) \;\leq\; \frac{\Phi_0}{\min_i u_i}\; e^{-(\delta - \beta \rho) t},$$
+  d'où l'extinction en \(O(\log n)\) (le préfacteur est polynomial en \(n\)).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.4 — SIR final = percolation&nbsp;: la taille finale est une composante géante</span>
+  Pour le SIR sur \(G(n, c/n)\), la taille finale de l'épidémie lancée d'un sommet
+  aléatoire a la même loi que la taille de la composante connexe de ce sommet dans le
+  graphe <em>percolé</em> \(G(n, c \frac{\beta}{\beta + \delta}/n)\), où chaque arête est
+  gardée avec probabilité \(\frac{\beta}{\beta + \delta}\) (probabilité que la
+  transmission gagne la course, cf. 3.2). En particulier&nbsp;: épidémie massive \(\iff\)
+  composante géante du graphe percolé — le théorème 1.3 se réapplique au paramètre
+  \(c \tau' = c \frac{\beta}{\beta + \delta}\), et la fraction finale de la population
+  infectée est \(\rho\) solution de \(\rho = 1 - e^{-c \tau' \rho}\).
+  <div class="proof">
+  (Couplage.) Ordonnons les événements&nbsp;: pour chaque arête \((u, v)\), la course
+  «&nbsp;transmission vs guérison&nbsp;» peut être tirée <em>à l'avance</em>, indépendamment
+  de tout le reste&nbsp;: marquer l'arête «&nbsp;ouverte&nbsp;» avec probabilité
+  \(\frac{\beta}{\beta+\delta}\) (horloge de transmission plus rapide que celle de
+  guérison, toutes indépendantes). La propriété de Markov forte du processus montre alors
+  que l'ensemble final des infectés est exactement l'ensemble des sommets atteignables
+  depuis l'origine dans le sous-graphe des arêtes ouvertes — la composante connexe
+  percolée. C'est le pont classique épidémie \(\leftrightarrow\) percolation (Grassberger
+    1983&nbsp;; Newman 2002). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.5 (Pastor-Satorras–Vespignani, 2001) — seuil nul sur les réseaux scale-free</span>
+  Sur un graphe de configuration dont la loi des degrés est \(p_k \sim C k^{-\gamma}\)&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>le seuil épidémique effectif vaut \(\tau_c = \frac{\mathbb{E}[D]}{\mathbb{E}[D(D-1)]}\)
+    (égal au \(R_0\) réciproque du théorème 2.2)&nbsp;;</li>
+    <li>si \(2 &lt; \gamma \leq 3\), \(\mathbb{E}[D(D-1)]\) diverge avec \(n\)&nbsp;:
+    \(\tau_c \to 0\) — <strong>toute contagion devient épidémique</strong> sur un réseau
+    scale-free infini.</li>
+  </ol>
+  Lecture d'ingénieur&nbsp;: vacciner au hasard ne change pas la divergence&nbsp;;
+  cibler les hubs (vaccination «&nbsp;acquaintance&nbsp;» ou par degré) réintroduit un
+  seuil positif. C'est l'argument quantitatif derrière la modération des comptes à très
+  forte audience sur les plateformes (et derrière les stratégies de vaccination ciblée).
+</div>
+
+<div class="note">
+  <span class="tag">Du modèle à la donnée&nbsp;: \(R_0\) en pratique</span>
+  Estimer \(\beta, \delta\) ou \(R_0\) sur données de cascades (timestamps de
+  retweets)&nbsp;: maximum de vraisemblance sur les temps d'infection (processus de
+  Hawkes / chaînes de contagion — module Refresher Statistics, ch. 5)&nbsp;;
+  intervalles de confiance par bootstrap (ch. 4–6). Le TME du ch. 9 fait l'expérience
+  inverse&nbsp;: simuler, mesurer la taille finale, vérifier les seuils 3.2 et 3.5 sur
+  ER vs Barabási–Albert.
+</div>
+
+</section>
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Rumeurs, push-pull et influence</h2>
+
+<p>Diffuser une information à \(n\) machines sans annuaire ni coordinateur&nbsp;: le
+protocole <strong>gossip</strong> (ragot) est la solution élégante — chaque nœud appelle
+un voisin au hasard à chaque tour. C'est la brique des rumeurs (Karp et al. 2000), de
+l'agrégation distribuée (ch. 7) et l'ancêtre lointain des blocs de blockchain diffusés
+en «&nbsp;flood&nbsp;». La question quantitative&nbsp;: combien de tours pour tout le
+monde&nbsp;?</p>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Protocoles push, pull, push-pull (modèle du coup de téléphone)</span>
+  Temps discret&nbsp;; à chaque tour, chaque nœud choisit un interlocuteur uniformément
+  au hasard parmi les \(n - 1\) autres (graphe complet)&nbsp;:
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>push</strong>&nbsp;: les nœuds <em>informés</em> appellent pour
+    transmettre&nbsp;;</li>
+    <li><strong>pull</strong>&nbsp;: les nœuds <em>non informés</em> appellent pour
+    demander&nbsp;;</li>
+    <li><strong>push-pull</strong>&nbsp;: les deux à la fois — l'appel transmet
+    dès qu'un côté sait.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.2 (Karp, Schindelhauer, Shenker, Vöcking, FOCS 2000)</span>
+  Sur le graphe complet \(K_n\), le protocole push-pull informe tous les \(n\) nœuds en
+  $$\log_2 n + \ln n + o(\log n) \quad \text{tours, avec probabilité } 1 - o(1/n),$$
+  et le protocole push seul atteint la même vitesse asymptotique
+  \(\log_2 n + \ln n + o(\log n)\)&nbsp;; \(\log_2 n + \ln n\) est optimal dans le modèle.
+  <div class="proof">
+  (Esquisse en trois phases — d'où viennent les deux constantes.) Notons \(k_t\) le
+  nombre d'informés et \(s_t = n - k_t\) les ignorants.
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Doublement (\(k \leq n/2\))&nbsp;: le terme \(\log_2 n\).</strong>
+    Chaque informé pousse vers une cible uniforme&nbsp;; la probabilité de viser un
+    non-informé vaut \(1 - k/n \geq 1/2\), donc
+    \(\mathbb{E}[k_{t+1} \mid k_t] \geq k_t (1 + \frac{1}{2})\)&nbsp;: croissance
+    géométrique de raison \(\approx 3/2\) par tour, d'où \(\log_2 n + O(1)\) tours
+    pour passer de 1 à \(n/2\) (l'écart à l'espérance se contrôle par supermartingale).</li>
+    <li><strong>Décroissance exponentielle de l'ignorance (\(k \geq n/2\))&nbsp;: le
+    terme \(\ln n\).</strong> Un ignorant survit à un tour de <em>push</em> si aucun
+    des \(k_t\) informés ne l'a appelé&nbsp;:
+    \(\mathbb{P}(\text{survie}) = (1 - \frac{1}{n})^{k_t} \approx e^{-k_t/n}\). Quand
+    \(k_t = n - s_t \approx n\), chaque ignorant survit avec probabilité
+    \(\approx e^{-1}\) par tour&nbsp;: \(s_t\) décroît géométriquement de raison
+    \(\approx e^{-1}\), et il faut \(\ln n\) tours pour passer de \(\Theta(n)\)
+    ignorants aux derniers — la signature du collectionneur de coupons (module
+    Refresher Statistics, ch. 3)&nbsp;: chaque tour «&nbsp;couvre&nbsp;» \(k_t\) sommets
+    aléatoires, et couvrir les \(n\) sommets prend \(\ln n\) tours.</li>
+    <li><strong>Rôle du pull.</strong> Le pull ne change pas les deux constantes de
+    tête mais accélère la phase intermédiaire&nbsp;: un ignorant qui appelle au hasard
+    tombe sur un informé avec probabilité \(k_t/n\), ce qui borne la survie par
+    \(e^{-k_t/n} \cdot (1 - k_t/n)\) et régularise la transition. La difficulté
+    technique de l'article — au-delà de cette esquisse — est de contrôler les
+    déviations des deux phases simultanément (analyse «&nbsp;forward-backward&nbsp;»).</li>
+  </ol>
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Graphes généraux, et coûts de communication</span>
+  Sur un graphe de degré maximal \(\Delta\), push-pull prend \(\Theta(\Delta \log n)\)
+  tours dans le pire cas (l'information doit traverser les goulets)&nbsp;; sur les
+  graphes aléatoires du ch. 1–2, \(\Theta(\log n)\) suffit. Karp et al. montrent aussi
+  que le push seul peut être rendu <em>économe en messages</em>&nbsp;:
+  \(O(n \log \log n)\) transmissions avec une variante «&nbsp;paresseuse&nbsp;» — d'où
+  son usage dans les systèmes pairs-à-pairs (ch. 7). Les variantes modernes (pull avec
+  listes de nouveaux messages, protocoles de Doerr et al.) atteignent la même vitesse
+  avec une robustesse aux pannes.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.3 — Maximisation d'influence (Kempe, Kleinberg, Tardos, 2003)</span>
+  Modèle <strong>independent cascade</strong> (IC)&nbsp;: chaque arête \((u,v)\) est
+  «&nbsp;active&nbsp;» indépendamment avec probabilité \(p_{uv}\)&nbsp;; un contenu parti
+  de l'ensemble \(S\) se propage le long des arêtes actives (une fois par arête). La
+  <strong>fonction d'influence</strong> est \(\sigma(S) = \mathbb{E}[|R(S)|]\), taille
+  attendue de l'ensemble atteignable depuis \(S\). Problème&nbsp;: choisir \(S\) de
+  cardinal \(\leq k\) maximisant \(\sigma(S)\) — quel budget de «&nbsp;seeder&nbsp;»
+  pour une campagne virale&nbsp;? (Le modèle <strong>linear threshold</strong> — chaque
+  sommet s'active quand la somme des poids de voisins actifs dépasse un seuil aléatoire
+  — est l'alternative classique, même complexité.)
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.4 — \(\sigma\) est sous-modulaire, et glouton est \((1 - 1/e)\)-optimal</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>\(\sigma\) est <strong>monotone</strong> (\(S \subseteq T \Rightarrow
+    \sigma(S) \leq \sigma(T)\)) et <strong>sous-modulaire</strong>&nbsp;:
+    \(\sigma(S \cup \{v\}) - \sigma(S) \geq \sigma(T \cup \{v\}) - \sigma(T)\) pour
+    \(S \subseteq T\) — les rendements marginaux décroissent&nbsp;;</li>
+    <li>l'algorithme <strong>glouton</strong> (ajouter itérativement le sommet de gain
+    marginal maximal) renvoie \(S_g\) tel que
+    $$\sigma(S_g) \;\geq\; \Big( 1 - \frac{1}{e} \Big) \sigma(S^\ast),$$
+    où \(S^\ast\) est l'optimal (borne de Nemhauser–Wolsey–Fisher, 1978)&nbsp;;</li>
+    <li>le problème d'optimisation exact est NP-difficile (réduction de Set Cover)&nbsp;;
+    atteindre \((1 - 1/e + \varepsilon)\) pour tout \(\varepsilon &gt; 0\) est
+    NP-difficile aussi.</li>
+  </ol>
+  <div class="proof">
+  <strong>Sous-modularité (couplage live-edge).</strong> Tirons à l'avance, une fois
+  pour toutes, l'état «&nbsp;vivant/mort&nbsp;» de chaque arête (couplage du théorème
+  3.4)&nbsp;; dans <em>ce</em> monde, \(R(S)\) est l'ensemble des sommets atteignables
+  de \(S\) dans le sous-graphe vivant, et la atteignabilité est clairement monotone et
+  sous-modulaire&nbsp;: si \(w\) est atteignable de \(S \cup \{v\}\) mais pas de
+  \(S\), alors tout chemin vivant de \(S \cup \{v\}\) à \(w\) passe par \(v\), donc
+  \(w\) est atteignable de \(\{v\}\)&nbsp;; d'où
+  \(R(S) \cup R(\{v\}) \supseteq R(S \cup \{v\})\) et le gain marginal en atteint est
+  plus petit sur le grand ensemble. L'espérance préserve l'ordre. \(\square\)
+  <br><br>
+  <strong>Glouton.</strong> Par sous-modularité et monotonicité, les gains marginaux du
+  glouton \(g_1 \geq g_2 \geq \dots\) satisfont \(\sigma(S^\ast) \leq \sigma(S_g) +
+  \sum_{v \in S^\ast \setminus S_g} g_v \leq \sigma(S_g) + k\, g_t\) pour toute étape
+  \(t\) — en choisissant \(t = k\) et en sommant la récursion
+  \(\sigma(S_{i+1}) \geq \sigma(S_i)(1 - 1/k)\) il vient
+  \(\sigma(S_g) \geq (1 - (1 - 1/k)^k) \sigma(S^\ast) \geq (1 - e^{-1}) \sigma(S^\ast)\).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">De la théorie à la plateforme</span>
+  Les estimateurs Monte-Carlo de \(\sigma\) coûtent cher (10&nbsp;000 simulations par
+  candidat)&nbsp;; l'astuce CELF (Leskovec et al., 2007) divise le coût par ~700 en
+  exploitant la décroissance des gains marginaux pour lazy-évaluer. Les applications&nbsp;:
+  marketing viral (choix des seeders), détection précoce de contagions (capteurs),
+  vaccination (ch. 3). La symétrie noire&nbsp;: les mêmes algorithmes optimisent la
+  désinformation — d'où la recherche actuelle sur l'inoculation (pré-bunkage, bots
+  «&nbsp;curatifs&nbsp;») et les modèles de compétition entre cascades.
+</div>
+
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Le stochastic block model</h2>
+
+<p>Communautés&nbsp;: des groupes de sommets mieux connectés à l'intérieur qu'entre
+eux. Le <strong>stochastic block model</strong> (SBM) en est le modèle génératif
+canonique — l'équivalent, pour les graphes, des gaussiennes pour les nuages. Il permet
+de poser les bonnes questions&nbsp;: <em>quand</em> la structure de blocs est-elle
+détectable&nbsp;? <em>Quel algorithme</em> l'atteint&nbsp;? Les réponses font intervenir des
+seuils exacts — dont deux sont dus à l'enseignant du module (ch. 8).</p>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — SBM</span>
+  Paramètres&nbsp;: \(n\) sommets, \(q\) blocs, proportions
+  \((\pi_1, \dots, \pi_q)\), matrice de connectivité \(P = (p_{ab}) \in [0, 1]^{q
+  \times q}\). Génération&nbsp;: chaque sommet reçoit un bloc \(\sigma(v) \sim \pi\)
+  indépendamment&nbsp;; chaque paire \((u, v)\) est reliée avec probabilité
+  \(p_{\sigma(u)\sigma(v)}\), indépendamment. Cas d'école «&nbsp;deux blocs
+  symétriques&nbsp;»&nbsp;: \(q = 2\), \(\pi = (1/2, 1/2)\), \(p_{\mathrm{in}} = a/n\),
+  \(p_{\mathrm{out}} = b/n\) (deux communautés de degré moyen \(\frac{a+b}{2}\),
+  d'autant plus séparées que \(a &gt; b\)). Le SBM avec degrés hétérogènes dans les
+  blocs (DC-SBM, Karrer–Newman 2011) corrige le biais «&nbsp;les hubs deviennent des
+  blocs&nbsp;».
+</div>
+
+<div class="def">
+  <span class="tag">Définition 5.2 — Les trois régimes de difficulté</span>
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>Détection (sparse, degrés \(O(1)\))</strong>&nbsp;: partition
+    \(\hat\sigma\) mieux corrélée à \(\sigma\) que le hasard (plus de 50&nbsp;% de
+    bonnes paires en \(q = 2\)). Régime réaliste pour les grands réseaux.</li>
+    <li><strong>Récupération partielle</strong>&nbsp;: fraction d'erreur
+    \(\to 0\) asymptotiquement.</li>
+    <li><strong>Récupération exacte (dense, degrés \(\Theta(\log n)\))</strong>&nbsp;:
+    \(\mathbb{P}(\hat\sigma = \sigma) \to 1\). Pour deux blocs symétriques avec
+    \(p_{\mathrm{in}} = a \log n/n\), \(p_{\mathrm{out}} = b \log n / n\)&nbsp;: le seuil
+    exact est \(\sqrt a - \sqrt b &gt; \sqrt 2\) (Abbe, Bandeira, Hall&nbsp;;
+    Mossel, Neeman, Sly)&nbsp;: au-dessus, le maximum de vraisemblance — NP-difficile
+    en général — y est atteignable par relaxation semi-définie.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.3 — Seuils de Kesten–Stigum et de détection (énoncés)</span>
+  Pour deux blocs symétriques \((a, b)/n\)&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Impossibilité sous KS.</strong> Si \((a - b)^2 \leq 2(a + b)\), aucune
+    méthode ne fait mieux que le hasard (le modèle est «&nbsp;contigu&nbsp;» à
+    Erdős–Rényi de degré \(\frac{a+b}{2}\)) — conjecturé par Decelle, Krzakala, Moore,
+    Zdeborová (2011)&nbsp;; l'impossibilité est prouvée par Mossel, Neeman, Sly.</li>
+    <li><strong>Faisabilité au-dessus.</strong> Si \((a-b)^2 &gt; 2(a+b)\), la détection
+    est possible — c'est le théorème de Massoulié (STOC 2014, ch. 8)&nbsp;:
+    les graphes aléatoires y vérifient la propriété de Ramanujan faible, et un
+    algorithme spectral <em>non-retour</em> détecte.</li>
+  </ol>
+  La quantité \(\frac{(a-b)^2}{2(a+b)}\) joue le rôle d'un rapport signal/bruit&nbsp;;
+  le seuil est celui où l'information survit au bruit spectral du degré.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 5.4 — La matrice non-retour (hashimoto)</span>
+  Indexons les <strong>arêtes orientées</strong> \((u \to v)\) du graphe (il y en a
+  \(2m\)). La matrice non-retour \(B \in \{0,1\}^{2m \times 2m}\) est définie par
+  $$B_{(u \to v),\, (v \to w)} = \mathbf{1}\{ w \neq u \}, \qquad 0 \text{ sinon&nbsp;: un chemin qui ne revient pas sur ses pas.}$$
+  \(B\) code les marches <strong>non-retour</strong> (non-backtracking)&nbsp;: la
+  puissance \(B^r\) compte les marches sans demi-tour de longueur \(r\). Lien avec le
+  cours&nbsp;: c'est l'opérateur compagnon de l'adjacence \(A\), insensible au
+  «&nbsp;bruit de degré&nbsp;» qui pollue \(A\) — une marche sans demi-tour ne peut pas
+  faire des allers-retours sur un hub.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.5 (Bordenave, Lelarge, Massoulié, FOCS 2015 / Ann. Probab. 2018) — spectre non-retour du SBM</span>
+  Pour le SBM \((a, b)/n\) et son extension à \(q\) blocs, avec grande probabilité&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>le spectre de \(B\) est constitué d'un <strong>bulk</strong> contenu dans le
+    disque de rayon \(\sqrt{d}\) (où \(d\) est le degré moyen), plus
+    <strong>valeurs propres réelles porteuses d'information</strong>&nbsp;;</li>
+    <li>une valeur propre informative s'échappe du bulk
+    (\(|\lambda| &gt; \sqrt d\)) <em>si et seulement si</em> le seuil de Kesten–Stigum est
+    franchi&nbsp;;</li>
+    <li>en conséquence, l'algorithme <strong>spectral non-retour</strong> — calculer les
+    premiers vecteurs propres de \(B\), faire un k-moyennes dessus — détecte les blocs
+    exactement jusqu'au seuil d'information&nbsp;; la même matrice prouve que les
+    graphes aléatoires sont asymptotiquement «&nbsp;Ramanujan non réguliers&nbsp;».</li>
+  </ol>
+  <em>Pourquoi \(A\) échoue là où \(B\) réussit&nbsp;:</em> sous le régime
+  \(\log\)-libre (degrés \(O(1)\)), le plus haut degré est \(\Theta(\frac{\log n}{\log
+  \log n})\) et crée des valeurs propres parasites du même ordre que le signal&nbsp;;
+  l'opérateur \(B\) annule précisément la contribution de ces allers-retours locaux.
+  C'est la réponse théorique au problème pratique du spectral clustering sur réseaux
+  creux à hubs (module Graph ML, ch. 4&nbsp;; module Machine Learning, ch. 6).
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 5.6 — MLE et lien EM</span>
+  Écrire la log-vraisemblance du SBM (blocs latents inconnus)&nbsp;:
+  $$\ell(\sigma) = \sum_{a, b} \Big[ m_{ab}(\sigma) \log \tfrac{a \vee b}{n} + (\text{non-arêtes}) \log(1 - \tfrac{a\vee b}{n}) \Big],$$
+  et le MLE est la partition maximisant \(\ell\) — un problème combinatoire
+  (discrétisation des coupes). L'EM variationnel (module Machine Learning, ch. 6)
+  approche ce MLE&nbsp;: étape E — responsabilités des blocs&nbsp;; étape M —
+  re-estimation de \(P\) et \(\pi\)&nbsp;; initialisation spectrale (5.5) pour échapper
+  aux points selles. C'est le pipeline des bibliothèques graph-tool / sbm.
+</div>
+
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Détection de communautés et applications</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Modularité (Newman–Girvan, 2004)</span>
+  Pour une partition \(\mathcal{C}\) d'un graphe \(G\) à \(m\) arêtes, la modularité
+  compare la densité interne observée à celle attendue <em>sous le modèle de
+  configuration</em> (ch. 2) — le modèle nul «&nbsp;mêmes degrés, arêtes au
+  hasard&nbsp;»&nbsp;:
+  $$Q(\mathcal{C}) = \sum_{C \in \mathcal{C}} \Big( \frac{e_C}{m} - \Big( \frac{d_C}{2m} \Big)^2 \Big),$$
+  où \(e_C\) compte les arêtes internes du bloc \(C\) et \(d_C\) la somme des degrés
+  de ses sommets. Maximiser \(Q\) = trouver la partition la plus
+  «&nbsp;sur-connectée&nbsp;» par rapport au nul. C'est la fonction objectif de Louvain
+  (Blondel et al., 2008) — l'algorithme de référence industriel, \(O(m)\) par passe,
+  déployé dans networkx, Neo4j, Gephi.
+</div>
+
+<div class="note">
+  <span class="tag">Modularité vs SBM — le grand débat</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Limite de résolution</strong> (Fortunato–Barthélemy, 2007)&nbsp;: \(Q\)
+    ne peut pas voir des communautés plus petites que \(\sqrt{m/2}\) arêtes environ
+    — fusionner des petits modules augmente la modularité. Le SBM, lui, n'a pas de
+    granularité minimale.</li>
+    <li><strong>Sur-ajustement creux</strong>&nbsp;: dans le régime de degrés
+    \(O(1)\), maximiser \(Q\) trouve des communautés <em>même dans Erdős–Rényi</em>
+    pur — le biais de la modularité en graphe creux est bien documenté (Peixoto&nbsp;;
+    Newman)&nbsp;; l'inférence bayésienne du SBM pénalise la complexité et résiste.</li>
+    <li><strong>Deux philosophies</strong>&nbsp;: la modularité est <em>descriptive</em>
+    (une heuristique d'objectif, sans modèle)&nbsp;; le SBM est <em>génératif</em>
+    (un modèle, donc des tests, des seuils, des intervalles — ch. 5). En pratique&nbsp;:
+    Louvain/Leiden pour l'échelle, SBM pour la statistique.</li>
+    <li><strong>La leçon de Leskovec et al. (2009)</strong>&nbsp;: dans les grands
+    graphes réels, les communautés «&nbsp;naturelles&nbsp;» sont petites (jusqu'à
+    ~100 sommets) et noyées dans un cœur dense sans structure — c'est la
+    core-periphery, pas la partition, qui domine à grande échelle.</li>
+  </ol>
+</div>
+
+<div class="thm">
+  <span class="tag">6.2 — Applications&nbsp;: viralité, alignement, vie privée</span>
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>Viralité.</strong> Prédire la taille finale d'une cascade (retweets,
+      partages)&nbsp;: features précoces (profondeur, largeur, temps des premiers
+      partages — Cheng et al., WWW 2016) et modèles de Hawkes&nbsp;; la connexion au
+      cours&nbsp;: une cascade massive \(\Leftrightarrow\) composante géante percolée
+      (3.4), et la structure de blocs module \(\sigma(S)\) (4.3-4.4) — diffuser
+      <em>entre</em> deux communautés coûte les arêtes \(b\), diffuser à l'intérieur
+      profite des \(a\).</li>
+    <li><strong>Alignement de graphes et vie privée.</strong> Ré-identifier des
+      utilisateurs entre deux plateformes (anonymisés)&nbsp;: le problème d'alignement
+      de graphes corrélés — garanties de récupération partielle par Hall et Massoulié
+      (ch. 8). Lecture RGPD&nbsp;: «&nbsp;anonymiser&nbsp;» un graphe social est
+      mathématiquement fragile&nbsp;; la pseudonymisation n'est pas
+      l'anonymisation.</li>
+    <li><strong>Chambres d'écho.</strong> Le SBM homophile (\(a &gt; b\)) est le
+      modèle minimal de polarisation&nbsp;; les politiques de recommandation (module
+      Graph ML, ch. 6 — link prediction) qui optimisent l'engagement <em>diminuent</em>
+      \(b\) et creusent la polarisation — un pont quantitatif entre algorithme et
+      société.</li>
+    <li><strong>Détection d'anomalies.</strong> Blocs = comportements normaux&nbsp;;
+      les sommets mal classés (faible vraisemblance sous SBM ajusté) sont les
+      candidats bots/spam — la log-vraisemblance individuelle de l'exemple 5.6 sert
+      de score.</li>
+  </ul>
+</div>
+
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Systèmes distribués à grande échelle</h2>
+
+<p>Derrière chaque fil d'actualité&nbsp;: des millions de requêtes par seconde, des caches
+partout, des répartiteurs de charge. Ces systèmes consomment exactement les mêmes
+mathématiques que les chapitres précédents — boules dans des urnes, processus de
+Poisson, marcheurs aléatoires — et une partie des avancées vient de l'école française
+(Massoulié, ch. 8). Ce chapitre en donne les trois blocs&nbsp;: équilibrage de charge,
+caching, et partage de ressources.</p>
+
+<div class="thm">
+  <span class="tag">Théorème 7.1 — Boules dans des urnes&nbsp;: le pouvoir des deux choix</span>
+  On jette \(n\) boules indépendamment dans \(n\) urnes uniformément&nbsp;: la charge
+  maximale vaut \(\frac{\ln n}{\ln \ln n}\big( 1 + o(1) \big)\) avec grande probabilité
+  (Azar, Broder, Karlin, Upfal, 1999&nbsp;; Mitzenmacher, 2001). Si chaque boule
+  <strong>choisit deux urnes au hasard et va dans la moins chargée</strong>, la charge
+  maximale tombe à
+  $$\frac{\ln \ln n}{\ln 2} + O(1) \approx \log_2 \log_2 n + O(1),$$
+  gain exponentiel pour deux fois plus d'information.
+  <div class="proof">
+  (Esquisse — équations différentielles de densité, la méthode du champ moyen.)
+  Notons \(u_j(t)\) la fraction d'urnes de charge au moins \(j\) après \(t\) boules.
+  <strong>Un choix&nbsp;:</strong> une boule tombe sur une urne de charge \(j-1\) avec
+  probabilité \(u_{j-1} - u_j\) (première fois au niveau \(j\))&nbsp;;
+  \(\frac{\mathrm{d} u_j}{\mathrm{d} t} \approx u_{j-1} - u_j\), d'où
+  \(u_j \approx t^j / j!\) — et \(u_j \approx 1\) pour \(j \approx \frac{\ln n}{\ln \ln n}\).
+  <strong>Deux choix&nbsp;:</strong> la boule monte au niveau \(j\) seulement si
+  <em>les deux</em> urnes tirées sont au moins \(j - 1\)&nbsp;:
+  \(\frac{\mathrm{d} u_j}{\mathrm{d} t} \approx u_{j-1}^2 - u_j^2\)&nbsp;; en régime
+  stationnaire \(u_j \approx u_{j-1}^2\) — doublement à chaque niveau&nbsp;: \(k\)
+  niveaux atteignent \(u_k \approx 4^{-2^{k}} \cdot\)... et \(u_j\) atteint \(1/n\)
+  dès que \(2^{k} \approx \log_2 n\), soit \(k \approx \log_2 \log_2 n\).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Du modèle au data center</span>
+  Le «&nbsp;supermarché&nbsp;» (files d'attente + choix de la moins chargée) est la
+  modélisation des load balancers&nbsp;: à charge \(\rho &lt; 1\), le délai d'attente
+  typique passe de \(\Theta\big(\frac{1}{1 - \rho}\big)\) (un choix) à
+  \(\Theta\big(\log \frac{1}{1 - \rho}\big)\) (deux choix) — le comportement en queue
+  de distribution change d'échelle (Mitzenmacher&nbsp;; le régime JOIN-IDLE-QUEUE
+  traite les systèmes géants, la variante «&nbsp;power-of-d choices&nbsp;» avec
+  \(d &gt; 2\)). La même idée sert aux tables de hachage (cuckoo hashing)&nbsp;; le livre
+  de Mitzenmacher et Upfal en fait le tour.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.2 — Caching&nbsp;: LRU, LFU, et la hiérarchie des contenus</span>
+  Un <strong>cache</strong> de capacité \(k\) stocke \(k\) objets&nbsp;; les requêtes
+  arrivent selon un processus (idéalement Poisson), l'objet \(i\) avec probabilité
+  \(\lambda_i\) (popularité, typiquement en loi de puissance — ch. 2)&nbsp;; un
+  <em>hit</em> si l'objet est en cache, un <em>miss</em> sinon (coût&nbsp;: aller le
+  chercher plus loin). Politiques classiques&nbsp;: <strong>LRU</strong> (éjecter le
+  dernier utilisé — l'approximation de Che&nbsp;: le «&nbsp;temps caractéristique&nbsp;»
+  \(t_C\) donne \(\mathbb{P}(\text{hit}) = 1 - e^{-\lambda_i t_C}\))&nbsp;;
+  <strong>LFU</strong> (éjecter le moins fréquemment demandé)&nbsp;; <strong>random</strong>
+  et <strong>FIFO</strong>. Résultat structurel&nbsp;: contre un adversaire en ligne, LRU
+  est \(k\)-compétitive — son coût est au plus \(k\) fois celui de l'optimal hors
+  ligne (Sleator–Tarjan)&nbsp;; sous popularités i.i.d., l'approximation de Che la rend
+  analytique. La question <em>distribuée</em>&nbsp;: qui cache quoi,
+  quand les utilisateurs se servent entre eux — travaux de l'équipe au ch. 8.
+</div>
+
+<div class="thm">
+  <span class="tag">7.3 — Partage de bande passante et équité proportionnelle (Massoulié–Roberts, 1999-2002)</span>
+  Des flux partagent des liens&nbsp;; \(x_r\) = débit du flux \(r\), contraintes de
+  capacité \(A x \leq c\). Objectifs d'\(\alpha\)-équité&nbsp;: maximiser
+  \(\sum_r \frac{x_r^{1 - \alpha}}{1 - \alpha}\) — \(\alpha = 1\) (limite) donne
+  l'<strong>équité proportionnelle</strong> \(\max \sum_r \log x_r\), \(\alpha \to \infty\)
+  le max-min. Le théorème de Massoulié et Roberts (INFOCOM 1999 / IEEE-ACM ToN
+  2002)&nbsp;: les réseaux stabilisés par des algorithmes <em>distribués</em> simples
+  (fenêtre AIMD à la TCP, charge évoluant à l'échelle des RTT) convergent vers le point
+  d'équité proportionnelle — un pont entre la mécanique des protocoles et
+  l'optimisation convexe&nbsp;: «&nbsp;TCP fait de l'optimisation décentralisée sans le
+  savoir&nbsp;». Ce cadre a fondé toute une littérature (&gt; 900 citations) sur la
+  stabilité des réseaux à qualité de service.
+</div>
+
+<div class="note">
+  <span class="tag">Gossip et apprentissage distribué — le pont moderne</span>
+  Les protocoles push-pull du ch. 4 calculent aussi des <em>agrégats</em>&nbsp;: la
+  moyenne d'un champ de valeurs par itérations de marcheurs aléatoires (consensus
+  asymptotique), les quantiles approximatifs, les comptages distincts
+  (HyperLogLog). Le renouveau&nbsp;: <strong>SGD asynchrone sur graphes</strong> — des
+  travailleurs échangent des gradients par gossip au lieu d'un serveur central&nbsp;;
+  les garanties de convergence dépendent du trou spectral du graphe de communication
+  (travaux récents de l'équipe, ch. 8). Pour un master LLGA&nbsp;: le federated
+  learning est un protocole gossip contraint — la théorie du module s'y applique
+  directement.
+</div>
+
+</section>
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Travaux de l'équipe pédagogique</h2>
+
+<p>Le module est enseigné par <strong>Laurent Massoulié</strong>, directeur de recherche
+Inria (équipe <strong>Dragon</strong>, centre Inria de Paris&nbsp;; il a dirigé le centre
+ commun Microsoft Research–Inria et enseigne à l'École Polytechnique). Son parcours
+couvre exactement le programme&nbsp;: épidémies et réseaux, rumeurs, stochastic block
+model, et systèmes distribués (caching, équilibrage de charge, optimisation
+décentralisée). Cinq axes, avec les articles fondateurs à lire en projet (exercice 11).</p>
+
+<div class="thm">
+  <span class="tag">8.1 — Épidémies et topologie (Ganesh, Massoulié, Towsley, INFOCOM 2005)</span>
+  <em>The Effect of Network Topology on the Spread of Epidemics</em> (&gt; 1&nbsp;000
+  citations) fonde le contrôle épidémique <em>par la structure</em>&nbsp;: le théorème 3.3
+  du module en est le cœur — extinction rapide dès que \(\beta/\delta &lt; 1/\rho(A)\),
+  prouvée par la supermartingale spectrale que nous avons esquissée, et survie longue
+  dans le régime sur-critique. Posterité&nbsp;: toute la littérature sur les seuils
+  épidémiques spectraux (NIMFA, vaccination ciblée), et les politiques de ralentissement
+  des malwares/worms. Position dans le cours&nbsp;: c'est la réponse quantitative à
+  «&nbsp;la forme du réseau change-t-elle l'épidémie&nbsp;?&nbsp;» — oui, spectrale.
+</div>
+
+<div class="thm">
+  <span class="tag">8.2 — Le seuil de détection du SBM (Massoulié, STOC 2014)</span>
+  <em>Community Detection Thresholds and the Weak Ramanujan Property</em>. Résultat&nbsp;:
+  au-dessus du seuil de Kesten–Stigum, les graphes aléatoires «&nbsp;ressemblent&nbsp;» à
+  des graphes de Ramanujan (leurs valeurs propres non triviales sont dans le disque
+  de rayon \(\sqrt d\)) — la <strong>propriété de Ramanujan faible</strong> — et un
+  algorithme spectral l'exploite pour détecter les communautés jusqu'au seuil
+  d'information. C'est la première preuve de la conjecture de Decelle et al. côté
+  faisabilité (indépendamment de Mossel–Neeman–Sly), et la réponse à la question 5.3 du
+  module. Posterité&nbsp;: le pavé fondateur de la détection sous le seuil, prolongé par
+  8.3.
+</div>
+
+<div class="thm">
+  <span class="tag">8.3 — Le spectre non-retour (Bordenave, Lelarge, Massoulié, FOCS 2015 / Ann. Probab. 2018)</span>
+  <em>Non-backtracking Spectrum of Random Graphs: Community Detection and Non-regular
+  Ramanujan Graphs</em>. Le théorème 5.5 du module&nbsp;: le spectre de la matrice
+  non-retour d'un SBM est confiné dans un disque de rayon \(\sqrt d\) — bulk — sauf les
+  valeurs propres informatives, qui s'en échappent exactement au seuil de Kesten–Stigum.
+  Double retombée&nbsp;: (i) l'algorithme «&nbsp;vecteurs propres de \(B\) +
+  k-moyennes&nbsp;» détecte jusqu'au seuil (pratique&nbsp;: c'est celui du TME 9)&nbsp;;
+  (ii) les graphes aléatoires (même irréguliers) sont asymptotiquement Ramanujan — un
+  résultat de théorie des graphes pur qui clôture une question ouverte. C'est aussi la
+  justification théorique des opérateurs non-retour en apprentissage sur graphes (module
+  Graph ML, ch. 3-4&nbsp;; module Advanced GNN, ch. 3).
+</div>
+
+<div class="thm">
+  <span class="tag">8.4 — Systèmes distribués&nbsp;: caching, équilibrage, bande passante</span>
+  Trois travaux en lien avec le ch. 7&nbsp;:
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>Bandwidth sharing</strong> — Massoulié, Roberts (INFOCOM 1999&nbsp;;
+    IEEE/ACM ToN 2002)&nbsp;: la convergence des protocoles décentralisés (TCP-AIMD)
+    vers l'équité proportionnelle (7.3), socle de la stabilité des réseaux —
+    ~1&nbsp;000 citations.</li>
+    <li><strong>Distributed caching over heterogeneous mobile networks</strong> —
+    Ioannidis, Massoulié, Chaintreau (SIGMETRICS 2010&nbsp;; Queueing Systems 2012)&nbsp;:
+    des utilisateurs mettent en cache et s'échangent des contenus à l'occasion de leurs
+    rencontres&nbsp;; quelle politique décentralisée maximise le débit&nbsp;? Le modèle est
+    celui des épidémies du ch. 3 — une rumeur <em>utilisable</em> pour économiser de la
+    bande passante.</li>
+    <li><strong>Bipartite graph structures for efficient balancing of heterogeneous
+    loads</strong> — Leconte, Lelarge, Massoulié (ACM, 2012)&nbsp;: l'équilibrage de
+    charges hétérogènes comme appariement sur un graphe biparti aléatoire — le pont
+    entre power-of-two-choices (7.1) et structures de graphes (ch. 2).</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">8.5 — Aujourd'hui&nbsp;: alignement de graphes et apprentissage distribué</span>
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>Graph alignment</strong> — Hall, Massoulié, <em>Partial Recovery in the
+    Graph Alignment Problem</em> (Operations Research 71(1), 2023)&nbsp;: deux graphes
+    corrélés (deux plateformes), retrouve-t-on la correspondance des sommets&nbsp;?
+    Garanties de récupération partielle selon la sparsité et la corrélation — la
+    théorie de la dé-anonymisation (ch. 6), avec la limite de confidentialité qui va
+    avec.</li>
+    <li><strong>SGD asynchrone sur graphes</strong> — Even, Koloskova, Massoulié,
+    <em>Asynchronous SGD on Graphs</em> (AISTATS 2024)&nbsp;: un cadre unifié pour
+    l'optimisation décentralisée et fédérée via gossip — le chapitre 7 du module
+    projeté sur l'apprentissage fédéré d'aujourd'hui.</li>
+    <li><strong>Exploration collective</strong> — Cosson, Massoulié, <em>Collective
+    Tree Exploration via Potential Function Method</em> (ITCS 2024)&nbsp;: des robots
+    coopérants explorent un arbre inconnu — l'algorithmique distribuée sous l'angle
+    de l'analyse en ligne.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Fil conducteur (pour l'examen)</span>
+  Une même trame traverse toute l'œuvre&nbsp;: prendre un <em>système</em> (réseau,
+  plateforme, essaim), le modéliser par un <em>processus aléatoire sur un graphe</em>,
+  identifier un <em>seuil spectral ou de branchement</em>, et en tirer un
+  <em>algorithme décentralisé</em> avec garanties. C'est exactement la colonne
+  vertébrale des chapitres 1 à 7 de ce module — enseigner son propre champ de
+  recherche.
+</div>
+
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Mise en œuvre&nbsp;: simulations networkx</h2>
+
+<pre class="code"><code># TME 1 -- Erdos-Renyi vs Barabasi-Albert : lois de degres et composante geante
+import numpy as np, networkx as nx
+rng = np.random.default_rng(0)
+
+G_er  = nx.gnp_random_graph(2000, 6/2000, seed=1)      # c = 6
+G_ba  = nx.barabasi_albert_graph(2000, 3, seed=1)      # m = 3, degre moyen 6
+for name, G in (("ER", G_er), ("BA", G_ba)):
+    ccs = sorted((len(c) for c in nx.connected_components(G)), reverse=True)
+    degs = [d for _, d in G.degree()]
+    print(f"{name}: plus grande composante {ccs[0]/G.number_of_nodes():.2f}"
+          f" | degre max {max(degs)} | clustering {nx.average_clustering(G):.4f}")
+# attendu (theoreme 1.3 + 2.5): ER ~ 0.98, degre max ~ 15 ; BA ~ 1.0, degre max ~ 80
+# verification du rho de 1.3 : rho solution de rho = 1 - exp(-6 rho) ~ 0.997</code></pre>
+
+<pre class="code"><code># TME 2 -- SIR a temps discret : le seuil depend-il de la loi des degres ?
+def sir(G, p, patient0):
+    """SIR discret : infection p par arete et par pas, guerison en 1 pas.
+    Renvoie la taille finale de l'epidemie."""
+    inf, seen = {patient0}, {patient0}
+    while inf:
+        new = set()
+        for u in inf:
+            new |= {v for v in G[u] if v not in seen and rng.random() &lt; p}
+        seen |= new
+        inf = new
+    return len(seen)
+
+def outbreak(G, p, trials=200):
+    n = G.number_of_nodes()
+    sizes = [sir(G, p, int(rng.integers(n))) for _ in range(trials)]
+    return np.mean(sizes) / n            # fraction finale de la population
+
+for tau in (0.3, 0.5, 0.8, 1.2, 2.0):   # tau = beta/delta ; guerison en 1 pas,
+    p = 1 - np.exp(-tau)                 # infection par arete et par pas
+    print(f"tau={tau:4.1f}  ER {outbreak(G_er, p):.3f}   BA {outbreak(G_ba, p):.3f}")
+# exploration guidee : tracer la fraction finale en fonction de tau pour ER et BA,
+# et verifier le theoreme 3.5 : la courbe BA decolle bien avant la courbe ER
+# (seuil nul sur les reseaux scale-free).</code></pre>
+
+<pre class="code"><code># TME 3 -- SBM : detection spectrale (adjacence en dense, non-retour en creux)
+from scipy.sparse.linalg import eigsh
+
+sizes, p_in, p_out = [500, 500], 0.10, 0.02
+G = nx.stochastic_block_model(sizes, [[p_in, p_out], [p_out, p_in]], seed=3)
+A = nx.to_scipy_sparse_array(G).astype(float)
+truth = np.concatenate([np.zeros(sizes[0]), np.ones(sizes[1])])
+
+v2 = eigsh(A, k=2, which="LA")[1][:, 1]              # 2e vecteur propre
+hat = (v2 &gt; np.median(v2)).astype(int)
+acc = max(np.mean(hat == truth), np.mean(hat != truth))
+print("accuracy (adjacence, dense):", round(acc, 3))   # attendu ~ 1.0
+
+# en regime creux (p_in = 8/n, p_out = 2/n) : construire la matrice non-retour B
+# (lignes/colonnes = aretes orientees ; B[(u,v),(v,w)] = 1 si w != u), extraire ses
+# 2 premiers vecteurs propres reels et faire un k-means -- cf. theoreme 5.5 et
+# l'exercice 9. L'adjacence seule echoue : valeurs propres de hubs dans le signal.</code></pre>
+
+<div class="note">
+  <span class="tag">Protocole de TME (consignes)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Reproductibilité</strong>&nbsp;: fixer les graines (seed), rapporter
+    moyenne ± écart-type sur 200 répétitions (module Refresher Statistics, ch. 4-6)&nbsp;;
+    tracer les courbes avec bandes de confiance bootstrap.</li>
+    <li><strong>Vérifier les théories</strong>&nbsp;: chaque TME a une valeur attendue
+    (taille de la géante, seuil de décollement, accuracy)&nbsp;: un écart systématique
+    = bug ou mauvaise lecture du régime — le rapport doit trancher.</li>
+    <li><strong>Aller plus loin</strong>&nbsp;: remplacer k-means par le Louvain de
+    networkx (nx.community.louvain_communities) et comparer modularité vs SBM sur les
+    mêmes données (ch. 6)&nbsp;; tester Watts–Strogatz (diamètre vs clustering en
+    fonction de \(\beta\), ch. 2).</li>
+  </ol>
+</div>
+
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Du binôme au Poisson.</strong> Compléter la preuve de la proposition 1.2
+  avec l'encadrement \(\big(1 - \frac{k}{n}\big)^{n-1} \geq (1 - c/n)^n \to e^{-c}\)
+  (développement du logarithme)&nbsp;; montrer que la variance de \(\mathrm{Bin}(n-1, c/n)\)
+  converge vers \(c\) (module Refresher Statistics, ch. 3).</li>
+
+  <li><strong>Composante géante.</strong> Résoudre numériquement \(\rho = 1 -
+  e^{-c\rho}\) pour \(c = 1{,}5\), 2, 4, 10 et vérifier par simulation
+  (nx.gnp_random_graph, 10 répétitions)&nbsp;; montrer l'unicité de la solution dans
+  \((0, 1)\) pour \(c &gt; 1\) (étudier \(f(\rho) = \rho - 1 + e^{-c\rho}\)).</li>
+
+  <li><strong>Seuil des triangles.</strong> Compléter le second moment du théorème
+  1.6&nbsp;: calculer \(\mathbb{E}[T(T-1)]\) en séparant les paires de triangles
+  disjants, partageant un sommet, une arête&nbsp;; en déduire \(\mathrm{Var}(T) =
+  o(\mathbb{E}[T]^2)\) quand \(np \to \infty\). Que se passe-t-il pour le
+  \(K_4\) (seuil \(n^{-2/3}\))&nbsp;?</li>
+
+  <li><strong>Attachement préférentiel.</strong> Reprendre l'équation maîtresse du
+  théorème 2.5 avec la règle \(\Pi(i) \propto d_i + \alpha\) (attachement avec
+  nouveau-nés)&nbsp;: montrer \(p_k \sim k^{-\gamma}\) avec \(\gamma = 3 +
+  \alpha/m\) (poser l'équation différentielle et dériver comme dans la preuve).</li>
+
+  <li><strong>Watts–Strogatz.</strong> Simuler le diamètre et le clustering moyen de
+  l'anneau recâblé pour \(\beta \in \{10^{-4}, \dots, 1\}\) (échelle log)&nbsp;;
+  reproduire la figure originale&nbsp;; expliquer pourquoi quelques
+  \(\Theta(\beta n)\) liens «&nbsp;longs&nbsp;» par sommet suffisent à faire chuter
+  le diamètre de \(\Theta(n/K)\) à \(\Theta(\log n)\) alors que le clustering ne
+  bouge presque pas.</li>
+
+  <li><strong>Course transmission-guérison.</strong> Dans le SIR continu, montrer que
+  sur une arête infectée, la transmission bat la guérison avec probabilité
+  \(\frac{\beta}{\beta + \delta}\) (courses exponentielles indépendantes — loi du
+  minimum)&nbsp;; en déduire le couplage du théorème 3.4 et recalculer \(R_0^{\text{graphe}}\)
+  du théorème 3.2.</li>
+
+  <li><strong>Seuil spectral.</strong> Compléter la preuve du théorème 3.3(i)&nbsp;:
+  justifier l'égalité \(\sum_i x_i \sum_{j \sim i} u_j = \rho \sum_i x_i u_i\)
+  (utiliser \((A u)_i = \rho u_i\) composante par composante)&nbsp;; où utilise-t-on
+  \(u &gt; 0\) (Perron–Frobenius) dans le dernier pas
+  \(\Phi_t \geq (\min_i u_i)\mathbf{1}_{\{\text{non éteinte}\}}\)&nbsp;?</li>
+
+  <li><strong>Push-pull.</strong> Montrer que le pull seul ne démarre pas depuis un
+  unique informé quand \(n\) est grand (probabilité de contacter l'informé&nbsp;=
+  \(1/(n-1)\) par tour)&nbsp;; écrire la récurrence exacte
+  \(\mathbb{E}[k_{t+1} \mid k_t]\) du push seul et vérifier la raison \(3/2\) de la
+  phase de doublement (théorème 4.2).</li>
+
+  <li><strong>Sous-modularité.</strong> Prouver la sous-modularité de l'atteignabilité
+  par le couplage live-edge du théorème 4.4&nbsp;; montrer que la borne \((1 - 1/e)\)
+  est atteinte par l'exemple couverture d'ensembles&nbsp;; implémenter le glouton CELF
+  sur un SBM (1000 sommets) et comparer à 20 seeders aléatoires.</li>
+
+  <li><strong>Non-retour.</strong> Pour un chemin à \(n\) sommets, calculer le spectre
+  de \(A\) et de \(B\) (tridiagonalité)&nbsp;; pour un graphe \(d\)-régulier, montrer
+  que \(\rho(B) = d - 1\) (marches sans demi-tour sur un arbre local)&nbsp;; implémenter
+  \(B\) creuse (scipy.sparse) sur un SBM à \(q = 2\) blocs et vérifier le critère de
+  Kesten–Stigum du théorème 5.3 en scannant \((a, b)\).</li>
+
+  <li><strong>Papier.</strong> Choisir un article du ch. 8 (Ganesh–Massoulié–Towsley
+  2005&nbsp;; Massoulié 2014&nbsp;; Bordenave–Lelarge–Massoulié 2015&nbsp;; Hall–Massoulié
+  2023&nbsp;; Even–Koloskova–Massoulié 2024), le lire et le présenter en 10 minutes&nbsp;:
+  modèle, théorème principal, idée de preuve, algorithme, résultats numériques,
+  limites. Grille&nbsp;: une figure réexpliquée, une expérience reproduite en TME, une
+  question ouverte.</li>
+
+  <li><strong>Power of two choices.</strong> Simuler \(n\) boules dans \(n\) urnes
+  (un choix vs deux)&nbsp;; tracer la charge max vs \(n\) en échelle log et vérifier
+  les deux asymptotiques \(\frac{\ln n}{\ln \ln n}\) et \(\frac{\ln \ln n}{\ln 2}\)
+  (théorème 7.1)&nbsp;; discuter le coût d'information (l'urne doit connaître sa
+  charge) et le passage au modèle dynamique (arrivées/départs en file).</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>M. E. J. Newman, <em>Networks</em>, 2e édition, Oxford University Press, 2018 — <a href="https://global.oup.com/academic/product/networks-9780198805090">le manuel du module</a>&nbsp;: chapitres graphes aléatoires, épidémies, communautés.</li>
+  <li>R. van der Hofstad, <em>Random Graphs and Complex Networks, Vol. 1</em>, Cambridge University Press, 2017 — <a href="https://arxiv.org/abs/1609.03202">gratuit sur arXiv</a>&nbsp;: la référence rigoureuse du ch. 1 (seuils, Gumbel, percolation).</li>
+  <li>B. Bollobás, <em>Random Graphs</em>, 2e édition, Cambridge University Press, 2001 — le classique&nbsp;; résultats de 1959-60 d'Erdős et Rényi remis en forme.</li>
+  <li>P. Erdős, A. Rényi, <em>On Random Graphs I</em>, Publicationes Mathematicae Debrecen 6, 1959 — l'article fondateur (seuil de connexité).</li>
+  <li>D. Easley, J. Kleinberg, <em>Networks, Crowds, and Markets</em>, Cambridge University Press, 2010 — <a href="https://www.cs.cornell.edu/home/kleinber/networks-book/">gratuit en ligne</a>&nbsp;: la lecture économie/société (small-world, effets de réseau).</li>
+  <li>M. O. Jackson, <em>Social and Economic Networks</em>, Princeton University Press, 2008 — le point de vue sciences sociales.</li>
+  <li>M. Molloy, B. Reed, <a href="https://doi.org/10.1002/rsa.3240060205">A Critical Point for Random Graphs with a Given Degree Sequence</a>, Random Structures &amp; Algorithms 6, 1995 — le modèle de configuration (ch. 2).</li>
+  <li>D. J. Watts, S. H. Strogatz, <a href="https://doi.org/10.1038/30918">Collective Dynamics of 'Small-World' Networks</a>, Nature 393, 1998 — le small-world (ch. 2).</li>
+  <li>A.-L. Barabási, R. Albert, <a href="https://doi.org/10.1126/science.286.5439.509">Emergence of Scaling in Random Networks</a>, Science 286, 1999 — l'attachement préférentiel (théorème 2.5).</li>
+  <li>A. Clauset, C. R. Shalizi, M. E. J. Newman, <a href="https://doi.org/10.1137/070710111">Power-law Distributions in Empirical Data</a>, SIAM Review 51, 2009 — le protocole d'estimation des lois de puissance.</li>
+  <li>R. Pastor-Satorras, A. Vespignani, <a href="https://doi.org/10.1103/PhysRevLett.86.3200">Epidemic Spreading in Scale-Free Networks</a>, Physical Review Letters 86, 2001 — le seuil nul (théorème 3.5).</li>
+  <li>R. Pastor-Satorras, C. Castellano, P. Van Mieghem, A. Vespignani, <a href="https://doi.org/10.1103/RevModPhys.87.925">Epidemic Processes in Complex Networks</a>, Reviews of Modern Physics 87, 2015 — la grande revue des épidémies sur graphes.</li>
+  <li>A. Ganesh, L. Massoulié, D. Towsley, <a href="https://ieeexplore.ieee.org/document/1498374/">The Effect of Network Topology on the Spread of Epidemics</a>, IEEE INFOCOM 2005 — le seuil spectral (théorème 3.3&nbsp;; équipe, ch. 8.1).</li>
+  <li>R. Karp, C. Schindelhauer, S. Shenker, B. Vöcking, <a href="https://dl.acm.org/doi/10.5555/795666.796561">Randomized Rumor Spreading</a>, FOCS 2000 — push-pull (théorème 4.2).</li>
+  <li>D. Kempe, J. Kleinberg, É. Tardos, <a href="https://doi.org/10.1145/956750.956769">Maximizing the Spread of Influence through a Social Network</a>, KDD 2003 — influence maximisation (théorème 4.4).</li>
+  <li>G. L. Nemhauser, L. A. Wolsey, M. L. Fisher, <a href="https://doi.org/10.1007/BF01589408">An Analysis of Approximations for Maximizing Submodular Set Functions—I</a>, Mathematical Programming 14, 1978 — la borne \(1 - 1/e\).</li>
+  <li>P. W. Holland, K. B. Laskey, S. Leinhardt, <a href="https://doi.org/10.1016/0378-8733(83)90021-7">Stochastic Blockmodels: First Steps</a>, Social Networks 5, 1983 — la naissance du SBM.</li>
+  <li>B. Karrer, M. E. J. Newman, <a href="https://doi.org/10.1103/PhysRevE.83.016107">Stochastic Blockmodels and Community Structure in Networks</a>, Physical Review E 83, 2011 — le DC-SBM.</li>
+  <li>A. Decelle, F. Krzakala, C. Moore, L. Zdeborová, <a href="https://doi.org/10.1103/PhysRevLett.107.065701">Inference and Phase Transitions in the Detection of Modules in Sparse Networks</a>, Physical Review Letters 107, 2011 — la conjecture des seuils (ch. 5).</li>
+  <li>L. Massoulié, <a href="https://arxiv.org/abs/1311.3085">Community Detection Thresholds and the Weak Ramanujan Property</a>, STOC 2014 — le seuil de faisabilité (ch. 5.3&nbsp;; équipe, ch. 8.2).</li>
+  <li>C. Bordenave, M. Lelarge, L. Massoulié, <a href="https://arxiv.org/abs/1501.06087">Non-backtracking Spectrum of Random Graphs: Community Detection and Non-regular Ramanujan Graphs</a>, FOCS 2015&nbsp;; Annals of Probability 46(1), 2018 — le spectre non-retour (théorème 5.5&nbsp;; équipe, ch. 8.3).</li>
+  <li>E. Abbe, <a href="https://arxiv.org/abs/1703.10146">Community Detection and Stochastic Block Models: Recent Developments</a>, JMLR 18(177), 2018 — la grande revue du SBM.</li>
+  <li>M. Girvan, M. E. J. Newman, <a href="https://doi.org/10.1073/pnas.122653799">Community Structure in Social and Biological Networks</a>, PNAS 99, 2002 — la modularité, l'original.</li>
+  <li>V. D. Blondel, J.-L. Guillaume, R. Lambiotte, E. Lefebvre, <a href="https://doi.org/10.1088/1742-5468/2008/10/P10008">Fast Unfolding of Communities in Large Networks</a>, Journal of Statistical Mechanics, 2008 — Louvain.</li>
+  <li>S. Fortunato, M. Barthélemy, <a href="https://doi.org/10.1073/pnas.0605965104">Resolution Limit in Community Detection</a>, PNAS 104, 2007 — la limite de résolution.</li>
+  <li>J. Leskovec, K. J. Lang, A. Dasgupta, M. W. Mahoney, <a href="https://doi.org/10.1080/15427951.2009.10129177">Community Structure in Large Networks: Natural Cluster Sizes and the Absence of Large Well-Defined Clusters</a>, Internet Mathematics 6, 2009.</li>
+  <li>Y. Azar, A. Z. Broder, A. R. Karlin, E. Upfal, <a href="https://doi.org/10.1137/S0097539795288493">Balanced Allocations</a>, SIAM Journal on Computing 29(1), 1999 — power of two choices (théorème 7.1).</li>
+  <li>M. Mitzenmacher, A. Richa, R. Sitaraman, <a href="https://doi.org/10.1109/TNET.2001.933433">The Power of Two Random Choices: A Survey of Techniques and Results</a>, 2001 — la synthèse.</li>
+  <li>L. Massoulié, J. Roberts, <a href="https://team.inria.fr/rap/files/2013/12/MR02.pdf">Bandwidth Sharing: Objectives and Algorithms</a>, INFOCOM 1999&nbsp;; IEEE/ACM Transactions on Networking 10(3), 2002 — équité proportionnelle (7.3&nbsp;; équipe, ch. 8.4).</li>
+  <li>S. Ioannidis, L. Massoulié, A. Chaintreau, <a href="https://ece.northeastern.edu/fac-ece/ioannidis/static/pdf/2012/caching_questa.pdf">Distributed Caching over Heterogeneous Mobile Networks</a>, SIGMETRICS 2010&nbsp;; Queueing Systems 72, 2012 — caching décentralisé (équipe, ch. 8.4).</li>
+  <li>G. Hall, L. Massoulié, <a href="https://arxiv.org/abs/2007.00533">Partial Recovery in the Graph Alignment Problem</a>, Operations Research 71(1), 2023 — alignement de graphes (équipe, ch. 8.5).</li>
+  <li>M. Even, A. Koloskova, L. Massoulié, <a href="https://arxiv.org/abs/2311.00465">Asynchronous SGD on Graphs: A Unified Framework for Asynchronous Decentralized and Federated Optimization</a>, AISTATS 2024 — apprentissage distribué (équipe, ch. 8.5).</li>
+  <li>R. Cosson, L. Massoulié, <a href="https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ITCS.2024.35">Collective Tree Exploration via Potential Function Method</a>, ITCS 2024 — exploration collective (équipe, ch. 8.5).</li>
+  <li><strong>Outils</strong>&nbsp;: <a href="https://networkx.org">networkx</a> (les simulations des TME)&nbsp;; <a href="https://graph-tool.skewed.de">graph-tool</a> (SBM bayésien)&nbsp;; <a href="https://epidemicsonnetworks.readthedocs.io">EoN</a> (épidémies).</li>
+</ul>
+</section>
+
+
+<nav class="pager">
+  <a href="m1p1-tda.html"><span class="dir">← Précédent</span> Topological Data Analysis</a>
+  <a class="next" href="../index.html"><span class="dir">Suivant</span> Accueil</a>
+</nav>
+
+</div>
+</body>
+</html>
