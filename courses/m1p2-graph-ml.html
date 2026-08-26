@@ -1244,7 +1244,186 @@ sortie : visites   # composante connexe de s</code></pre>
 </div>
 </section>
 
-<!-- A_COMPLETER -->
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Laplacien.</strong> Montrer \(x^\top L x = \sum_{(u,v) \in E}(x_u - x_v)^2\),
+  puis que \(\lambda_2 &gt; 0 \iff\) connexe. Calculer le spectre du chemin et du cycle.
+  <em>Corrigé (esquisse)</em>&nbsp;: développer
+  \(x^\top D x - x^\top A x = \sum_v d_v x_v^2 - 2\sum_{(u,v)} x_u x_v\) et regrouper par
+  arêtes&nbsp;; \(\lambda_2 = 0\) équivaut à l'existence de \(x \perp \mathbf{1}\) non nul
+  constant par composante (th. 0.3 du calcul de multiplicité), donc \(\lambda_2 &gt; 0\)
+  \(\iff\) une seule composante. Chemin&nbsp;: \(2(1 - \cos\frac{k\pi}{n})\)&nbsp;;
+  cycle&nbsp;: \(2(1 - \cos\frac{2k\pi}{n})\).</li>
+
+  <li><strong>Triangles par la trace.</strong> À partir de \(\mathrm{tr}(A^3)\), compter les
+  triangles du graphe «&nbsp;deux \(K_4\) partagant une arête&nbsp;». Généraliser&nbsp;:
+  que compte \(\mathrm{tr}(A^4)\)&nbsp;? <em>Corrigé</em>&nbsp;: les deux \(K_4\) contiennent
+  chacun 4 triangles, aucun ne passe par l'arête partagée seule&nbsp;; total 8, donc
+  \(\mathrm{tr}(A^3) = 48\). \(\mathrm{tr}(A^4)\) compte les chemins fermés de longueur 4
+  (carrés, allers-retours…) — pas seulement les carrés&nbsp;; il faut retrancher les
+  contributions de degrés (formule de \(\sum_v d_v^2\) pour les allers-retours).</li>
+
+  <li><strong>node2vec.</strong> Simuler des marches avec \((p, q) = (1, 1)\), \((0{,}25, 4)\),
+  \((4, 0{,}25)\) sur le graphe du club de karaté (code 3.4)&nbsp;; projeter les embeddings en
+  2D (t-SNE) et relier \(p, q\) aux stratégies BFS/DFS. <em>Corrigé (attendu)</em>&nbsp;:
+  \((p,q) = (0{,}25, 4)\) — retour fort, exploration faible → BFS, embeddings groupés par
+  <em>rôle</em> (les deux hubs «&nbsp;Mr.&nbsp;Hi&nbsp;» et «&nbsp;Officer&nbsp;» se
+  rapprochent)&nbsp;; \((4, 0{,}25)\) → DFS, clustering par <em>factions</em> (homophilie),
+  NMI plus élevé pour la tâche de scission&nbsp;; \((1,1)\) intermédiaire.</li>
+
+  <li><strong>NetMF à la main.</strong> Pour le triangle \(K_3\), calculer
+  \(M = \log\big(\frac{\mathrm{vol}}{bT}(\sum_{r=1}^T P^r) D^{-1}\big)\) avec \(T = 2\),
+  \(b = 1\), et interpréter les signes. <em>Corrigé</em>&nbsp;: \(P = J - I\) (adjacence
+  moins identité)&nbsp;; \(P^2 = \frac{1}{2} I + \frac{1}{2} J\)&nbsp;; \(\sum_{r\leq 2} P^r\)
+  est strictement positive, \(D^{-1} = \frac13 I\), \(\mathrm{vol} = 6\) → \(M\) constante
+  hors diagonale \(=\log(1{,}5)\), diagonale plus faible — DeepWalk sur un graphe sans
+  structure ne peut que refléter les degrés&nbsp;; conclusion&nbsp;: la matrice cible
+  <em>est</em> le signal.</li>
+
+  <li><strong>Permutation-équivariance.</strong> Vérifier que la couche GCN satisfait
+  \(f(PX, PAP^\top) = P f(X, A)\) et interpréter&nbsp;; montrer qu'une couche dense classique
+  (MLP sur features concaténées) ne la satisfait pas. <em>Corrigé (esquisse)</em>&nbsp;:
+  \(\tilde D_{PAP^\top} = P \tilde D P^\top\) (les degrés suivent la permutation), donc
+  \(\tilde D_{PAP}^{-1/2} (P\tilde A P^\top) \tilde D_{PAP}^{-1/2} P X
+  = P \tilde D^{-1/2} \tilde A \tilde D^{-1/2} X\)&nbsp;; un MLP dense sur la concaténation
+  \([x_1 \| \dots \| x_n]\) applique des poids <em>différents</em> à chaque position —
+  permuter les nœuds change la sortie autrement que par \(P\).</li>
+
+  <li><strong>GCN à la main.</strong> Implémenter une couche GCN <em>sans</em> PyG (calculer
+  \(\tilde A\), \(\tilde D\)), vérifier l'égalité des sorties avec <code>GCNConv</code> à poids
+  fixés, puis mesurer l'over-smoothing&nbsp;: similarité cosinus moyenne des embeddings en
+  fonction du nombre de couches (1 à 10). <em>Corrigé (guidé PyG)</em>&nbsp;:
+<pre class="code"><code>import torch, torch_geometric
+from torch_geometric.datasets import Planetoid
+data = Planetoid(root="/tmp/Cora", name="Cora")[0]
+A = torch.zeros(2708, 2708)
+A[data.edge_index[0], data.edge_index[1]] = 1.0
+A_tilde = A + torch.eye(2708)
+D_inv_sqrt = A_tilde.sum(1).pow(-0.5).diag()
+P = D_inv_sqrt @ A_tilde @ D_inv_sqrt            # propagateur renormalise
+X = data.x
+for L in range(1, 11):
+    H = X
+    for _ in range(L):
+        H = P @ H                                 # propagation pure (th. 5.3)
+    cos = torch.nn.functional.cosine_similarity(
+        H.unsqueeze(1), H.unsqueeze(0), dim=-1)
+    print(L, (cos.sum() - 2708) / (2708 * 2707))  # -> converge vers 1</code></pre>
+  </li>
+
+  <li><strong>Spectral clustering.</strong> Appliquer l'algorithme 4.4 (k = 2) au graphe «&nbsp;deux
+  \(K_5\) + pont&nbsp;» en validant le vecteur de Fiedler de l'exemple 4.3&nbsp;; comparer Ncut
+  et RatioCut pour la partition trouvée. <em>Corrigé</em>&nbsp;: signes du vecteur
+  \((1,1,1,1,0{,}70,-0{,}70,-1,-1,-1,-1)\) → partition exacte&nbsp;;
+  \(\mathrm{cut} = 1\), RatioCut \(= \frac{1}{5} + \frac{1}{5} = 0{,}4\)&nbsp;; Ncut
+  \(= \frac{1}{16} + \frac{1}{16}\) (volumes 16) = 0,125&nbsp;; toute coupe séparant un seul
+  nœud a un RatioCut \(\frac{5}{1} + \frac{5}{9}\) bien plus grand — la pondération par taille
+  fait le travail.</li>
+
+  <li><strong>GAT.</strong> Montrer que la complexité mémoire de l'attention à \(T\) têtes est
+  \(\mathcal{O}(T |E| F')\), et qu'avec des self-loops GCN s'obtient comme cas particulier
+  d'attention uniforme. Comment GAT gère-t-il les graphes non réguliers que GCN normalise
+  mal&nbsp;?</li>
+
+  <li><strong>Link prediction.</strong> Sur Cora&nbsp;: masquer 10&nbsp;% des arêtes, encoder
+  avec un GAE (ch. 6), scorer les paires par \(\sigma(z_u^\top z_v)\)&nbsp;; évaluer AUC contre
+  des négatifs échantillonnés&nbsp;; comparer GAE vs VGAE vs embeddings DeepWalk (ch. 3).
+  <em>Corrigé (guidé PyG)</em>&nbsp;:
+<pre class="code"><code>import torch.nn as nn
+from torch_geometric.nn import GCNConv
+from torch_geometric.utils import negative_sampling
+
+class GAE(nn.Module):
+    def __init__(self, d_in, d_hid):
+        super().__init__()
+        self.e1, self.e2 = GCNConv(d_in, d_hid), GCNConv(d_hid, d_hid)
+    def forward(self, x, ei):
+        return self.e2(torch.relu(self.e1(x, ei)), ei)
+
+model, opt = GAE(1433, 64), None
+opt = torch.optim.Adam(model.parameters(), lr=0.01)
+# split : train_pos = 90 % des aretes ; test_pos = 10 % + autant de negatives
+for ep in range(200):
+    Z = model(data.x, train_pos_ei)
+    neg = negative_sampling(train_pos_ei, num_nodes=2708)
+    ei_all = torch.cat([train_pos_ei, neg], dim=1)
+    lbl = torch.cat([torch.ones(train_pos_ei.size(1)),
+                     torch.zeros(neg.size(1))])
+    score = (Z[ei_all[0]] * Z[ei_all[1]]).sum(-1)
+    loss = nn.functional.binary_cross_entropy_with_logits(score, lbl)
+    opt.zero_grad(); loss.backward(); opt.step()
+# AUC : trier les scores des aretes test et de nouveaux negatifs</code></pre>
+  Attendu&nbsp;: AUC \(\approx 0{,}90\)–0,92.</li>
+
+  <li><strong>Échelle.</strong> Dériver la borne \(1 + s_L(1 + s_{L-1}(\dots))\) du
+  NeighborSampler&nbsp;; pour ogbn-arxiv (degrés moyens \(\approx\) 7, max 200+), quel fanout
+  \((s_1, s_2)\) recommandez-vous et pourquoi&nbsp;? Évaluer l'écart de précision vs full-batch
+  sur Cora en augmentant la variance (fanouts (2,2), (5,5), (10,10)).</li>
+
+  <li><strong>Génération aléatoire.</strong> Implémenter ER et SBM (SBM&nbsp;: 4 blocs,
+  \(B_{aa} = 0{,}8\), \(B_{ab} = 0{,}05\)), générer 500 graphes, et vérifier au MMD-degrés
+  que ER ne reproduit pas la distribution de degrés du SBM. Quel \(k\) minimal du k-means
+  spectral (ch. 4) retrouve les blocs&nbsp;?</li>
+
+  <li><strong>Génération neuronale.</strong> Entraîner un petit modèle autorégressif (ajout
+  séquentiel de nœuds/arêtes, MLP + softmax — schéma GraphRNN du ch. 9.4) sur des molécules
+  de ZINC&nbsp;; mesurer validité (valence chimique) et unicité des graphes générés&nbsp;;
+  comparer à un échantillonneur Erdős-Rényi de même densité. <em>Pistes</em>&nbsp;: coder les
+  \(S^i\) binaires (4 types d'atomes max), teacher forcing, 200 époques suffisent pour le
+  TME&nbsp;; lecture&nbsp;: validité faible (\(&lt; 50\)%&) sans contrainte de valence —
+  expliquer pourquoi NeVAE (ch. 9.3) l'architecture change tout.</li>
+
+  <li><strong>Papier.</strong> Choisir un article du ch. 10 (Graph of Words, PathNN, GOAT ou
+  NGG), le lire, et le présenter en 10 minutes&nbsp;: problème, contribution, résultats,
+  limites, position dans le cours. Grille&nbsp;: clarté de la figure clé, reproduction d'un
+  chiffre commentée, une question ouverte proposée.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>W. Hamilton, <em>Graph Representation Learning</em>, Morgan &amp; Claypool, 2020 — <a href="https://www.cs.mcgill.ca/~wlh/grl_book/">gratuit en ligne</a>&nbsp;: <em>le</em> manuel du module.</li>
+  <li>T. Kipf, M. Welling, <a href="https://arxiv.org/abs/1609.02907">Semi-Supervised Classification with Graph Convolutional Networks</a> (GCN), ICLR 2017.</li>
+  <li>P. Veličković et al., <a href="https://arxiv.org/abs/1710.10903">Graph Attention Networks</a>, ICLR 2018.</li>
+  <li>W. Hamilton et al., <a href="https://arxiv.org/abs/1706.02216">Inductive Representation Learning on Large Graphs</a> (GraphSAGE), NeurIPS 2017.</li>
+  <li>M. Defferrard et al., <a href="https://arxiv.org/abs/1606.09375">Neural Networks on Graphs with Fast Localized Spectral Filtering</a> (ChebNet), NeurIPS 2016.</li>
+  <li>J. Gilmer et al., <a href="https://arxiv.org/abs/1704.01212">Neural Message Passing for Quantum Chemistry</a> (MPNN), ICML 2017.</li>
+  <li>B. Perozzi et al., <a href="https://arxiv.org/abs/1403.6652">DeepWalk: Online Learning of Social Representations</a>, KDD 2014.</li>
+  <li>A. Grover, J. Leskovec, <a href="https://arxiv.org/abs/1607.00653">node2vec: Scalable Feature Learning for Networks</a>, KDD 2016.</li>
+  <li>J. Qiu et al., <a href="https://arxiv.org/abs/1710.02971">Network Embedding as Matrix Factorization: Unifying DeepWalk, LINE, PTE, and node2vec</a> (NetMF), WSDM 2018.</li>
+  <li>T. Kipf, M. Welling, <a href="https://arxiv.org/abs/1611.07308">Variational Graph Auto-Encoders</a>, 2016.</li>
+  <li>R. Ying et al., <a href="https://arxiv.org/abs/1806.01910">Graph Convolutional Neural Networks for Web-Scale Recommender Systems</a> (PinSage), KDD 2018.</li>
+  <li>F. Schlichtkrull et al., <a href="https://arxiv.org/abs/1703.06103">Modeling Relational Data with Graph Convolutional Networks</a> (R-GCN), ESWC 2018.</li>
+  <li>Z. Ying et al., <a href="https://arxiv.org/abs/1806.08804">Hierarchical Graph Representation Learning with Differentiable Pooling</a> (DiffPool), NeurIPS 2018.</li>
+  <li>K. Xu et al., <a href="https://arxiv.org/abs/1806.03536">Representation Learning on Graphs with Jumping Knowledge Networks</a>, ICML 2018.</li>
+  <li>W.-L. Chiang et al., <a href="https://arxiv.org/abs/1905.07953">Cluster-GCN: An Efficient Algorithm for Training Deep and Large Graph Convolutional Networks</a>, KDD 2019.</li>
+  <li>H. Zeng et al., <a href="https://arxiv.org/abs/1907.04931">GraphSAINT: Graph Sampling Based Inductive Learning Method</a>, ICLR 2020.</li>
+  <li>W. Hu et al., <a href="https://arxiv.org/abs/2005.00687">Open Graph Benchmark: Datasets for Machine Learning on Graphs</a>, NeurIPS 2020.</li>
+  <li>M. Simonovsky, V. Komodakis, <a href="https://arxiv.org/abs/1802.03480">GraphVAE: Towards Generation of Small Graphs Using Variational Autoencoders</a>, ICML 2018 (workshop).</li>
+  <li>B. Samanta et al., <a href="https://arxiv.org/abs/1802.05283">NeVAE: A Deep Generative Model for Molecular Graphs</a>, AAAI 2019.</li>
+  <li>J. You et al., <a href="https://arxiv.org/abs/1802.08773">GraphRNN: Generating Realistic Graphs with Deep Recurrent Network Models</a>, ICML 2018.</li>
+  <li>C. Vignac et al., <a href="https://arxiv.org/abs/2210.13934">DiGress: Discrete Denoising Diffusion for Graph Generation</a>, ICLR 2023.</li>
+  <li>M. Gerlach, T. Peixoto, E. Altmann, <a href="https://arxiv.org/abs/1708.01677">A Network Approach to Topic Models</a> (TopSBM), Science Advances 2018.</li>
+  <li>M. Bronstein et al., <a href="https://arxiv.org/abs/2104.13478">Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, Gauges</a>, 2021 — la «&nbsp;charte unifiée&nbsp;» (E(n)-equivariance).</li>
+  <li>D. Edge et al., <a href="https://arxiv.org/abs/2404.16130">From Local to Global: A Graph RAG Approach to Query-Focused Summarization</a>, 2024.</li>
+  <li>H. Wang et al., <a href="https://arxiv.org/abs/2305.10037">Can Language Models Solve Graph Problems in Natural Language?</a> (NLGraph), NeurIPS 2023.</li>
+  <li>B. Fatemi et al., <a href="https://arxiv.org/abs/2310.04560">Talk like a Graph: Encoding Graphs for Large Language Models</a>, ICLR 2024.</li>
+  <li>Z. Wu et al., <a href="https://arxiv.org/abs/1901.00596">A Comprehensive Survey on Graph Neural Networks</a>, IEEE TNNLS, 2021.</li>
+  <li><strong>Équipe pédagogique (DaSciM, LIX)</strong>&nbsp;:
+  F. Rousseau, M. Vazirgiannis, <a href="https://www.semanticscholar.org/paper/251f8fddfca0f2952736673e75ed96de437c8964">Main Core Retention on Graph-of-Words for Single-Document Keyword Extraction</a>, ECIR 2015&nbsp;;
+  A. Tixier, F. Malliaros, M. Vazirgiannis, <a href="https://aclanthology.org/D16-1191/">A Graph Degeneracy-based Approach to Keyword Extraction</a>, EMNLP 2016&nbsp;;
+  G. Michel, G. Nikolentzos, J. Lutzeyer, M. Vazirgiannis, <a href="https://arxiv.org/abs/2306.05955">Path Neural Networks: Expressive and Accurate Graph Neural Networks</a>, ICML 2023&nbsp;;
+  M. Chatzianastasis, J. Lutzeyer, G. Dasoulas, M. Vazirgiannis, <a href="https://arxiv.org/abs/2204.05351">Graph Ordering Attention Networks</a>, AAAI 2023&nbsp;;
+  I. Evdaimon et al., <a href="https://arxiv.org/abs/2403.01535">Neural Graph Generator: Feature-Conditioned Graph Generation using Latent Diffusion</a>, 2024&nbsp;;
+  K. Skianis, G. Nikolentzos, M. Vazirgiannis, <a href="https://arxiv.org/abs/2409.17906">Graph Reasoning with Large Language Models via Pseudo-code Prompting</a>, 2024.</li>
+  <li><a href="https://www.pyg.org">PyTorch Geometric</a> — le framework des TP&nbsp;; <a href="https://ogb.stanford.edu">OGB</a> — les benchmarks.</li>
+</ul>
+</section>
+
 
 <nav class="pager">
   <a href="m1p2-reinforcement-learning.html"><span class="dir">← Précédent</span> Reinforcement Learning</a>

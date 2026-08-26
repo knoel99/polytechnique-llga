@@ -534,7 +534,821 @@ for w in ["graph", "court", "ticket"]:
     print(w, "->", [x for x, _ in wv.most_similar(w, topn=3)])</code></pre>
 </section>
 
-<!-- A_COMPLETER -->
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Topic models</h2>
+
+<div class="thm">
+  <span class="tag">Modèle 4.1 — LDA (Blei, Ng &amp; Jordan, 2003)&nbsp;: le génératif complet</span>
+  Pour chaque document \(d\) et chaque position \(i\) du corpus&nbsp;:
+  $$\theta_d \sim \mathrm{Dir}(\alpha),\quad
+  z_{d,i}\mid\theta_d \sim \theta_d,\quad
+  \varphi_k\sim\mathrm{Dir}(\beta),\quad
+  w_{d,i}\mid z_{d,i},\varphi \sim \varphi_{z_{d,i}}.$$
+  Un document est un mélange de \(K\) thèmes&nbsp;; chaque mot est tiré du thème de sa
+  position. La vraisemblance \(p(\mathbf{w})\) somme sur toutes les assignations
+  \(z\) — intractable (\(K^{\#\mathrm{mots}}\) termes)&nbsp;: d'où l'inférence
+  <em>variational Bayes</em> (papier original) ou <em>Gibbs sampling</em> (usage
+  pratique). Rappels connectés&nbsp;: EM du module ML (l'inférence variationnelle en est
+  la version bayésienne)&nbsp;; chaînes de Markov (Refresher L3 — l'échantillonneur est
+  une chaîne&nbsp;; convergence géométrique sous conditions).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.2 — Gibbs échantillonné «&nbsp;collapsed&nbsp;»&nbsp;: l'équation de mise à jour</span>
+  En intégrant \(\theta,\varphi\) (conjugaison Dirichlet–multinomial), la loi d'une
+  assignation \(z_i\) sachant tout le reste ne dépend que de <em>comptages</em>&nbsp;:
+  $$\mathbb{P}(z_i = k \mid z_{-i},\, w) \;\propto\;
+  \underbrace{\frac{n_{k,w_i}^{-i}+\beta}{n_k^{-i}+|V|\beta}}_{\text{thème \(k\) aime-t-il le mot \(w_i\) ?}}\;\cdot\;
+  \underbrace{\frac{n_{d,k}^{-i}+\alpha}{n_d^{-i}+K\alpha}}_{\text{document \(d\) aime-t-il le thème \(k\) ?}}$$
+  où \(n_{k,w}\) = fois où le thème \(k\) a émis \(w\), \(n_{d,k}\) = thème \(k\) dans
+  \(d\), exposant \(-i\) = «&nbsp;sans la position courante&nbsp;». On échantillonne chaque
+  \(z_i\) séquentiellement, des milliers de passages&nbsp;; les thèmes émergent par
+  renforcement (rich-get-richer des Dirichlet).
+  <div class="proof">
+  Par conjugaison, la marginale du corpus factorise en fonctions bêta multivariées&nbsp;:
+  \(p(w,z\mid\alpha,\beta)=\prod_k \frac{B(n_{k,\cdot}+\beta)}{B(\beta)}
+  \prod_d \frac{B(n_{d,\cdot}+\alpha)}{B(\alpha)}\). La conditionnelle
+  \(\mathbb{P}(z_i=k\mid\cdot)\) est le rapport \(p(w,z_i=k,z_{-i})/p(z_{-i},w_{-i})\)&nbsp;:
+  tous les facteurs ne touchant pas la position \(i\) se simplifient (propriété des
+  rapports de bêta&nbsp;:
+  \(\frac{B(u+e_k)}{B(u)}=\frac{u_k}{\sum_j u_j}\)), il reste le produit des deux
+  facteurs prédictifs ci-dessus. <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Choix des hyperparamètres et de K</span>
+  \(\alpha\) petit = documents purs (peu de thèmes par document)&nbsp;; \(\beta\) petit =
+  thèmes purs (mots marqués). La version <em>asymétrique</em> (\(\alpha_k\) non uniforme)
+  laisse émerger un thème «&nbsp;bruit&nbsp;». \(K\) se choisit par validation (perplexité
+  held-out) <em>ou</em> par cohérence — voir ci-dessous, les deux critères ne classent pas
+  les modèles dans le même ordre, c'est un résultat important du text mining.
+</div>
+
+<div class="def">
+  <span class="tag">Évaluation 4.3 — Perplexité vs cohérence</span>
+  <strong>Perplexité</strong> (held-out)&nbsp;:
+  \(\mathrm{PPL}=\exp\big(-\frac{1}{N_{\mathrm{test}}}\sum \log p(w_{\mathrm{test}})\big)\)
+  avec \(p(w\mid d)=\sum_k \theta_{d,k}\varphi_{k,w}\) — mais elle corrèle <em>mal</em> le
+  jugement humain (Chang et al., 2009&nbsp;: des modèles à plus faible perplexité peuvent
+  produire des thèmes moins interprétables). <strong>Cohérence NPMI</strong>&nbsp;: pour
+  les \(M\) mots les plus probables de chaque thème, moyenner
+  $$\mathrm{NPMI}(u,v)=\frac{\log\dfrac{P(u,v)}{P(u)P(v)}}{-\log P(u,v)} \in [-1,1]$$
+  sur toutes les paires (probabilités estimées par cooccurrences documentaires)&nbsp;:
+  mesure la collocation réelle des mots du thème — bien corrélée à l'humain. Règle
+  d'ingénieur&nbsp;: perplexité pour la capacité prédictive, NPMI/\(C_v\) pour
+  l'interprétabilité.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.4 — LSA&nbsp;: la SVD tronquée comme ACP du texte</span>
+  Sur la matrice TF-IDF \(\mathbf{X}\)&nbsp;: \(\mathbf{X}\approx\mathbf{U}_k\Sigma_k\mathbf{V}_k^\top\)&nbsp;;
+  colonnes de \(\mathbf{U}_k\Sigma_k\) = coordonnées des documents dans l'espace latent
+  (dimensions = directions de variance maximale, non corrélées)&nbsp;; \(\mathbf{V}_k\)
+  donne les thèmes (distributions de mots une fois renormalisées). Différences
+  clés&nbsp;: LSA est linéaire, déterministe, rapide&nbsp;; LDA est génératif, modélise
+  les comptages, donne des mélangeurs interprétables — mais LSA capture la
+  <em>cooccurrence pondérée</em> et suffit souvent en similarité de documents. Lien ACP&nbsp;:
+  ACP = SVD de la matrice centrée-réduite (module ML)&nbsp;; LSA = SVD de la matrice
+  TF-IDF (pas de centrage&nbsp;: la «&nbsp;moyenne&nbsp;» du texte n'a pas de sens).
+</div>
+
+<ul>
+  <li><strong>Après LDA</strong>&nbsp;: BERTopic (embeddings + clustering + c-TF-IDF) pour
+  des thèmes sur corpus contemporains — cohérent avec le pipeline «&nbsp;embeddings
+  ch. 3&nbsp;»&nbsp;; pour l'usage industriel des thèmes&nbsp;: veille, conformité,
+  e-discovery, détection de thématiques émergentes&nbsp;;</li>
+  <li><strong>Word Sense Induction</strong>&nbsp;: appliquer le clustering à <em>toutes
+  les occurrences d'un seul mot</em> (contextes BERT) révèle ses sens — le papier
+  commun Vazirgiannis–Buscaldi du ch. 9 fait exactement cela, avec maximisation
+  d'information mutuelle&nbsp;;</li>
+  <li><strong>Topic models sur graphes</strong> (TopicSBM etc.)&nbsp;: l'idée étendue aux
+  réseaux (lien module Graph ML).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Classification de textes</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 5.1 — Naive Bayes multinomial, dérivé</span>
+  Avec l'hypothèse (fausse&nbsp;!) d'indépendance des mots sachant la classe,
+  \(\mathbb{P}(d\mid c)=\prod_{t\in d}\mathbb{P}(t\mid c)^{\mathrm{tf}(t,d)}\), et Bayes&nbsp;:
+  $$\hat c = \arg\max_c \Big[\log \mathbb{P}(c) + \sum_{t\in d}\mathrm{tf}(t,d)\log \mathbb{P}(t\mid c)\Big].$$
+  MLE des paramètres&nbsp;: \(\mathbb{P}(t\mid c)=\frac{n_{t,c}}{n_c}\) (comptages),
+  \(\mathbb{P}(c)=\frac{n_c}{n}\). <strong>Lissage de Laplace</strong>&nbsp;:
+  $$\mathbb{P}(t\mid c)=\frac{n_{t,c}+1}{n_c+|V|}.$$
+  <div class="proof">
+  (i) Le MLE vient de la maximisation de la log-vraisemblance multinomiale sous contrainte
+  \(\sum_t \mathbb{P}(t\mid c)=1\) (multiplicateurs de Lagrange — comptages relatifs).
+  (ii) Problème&nbsp;: un mot vu en test mais jamais en classe \(c\) donne
+  \(\log 0 = -\infty\) — une seule rareté annule toute la classe&nbsp;; en français
+  («&nbsp;compte&nbsp;» etc.) c'est systématique en petits corpus. (iii) Le lissage de
+  Laplace = le <em>MAP</em> sous prior Dirichlet\((1,\dots,1)\) uniforme&nbsp;: la
+  densité a posteriori \(\propto \prod_t \pi_t^{n_{t,c}}\cdot\prod_t\pi_t^{1-1}\) est
+  maximisée en \(\frac{n_{t,c}+1}{n_c+|V|}\) — le lien Bayésien exact du ch. 0.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi NB marche malgré une hypothèse absurde</span>
+  L'indépendance conditionnelle est massivement violée («&nbsp;New&nbsp;» prédit
+  «&nbsp;York&nbsp;»). Mais la <em>décision</em> (argmax) est souvent correcte même quand
+  les <em>probabilités</em> sont très mal calibrées&nbsp;: il suffit que le bon candidat
+  gagne, pas que son score soit juste (théorie de Domingos &amp; Pazzani). D'où le
+  statut de NB&nbsp;: mauvaises probabilités, bonne baseline — toujours la
+  <em>première</em> d'un projet texte, parce qu'elle s'entraîne en secondes et fixe le
+  plancher de performance.
+</div>
+
+<div class="prop">
+  <span class="tag">Régression logistique creuse&nbsp;: pourquoi ça marche en haute dimension</span>
+  Sur TF-IDF, \(\#\text{features} \gg \#\text{docs}\) (10⁵ features pour 10³
+  documents)&nbsp;: le risque de sur-apprendre semble maximal, or le modèle linéaire
+  régularisé (L2, ou L1 pour sélectionner) généralise très bien. Trois raisons&nbsp;:
+  (1) les vecteurs sont <em>presque orthogonaux</em> en haute dimension — les exemples
+  sont naturellement séparables, la régularisation suffit à choisir un séparateur
+  «&nbsp;sobre&nbsp;»&nbsp;; (2) la pondération IDF a déjà fait une grosse part du travail
+  statistique (prop. 2.3)&nbsp;; (3) les unigrammes/bigrammes discriminants sont
+  exactement les features que le linéaire pondère bien. État de l'art
+  «&nbsp;classique&nbsp;» jusqu'en 2018 (Joulin et al., fastText)&nbsp;; encore
+  redoutable sous 1&nbsp;000 exemples étiquetés.
+</div>
+
+<ul>
+  <li><strong>Calibration</strong>&nbsp;: quand on consomme la probabilité (seuils
+  métier, routing de tickets), recalibrer — Platt (régression logistique sur les
+  scores) ou isotone&nbsp;; diagnostic&nbsp;: courbe de fiabilité (fiabilité prédite vs
+  observée)&nbsp;;</li>
+  <li><strong>Classes déséquilibrées</strong>&nbsp;: pondération de classes
+    (<code>class_weight="balanced"</code>), seuil optimal sur la courbe PR (pas
+    ROC)&nbsp;; métrique&nbsp;: <strong>macro-F1</strong> (moyenne par classe — chaque
+    classe compte pareil) plutôt qu'accuracy (majoritaire flattée)&nbsp;; matrice de
+    confusion par intention pour chatbots&nbsp;;</li>
+  <li><strong>Réseaux</strong>&nbsp;: CNN de phrases (Kim, 2014), BiLSTM&nbsp;; puis
+  fine-tuning de transformers (ch. 7). Courbes d'apprentissage empiriques&nbsp;:
+  linéaire+TF-IDF gagne sous ~10²-10³ exemples, le transformer au-dessus&nbsp;;</li>
+  <li><strong>Zero-shot / few-shot par LLM</strong>&nbsp;: zéro exemple étiqueté,
+  k exemples dans le prompt (M2 LLMs, ch. 4)&nbsp;: excellent point de départ
+  exploratoire et étiquetage assisté (active learning), rarement la solution finale en
+  production (coût, latence, confidentialité) — arbitrage détaillé au M2.</li>
+</ul>
+
+<pre class="code"><code>from sklearn.pipeline import make_pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.metrics import f1_score, classification_report
+
+train = fetch_20newsgroups(subset="train", remove=("headers","footers","quotes"))
+test  = fetch_20newsgroups(subset="test",  remove=("headers","footers","quotes"))
+
+pipe = make_pipeline(TfidfVectorizer(min_df=3, ngram_range=(1,2), sublinear_tf=True),
+                     LogisticRegression(C=10, max_iter=2000, class_weight="balanced"))
+pipe.fit(train.data, train.target)
+pred = pipe.predict(test.data)
+print("macro-F1 :", f1_score(test.target, pred, average="macro"))
+print(classification_report(test.target, pred, target_names=test.target_names[:3]))</code></pre>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Séquences&nbsp;: NER, HMM, CRF</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Étiquetage de séquences</span>
+  Attribuer à chaque token une étiquette&nbsp;: <strong>POS</strong> (catégorie grammaticale) ou
+  <strong>NER</strong> (entités nommées&nbsp;: PER, ORG, LOC…) en BIO
+  («&nbsp;<strong>B</strong>egin/<strong>I</strong>nside/<strong>O</strong>utside&nbsp;»)&nbsp;:
+  «&nbsp;<em>Kim</em>&nbsp;» = B-PER, «&nbsp;<em>Noel</em>&nbsp;» = I-PER. Le NER est la porte
+  d'entrée de la construction de graphes de connaissances (extraction d'entités + relations).
+</div>
+
+<div class="thm">
+  <span class="tag">HMM&nbsp;: forward, backward, Viterbi — les récurrences démontrées</span>
+  HMM&nbsp;: états cachés \(z_t\) (étiquettes), émissions \(\mathbb{P}(w_t\mid z_t)\),
+  transitions \(\mathbb{P}(z_t\mid z_{t-1})\). Notations&nbsp;:
+  \(\alpha_t(z)=\mathbb{P}(w_1,\dots,w_t,\,z_t=z)\) (<strong>forward</strong>) et
+  \(\beta_t(z)=\mathbb{P}(w_{t+1},\dots,w_T\mid z_t=z)\) (<strong>backward</strong>)&nbsp;:
+  $$\alpha_t(z)=\mathbb{P}(w_t\mid z)\sum_{z'}\alpha_{t-1}(z')\,\mathbb{P}(z\mid z'),
+  \qquad \beta_t(z)=\sum_{z'}\mathbb{P}(z'\mid z)\,\mathbb{P}(w_{t+1}\mid z')\,\beta_{t+1}(z').$$
+  <div class="proof">
+  Forward&nbsp;: conditionner sur \(z_{t-1}\). \(\alpha_t(z)=\sum_{z'}\mathbb{P}(w_{1:t},z_{t-1}=z',z_t=z)
+  =\sum_{z'}\underbrace{\mathbb{P}(w_{1:t-1},z_{t-1}=z')}_{\alpha_{t-1}(z')}
+  \,\mathbb{P}(z\mid z')\,\mathbb{P}(w_t\mid z)\) — markovien&nbsp;: le passé ne dépend
+  que de \(z_t\). Backward&nbsp;: symétrique en conditionnant sur \(z_{t+1}\).
+  Usages&nbsp;: vraisemblance \(\mathbb{P}(w_{1:T})=\sum_z \alpha_T(z)\)&nbsp;;
+  posteriors marginaux \(\mathbb{P}(z_t\mid w)=\alpha_t(z)\beta_t(z)/\mathbb{P}(w)\)
+  — c'est l'E-step d'un EM pour entraîner l'HMM (module ML). Tout en
+  \(\mathcal{O}(T K^2)\). <span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithme 6.2 — Viterbi&nbsp;: optimalité par sous-structure</span>
+  Le chemin d'étiquettes le plus vraisemblable satisfait la récurrence
+  $$\delta_t(z) = \max_{z'} \big[\delta_{t-1}(z')\, \mathbb{P}(z \mid z')\big]\ \mathbb{P}(w_t \mid z),\qquad
+  \delta_0(z)=\mathbb{P}(z)\mathbb{P}(w_1\mid z),$$
+  et l'étiquetage optimal se relit en remontant les argmax — \(\mathcal{O}(T K^2)\)
+  au lieu de \(\mathcal{O}(K^T)\).
+  <div class="proof">
+  Optimalité&nbsp;: tout chemin optimal arrivant en \((t,z)\) a un préfixe optimal jusqu'à
+  \((t-1,z')\) — sinon remplacer le préfixe par un meilleur augmente la probabilité
+  totale (argument d'échange&nbsp;: les facteurs futurs ne dépendent que de \(z\),
+  markovien). Donc il suffit de suivre le meilleur prédécesseur&nbsp;: c'est Bellman
+  (module RL, ch. 2) sur une chaîne de Markov, avec max au lieu d'espérance.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">CRF (Lafferty et al., 2001)&nbsp;: le discriminatif</span>
+  HMM modélise <em>conjointement</em> \(\mathbb{P}(w,z)\) (génératif)&nbsp;; la CRF modèle
+  directement \(\mathbb{P}(z\mid w)\)&nbsp;:
+  $$\mathbb{P}(z\mid w)=\frac{\exp\big(\sum_{t}\theta^\top f(z_{t-1},z_t,w,t)\big)}{Z(w)},
+  \qquad \nabla_\theta \log\mathbb{P} = \mathbb{E}_{p(z\mid w)}[f]-f(z^\star)$$
+  — features <em>arbitraires</em> sur toute la séquence&nbsp;: identité du mot, suffixes,
+  majuscule, forme du voisin, tiret, position…, plus des features de transition
+  \(z_{t-1}\to z_t\) (qui interdisent O→I-PER&nbsp;: un début d'entité doit être B).
+  Inférence&nbsp;: forward-backward pour \(Z(w)\) et l'espérance des features&nbsp;;
+  Viterbi pour la prédiction. Le gain sur HMM&nbsp;: pas de «&nbsp;gaspillage&nbsp;» à
+  modéliser les mots, features riches, interactions arbitraires — longtemps l'état de
+  l'art NER (CoNLL-2003).
+</div>
+
+<div class="def">
+  <span class="tag">Décodage BIO et évaluation NER au niveau entité</span>
+  Les prédictions par token doivent être converties en <em>spans</em>&nbsp;:
+  une entité = séquence B-X (I-X)*. Évaluation <strong>entité</strong> (pas
+  token)&nbsp;: une entité est correcte ssi type <em>et</em> bornes exactes&nbsp;;
+  $$\mathrm{P}=\frac{\#\text{correctes}}{\#\text{prédites}},\qquad
+  \mathrm{R}=\frac{\#\text{correctes}}{\#\text{dorées}},\qquad F_1=\frac{2PR}{P+R}.$$
+  Le F1 token ( indulgent sur les bornes) surestime toujours le F1 entité —
+  toujours rapporter le F1 entité (standard conlleval). Réflexe industriel&nbsp;:
+  auditer les erreurs de <em>bornes</em> («&nbsp;Banque de France&nbsp;» tronqué)
+  séparément des erreurs de <em>type</em> (PER vs ORG).
+</div>
+
+<div class="note">
+  <span class="tag">Aujourd'hui</span> Les transformers étiquettent token par token
+  (per-token softmax + décodage BIO&nbsp;; la tête est souvent une <em>linear-chain CRF</em>
+  ou un simple softmax avec contraintes BIO en post-traitement)&nbsp;; les librairies
+  <code>spaCy</code> et <code>transformers</code> (pipeline <code>ner</code>) donnent
+  l'état de l'art en quelques lignes&nbsp;; le TP construit un extracteur
+  entités-relations qui alimente le mini-GraphRAG du module Graph ML — ch. 8 du
+  présent cours pour le pipeline complet.
+</div>
+
+<pre class="code"><code># Viterbi jouet : POS tagging a 2 etats (N nom, V verbe), vocabulaire de 4 mots
+import numpy as np
+W = ["le", "chat", "mange", "souris"]
+p_z0  = np.array([.9, .1])                      # P(z1)
+A     = np.array([[.8,.2],[.3,.7]])             # P(z_t | z_{t-1})  lignes=prec
+B     = np.array([[.6,.3,.02,.08],
+                  [.0,.02,.9,.08]])             # P(w | z)  colonnes=mots
+seq   = [0,1,2,3]                               # "le chat mange souris"
+
+delta = B[:, seq[0]] * p_z0                     # initialisation
+back  = []
+for w in seq[1:]:
+    m = delta[:, None] * A * B[:, w][None, :]   # (prec, cur)
+    back.append(m.argmax(0)); delta = m.max(0)
+z = [delta.argmax()]
+for bp in reversed(back): z.append(bp[z[-1]])
+print("etiquettes :", ["N","V"][i] for i in reversed(z))</code></pre>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Transformers pour le NLP</h2>
+
+<ul>
+  <li><strong>Architecture</strong>&nbsp;: reprise du module Deep Learning ch. 6 (attention
+  multi-tête \(\mathrm{softmax}(QK^\top/\sqrt{d_k})V\), résidus, LayerNorm,
+  encodeur/décodeur)&nbsp;; ici on l'<em>applique</em> au texte — le M2 LLMs
+  (ch. 2) reprendra l'architecture en profondeur (RoPE, GQA, MoE…)&nbsp;;</li>
+</ul>
+
+<div class="thm">
+  <span class="tag">BERT (Devlin et al., 2019)&nbsp;: MLM + NSP en détail</span>
+  Encodeur bidirectionnel, pré-entraîné sur deux tâches&nbsp;:
+  <strong>(1) Masked LM</strong>&nbsp;: 15&nbsp;% des tokens tirés&nbsp;; parmi eux 80&nbsp;%
+  remplacés par <code>[MASK]</code>, 10&nbsp;% par un mot aléatoire, 10&nbsp;% inchangés&nbsp;;
+  on prédit le token d'origine (sortie&nbsp;: classification par position). Le mélange
+  évite le mismatch pré-entraînement/fine-tuning (le modèle ne verra plus
+  <code>[MASK]</code> en aval) et force une représentation robuste. <strong>(2) Next
+  Sentence Prediction</strong>&nbsp;: classifier si deux phrases se suivent (paire
+  <code>[CLS]</code> A <code>[SEP]</code> B) — tâche faible, abandonnée par RoBERTa au
+  profit de plus de données. Résultat&nbsp;: <code>[CLS]</code> = représentation de
+  phrase&nbsp;; un modèle, des dizaines de tâches par simple couche de tête.
+</div>
+
+<div class="thm">
+  <span class="tag">GPT (Radford et al.) et T5 (Raffel et al., 2019)</span>
+  <strong>GPT</strong>&nbsp;: décodeur causal —
+  \(\mathcal{L}=-\sum_t\log p(x_t\mid x_{&lt;t})\), pré-entraînement = prédire le token
+  suivant&nbsp;; génératif par construction, zéro tâche spécifique (c'est la famille
+  prolongée au M2). <strong>T5</strong>&nbsp;: tout en text-to-text — span corruption
+  (masquer des fragments continus et les régénérer), chaque tâche (classification,
+  traduction, QA…) formulée entrée→sortie textuelles&nbsp;; unifie MLM et CLM.
+</div>
+
+<div class="def">
+  <span class="tag">Protocole 7.1 — Fine-tuning complet (la recette stable)</span>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li><strong>Tête</strong>&nbsp;: une couche linéaire \(\mathrm{Linear}(d, K)\) sur
+    <code>[CLS]</code> (classification) ou par position (NER, POS)&nbsp;;</li>
+    <li><strong>Optimiseur</strong>&nbsp;: AdamW, learning rate
+    \(\{2\times10^{-5}, 3\times10^{-5}, 5\times10^{-5}\}\) — grille courte, le
+    fine-tuning est sensible mais plat autour de l'optimum&nbsp;; warmup linéaire
+    10&nbsp;% puis décroissance linéaire&nbsp;;</li>
+    <li><strong>Epochs</strong>&nbsp;: 2 à 4 (au-delà&nbsp;: sur-apprentissage brutal
+    sur petits corpus — surveiller la dev)&nbsp;; batch 16-32&nbsp;;</li>
+    <li><strong>Petits corpus (&lt;1k)</strong>&nbsp;: geler les couches basses, decay
+    par couche (<em>layer-wise lr decay</em>), ou adapters/LoRA (paramètres ajoutés
+    &lt;&lt; 1&nbsp;% — reprise au M2, ch. 6)&nbsp;;</li>
+    <li><strong>Coût</strong>&nbsp;: distillation (DistilBERT ≈ −40&nbsp;% params, −97&nbsp;% 
+    du temps d'entraînement, ~97&nbsp;% de la performance), quantification int8 — le
+    compromis performance/coût est un critère d'ingénieur, approfondi en M2
+    (LLMs ch. 6, ML Ops).</li>
+  </ol>
+</div>
+
+<div class="thm">
+  <span class="tag">Sentence-BERT (Reimers &amp; Gurevych, 2019)&nbsp;: la perte triplet dérivée</span>
+  Pour encoder des phrases dans un espace comparable (recherche, clustering, RAG)&nbsp;:
+  siames BERT + pooling (moyenne), entraînés par <em>triplet loss</em> sur
+  (ancre \(a\), positif \(p\), négatif \(n\))&nbsp;:
+  $$\mathcal{L}=\max\big(0,\ d(a,p)-d(a,n)+\varepsilon\big).$$
+  <div class="proof">
+  Si la marge est respectée (\(d(a,p)+\varepsilon\le d(a,n)\)), la perte est nulle&nbsp;:
+  rien à apprendre. Sinon, le gradient \(\nabla = \nabla d(a,p)-\nabla d(a,n)\)
+  <em>rapproche</em> l'ancre du positif et l'<em>éloigne</em> du négatif, à force
+  proportionnelle à la violation. Point crucial&nbsp;: la qualité dépend des négatifs
+  (mini-batch&nbsp;: les autres paires font des négatifs <em>durs</em> — c'est ce qui
+  façonne l'espace). C'est ce type d'embeddings qui indexe les corpus des systèmes
+  RAG — détaillé au M2 LLMs ch. 7 (recherche dense, reranking).
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Le français&nbsp;: CamemBERT, FlauBERT, JuriBERT</span>
+  CamemBERT (Martin et al., 2020)&nbsp;: RoBERTa ré-entraîné sur 138 Go de texte
+  français — le modèle français de référence&nbsp;; FlauBERT&nbsp;: BERT français
+  académique&nbsp;; <strong>JuriBERT</strong> (Douka et al., 2021 — travaux du cours,
+  ch. 9)&nbsp;: adaptation au français <em>juridique</em>, où le vocabulaire (doctrine,
+  griefs, pourvoi) déroute les modèles généraux. Multilingue&nbsp;: mBERT, XLM-R
+  (100+ langues, embeddings partagés — au prix d'une capacité diluée par langue).
+</div>
+
+<pre class="code"><code>from transformers import pipeline
+
+classifier = pipeline("text-classification",
+                      model="distilbert-base-uncased-finetuned-sst-2-english")
+print(classifier("Graph RAG is a game changer for enterprise search."))
+
+ner = pipeline("ner", aggregation_strategy="simple")
+print(ner("Michalis Vazirgiannis teaches at Ecole Polytechnique."))
+
+# embeddings de phrases pour le RAG (cf. ch. 8 et M2 LLMs ch. 7)
+from sentence_transformers import SentenceTransformer
+enc = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+print(enc.encode(["résumé automatique", "automatic summarization"]).shape)</code></pre>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Text mining industriel</h2>
+
+<p>Ce chapitre assemble les briques ch. 1-7 en <em>produits</em>&nbsp;: résumés,
+mots-clés, déduplication, classification de tickets — les charges de travail réelles du
+NLP en entreprise, avec leurs pièges d'ingénierie.</p>
+
+<h3>8.1 TextRank&nbsp;: le résumé extractif par PageRank</h3>
+
+<div class="thm">
+  <span class="tag">TextRank (Mihalcea &amp; Tarau, 2004)</span>
+  (1) Phrase → nœud&nbsp;; similarité entre phrases \(S_i,S_j\) (recouvrement de mots
+  filtrés)&nbsp;:
+  \(w_{ij}=\frac{|\{t\in S_i\}\cap\{t\in S_j\}|}{\log|S_i|+\log|S_j|}\)&nbsp;; (2) poids
+  symétriques → marche aléatoire&nbsp;; (3) score&nbsp;:
+  $$\mathrm{TR}(u)=\frac{1-d}{N}+d\sum_{v\to u}\frac{w_{vu}}{\sum_{v'}w_{vv'}}\,\mathrm{TR}(v),$$
+  itérée depuis l'uniforme (puissance de matrice)&nbsp;; convergence géométrique vers
+  l'unique stationnaire (Perron–Frobenius&nbsp;: matrice stochastique primitive —
+  rappel chaînes de Markov, ch. 0)&nbsp;; (4) les k phrases de plus haut score =
+  résumé (réordonnées chronologiquement). Le même algorithme sur le graphe de
+  <em>mots</em> (fenêtre de cooccurrence) donne l'extraction de mots-clés —
+  «&nbsp;PageRank pour le texte&nbsp;».
+  <div class="proof">
+  La récurrence s'écrit \(\pi^{(k+1)}=\big[(1-d)\tfrac{\mathbb{1}}{N}
+  +d\,M\big]\pi^{(k)}\) avec \(M\) la matrice de transition pondérée&nbsp;: l'opérateur
+  est contractant (facteur \(d<1\)), d'où convergence géométrique de taux \(d\) —
+  amorti en ~20-30 itérations pour \(d=0{,}85\). <span class="qed">∎</span></div>
+</div>
+
+<h3>8.2 Extraction de mots-clés&nbsp;: RAKE, YAKE, KeyBERT</h3>
+
+<ul>
+  <li><strong>RAKE</strong> (Rose et al., 2010)&nbsp;: découper sur stopwords/ponctuation
+  → phrases candidates&nbsp;; score d'un mot = \(\deg(w)/\mathrm{freq}(w)\) (degré dans
+  le graphe de cooccurrence <em>au sein des candidats</em>) + fréquence des
+  bigrammes&nbsp;; score d'une expression = somme des mots. Rapide, sans corpus
+  externe, sensible aux stopwords&nbsp;;</li>
+  <li><strong>YAKE</strong> (Campos et al., 2020)&nbsp;: features statistiques
+  <em>non supervisées</em> par mot — fréquence, dispersion des positions (un mot-clé
+  apparaît partout), casse (majuscule intra-phrase = signal), redondance des
+  variantes (distance d'édition) — score agrégé, fenêtre gauche/droite pour le
+  contexte&nbsp;; robuste et multilingue&nbsp;;</li>
+  <li><strong>KeyBERT</strong> (Grootendorst, 2020)&nbsp;: extraire des candidats
+  (n-grammes), les <em>embedder</em> (ch. 3), prendre les plus proches du document —
+  et diversifier par <strong>MMR</strong>&nbsp;:
+  $$\mathrm{MMR}=\arg\max_{c\,\in\,C\setminus S}\ \Big[\lambda\cos(c,d)-(1-\lambda)\max_{s\in S}\cos(c,s)\Big],$$
+  qui ajoute à l'ensemble \(S\) le candidat pertinent <em>et</em> peu redondant&nbsp;;
+  le même schéma «&nbsp;embeddings + MMR&nbsp;» revient en RAG (M2, ch. 7).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Extractif vs abstractif</span>
+  Extractif (TextRank&nbsp;;BERT&nbsp;: classer des phrases)&nbsp;: extractible, sans
+  hallucination, mais redondant et haché. Abstractif (générer)&nbsp;: fluide, mais
+  exige un modèle génératif <em>et</em> une évaluation de fidélité — c'est le terrain
+  du M2 (LLMs ch. 7-8) et des travaux de l'enseignant du M2 (résumé de réunions,
+  cf. ch. 9). En entreprise&nbsp;: l'extractif reste la solution de confiance quand
+  chaque phrase doit être traçable à la source.
+</div>
+
+<h3>8.3 Déduplication à grande échelle&nbsp;: MinHash + LSH</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 8.1 — MinHash estime la similarité de Jaccard</span>
+  Pour \(h\) uniforme, \(\;\mathbb{P}\big(\min_{x\in A} h(x)=\min_{y\in B} h(y)\big)
+  = J(A,B)=\frac{|A\cap B|}{|A\cup B|}\). Empiler \(m\) hachages → signature
+  \(\mathrm{sig}(A)\in\{0,\dots,2^{64}\}^m\), et la fréquence de collisions estime
+  \(J\).
+  <div class="proof">
+  Soit \(z\) l'élément de \(A\cup B\) minimisant \(h\) (unique p.s. si \(h\) uniforme).
+  \(\min h(A)=\min h(B)\) ssi \(z\in A\cap B\). Or \(z\) est uniforme sur
+  \(A\cup B\) (invariance par permutation des hachages), d'où la probabilité
+  \(\frac{|A\cap B|}{|A\cup B|}\). <span class="qed">∎</span></div>
+</div>
+
+<div class="def">
+  <span class="tag">LSH (Locality-Sensitive Hashing)&nbsp;: bandes et rangs</span>
+  Signature découpée en \(b\) bandes de \(r\) rangs&nbsp;; deux documents sont
+  <em>candidats</em> si une bande entière coïncide. Probabilité de détection&nbsp;:
+  $$\mathbb{P}_{\mathrm{détecter}}(J)=1-\big(1-J^{\,r}\big)^{b}$$
+  — une sigmoïde raide&nbsp;: avec \(r=5,\ b=20\)&nbsp;:
+  \(J=0{,}5\to 47\,\%\), \(J=0{,}8\to 99{,}96\,\%\). On «&nbsp;choisit&nbsp;» la
+  frontière accepté/rejeté par \((r,b)\) — c'est le mécanisme exact de déduplication
+  des corpus de pré-entraînement des LLMs (M2 LLMs, ch. 3, où il est détaillé avec
+  les chiffres d'échelle&nbsp;; implémentation TP&nbsp;: <code>datasketch</code>).
+</div>
+
+<h3>8.4 Cas complet&nbsp;: classification de tickets support</h3>
+
+<div class="ex">
+  <span class="tag">Étude de cas — 50 000 tickets, 40 catégories, 3 langues</span>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li><strong>Données</strong>&nbsp;: tickets (sujet + corps), catégories très
+    déséquilibrées (logiciel ~30&nbsp;%, licence ~0,2&nbsp;%)&nbsp;; annotation
+    fragmentaire, historique bruité&nbsp;;</li>
+    <li><strong>Prétraitement</strong>&nbsp;: NFKC (ch. 1), détection de langue,
+    remplacement des références produits/numéros par des tokens génériques
+    (&lt;REF&gt;, &lt;DATE&gt;) — <em>étape à plus fort impact</em>&nbsp;: les tickets
+    sont 30&nbsp;% de codes&nbsp;;</li>
+    <li><strong>Baseline</strong>&nbsp;: TF-IDF (unigrammes, sublinear) + régression
+    logistique pondérée → macro-F1 ≈ 0,72 — à battre&nbsp;;</li>
+    <li><strong>Modèle</strong>&nbsp;: CamemBERT/multilingue fine-tuné (protocole 7.1)
+    → macro-F1 ≈ 0,82&nbsp;; gain principal sur les classes rares&nbsp;;</li>
+    <li><strong>Erreurs</strong>&nbsp;: matrice de confusion —
+    «&nbsp;connexion&nbsp;» vs «&nbsp;mot de passe&nbsp;» systématiquement confondus
+    (frontière sémantique floue aussi pour les humains)&nbsp;; solution&nbsp;:
+    fusion de classes métier ou seuil de rejet (confidence &lt; τ → file humaine)&nbsp;;</li>
+    <li><strong>Production</strong>&nbsp;: dérive (nouveaux produits → OOV)&nbsp;:
+    surveillance de la distribution d'entrée, ré-entraînement trimestriel, active
+    learning sur les tickets rejetés (les plus incertains = les plus informatifs).
+  </ol>
+</div>
+
+<ul>
+  <li><strong>Question-réponse et RAG</strong>&nbsp;: retriever (BM25 — le descendant
+  direct du ch. 2 — et/ou dense&nbsp;;<em>hybrid search</em>) + générateur&nbsp;; le
+  module de référence est le M2 LLMs (ch. 7)&nbsp;; le TP fil rouge en monte une
+  version graph&nbsp;;</li>
+  <li><strong>Veille</strong>&nbsp;: flux → dédup MinHash → topic model (ch. 4) →
+  mots-clés (8.2) → classification → alertes&nbsp;;</li>
+  <li><strong>Le français et le multilingue</strong>&nbsp;: corpus, modèles
+  multilingues (mBERT, XLM-R)&nbsp;; juridique/français = difficultés spécifiques —
+  JuriBERT (ch. 9) y répond côté modèle, les travaux Buscaldi (ch. 9) côté
+  recherche d'information.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Projet fil rouge</span> Pipeline complet de veille&nbsp;:
+  corpus de 500 articles → nettoyage/tokenisation → TF-IDF + LDA (thématiques) →
+  classification supervisée fine-tunée → NER + relations → export vers le mini-GraphRAG
+  (module Graph ML)&nbsp;; évaluation à chaque étage (perplexité, cohérence, macro-F1, F1 NER).
+</div>
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Travaux de l'équipe pédagogique</h2>
+
+<p>Ce module est adossé à un laboratoire (DaSciM, LIX, École Polytechnique —
+M.&nbsp;Vazirgiannis&nbsp;; LIPN, Sorbonne Paris Nord — D.&nbsp;Buscaldi)&nbsp;: voici
+les travaux <em>réels</em> des deux enseignants, chacun positionné par rapport aux
+chapitres du cours. Une leçon de méthode&nbsp;: chaque brique du cours (TF-IDF,
+clustering, graphes, embeddings) est un <em>argument de recherche</em> vivant.</p>
+
+<h3>9.1 Michalis Vazirgiannis&nbsp;: le text mining par les graphes</h3>
+
+<ul>
+  <li><strong>Graph-of-Word et TW-IDF</strong> — F.&nbsp;Rousseau &amp;
+  M.&nbsp;Vazirgiannis, <em>Graph-of-word and TW-IDF: new approach to ad hoc IR</em>,
+  CIKM 2013 (<a href="https://doi.org/10.1145/2505515.2505671">doi</a>)&nbsp;;
+  vue d'ensemble&nbsp;: <em>Graph of Words: Boosting Text Mining Tasks with Graphs</em>,
+  WWW 2017 (<a href="https://doi.org/10.1145/3041021.3055362">doi</a>).
+  <strong>L'idée</strong>&nbsp;: représenter chaque document par un graphe de mots
+  (nœuds = termes, arêtes = cooccurrence dans une fenêtre), et remplacer le tf(t,d)
+  du TF-IDF (ch. 2) par la <em>centralité</em> du terme — la somme des poids de ses
+  arêtes (degré pondéré). Le poids capture la cohésion locale du terme dans le
+  discours, pas seulement sa fréquence&nbsp;; TW-IDF améliore la recherche ad hoc
+  sur des collections de référence. <strong>Position&nbsp;:</strong> prolonge
+  directement le ch. 2 — «&nbsp;le comptage devient un score de graphe&nbsp;»&nbsp;;
+  c'est aussi la porte d'entrée du module Graph ML (motifs, communautés, k-cores).</li>
+  <li><strong>Mots-clés par dégénérescence</strong> — <em>Main Core Retention on
+  Graph-of-Words for Single-Document Keyword Extraction</em>, ECIR 2015
+  (<a href="https://doi.org/10.1007/978-3-319-16354-3_42">doi</a>)&nbsp;;
+  Tixier, Malliaros &amp; Vazirgiannis, <em>A Graph Degeneracy-based Approach to
+  Keyword Extraction</em>, EMNLP 2016
+  (<a href="https://aclanthology.org/D16-1191/">aclanthology</a>). Décomposition
+  k-core du graph-of-word&nbsp;: le <em>cœur principal</em> (noyau maximal où chaque
+  mot coapparient à k voisins) isole les mots porteurs du document — méthode
+  <em>non supervisée, robuste au bruit</em>, qui rivalise avec des approches
+  supervisées. <strong>Position&nbsp;:</strong> le concurrent «&nbsp;graphe&nbsp;»
+  de RAKE/YAKE du ch. 8&nbsp;; démo GoWvis (ACL 2016,
+  <a href="https://aclanthology.org/P16-4026/">aclanthology</a>)&nbsp;; version
+  temps réel pour conversations&nbsp;: EACL 2017
+  (<a href="https://aclanthology.org/E17-2074/">aclanthology</a>).</li>
+  <li><strong>Clustering</strong> — Giatsidis, Malliaros, Thilikos &amp;
+  Vazirgiannis, <em>CoreCluster: A Degeneracy Based Graph Clustering Framework</em>,
+  AAAI 2014 (<a href="https://doi.org/10.1609/aaai.v28i1.8731">doi</a>)&nbsp;;
+  Skianis, Rousseau &amp; Vazirgiannis, <em>Regularizing Text Categorization with
+  Clusters of Words</em>, EMNLP 2016
+  (<a href="https://aclanthology.org/D16-1188/">aclanthology</a>)&nbsp;: on
+  <em>regroupe les mots</em> (communautés du graphe de cooccurrence) et on
+  classifie les documents sur ces clusters — régularisation en petite dimension,
+  interpretable, qui précède la logique «&nbsp;topics&nbsp;» du ch. 4&nbsp;;
+  <strong>Position&nbsp;:</strong> ch. 4 et ch. 5 (le clustering au service de la
+  classification).</li>
+  <li><strong>Induction de sens par clustering neural</strong> — Abdine, Kamal
+  Eddine, Buscaldi &amp; Vazirgiannis, <em>Word Sense Induction with Hierarchical
+  Clustering and Mutual Information Maximization</em>, AI Open 2023
+  (<a href="https://arxiv.org/abs/2210.05422">arXiv:2210.05422</a>) — <em>article
+  co-signé par les deux enseignants du module</em>&nbsp;: clusteriser les
+  occurrences d'un mot par leurs embeddings <em>contextuels</em> (BERT), avec un
+  critère d'information mutuelle <em>maximisée</em> — le dual exact du NPMI
+  «&nbsp;cohérence&nbsp;» du ch. 4&nbsp;; <strong>Position&nbsp;:</strong> fusion
+  ch. 3 (embeddings) + ch. 4 (thèmes/clustering) + ch. 7 (BERT).</li>
+  <li><strong>JuriBERT</strong> — Douka, Abdine, Vazirgiannis, El Hamdani &amp;
+  Restrepo Amariles, NLLP@EMNLP 2021
+  (<a href="https://arxiv.org/abs/2110.01485">arXiv:2110.01485</a>)&nbsp;:
+  adaptation du masked LM au français juridique — cf. ch. 7&nbsp;;
+  <em>ouvre la voie aux travaux Buscaldi en IR juridique (ci-dessous)</em>.</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Prolongement ouvert&nbsp;: TF-IDF × LLMs</span>
+  Le TF-IDF du ch. 2 sélectionne les termes qui identifient un document&nbsp;;
+  une question de recherche actuelle est de pondérer de même les
+  <em>exemples</em> montrés à un LLM (in-context learning, M2 ch. 4) — la boucle
+  «&nbsp;poids classiques au service des modèles modernes&nbsp;» part du TW-IDF.
+  Sujet possible de projet fil rouge&nbsp;: comparer TF-IDF, TF-IDF graphique
+  (TW-IDF) et embeddings denses pour ordonner les exemples d'un prompt.
+</div>
+
+<h3>9.2 Davide Buscaldi&nbsp;: QA, juridique, sentiment, graphes de connaissances</h3>
+
+<ul>
+  <li><strong>Question-réponse par repêchage de passages</strong> — Gómez-Soriano,
+  Buscaldi et al., <em>A Multilingual Question Answering System using an n-grams
+  based Passage Retrieval Engine</em>, IICAI 2005, et version journal
+  (<em>Answering questions with an n-gram based passage retrieval engine</em>,
+  JIIS 2011)&nbsp;: classer les <em>passages</em> par recouvrement de n-grammes
+  requête-passage (l'ancêtre direct du scoring BM25 du ch. 2), évalué en
+  multilingue (CLEF QA) et sur questions orales (QAST). <strong>Position&nbsp;:</strong>
+  ch. 2 (n-grammes, repêchage) et ch. 8 (le retriever avant le RAG — le «&nbsp;R&nbsp;»
+  de RAG au M2, ch. 7, a cette histoire-là).</li>
+  <li><strong>Recherche d'information juridique</strong> — Rosso, Correa &amp;
+  Buscaldi, <em>Passage retrieval in legal texts</em>, Journal of Logic and
+  Algebraic Programming 2011
+  (<a href="https://doi.org/10.1016/j.jlap.2011.02.001">doi</a>)&nbsp;: repêcher
+  les passages pertinents dans des décisions de justice — textes longs,
+  vocabulaire technique, références croisées&nbsp;: exactement les difficultés
+  «&nbsp;français juridique&nbsp;» du ch. 8, côté repêchage (JuriBERT, ci-dessus,
+  les traite côté modèle).</li>
+  <li><strong>Sentiment pour la gestion de crise</strong> — Buscaldi &amp;
+  Hernandez-Farias, <em>Sentiment Analysis on Microblogs for Natural Disasters
+  Management: a Study on the 2014 Genoa Floodings</em>, WWW Companion 2015
+  (<a href="https://doi.org/10.1145/2740908.2741727">doi</a>)&nbsp;: classifier
+  l'émotion de tweets pendant une inondation — classification (ch. 5) sur texte
+  court, bruité, avec classes subtiles (inquiétude vs alerte)&nbsp;; suite
+  naturelle&nbsp;: détection de trolls (TexTrolls,
+  <a href="https://arxiv.org/abs/1910.01340">arXiv:1910.01340</a>).</li>
+  <li><strong>Graphes de connaissances scientifiques</strong> — Dessì, Osborne,
+  Reforgiato Recupero, Buscaldi et al., <em>AI-KG</em> (ISWC 2020) et
+  <em>CS-KG</em> (ISWC 2022)&nbsp;: pipelines NLP (extraction d'entités, de
+  relations — ch. 6) qui transforment des millions d'articles en graphe de
+  connaissances&nbsp;; <strong>Position&nbsp;:</strong> le débouché exact du
+  NER du ch. 6&nbsp;; ces graphes alimentent le GraphRAG du module Graph ML&nbsp;;
+  la série d'articles LLM-KG du groupe relie le module au M2.</li>
+  <li><strong>À l'ère des LLM&nbsp;: détection et mémorisation</strong> — avec
+  Liyanage &amp; Nazarenko, benchmark de détection de texte académique généré
+  (LREC 2022, <a href="https://arxiv.org/abs/2202.02013">arXiv:2202.02013</a>)&nbsp;;
+  avec Dentan, Shabou &amp; Vanier&nbsp;: <em>Predicting memorization within
+  fine-tuned Large Language Models</em> (ECAI 2025,
+  <a href="https://arxiv.org/abs/2409.18858">arXiv:2409.18858</a>) et le benchmark
+  multilingue d'hallucinations <em>MUCH</em> (LREC 2026,
+  <a href="https://arxiv.org/abs/2511.17081">arXiv:2511.17081</a>).
+  <strong>Position&nbsp;:</strong> ces travaux structurent le ch. 9 «&nbsp;évaluation
+  et sûreté&nbsp;» du module M2 LLMs — la continuité pédagogique du master.</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Fil conducteur</span> Vazirgiannis&nbsp;: <em>le texte comme
+  graphe</em> (ch. 2, 4, 8 → Graph ML, GraphRAG)&nbsp;; Buscaldi&nbsp;: <em>trouver
+  l'information et la fiabiliser</em> (ch. 2, 5, 8 → RAG, sûreté M2). Leur article
+  commun (WSI) est le carrefour&nbsp;: embeddings contextuels + clustering +
+  information mutuelle — c'est-à-dire les ch. 3, 4 et 7 de ce module.
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>TF-IDF papier.</strong> Sur 3 documents donnés, calculer à la main la matrice
+  TF-IDF (log naturel) du vocabulaire réduit, puis la similarité cosinus de chaque paire&nbsp;;
+  vérifier avec <code>TfidfVectorizer</code> (attention à la normalisation L2).
+  <div class="proof">
+  Corrigé (démarche)&nbsp;: (1) compter tf(t,d)&nbsp;; (2) df(t) sur les 3 docs puis
+  \(\mathrm{idf}=\log(3/\mathrm{df})\) (0 pour un terme partout — il disparaît)&nbsp;;
+  (3) multiplier&nbsp;; (4) normaliser chaque ligne \(\tilde d=d/\|d\|_2\) alors
+  \(\cos(d_i,d_j)=\tilde d_i^\top \tilde d_j\) — c'est ce que sklearn renvoie&nbsp;;
+  (5) piège classique&nbsp;: sklearn utilise l'IDF lissé \(\log\frac{1+n}{1+\mathrm{df}}+1\)&nbsp;;
+  passer <code>smooth_idf=False</code> pour retrouver la formule du cours.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>IDF = PMI.</strong> Redémontrer la proposition 2.3 dans le cas
+  \(\mathrm{df}(t)=n\) (terme partout) et \(\mathrm{df}(t)=1\) (terme unique)&nbsp;;
+  en déduire pourquoi la pondération L2 seule ne suffit pas à écraser les mots
+  omniprésents.
+  <div class="proof">
+  Corrigé&nbsp;: \(\mathrm{df}=n \Rightarrow \mathrm{idf}=\log 1=0\) — le terme ne
+  discrimine <em>aucun</em> document (PMI nulle)&nbsp;; \(\mathrm{df}=1 \Rightarrow
+  \mathrm{idf}=\log n\) — le terme identifie parfaitement son document. La norme L2
+  rescale les documents, pas les colonnes&nbsp;: un mot fréquent garde un tf élevé
+  dans <em>tous</em> les documents — seule l'IDF (poids par colonne) l'écrase.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>BPE.</strong> Reprendre l'exemple 1.4 avec le corpus
+  <code>stage</code>×3, <code>stages</code>×2, <code>stand</code>×4 et lister les 5
+  premières fusions&nbsp;; que se passe-t-il si l'on ajoute <code>stand</code>×40&nbsp;?
+  <div class="proof">
+  Corrigé (début)&nbsp;: paires initiales (s,t)=9, (t,a)=9, (a,g)=5, (a,n)=4… —
+  l'égalité initiale (s,t)/(t,a) se tranche arbitrairement&nbsp;; avec
+  <code>stand</code>×40, la paire (a,n) atteint 44 et <em>stand</em> devient un token
+  avant les autres racines — c'est la leçon de BPE&nbsp;: le vocabulaire encode
+  <em>les fréquences du corpus</em>, pas la linguistique. <span class="qed">∎</span></div></li>
+
+  <li><strong>BM25.</strong> Montrer que le facteur tf de BM25 croît, est borné par
+  \(k_1+1\), et atteint sa demi-valeur en
+  \(\mathrm{tf}=k_1(1-b+b|d|/\mathrm{avgdl})\)&nbsp;; commenter l'effet de \(b=0,9\)
+  sur un corpus de documents de longueurs très variées.
+  <div class="proof">
+  Corrigé&nbsp;: poser \(g(x)=\frac{x(k_1+1)}{x+c}\) avec
+  \(c=k_1(1-b+b|d|/\mathrm{avgdl})&gt;0\) — dérivée \(g'(x)=\frac{c(k_1+1)}{(x+c)^2}&gt;0\),
+  \(g\to k_1+1\), et \(g(x)=\frac{k_1+1}{2} \Leftrightarrow x=c\). \(b\) élevé&nbsp;:
+  les documents longs voient leur \(c\) augmenter → saturation plus lente <em>et</em>
+  pénalité plus forte — adapté quand la longueur est un signal de richesse&nbsp;;
+  dangereux sur des mélanges courts/longs hétérogènes. <span class="qed">∎</span></div></li>
+
+  <li><strong>Naive Bayes.</strong> Dériver l'estimateur MLE de \(\mathbb{P}(t \mid c)\),
+  montrer le problème des probabilités nulles et justifier le lissage de Laplace comme
+  MAP sous Dirichlet(1,…,1) (théorème 5.1)&nbsp;; implémenter et comparer à
+  <code>MultinomialNB</code> sur 20 Newsgroups&nbsp;; tester l'effet de α sur la
+  calibration.
+  <div class="proof">
+  Corrigé (noyau)&nbsp;: lagrangiens → comptages relatifs&nbsp;; un mot test absent
+  de la classe → \(\log 0\) : la classe est éliminée&nbsp;; le prior uniforme ajoute
+  un «&nbsp;pseudo-compte&nbsp;» 1 à chaque terme → la formule lissée&nbsp;; α>1
+  écrase les différences (moins overconfident), α&lt;1 accentue (plus discriminant,
+  moins calibré). <span class="qed">∎</span></div></li>
+
+  <li><strong>Skip-gram.</strong> Écrire la perte du negative sampling
+  \(\log \sigma(z_c^\top z_t) + \sum_{k}\mathbb{E}_{w_k \sim p_n}\log \sigma(-z_{w_k}^\top z_t)\)&nbsp;;
+  calculer le gradient en \(z_t\) et l'interpréter (qui est attiré, qui est
+  repoussé, à quelle force)&nbsp;; implémenter sur un petit corpus et vérifier que les
+  mots de contexte proche ont des embeddings proches.
+  <div class="proof">
+  Corrigé&nbsp;: gradient = \(-（1-\sigma_c)z_c+\sum_k\sigma_k z_{w_k}\) (cf. thm 3.1)&nbsp;;
+  le positif est attiré en \((1-\sigma)\), les négatifs repoussés en \(\sigma\)&nbsp;;
+  vérification&nbsp;: voisinage cosinus de «&nbsp;graphe&nbsp;» ≈ {réseau, nœud, arête}.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Analogies et biais.</strong> Avec des embeddings pré-entraînés (GloVe fr),
+  tester 10 analogies et mesurer le taux de réussite&nbsp;; calculer la statistique
+  WEAT sur deux jeux de métiers × deux listes de prénoms&nbsp;; implémenter la
+  neutralisation (projection retirée) et mesurer l'effet sur les deux scores.</li>
+
+  <li><strong>LDA.</strong> Écrire la loi jointe du modèle 4.1, intégrer \(\theta_d\) et
+  \(\varphi_k\) et retrouver l'équation de Gibbs du théorème 4.2 dans le cas
+  \(K=2\), \(\alpha=\beta=1\) (les bêta multivariées se réduisent à des factorielles
+  généralisées)&nbsp;; vérifier numériquement le renforcement «&nbsp;rich-get-richer&nbsp;»
+  sur 200 mots.</li>
+
+  <li><strong>Viterbi.</strong> Implémenter Viterbi pour un POS tagger jouet (2 étiquettes,
+  vocabulaire de 5 mots)&nbsp;; vérifier l'optimalité contre l'énumération exhaustive&nbsp;;
+  complexité \(\mathcal{O}(TK^2)\)&nbsp;; modifier la preuve du thm 6.2 pour le cas
+  de chemins avec poids nuls.</li>
+
+  <li><strong>MinHash/LSH.</strong> Pour \(r=5, b=20\), tracer
+  \(\mathbb{P}_{\mathrm{détecter}}(J)=1-(1-J^r)^b\) et localiser le «&nbsp;seuil&nbsp;»&nbsp;;
+  quelle couple \((r,b)\) à \(m=256\) donne un seuil proche de \(J=0{,}7\)?
+  <div class="proof">
+  Corrigé&nbsp;: la sigmoïde passe de ~0,1 à ~0,9 entre \(J\approx0{,}45\) et
+  \(J\approx0{,}65\) — seuil \(\approx(1/b)^{1/r}\approx 0{,}55\)&nbsp;; pour viser
+  0,7 avec \(m=256\)&nbsp;: essayer \(r=7\) (0,7⁷≈0,082) et \(b=256/7\approx36\)&nbsp;;
+  on retient la règle&nbsp;: seuil \(\approx (1/b)^{1/r}\), qualité croît avec
+  \(m\). <span class="qed">∎</span></div></li>
+
+  <li><strong>Comparatif.</strong> Sur une tâche de classification de votre corpus&nbsp;:
+  Naive Bayes / TF-IDF+SVM / CamemBERT fine-tuné — tracer accuracy vs taille d'entraînement
+  (50, 200, 1000, tout) et commenter le crossover.</li>
+
+  <li><strong>Fil rouge (projet).</strong> Réaliser le projet du ch. 8&nbsp;; chaque étage
+  doit rapporter SA métrique (cohérence NPMI pour LDA, macro-F1 pour la
+  classification, F1 entité pour le NER) et une analyse d'erreurs de 10 exemples.
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li><strong>Manuels</strong>&nbsp;: D. Jurafsky, J. Martin, <em>Speech and Language
+  Processing</em>, 3e éd. (draft) — <a href="https://web.stanford.edu/~jurafsky/slp3/">gratuit en ligne</a>
+  (le manuel du module)&nbsp;; C. Manning, H. Schütze, <em>Foundations of Statistical
+  Natural Language Processing</em>, MIT Press, 1999 (HMM, CRF, collocations).</li>
+  <li><strong>Tokenisation</strong>&nbsp;: R. Sennrich et al., <a href="https://arxiv.org/abs/1508.07909">Neural Machine Translation of Rare Words with Subword Units</a> (BPE), ACL 2016&nbsp;;
+  T. Kudo, J. Richardson, <a href="https://arxiv.org/abs/1808.06226">SentencePiece</a>, EMNLP 2018&nbsp;;
+  T. Kudo, <a href="https://arxiv.org/abs/1804.10959">Subword Regularization</a> (Unigram), ACL 2018.</li>
+  <li><strong>Pondération et repêchage</strong>&nbsp;: S. Robertson, H. Zaragoza,
+  <em>The Probabilistic Relevance Framework: BM25 and Beyond</em>, Foundations and
+  Trends in IR, 2009 — <a href="https://dl.acm.org/doi/10.1561/1500000019">doi</a>&nbsp;;
+  A. Broder, <em>Min-wise Permutations</em> (MinHash), 1998.</li>
+  <li><strong>Embeddings</strong>&nbsp;: T. Mikolov et al., <a href="https://arxiv.org/abs/1301.3781">Efficient Estimation of Word Representations in Vector Space</a>, 2013&nbsp;;
+  O. Levy, Y. Goldberg, <a href="https://arxiv.org/abs/1402.3722">word2vec Explained</a>, 2014&nbsp;;
+  J. Pennington et al., <a href="https://nlp.stanford.edu/projects/glove/">GloVe</a>, EMNLP 2014&nbsp;;
+  P. Bojanowski et al., <a href="https://arxiv.org/abs/1607.04606">Enriching Word Vectors with Subword Information</a> (fastText), TACL 2017&nbsp;;
+  S. Arora, Y. Liang, T. Ma, <em>A Simple but Tough-to-Beat Baseline for Sentence Embeddings</em>, TACL 2017&nbsp;;
+  A. Caliskan et al., <a href="https://arxiv.org/abs/1608.07187">Semantics derived automatically from language corpora contain human-like biases</a>, Science 2017&nbsp;;
+  T. Bolukbasi et al., <a href="https://arxiv.org/abs/1607.06520">Man is to Computer Programmer as Woman is to Homemaker</a>, NeurIPS 2016.</li>
+  <li><strong>Topic models</strong>&nbsp;: D. Blei, A. Ng, M. Jordan, <a href="https://jmlr.org/papers/v3/blei03a.html">Latent Dirichlet Allocation</a>, JMLR 2003&nbsp;;
+  T. Griffiths, M. Steyvers, <em>Finding scientific topics</em>, PNAS 2004 (Gibbs)&nbsp;;
+  J. Chang et al., <em>Reading Tea Leaves: How Humans Interpret Topic Models</em>, NeurIPS 2009.</li>
+  <li><strong>Classification, séquences, transformers</strong>&nbsp;: A. Joulin et al.,
+  <a href="https://arxiv.org/abs/1607.01759">Bag of Tricks for Efficient Text Classification</a>, EACL 2017&nbsp;;
+  Y. Kim, <a href="https://arxiv.org/abs/1408.5882">Convolutional Neural Networks for Sentence Classification</a>, EMNLP 2014&nbsp;;
+  J. Lafferty et al., <em>Conditional Random Fields</em>, ICML 2001&nbsp;;
+  J. Devlin et al., <a href="https://arxiv.org/abs/1810.04805">BERT</a>, NAACL 2019&nbsp;;
+  Y. Liu et al., <a href="https://arxiv.org/abs/1907.11692">RoBERTa</a>, 2019&nbsp;;
+  C. Raffel et al., <a href="https://arxiv.org/abs/1910.10683">T5</a>, JMLR 2020&nbsp;;
+  N. Reimers, I. Gurevych, <a href="https://arxiv.org/abs/1908.10084">Sentence-BERT</a>, EMNLP 2019&nbsp;;
+  L. Martin et al., <a href="https://arxiv.org/abs/1911.03894">CamemBERT</a>, ACL 2020&nbsp;;
+  H. Le et al., <a href="https://arxiv.org/abs/1912.05372">FlauBERT</a>, ACL 2020.</li>
+  <li><strong>Text mining industriel</strong>&nbsp;: R. Mihalcea, P. Tarau,
+  <a href="https://aclanthology.org/W04-3250/">TextRank</a>, 2004&nbsp;;
+  S. Rose et al., <em>Automatic Keyword Extraction from Individual Documents</em> (RAKE), 2010&nbsp;;
+  R. Campos et al., <em>YAKE!</em>, Information Processing &amp; Management 2020 (<a href="https://github.com/LIAAD/yake">code</a>).</li>
+  <li><strong>Travaux de l'équipe pédagogique (ch. 9)</strong>&nbsp;: Rousseau &amp;
+  Vazirgiannis (TW-IDF, CIKM 2013)&nbsp;; Tixier, Malliaros &amp; Vazirgiannis (degeneracy,
+  EMNLP 2016)&nbsp;; Skianis et al. (EMNLP 2016)&nbsp;; Giatsidis et al. (CoreCluster,
+  AAAI 2014)&nbsp;; Abdine, Buscaldi et Vazirgiannis (<a href="https://arxiv.org/abs/2210.05422">WSI</a>, AI Open 2023)&nbsp;;
+  Douka et al. (<a href="https://arxiv.org/abs/2110.01485">JuriBERT</a>, 2021)&nbsp;;
+  Buscaldi et al. (JIIS 2011&nbsp;; WWW 2015&nbsp;;
+  <a href="https://arxiv.org/abs/1910.01340">TexTrolls</a>&nbsp;;
+  <a href="https://arxiv.org/abs/2202.02013">détection de texte généré</a>&nbsp;;
+  <a href="https://arxiv.org/abs/2409.18858">mémorisation</a>&nbsp;;
+  <a href="https://arxiv.org/abs/2511.17081">MUCH</a>).</li>
+  <li><strong>Outils</strong>&nbsp;: <a href="https://huggingface.co/learn">HuggingFace Course</a>
+  (les TP suivent ce parcours)&nbsp;; <a href="https://spacy.io">spaCy</a>&nbsp;;
+  <a href="https://radimrehurek.com/gensim/">gensim</a>&nbsp;;
+  <a href="https://github.com/dhharris89/rank_bm25">rank_bm25</a>&nbsp;;
+  <a href="https://github.com/ekzhu/datasketch">datasketch</a> (MinHash LSH).</li>
+</ul>
+</section>
 
 <nav class="pager">
   <a href="m1p2-graph-ml.html"><span class="dir">← Précédent</span> Graph Machine and Deep Learning</a>

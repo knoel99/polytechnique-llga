@@ -1122,6 +1122,110 @@ programme de ce cours — et la vidéo en est le fil rouge.</p>
   paramétrable&nbsp;; évaluer FID/CLIPScore avant/après et analyser l'effet du poids de
   guidance \(w\) — en testant aussi des ordonnances \(w(t)\) variables (cf. ch. 9).</li>
 </ol>
+
+<div class="note">
+<span class="tag">Corrigé 1 — Composition des bruits</span>
+Récurrence&nbsp;: vrai en \(t=1\) par définition&nbsp;; si \(x_{t-1}\mid x_0\) est gaussien
+de moyenne \(\sqrt{\bar\alpha_{t-1}}x_0\) et de variance \((1-\bar\alpha_{t-1})I\), alors
+\(x_t = \sqrt{\alpha_t}x_{t-1} + \sqrt{1-\alpha_t}\,\epsilon\) avec \(\epsilon\) indépendant&nbsp;;
+la prop. 0.1 (somme de gaussiennes indépendantes) donne moyenne
+\(\sqrt{\alpha_t\bar\alpha_{t-1}}x_0 = \sqrt{\bar\alpha_t}\,x_0\) et variance
+\(\alpha_t(1-\bar\alpha_{t-1}) + (1-\alpha_t) = 1-\bar\alpha_t\). La forme fermée rend
+l'entraînement efficace car on saute les \(t-1\) premiers pas&nbsp;: bruitage direct à
+n'importe quel \(t\), un seul forward par exemple d'entraînement.
+</div>
+
+<div class="note">
+<span class="tag">Corrigé 2 — ELBO DDPM (plan)</span>
+(1) Écrire l'ELBO de la chaîne \(p_\theta(x_{0:T})\) contre \(q\) et télescoper (chaîne de
+Markov)&nbsp;: \(L = L_T + \sum_t L_{t-1}\) avec \(L_{t-1} = \mathrm{KL}(q(x_{t-1}\mid x_t,x_0)\,\|\,p_\theta(x_{t-1}\mid x_t))\)&nbsp;.
+(2) \(q(x_{t-1}\mid x_t,x_0)\) est gaussien (produit de deux gaussiennes&nbsp;:
+Bayes + complétion du carré). (3) Chaque \(L_{t-1}\) est une KL de gaussiennes&nbsp;:
+fermée (prop. 0.4)&nbsp;; avec \(\sigma_t^2 = \tilde\beta_t\) il reste l'écart des
+moyennes \(\propto \|\tilde\mu_t - \mu_\theta\|^2\). (4) La paramétrisation
+\(\mu_\theta = \frac{1}{\sqrt{\alpha_t}}(x_t - \frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\epsilon_\theta)\)
+échange l'écart des moyennes contre la MSE de bruit — détails complets dans la preuve du
+modèle 3.2.
+</div>
+
+<div class="note">
+<span class="tag">Corrigé 3 — KL gaussiennes (cas scalaire)</span>
+\(\mathrm{KL} = \mathbb{E}_q[\log q - \log p]\) avec \(\log q(x) = -\frac12\log(2\pi\sigma_1^2) - \frac{(x-\mu_1)^2}{2\sigma_1^2}\)
+et de même pour \(p\). Différence&nbsp;:
+\(\log q - \log p = \frac12\log\frac{\sigma_2^2}{\sigma_1^2} - \frac{(x-\mu_1)^2}{2\sigma_1^2} + \frac{(x-\mu_2)^2}{2\sigma_2^2}\).
+Or \(\mathbb{E}_q[(x-\mu_1)^2] = \sigma_1^2\) et
+\(\mathbb{E}_q[(x-\mu_2)^2] = \mathbb{E}[((x-\mu_1) + (\mu_1-\mu_2))^2]
+= \sigma_1^2 + (\mu_1-\mu_2)^2\) (terme croisé nul). D'où
+\(\mathrm{KL}(q\|p) = \frac12\big[\log\frac{\sigma_2^2}{\sigma_1^2} + \frac{\sigma_1^2 + (\mu_1-\mu_2)^2}{\sigma_2^2} - 1\big]\).
+C'est \(\frac12[u - 1 - \log u] \ge 0\) avec \(u = \sigma_2^2/\sigma_1^2\) (car
+\(\log u \le u - 1\)) plus un terme carré&nbsp;: nul ssi \((\mu_1,\sigma_1) = (\mu_2,\sigma_2)\).
+</div>
+
+<div class="note">
+<span class="tag">Corrigé 4 — Mini-GAN 2D (code)</span>
+<pre class="code"><code>import torch
+G = torch.nn.Sequential(torch.nn.Linear(2, 64), torch.nn.ReLU(),
+                        torch.nn.Linear(64, 64), torch.nn.ReLU(),
+                        torch.nn.Linear(64, 2))          # bruit -> point 2D
+D = torch.nn.Sequential(torch.nn.Linear(2, 64), torch.nn.ReLU(),
+                        torch.nn.Linear(64, 1))          # point -> logit
+
+def sample_ring(n, r=1.0, noise=.05):                    # vraie loi : anneau
+    a = torch.rand(n) * 2 * torch.pi
+    return torch.stack([r*torch.cos(a), r*torch.sin(a)], 1) + noise*torch.randn(n, 2)
+
+optG, optD = torch.optim.Adam(G.parameters(), 2e-4), torch.optim.Adam(D.parameters(), 2e-4)
+bce = torch.nn.functional.binary_cross_entropy_with_logits
+for step in range(5000):
+    x = sample_ring(256); z = torch.randn(256, 2)
+    lossD = bce(D(x), torch.ones(256, 1)) + bce(D(G(z)), torch.zeros(256, 1))
+    optD.zero_grad(); lossD.backward(); optD.step()
+    z = torch.randn(256, 2)
+    lossG = bce(D(G(z)), torch.ones(256, 1))             # forme non-saturee
+    optG.zero_grad(); lossG.backward(); optG.step()
+    if step % 1000 == 0: print(step, float(lossD), float(lossG))
+# Observer : G se concentre sur un arc de cercle (mode collapse) ;
+# mesurer la diversite : moyenne des distances entre pairs generees.</code></pre>
+Le collapse est visible quand l'arc couvert rétrécit&nbsp;; comparer à une diffusion
+2D (même réseau pour \(\epsilon_\theta\))&nbsp;: la MSE de débruitage couvre tout l'anneau.
+</div>
+
+<div class="note">
+<span class="tag">Corrigé 5 — CFG</span>
+\(\tilde\epsilon = \epsilon_\theta(\varnothing) + w(\epsilon_\theta(c) - \epsilon_\theta(\varnothing))\)&nbsp;:
+pour \(w = 0\), \(\tilde\epsilon = \epsilon_\theta(\varnothing)\) (inconditionnel)&nbsp;;
+pour \(w = 1\), \(\tilde\epsilon = \epsilon_\theta(c)\) (conditionnel). Pour \(w &gt; 1\),
+la preuve du thm. 4.1 montre que \(\tilde\epsilon\) est le score de
+\(p(x\mid c)^w p(x)^{1-w}\)&nbsp;: distribution conditionnelle «&nbsp;sur-pondérée&nbsp;»,
+plus piquée — fidélité au prompt accrue, diversité réduite (moins d'échantillons
+explorés). Grille typique&nbsp;: à \(w=0\), images hors-sujet&nbsp;; \(w=1\), correctes
+et variées&nbsp;; \(w=5\), très conformes, répétitives&nbsp;; \(w=10\), saturation
+(couleurs brûlées, artefacts).
+</div>
+
+<div class="note">
+<span class="tag">Corrigé 7 — FID et W2 (Bures)</span>
+Pour deux gaussiennes \(\mathcal{N}(\mu_1,\Sigma_1)\), \(\mathcal{N}(\mu_2,\Sigma_2)\)&nbsp;:
+$$W_2^2 = \|\mu_1 - \mu_2\|^2 + \mathrm{tr}\big(\Sigma_1 + \Sigma_2 - 2(\Sigma_1^{1/2}\Sigma_2\Sigma_1^{1/2})^{1/2}\big)$$
+(démonstration&nbsp;: cas diagonal par rotation, puis général — module OT). Le FID est
+exactement cette formule appliquée aux gaussiennes <em>ajustées sur les features</em>
+Inception des deux jeux d'images — une approximation de \(W_2\) à la fois par les
+features (le transport n'a lieu que dans l'espace du backbone) et par l'estimation des
+moments (\(\hat\mu, \hat\Sigma\) sur N échantillons&nbsp;: le FID est <em>biaisé vers le
+bas</em> à petit N — toujours comparer à taille de cohorte égale).
+</div>
+
+<div class="note">
+<span class="tag">Corrigé 8 — Epsilon = -sqrt(1-a_bar) x score</span>
+Voir la preuve du théorème 3.3&nbsp;: pour
+\(p(x_t\mid x_0) = \mathcal{N}(\sqrt{\bar\alpha_t}x_0, (1-\bar\alpha_t)I)\),
+\(\nabla_{x_t}\log p = -(x_t - \sqrt{\bar\alpha_t}x_0)/(1-\bar\alpha_t)
+= -\epsilon/\sqrt{1-\bar\alpha_t}\), d'où
+\(\epsilon = -\sqrt{1-\bar\alpha_t}\,\nabla_{x_t}\log p(x_t\mid x_0)\).
+Conséquence&nbsp;: la MSE de débruitage est une régression vers le score
+conditionnel&nbsp;; en intégrant sur \(x_0\), elle cible le score marginal
+\(\nabla\log p_t(x_t)\) — le point de départ de la formulation SDE (ch. 4).
+</div>
 </section>
 
 <!-- ============================ REFS ============================ -->

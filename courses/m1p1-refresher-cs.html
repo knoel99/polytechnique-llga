@@ -47,6 +47,7 @@
     <li><a href="#ch5">Algorithmes de graphes</a></li>
     <li><a href="#ch6">NumPy : algèbre linéaire numérique</a></li>
     <li><a href="#ch7">Génie logiciel minimal (OOP, tests, git)</a></li>
+    <li><a href="#ch8">Algorithmes géométriques et travaux de l'enseignant</a></li>
     <li><a href="#ex">Exercices</a></li>
     <li><a href="#refs">Références</a></li>
   </ol>
@@ -58,7 +59,9 @@
 
 <p>Python est la langue véhiculaire du master : tous les TP (PyTorch, PyG, HuggingFace, POT,
 networkx, scikit-learn) s'écrivent en Python. On suppose les bases (boucles, fonctions, types)
-acquises ; on consolide ici les idiomes que les TP utilisent massivement.</p>
+acquises ; on consolide ici les idiomes que les TP utilisent massivement. Ce chapitre est
+long parce qu'il est <em>opératoire</em> : chaque section doit vous rendre capable de lire et
+d'écrire le code des modules suivants sans friction.</p>
 
 <h3>1.1 Idiomes essentiels</h3>
 <pre class="code"><code># Compréhensions de liste / dict / set
@@ -66,7 +69,7 @@ squares  = [x**2 for x in range(10) if x % 2 == 0]
 index    = {token: i for i, token in enumerate(vocab)}   # vocabulaire NLP
 uniques  = {w.lower() for w in tokens}
 
-# Fonctions d'ordre supérieur et unpacking
+# Fonctions d'ordre supérieur, unpacking, lambda
 def softmax(logits):
     m = max(logits)
     exps = [math.exp(z - m) for z in logits]     # stabilité numérique
@@ -74,12 +77,7 @@ def softmax(logits):
     return [e / Z for e in exps]
 
 first, *rest = [1, 2, 3, 4]                      # unpacking étendu
-
-# Générateurs : traiter des corpus sans tout charger en mémoire
-def stream_tokens(path):
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            yield from line.lower().split()
+key_fn = lambda kv: kv[1]                        # tri par valeur
 
 # dataclasses : objets de données propres (utilisées partout en ML engineering)
 from dataclasses import dataclass
@@ -88,13 +86,265 @@ class Config:
     lr: float = 1e-3
     batch_size: int = 32</code></pre>
 
-<h3>1.2 Environnements et écosystème</h3>
-<p>Règle d'or du master : <strong>un environnement virtuel par projet</strong>
-(<code>python -m venv .venv</code> ou <code>conda</code>), des dépendances figées
-(<code>pip freeze &gt; requirements.txt</code>), et le trio
-<a href="https://numpy.org">NumPy</a> / <a href="https://pandas.pydata.org">pandas</a> /
-matplotlib comme boîte à outils de base. Les modules suivants ajouteront PyTorch,
-transformers, networkx/PyG et POT.</p>
+<h3>1.2 Décorateurs</h3>
+
+<p>Un décorateur est une fonction qui prend une fonction et renvoie une fonction — du sucre
+syntaxique pour «&nbsp;emballer&nbsp;» un comportement. Ils sont partout dans l'écosystème
+(PyTorch <code>torch.no_grad</code>, pytest <code>@pytest.fixture</code>, Flask routes,
+<code>@functools.lru_cache</code>). En comprendre la mécanique n'est pas optionnel.</p>
+
+<pre class="code"><code>import functools, time
+
+def timing(fn):
+    """Mesure et affiche le temps d'exécution — outil de TP indispensable."""
+    @functools.wraps(fn)                     # conserve le nom/docstring de fn
+    def wrapper(*args, **kwargs):
+        t0 = time.perf_counter()
+        out = fn(*args, **kwargs)
+        dt = (time.perf_counter() - t0) * 1e3
+        print(f"[{fn.__name__}] {dt:.2f} ms")
+        return out
+    return wrapper
+
+@timing                                     # equivaut a train = timing(train)
+def train_one_epoch(model, loader):
+    ...
+
+# @property : accesseur calcule a la volee, acces sans parentheses
+class Dataset:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+    @property
+    def n(self):                            # ds.n (pas ds.n())
+        return len(self.x)
+
+# Decorateur parametre (usine a decorateurs) : memoisation LRU
+@functools.lru_cache(maxsize=None)          # cles = arguments hashables
+def fib(n):
+    return n if n &lt; 2 else fib(n-1) + fib(n-2)
+# fibonacci exponentiel -&gt; lineaire : la memoisation transforme la recurrence
+# en programmation dynamique (cf. chapitre 4)</code></pre>
+
+<h3>1.3 Générateurs : le protocole et les pipelines</h3>
+
+<p>Un générateur produit ses valeurs <em>paresseusement</em> : rien n'est calculé avant
+l'itération, et la mémoire reste \(\mathcal{O}(1)\) par élément traité. C'est la seule façon
+de parcourir des corpus qui ne tiennent pas en RAM (Wikipedia, Common Crawl, grands logs).</p>
+
+<pre class="code"><code>def stream_tokens(path):
+    """Generateur : yield suspend la fonction et conserve son etat."""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            yield from line.lower().split()   # yield from : sous-genérateur
+
+def up_to(it, n):
+    for i, x in enumerate(it):
+        if i &gt;= n: return
+        yield x
+
+# Pipeline : chaque etape est un générateur, les données coulent element par element
+tokens = up_to(stream_tokens("corpus.txt"), 1_000_000)
+long_words = (t for t in tokens if len(t) &gt;= 6)   # expression génératrice
+first100 = list(zip(range(100), long_words))
+
+# Protocole complet : next() / Send / close ; en pratique on boucle :
+# for tok in stream_tokens(path): ...   # &lt;- 99 % des usages</code></pre>
+
+<div class="note">
+  <span class="tag">Générateur ≠ liste : le piège de l'épuisement</span>
+  Un générateur se consomme <em>une seule fois</em> : après une boucle, il est vide. Pour deux
+  passes, soit matérialiser (<code>list(gen)</code>), soit régénérer. Seconde différence clé :
+  <code>len()</code> et l'indexation échouent sur un générateur — les DataLoader de PyTorch
+  résolvent ce problème avec des itérables dédiés (cf. module Deep Learning).
+</div>
+
+<h3>1.4 Context managers</h3>
+
+<pre class="code"><code># with : garantir la liberation d'une ressource (fichier, session, etat numerique)
+with open("out.txt", "w") as f:              # ferme meme en cas d'exception
+    f.write("done")
+
+# Le protocole : __enter__ / __exit__
+import contextlib, numpy as np
+
+@contextlib.contextmanager
+def seed_context(rng, seed):
+    state = rng.bit_generator.state         # sauver
+    rng = np.random.default_rng(seed)       # substituer
+    try:
+        yield rng                           # corps du with
+    finally:
+        rng = None                          # restaurer/nettoyer
+
+# Usage standard en TP : etat d'erreur numpy, device PyTorch
+with np.errstate(divide="ignore"):
+    z = np.log(np.array([0.0]))             # pas de warning</code></pre>
+
+<h3>1.5 Typage : Generic et Protocol</h3>
+
+<pre class="code"><code>from typing import Generic, TypeVar, Protocol, Iterator
+
+T = TypeVar("T")
+
+class Stack(Generic[T]):                    # pile typée : Stack[int], Stack[str]
+    def __init__(self) -&gt; None:
+        self._items: list[T] = []
+    def push(self, x: T) -&gt; None:
+        self._items.append(x)
+    def pop(self) -&gt; T:
+        return self._items.pop()
+
+class SupportsFit(Protocol):                # typage structurel (canard typé)
+    def fit(self, x: np.ndarray, y: np.ndarray) -&gt; "SupportsFit": ...
+    def predict(self, x: np.ndarray) -&gt; np.ndarray: ...
+
+def train_and_score(model: SupportsFit, x, y) -&gt; float:
+    """Accepte tout objet avec fit/predict, sans héritage commun :
+    LinearRegression de sklearn OU un modèle maison — typage duck."""
+    model.fit(x, y)
+    return float((model.predict(x) == y).mean())</code></pre>
+
+<div class="note">
+  <span class="tag">Pourquoi typer en Python&nbsp;?</span>
+  Les annotations ne sont pas vérifiées à l'exécution (sauf avec <code>pydantic</code> ou
+  <code>beartype</code>) mais : (i) elles documentent ; (ii) les IDE complètent et
+  <em>refactorent</em> sûrement ; (iii) <code>mypy</code>/<code>pyright</code> attrapent les
+  bugs avant exécution — précieux sur les pipeline longs d'entraînement où un crash au
+  40e epoch coûte une nuit. Le code des bibliothèques du master (PyTorch, PyG) est massivement
+  typé.
+</div>
+
+<h3>1.6 dataclasses avancées</h3>
+
+<pre class="code"><code>from dataclasses import dataclass, field
+
+@dataclass(frozen=True, slots=True)         # immuable + economie memoire
+class HP:
+    lr: float = 1e-3
+    weight_decay: float = 0.0
+    tags: tuple[str, ...] = ()              # immuable =&gt; hashable =&gt; cle de cache
+    metrics: dict = field(default_factory=dict)  # jamais [] en defaut mut !
+
+h = HP(lr=3e-4)
+# h.lr = 0.1  -&gt; FrozenInstanceError ; parfait pour figer une config d'experience</code></pre>
+
+<h3>1.7 itertools et collections : la boîte à outils</h3>
+
+<pre class="code"><code>from collections import Counter, defaultdict, deque
+from itertools import chain, islice, product, groupby
+
+# Counter : comptage NLP en une ligne
+words = "le chat le chien le chat".split()
+c = Counter(words)                    # {'le': 3, 'chat': 2, 'chien': 1}
+c.most_common(2)                      # top-k frequent en O(n log k)... ici trié
+
+# defaultdict : plus de KeyError ; typique : adjacency, index inversé
+adj = defaultdict(list)
+for u, v in edges:
+    adj[u].append(v)                  # graphe (chapitre 5)
+by_label = defaultdict(list)
+for x, y in zip(X, y_all):
+    by_label[y].append(x)             # partition par classe
+
+# deque : file O(1) aux deux bouts (BFS, fenetre glissante)
+window = deque(maxlen=100)
+for t, loss in enumerate(losses):
+    window.append(loss)               # evince le plus ancien automatiquement
+
+# itertools : chain (concat paresseuse), islice (trancher un generateur),
+# product (grille d'hyperparametres), groupby (regrouper une sequence triée)
+for lr, wd in product([1e-3, 3e-4], [0.0, 1e-2]):
+    run_experiment(HP(lr=lr, weight_decay=wd))</code></pre>
+
+<h3>1.8 Mémoire et coût des objets</h3>
+
+<pre class="code"><code>import sys
+sys.getsizeof([])                     # ~56 octets : la liste vide n'est pas libre
+sys.getsizeof([0])                    # ~88 : sur-allocation pour les append futurs
+sys.getsizeof("token")                # ~53 : chaque str porte son entete
+sys.getsizeof(2**100)                 # ~72 : int de precision arbitraire (mot par mot)
+
+# 1 million de petits int dans une liste Python vs un array NumPy :
+py_list = list(range(1_000_000))          # ~40 Mo (pointeurs + entetes)
+np_arr  = np.arange(1_000_000)            # ~8 Mo (int64 contigus)
+# -&gt; d'ou le chapitre 6 : en calcul numerique, on quitte les objets Python
+#    pour des tampons contigus (buffer protocol, BLAS, GPU).</code></pre>
+
+<h3>1.9 Profilage : mesurer avant d'optimiser</h3>
+
+<pre class="code"><code># timeit : micro-benchmarks isoles (desactive le GC, repete, statistique)
+python -m timeit -s "import numpy as np; A = np.random.rand(600,600); x = np.random.rand(600)" \
+                  "A @ x"
+# -&gt; ~1 ms par appel : BLAS.
+
+# cProfile : ou part le temps d'un programme complet ?
+python -m cProfile -s cumtime train.py
+#   ncalls  cumtime  function
+#      200  120.3s  train.py:epoch
+#    50000   90.1s  dataloader.py:__next__   &lt;- coupable : data loading
+#profilage ligne a ligne : line_profiler (kernprof -l -v train.py)</code></pre>
+
+<div class="note">
+  <span class="tag">Réflexe professionnel</span>
+  Un pipeline lent a presque toujours <em>un</em> goulot (data loading, conversion CPU-GPU,
+  boucle Python là où une primitive vectorisée existe). <code>cProfile</code> le localise en
+  trente secondes ; l'intuition, elle, se trompe régulièrement. Règle : profil d'abord,
+  optimisation ensuite, benchmark autour (timeit) pour prouver le gain.
+</div>
+
+<h3>1.10 Environnements : venv, uv, poetry</h3>
+
+<p>Règle d'or du master : <strong>un environnement virtuel par projet</strong>. Les outils
+modernes vont plus vite que <code>pip</code> et figent les dépendances complètes :</p>
+
+<pre class="code"><code># venv + pip (standard, deja installe)
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt &amp;&amp; pip freeze &gt; requirements.lock
+
+# uv (rapide, Rust) : environnements et dependances en un outil
+uv venv &amp;&amp; uv pip install -r pyproject.toml
+uv add torch --upgrade
+
+# poetry : pyproject.toml + poetry.lock reproductibles
+poetry install                          # installe exactement poetry.lock</code></pre>
+
+<h3>1.11 Tests avec pytest</h3>
+
+<pre class="code"><code># test_softmax.py — les tests du master ressemblent tous a ceci
+import pytest, math
+import numpy as np
+
+def softmax(v):
+    m = max(v)
+    e = [math.exp(x - m) for x in v]
+    Z = sum(e)
+    return [x / Z for x in e]
+
+def test_softmax_sums_to_one():
+    out = softmax([1.0, 2.0, 3.0])
+    assert abs(sum(out) - 1.0) &lt; 1e-12          # invariant fondamental
+
+def test_softmax_stable_under_shift():
+    # invariance par translation : la propriete qui justifie le -max
+    assert np.allclose(softmax([1000.0, 1001.0]), softmax([0.0, 1.0]))
+
+def test_softmax_empty_raises():
+    with pytest.raises(ValueError):
+        softmax([])
+
+@pytest.mark.parametrize("n", [1, 5, 100])       # meme test, 3 tailles
+def test_softmax_output_length(n):
+    assert len(softmax(list(range(n)))) == n
+
+@pytest.fixture                                    # donnee reutilisable, isolee
+def toy_dataset():
+    rng = np.random.default_rng(0)
+    return rng.normal(size=(50, 3)), rng.integers(0, 2, 50)
+
+def test_model_overfits_toy(model, toy_dataset):  # un modele qui n'apprend
+    X, y = toy_dataset                             # pas ce toy echoue
+    model.fit(X, y, epochs=500)
+    assert model.score(X, y) &gt; 0.95</code></pre>
 
 <div class="note">
   <span class="tag">Vectorialisation</span>
@@ -102,6 +352,21 @@ transformers, networkx/PyG et POT.</p>
   <code>np.dot(A, x)</code> est ~100× plus rapide qu'une triple boucle, car il délègue à du
   code BLAS compilé. Réflexe à acquérir dès maintenant — il conditionne la lisibilité et la
   performance de tous les TP de deep learning.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 1</p>
+  <ul>
+    <li>Décorateurs = emballage de fonctions (<code>wraps</code> !) ; générateurs = flux
+    paresseux \(\mathcal{O}(1)\) mémoire, mono-consommation.</li>
+    <li><code>defaultdict</code>/<code>Counter</code> = reflexes NLP et graphes ;
+    <code>dataclass(frozen, slots)</code> = configs sûres.</li>
+    <li>Typage : <code>Generic</code> pour les conteneurs, <code>Protocol</code> pour le
+    canard typé — lire PyTorch exige les deux.</li>
+    <li>Profilage avant optimisation (<code>cProfile</code>, <code>timeit</code>) ; un
+    environnement par projet (venv/uv/poetry) ; pytest : fixtures +
+    <code>parametrize</code> + invariants.</li>
+  </ul>
 </div>
 </section>
 
@@ -130,18 +395,156 @@ L'échelle pratique à avoir en tête&nbsp;:</p>
 </tbody>
 </table>
 
+<h3>2.1 Master theorem</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 2.2 — Master theorem (forme standard)</span>
+  Pour une récurrence de diviser-pour-régner
+  $$T(n) = a\,T(n/b) + \mathcal{O}(n^d), \qquad a \geq 1,\; b &gt; 1,\; d \geq 0,$$
+  en notant \(c^\star = \log_b a\) le «&nbsp;seuil critique&nbsp;» (croissance du nombre de
+  sous-problèmes) :
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>si \(d &gt; c^\star\) : le travail à la racine domine, \(T(n) = \Theta(n^d)\)&nbsp;;</li>
+    <li>si \(d = c^\star\) : chaque niveau coûte autant, \(T(n) = \Theta(n^d \log n)\)&nbsp;;</li>
+    <li>si \(d &lt; c^\star\) : les feuilles dominent, \(T(n) = \Theta(n^{\log_b a})\).</li>
+  </ul>
+  <em>Intuition :</em> l'arbre de récursion a \(\log_b n\) niveaux ; le coût par niveau est
+  \(a^k \cdot \mathcal{O}((n/b^k)^d) = \mathcal{O}(n^d (a/b^d)^k)\) : géométriquement
+  croissant, constant ou décroissant selon le signe de \(d - \log_b a\).
+</div>
+
 <div class="ex">
-  <span class="tag">Exemple 2.2 — Deux boucles imbriquées</span>
+  <span class="tag">Exemple 2.3 — Quatre applications immédiates</span>
+  <table class="tbl">
+  <thead><tr><th>Récurrence</th><th>Algorithme</th><th>Cas</th><th>Résultat</th></tr></thead>
+  <tbody>
+  <tr><td>\(T(n) = 2T(n/2) + \mathcal{O}(n)\)</td><td>tri fusion</td><td>\(d = c_{\crit} = 1\)</td><td>\(\Theta(n \log n)\)</td></tr>
+  <tr><td>\(T(n) = T(n/2) + \mathcal{O}(1)\)</td><td>dichotomie</td><td>\(d = 0 = c^\star\)</td><td>\(\Theta(\log n)\)</td></tr>
+  <tr><td>\(T(n) = 2T(n/2) + \mathcal{O}(n^2)\)</td><td>naïf matriciel par blocs</td><td>\(d = 2 &gt; 1\)</td><td>\(\Theta(n^2)\)</td></tr>
+  <tr><td>\(T(n) = 3T(n/2) + \mathcal{O}(n)\)</td><td>Karatsuba (grands entiers)</td><td>\(1 &lt; \log_2 3 \approx 1{,}58\)</td><td>\(\Theta(n^{1{,}58})\)</td></tr>
+  </tbody>
+  </table>
+  Pour la dichotomie : \(a = 1, b = 2, d = 0\), \(c_{\crit} = \log_2 1 = 0 = d\) — cas
+  d'égalité, chaque niveau coûte \(\mathcal{O}(1)\), il y a \(\log_2 n\) niveaux. Karatsuba
+  montre l'intérêt de <em>réduire \(a\)</em> (3 multiplications au lieu de 4) : c'est le même
+  trick qui mène à Strassen (\(\mathcal{O}(n^{2{,}81})\) pour le produit matriciel — au
+  programme du module Optimal Transport pour ses préconditionneurs).
+</div>
+
+<h3>2.2 Analyse amortie : le tableau dynamique</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 2.4 — append est \(\mathcal{O}(1)\) amorti</span>
+  Un tableau dynamique double sa capacité quand il est plein. Alors une suite de \(n\)
+  <code>append</code> consécutifs depuis un tableau vide coûte au total
+  \(\mathcal{O}(n)\) : coût amorti constant par opération, <em>malgré</em> des
+  réallocations ponctuellement en \(\mathcal{O}(n)\).
+</div>
+
+<div class="proof">
+  <strong>Par la somme directe.</strong> Coût des insertions élémentaires : \(n\) écritures,
+  une par append. Coût des copies lors des doublements : après les doublements successifs
+  \(1, 2, 4, \dots, 2^k\) avec \(2^k \leq n\), le total des éléments copiés est
+  \(1 + 2 + 4 + \dots + 2^k = 2^{k+1} - 1 \leq 2n\). Total général :
+  \(n + 2n = 3n = \mathcal{O}(n)\), donc \(\mathcal{O}(1)\) amorti.
+  <strong>Par la méthode du potentiel</strong> (formalisme général) : posons
+  \(\Phi(\text{état}) = 2 \times (\text{taille}) - (\text{capacité}) \geq 0\) ; l'append
+  ordinaire paie 1 réel + 1 de potentiel, le doublement est entièrement financé par le
+  potentiel accumulé. Ce formalisme traitera aussi les cas où la somme directe échoue
+  (multi-pop d'une pile, incrément binaire — exercice).
+  <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">«&nbsp;Amorti&nbsp;» ≠ «&nbsp;moyen&nbsp;»</span>
+  L'analyse amortie est <em>déterministe</em> : aucune hypothèse probabiliste, c'est la somme
+  réelle sur toute séquence d'opérations qui est bornée. Ne pas confondre avec la complexité
+  <em>en moyenne</em> (quicksort, hachage — section 3.1) qui, elle, suppose un modèle
+  aléatoire (cf. module Refresher in Statistics pour les outils).
+</div>
+
+<h3>2.3 Complexité mémoire et opérations Python réelles</h3>
+
+<table class="tbl">
+<thead><tr><th>Opération</th><th>Complexité</th><th>Remarque</th></tr></thead>
+<tbody>
+<tr><td><code>lst[i]</code>, <code>lst.append(x)</code></td><td>\(\mathcal{O}(1)\) / \(\mathcal{O}(1)\) amorti</td><td>tableau dynamique (théorème 2.4)</td></tr>
+<tr><td><code>x in lst</code></td><td>\(\mathcal{O}(n)\)</td><td>scan linéaire — le piège n°1 des boucles imbriquées</td></tr>
+<tr><td><code>d[k]</code>, <code>s.add(x)</code>, <code>x in d</code></td><td>\(\mathcal{O}(1)\) moyen</td><td>table de hachage (section 3.1)</td></tr>
+<tr><td><code>lst.insert(0, x)</code>, <code>lst.pop(0)</code></td><td>\(\mathcal{O}(n)\)</td><td>décale tout — utiliser <code>deque</code></td></tr>
+<tr><td><code>heapq.heappush / heappop</code></td><td>\(\mathcal{O}(\log n)\)</td><td>tas binaire (section 3.3)</td></tr>
+<tr><td><code>sorted(lst)</code> / <code>lst.sort()</code></td><td>\(\mathcal{O}(n \log n)\)</td><td>Timsort (hybride fusion/insertion, stable)</td></tr>
+<tr><td><code>a + b</code> (list, str)</td><td>\(\mathcal{O}(|a|+|b|)\)</td><td>nouvelle allocation — préférer <code>join</code></td></tr>
+</tbody>
+</table>
+
+<div class="ex">
+  <span class="tag">Exemple 2.5 — Deux boucles imbriquées, et une réécriture</span>
 <pre class="code"><code>def all_pairs_dist(V, E):
     d = {}
     for u in V:              # n itérations
-        for v in V:          # n itérations  -> O(n^2)
+        for v in V:          # n itérations  -&gt; O(n^2)
             d[u, v] = dist(u, v)
     return d</code></pre>
   Sur un graphe de \(10^5\) nœuds, \(\mathcal{O}(n^2)\) = 10¹⁰ paires stockées : intenable.
   C'est exactement pourquoi le module <em>Graph ML</em> n'apprend pas toutes les distances mais
-  des <em>embeddings</em> (chapitre 8 du module Graph ML) : réduire une complexité structurelle
-  par apprentissage.
+  des <em>embeddings</em> : réduire une complexité structurelle par apprentissage.
+  Réécriture typique : remplacer <code>x in lst</code> (\(\mathcal{O}(n)\)) dans une boucle
+  par <code>x in seen_set</code> (\(\mathcal{O}(1)\) moyen) fait passer le tout de
+  \(\mathcal{O}(n^2)\) à \(\mathcal{O}(n)\) — l'optimisation la plus rentable de Python.
+</div>
+
+<h3>2.4 Mémoire : la complexité spatiale</h3>
+
+<p>Compter la mémoire suit les mêmes règles : matrice d'adjacence dense
+\(\Theta(|V|^2)\) contre listes \(\Theta(|V|+|E|)\) ; DP par table \(m \times n\) souvent
+réductible à deux lignes (\(\mathcal{O}(\min(m,n))\) pour Levenshtein, section 4.5) ;
+récursion = pile d'appels \(\Theta(\text{profondeur})\) — un DFS récursif sur un graphe
+chemin de \(10^6\) nœuds fait exploser la pile Python (limite par défaut ~1000, ajustable
+par <code>sys.setrecursionlimit</code>, ou passer à l'itératif). En deep learning, la mémoire
+\(\Theta(\text{batch} \times \text{longueur} \times \text{dimensions})\) des activations
+gouverne la taille de contexte exploitable (cf. module LLMs M2, attention quadratique).</p>
+
+<h3>2.5 P vs NP : ce que le master suppose</h3>
+
+<div class="note">
+  <span class="tag">Énoncé informel</span>
+  <strong>P</strong> : problèmes de décision solubles en temps polynomial
+  (\(\mathcal{O}(n^k)\)). <strong>NP</strong> : solutions <em>vérifiables</em> en temps
+  polynomial. <strong>NP-complet</strong> : les plus durs de NP — si l'un d'eux est dans P,
+  tous le sont. La conjecture \(P \neq NP\) (millennium problem, prix Clay) dit qu'il existe
+  des problèmes vérifiables vite mais insolubles vite. En pratique : face à un problème
+  NP-dur (la plupart des optimisations combinatoires réelles), on ne cherche pas
+  l'optimum exact : heuristiques, approximations, énumération guidée — ou apprentissage
+  (le master entier est, en un sens, une réponse industrielle à \(P \neq NP\)).
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.6 — Une réduction : du cycle hamiltonien au TSP</span>
+  <strong>TSP (voyageur de commerce, version décision)</strong> : «&nbsp;existe-t-il un tour
+  de longueur \(\leq B\)&nbsp;?&nbsp;». Réduction depuis le cycle hamiltonien (NP-complet) :
+  étant donné un graphe \(G\) à \(n\) sommets, construire une instance TSP complète où
+  \(d(u,v) = 1\) si \((u,v) \in E\), \(2\) sinon, avec budget \(B = n\). Un tour de coût
+  \(\leq n\) n'utilise que des arêtes de poids 1, i.e. des arêtes de \(G\) : c'est un cycle
+  hamiltonien. Réciproquement triviale. Donc si l'on savait résoudre TSP en polynomial, on
+  résoudrait hamiltonien : TSP est <em>au moins aussi dur</em>. Ce schéma — encoder un
+  problème dans un autre par une transformation polynomiale — est la grammaire de toute
+  preuve de NP-dureté. Le TSP reviendra : approximation par arbres (module Graph ML),
+  relaxation continue (module Optimal Transport).
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 2</p>
+  <ul>
+    <li>Master theorem : comparer \(d\) et \(\log_b a\) ; trois régimes (racine /
+    niveaux / feuilles).</li>
+    <li>Amorti : tableau dynamique \(\mathcal{O}(1)\) par append (preuve par somme
+    géométrique ou potentiel) ; amorti ≠ moyen.</li>
+    <li>Table des coûts Python : <code>in list</code> \(\mathcal{O}(n)\) vs
+    <code>in set</code> \(\mathcal{O}(1)\) — la faute de performance la plus courante.</li>
+    <li>P vs NP : réduction = encoder ; NP-dur \(\Rightarrow\) heuristique ou
+    approximation, pas d'optimum exact.</li>
+  </ul>
 </div>
 </section>
 
@@ -157,25 +560,225 @@ L'échelle pratique à avoir en tête&nbsp;:</p>
 <tr><td>pile (LIFO)</td><td>top \(\mathcal{O}(1)\)</td><td>\(\mathcal{O}(1)\)</td><td>DFS, backtracking</td></tr>
 <tr><td>file (FIFO)</td><td>head \(\mathcal{O}(1)\)</td><td>\(\mathcal{O}(1)\)</td><td>BFS, pipelines de données</td></tr>
 <tr><td>tas binaire (heapq)</td><td>min \(\mathcal{O}(1)\)</td><td>\(\mathcal{O}(\log n)\)</td><td>top-k, Dijkstra, recherche beam</td></tr>
-<tr><td>arbre binaire de recherche</td><td>\(\mathcal{O}(\log n)\) (équilibré)</td><td>\(\mathcal{O}(\log n)\)</td><td>index ordonnés</td></tr>
+<tr><td>arbre binaire de recherche équilibré</td><td>\(\mathcal{O}(\log n)\)</td><td>\(\mathcal{O}(\log n)\)</td><td>index ordonnés</td></tr>
+<tr><td>trie (arbre préfixe)</td><td>\(\mathcal{O}(L)\) par mot</td><td>\(\mathcal{O}(L)\)</td><td>autocomplétion, vocabulaire NLP</td></tr>
 </tbody>
 </table>
 
+<h3>3.1 Tables de hachage : sous le capot de dict et set</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — Table de hachage</span>
+  Un grand tableau de \(m\) alvéoles ; la clé \(k\) est placée à l'indice
+  \(h(k) \bmod m\) où \(h\) est une <strong>fonction de hachage</strong> (uniformisante,
+  déterministe). Recherche/insertion/suppression en \(\mathcal{O}(1)\) <em>en moyenne</em>
+  (sous hachage uniforme), \(\mathcal{O}(n)\) au pire (toutes les clés en collision).
+</div>
+
+<div class="note">
+  <span class="tag">Collisions : deux stratégies</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Chaînage</strong> : chaque alvéole est une petite liste ; les clés en collision
+    s'y empilent. Simple, mais pointeurs = cache-unfriendly.</li>
+    <li><strong>Adressage ouvert</strong> (variante Python) : en cas de collision, sonder une
+    autre alvéole (sondage pseudo-aléatoire). Toutes les données vivent dans un seul tableau
+    contigu — excellent pour le cache.</li>
+    <li><strong>Facteur de charge</strong> \(\alpha = n/m\) : Python redimensionne
+    (rehash complet) dès que \(\alpha \gtrsim 2/3\) ; c'est ce rehash qui rend l'insertion
+    <em>amortie</em> \(\mathcal{O}(1)\) — même mécanisme que le théorème 2.4. Clé :
+    les objets mutables sont interdits comme clés (un <code>list</code> haché puis modifié
+    serait introuvable) ; les <code>frozenset</code>/<code>tuple</code> d'immuables, oui.</li>
+  </ul>
+</div>
+
 <div class="ex">
-  <span class="tag">Exemple 3.1 — Top-k avec un tas</span>
+  <span class="tag">Exemple 3.2 — Vocabulaire NLP en une passe</span>
+<pre class="code"><code>vocab = {}                                # token -&gt; id
+def tokenize_id(text):
+    out = []
+    for tok in text.lower().split():
+        if tok not in vocab:              # O(1) moyen
+            vocab[tok] = len(vocab)       # prochain id libre
+        out.append(vocab[tok])
+    return out
+# 10^9 tokens, vocabulaire 10^5 : O(n) au lieu de O(n * V) avec une liste.
+# Le meme principe indexe les arêtes d'un graphe (chapitre 5) ou les couples
+# (user, item) des systemes de recommandation.</code></pre>
+</div>
+
+<h3>3.2 Arbres équilibrés : AVL et rouge-noir</h3>
+
+<div class="note">
+  <span class="tag">Esquisse</span>
+  Un arbre binaire de recherche (ABR) stocke les clés ordonnées : gauche &lt; racine &lt;
+  droite ; toutes les opérations coûtent \(\Theta(\text{hauteur})\), entre \(\log n\) (équilibré)
+  et \(n\) (dégénéré en liste). Les ABR <em>auto-équilibrés</em> maintiennent la hauteur en
+  \(\mathcal{O}(\log n)\) par des <strong>rotations</strong> (réarrangements locaux qui
+  préservent l'ordre) : AVL (hauteurs des fils différant d'au plus 1, rotations à
+  l'insertion), rouge-noir (hauteur \(\leq 2\log n\), rotations moins fréquentes —
+  implémentation des <code>map</code> de C++ et des index de bases de données). En Python
+  pur on n'en écrit presque jamais (<code>dict</code> suffit pour 95&nbsp;% des usages), mais
+  leur invariant — <em>toute branche a des longueurs comparables</em> — est le même que celui
+  des arbres de segmentation et des hiérarchies de clustering (module Graph ML).
+</div>
+
+<h3>3.3 Tas binaire : heapify est linéaire</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — Construction en \(\mathcal{O}(n)\)</span>
+  Un tas binaire (tableau où chaque parent \(\leq\) ses fils) se construit <em>à partir d'un
+  tableau quelconque</em> en temps \(\Theta(n)\) — et non \(\Theta(n \log n)\).
+</div>
+
+<div class="proof">
+  La construction «&nbsp;bas-haut&nbsp;» tamise (sift-down) chaque nœud interne ; un nœud à
+  hauteur \(h\) coûte \(\mathcal{O}(h)\), et il y a au plus \(\lceil n/2^{h+1} \rceil\)
+  nœuds à hauteur \(h\). Somme :
+  $$\sum_{h=0}^{\lfloor \log n \rfloor} \frac{n}{2^{h+1}}\,\mathcal{O}(h)
+  \;=\; \mathcal{O}\Big(n \sum_{h \geq 0} \frac{h}{2^{h}}\Big)
+  \;=\; \mathcal{O}(2n) = \mathcal{O}(n),$$
+  en utilisant \(\sum_{h\geq0} h/2^h = 2\) (dérivée d'une série géométrique). La moitié des
+  nœuds sont des feuilles (coût nul), le quart à hauteur 1 coûte 1 pas... : la masse est en
+  bas, où c'est bon marché.
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 3.4 — Top-k avec un tas</span>
 <pre class="code"><code>import heapq
 
 def top_k(items, scores, k):
     """Renvoie les k items de plus haut score en O(n log k)."""
-    heap = []                                  # min-tas de taille <= k
+    heap = []                                  # min-tas de taille &lt;= k
     for it, s in zip(items, scores):
-        if len(heap) < k:
+        if len(heap) &lt; k:
             heapq.heappush(heap, (s, it))
-        elif s > heap[0][0]:
+        elif s &gt; heap[0][0]:
             heapq.heapreplace(heap, (s, it))   # évict le plus petit
     return sorted(heap, reverse=True)
 
-# En NLP : les k tokens les plus probables d'un LLM (échantillonnage top-k)</code></pre>
+# En NLP : les k tokens les plus probables d'un LLM (échantillonnage top-k).
+# heapify préalable (O(n)) puis nsmallest/nlargest de heapq font la même chose.</code></pre>
+</div>
+
+<h3>3.5 Tries : la recherche par préfixe</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.5 — Trie (arbre de préfixes)</span>
+  Arbre dont les arêtes portent des caractères ; chaque nœud matérialise un préfixe commun.
+  Insérer ou chercher un mot de longueur \(L\) coûte \(\Theta(L)\) — <em>indépendant du
+  nombre de mots stockés</em>, contre \(\mathcal{O}(\log n)\) par comparaisons pour un ABR
+  (et \(\mathcal{O}(n)\) en moyenne pour une liste triée de mots par recherche binaire sur
+  des chaînes).
+</div>
+
+<pre class="code"><code>class TrieNode:
+    __slots__ = ("children", "is_word")
+    def __init__(self):
+        self.children = {}            # char -&gt; TrieNode (table de hachage)
+        self.is_word = False
+
+class Trie:
+    def __init__(self):
+        self.root = TrieNode()
+    def insert(self, word):
+        node = self.root
+        for ch in word:
+            node = node.children.setdefault(ch, TrieNode())
+        node.is_word = True
+    def search(self, word):
+        node = self._walk(word)
+        return node is not None and node.is_word
+    def starts_with(self, prefix):           # autocomplétion
+        return self._walk(prefix) is not None
+    def completions(self, prefix, limit=10):
+        node = self._walk(prefix)
+        out, stack = [], [(node, prefix)] if node else []
+        while stack and len(out) &lt; limit:    # DFS lexicographique
+            n, s = stack.pop()
+            if n.is_word: out.append(s)
+            stack.extend((c, s + ch) for ch, c in reversed(list(n.children.items())))
+        return out
+    def _walk(self, s):
+        node = self.root
+        for ch in s:
+            node = node.children.get(ch)
+            if node is None: return None
+        return node
+
+t = Trie()
+for w in ["graph", "graphe", "graine", "gradient"]:
+    t.insert(w)
+assert t.starts_with("grad") and not t.starts_with("grapx")
+print(t.completions("gra"))     # ['graine', 'gradient', 'graph', 'graphe']</code></pre>
+
+<div class="note">
+  <span class="tag">Tries et NLP</span>
+  Recherche de préfixe (autocomplétion, suggestions), tokenizers par sous-mots (l'arbre des
+  pièces BPE vit dans un trie), stockage de grands lexiques avec partage de préfixes, routage
+  de règles par masque (module NLP). Variante compressée (<em>radix tree</em>) utilisée par
+  les routeurs IP.
+</div>
+
+<h3>3.6 File de priorité double bout</h3>
+
+<div class="note">
+  <span class="tag">Médiane d'un flux, en ligne</span>
+  Le problème type : recevoir des nombres un par un et pouvoir interroger la médiane à tout
+  instant. Solution classique par <em>deux tas</em> : un max-tas \(L\) pour la moitié basse,
+  un min-tas \(U\) pour la moitié haute, avec l'invariant \(|L| - |U| \in \{0, 1\}\) et
+  \(\max L \leq \min U\). Insertion \(\mathcal{O}(\log n)\) (placer, puis rééquilibrer en
+  déplaçant la racine d'un tas vers l'autre) ; médiane \(\mathcal{O}(1)\) (racine de \(L\),
+  ou moyenne des deux racines). Cette structure sert au contrôle de dérive des distributions
+  (monitoring de modèles en production) et aux algorithmes médians de k-means.
+</div>
+
+<h3>3.7 Filtres de Bloom</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.6 — Filtre de Bloom</span>
+  Un tableau de \(m\) bits et \(k\) fonctions de hachage indépendantes. Insertion de \(x\) :
+  mettre à 1 les bits \(h_1(x), \dots, h_k(x)\). Requête «&nbsp;\(x\) a-t-il été
+  inséré&nbsp;?&nbsp;» : répondre <em>oui</em> si tous ces bits valent 1, <em>non</em> sinon.
+  Réponse <strong>non</strong> : certaine. Réponse <strong>oui</strong> : probabiliste
+  (faux positifs possibles, jamais de faux négatifs). Mémoire : \(\mathcal{O}(m)\) bits,
+  indépendamment de la taille des clés.
+</div>
+
+<div class="proof">
+  <strong>Taux de faux positifs.</strong> Après \(n\) insertions, la probabilité qu'un bit
+  donné soit resté à 0 : \((1 - 1/m)^{kn} \approx e^{-kn/m}\). Un élément <em>absent</em>
+  est déclaré présent si ses \(k\) bits sont à 1 :
+  $$p \;=\; \big(1 - e^{-kn/m}\big)^k.$$
+  À \(m/n\) fixé (bits par élément), on minimise en dérivant en \(k\) :
+  optimum pour \(k^\star = \frac mn \ln 2\), donnant \(p^\star \approx (0{,}6185)^{m/n}\) —
+  exponentiellement petit en le nombre de bits par élément : avec 10 bits/élément et
+  \(k = 7\), \(p \approx 0{,}008\). C'est la même arithmétique que les probabilités
+  d'indépendance approximative du cours de statistiques (chapitre 1 du module
+  Statistics) — appliquée aux bits.
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 3.7 — Déduplication de crawling</span>
+<pre class="code"><code>import hashlib
+class Bloom:
+    def __init__(self, m_bits, k):
+        self.m, self.k, self.bits = m_bits, k, bytearray(m_bits // 8 + 1)
+    def _pos(self, x, i):
+        h = hashlib.sha256(f"{i}:{x}".encode()).digest()
+        return int.from_bytes(h[:8], "big") % self.m
+    def add(self, x):
+        for i in range(self.k):
+            p = self._pos(x, i); self.bits[p // 8] |= 1 &lt;&lt; (p % 8)
+    def might_contain(self, x):
+        return all(self.bits[p // 8] &amp; (1 &lt;&lt; (p % 8)) for p in map(lambda i: self._pos(x, i), range(self.k)))
+
+b = Bloom(m_bits=8_000_000, k=7)      # ~1 Mo pour ~1 M d'url, p ~ 0.008
+b.add("https://polytechnique.edu")
+assert b.might_contain("https://polytechnique.edu")
+# Usage : crawler (deja vu ?), cache negatif de disque, blocage d'URLs,
+# jointure approximative de gros datasets avant verification exacte.</code></pre>
 </div>
 
 <div class="note">
@@ -183,7 +786,21 @@ def top_k(items, scores, k):
   Un vocabulaire de 100&nbsp;k mots dans une matrice dense \(10^5 \times 10^5\) est impossible ;
   la matrice de co-occurrence réelle est <em>creuse</em> (sparse). On utilise
   <code>scipy.sparse</code> / dictionnaires — idée que l'on retrouvera pour les matrices
-  d'adjacence de graphes (chapitre 5).
+  d'adjacence de graphes (chapitre 5) et les filtres de Bloom ci-dessus : ne stocker que
+  l'information présente.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 3</p>
+  <ul>
+    <li>Hash : collisions par chaînage ou adressage ouvert, rehash à \(\alpha \approx 2/3\),
+    \(\mathcal{O}(1)\) moyen amorti — le nerf de <code>dict</code>/<code>set</code>.</li>
+    <li>heapify linéaire (preuve \(\sum h/2^h = 2\)) ; top-k en \(\mathcal{O}(n\log k)\).</li>
+    <li>Trie : opérations \(\Theta(L)\), indépendantes du nombre de mots — autocomplétion
+    et tokenizers.</li>
+    <li>Bloom : pas de faux négatifs ; faux positifs \((1-e^{-kn/m})^k\), optimum
+    \(k = \frac mn \ln 2\) — dédup massive à mémoire bornée.</li>
+  </ul>
 </div>
 </section>
 
@@ -191,21 +808,184 @@ def top_k(items, scores, k):
 <section class="chapter" id="ch4">
 <h2>4. Tri, recherche, récursion</h2>
 
+<h3>4.1 Quicksort : partition in place et analyse</h3>
+
+<pre class="code"><code>def quicksort(a, lo=0, hi=None):
+    if hi is None: hi = len(a) - 1
+    if lo &gt;= hi: return a
+    p = partition(a, lo, hi)          # pivot a sa place definitive
+    quicksort(a, lo, p - 1)           # tout a gauche &lt; pivot
+    quicksort(a, p + 1, hi)           # tout a droite &gt;= pivot
+    return a
+
+def partition(a, lo, hi):
+    """Partition de Lomuto : pivot = a[hi], en place, O(hi-lo)."""
+    pivot, i = a[hi], lo
+    for j in range(lo, hi):
+        if a[j] &lt; pivot:              # maintenir l'invariant :
+            a[i], a[j] = a[j], a[i]   # a[lo..i-1] &lt; pivot
+            i += 1                    # a[i..j-1] &gt;= pivot
+    a[i], a[hi] = a[hi], a[i]         # placer le pivot entre les deux
+    return i</code></pre>
+
+<div class="prop">
+  <span class="tag">Proposition 4.1 — Complexité moyenne \(\Theta(n \log n)\), pire cas \(\Theta(n^2)\)</span>
+  <em>Pire cas</em> (pivot toujours extrémal, ex. tableau déjà trié avec pivot en dernière
+  position) : récurrence \(T(n) = T(n-1) + \mathcal{O}(n) = \Theta(n^2)\).
+  <em>En moyenne</em> (pivot uniforme) : récurrence aléatoire
+  $$T(n) = n - 1 + \frac{1}{n}\sum_{k=0}^{n-1}\big(T(k) + T(n-1-k)\big),$$
+  car le rang du pivot est uniforme. En multipliant par \(n\) puis en soustrayant les
+  équations pour \(n\) et \(n-1\) (technique de télescopage), on obtient
+  \(\frac{T(n)}{n+1} = \frac{T(n-1)}{n} + \frac{2}{n+1}\), d'où
+  \(T(n) = 2(n+1)H_n - 4n \approx 1{,}39\, n \log_2 n\) : optimal à 39&nbsp;% près
+  (la constante du tri fusion est \(n\log_2 n\), la borne informationnelle
+  \(\log_2 n! \approx n\log_2 n - 1{,}44 n\)).
+</div>
+
+<div class="note">
+  <span class="tag">Mitigations du pire cas</span>
+  (i) <strong>Pivot aléatoire</strong> : le pire cas devient un événement de probabilité
+  négligeable — l'analyse passe du «&nbsp;adversaire choisit l'entrée&nbsp;» au
+  «&nbsp;l'algorithme choisit le pivot&nbsp;». (ii) <strong>Médiane de trois</strong>
+  (lo/milieu/hi). (iii) <strong>Introsort</strong> (C++ <code>std::sort</code>) : quicksort,
+  bascule en heapsort si la profondeur dépasse \(2\log n\) — garantit
+  \(\mathcal{O}(n\log n)\) <em>et</em> garde la vitesse pratique. Python utilise Timsort
+  (hybride fusion/insertion, exploite les runs triés, stable) : \(\Theta(n)\) sur les données
+  presque triées.
+</div>
+
+<h3>4.2 Tri fusion et comptage d'inversions</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Mergesort</span>
+  Diviser au milieu, trier chaque moitié, fusionner en \(\Theta(n)\) : récurrence
+  \(2T(n/2) + n\), donc \(\Theta(n \log n)\) <em>garanti</em> (théorème 2.2). Stable
+  (l'ordre relatif des éléments égaux est préservé — indispensable pour les tris
+  multi-critères : trier par score <em>puis</em> par date laisse les scores groupés par date).
+  Coût : \(\Theta(n)\) mémoire auxiliaire.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.3 — Bonus : compter les inversions en \(\Theta(n\log n)\)</span>
+  Une <em>inversion</em> est un couple \((i,j)\), \(i \lt j\), avec \(a_i &gt; a_j\) — mesure de
+  désordre (corrélation de Kendall entre deux classements : utile pour comparer des
+  rankings de modèles ou de moteurs de recherche). La force brute compte en
+  \(\mathcal{O}(n^2)\) ; le tri fusion instrumenté fait mieux :
+<pre class="code"><code>def count_inversions(a):
+    if len(a) &lt;= 1: return a, 0
+    mid = len(a) // 2
+    left,  cl = count_inversions(a[:mid])
+    right, cr = count_inversions(a[mid:])
+    merged, cross = [], 0
+    i = j = 0
+    while i &lt; len(left) and j &lt; len(right):
+        if left[i] &lt;= right[j]:
+            merged.append(left[i]); i += 1
+        else:                              # left[i] &gt; right[j] :
+            merged.append(right[j]); j += 1
+            cross += len(left) - i          # tous ces elements forment une inversion
+    return merged + left[i:] + right[j:], cl + cr + cross
+
+count_inversions([5, 4, 3, 2, 1])   # -&gt; 10 = C(5,2) : ordre totalement inverse</code></pre>
+  Chaque fois qu'un élément droit passe devant des éléments gauches restants, cela compte
+  exactement les inversions <em>inter-blocs</em> ; les inversions intra-blocs sont comptées
+  par la récursion.
+</div>
+
+<h3>4.3 Radix sort : trier sans comparer</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.4 — Tri par base (LSD)</span>
+  Pour \(n\) entiers de \(k\) chiffres en base \(b\) : \(k\) passes de tri stable par
+  chiffre (bucket par valeur de chiffre), chacune \(\Theta(n + b)\) :
+  $$T = \Theta\big(k\,(n + b)\big) \;\approx\; \Theta(n \cdot k).$$
+  Sans comparaison — la borne inférieure \(\Omega(n\log n)\) des tris <em>par
+  comparaisons</em> (arbre de décision à \(n!\) feuilles) ne s'applique pas. Pour des clés
+  64 bits (\(k = 8\) octets), c'est \(\Theta(8n)\), linéaire en pratique. Usage : trier des
+  identifiants de tokens, des adresses IP, des couples (cluster, distance) dans les k-means
+  accélérés. Inconvénient : mémoire \(\Theta(n+b)\) et efficacité qui s'effondre si \(k\)
+  grandit (clés longues, flottants).
+</div>
+
+<h3>4.4 Sélection : la médiane en \(\Theta(n)\) attendu</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.5 — Quickselect</span>
+  Pour trouver le \(k\)-ième plus petit élément : partitionner comme quicksort, mais ne
+  récursiver <em>que du côté</em> où se trouve le rang \(k\). Récurrence moyenne
+  \(T(n) = T(\text{fraction de } n) + \mathcal{O}(n)\), avec fractions espérées
+  \(\to\) \(T(n) = \Theta(n)\) (chaque niveau divise au moins par ~2 en moyenne, et les
+  tailles somment géométriquement). C'est la médiane du k-médianoïde, le quantile rapide
+  des statistiques d'ordre (module Statistics, chapitre 3) ; la variante déterministe
+  «&nbsp;médiane des médianes&nbsp;» garantit le pire cas \(\Theta(n)\) au prix de constantes
+  lourdes.
+</div>
+
+<h3>4.5 Dichotomie : invariant de boucle et dérivés</h3>
+
+<pre class="code"><code>def binary_search(a, x):           # a trie croissant
+    lo, hi = 0, len(a)             # recherche dans [lo, hi)
+    while lo &lt; hi:
+        mid = (lo + hi) // 2
+        if a[mid] == x: return mid
+        elif a[mid] &lt; x: lo = mid + 1
+        else:            hi = mid
+    return -1</code></pre>
+
+<div class="proof">
+  <strong>Correction par invariant.</strong> Invariant : «&nbsp;si \(x\) est dans \(a\),
+  alors \(x\) se trouve dans \(a[lo..hi)\)&nbsp;». Initialisation : \(lo=0, hi=n\), la
+  tranche est tout le tableau — vrai. Conservation : si \(a[mid] &lt; x\), le tableau étant
+  trié, tous les \(a[lo..mid]\) sont \(&lt; x\), donc \(x \notin a[lo..mid]\) et l'invariant
+  tient pour \([mid+1, hi)\) ; symétriquement si \(a[mid] &gt; x\). Terminaison :
+  \(hi - lo\) décroît strictement à chaque itération (au moins 1). À la sortie, la tranche
+  est vide : soit on a trouvé \(x\) plus tôt, soit \(x\) est absent.
+  Complexité : la taille est au moins divisée par 2 à chaque pas, d'où
+  \(\Theta(\log n)\).
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.6 — Binary search sur la <em>réponse</em></span>
+  Pattern transverse : quand la propriété «&nbsp;\(\leq c\)&nbsp;» est <em>monotone</em> en
+  \(c\), on cherche le seuil par dichotomie au lieu de le calculer. Exemple : \(n\) tâches
+  de durées \(d_i\), \(k\) machines, minimiser le makespan (charge max).
+<pre class="code"><code>def feasible(d, k, cap):                 # glouton : peut-on tout placer
+    load, machines = 0, 1                # avec chaque machine &lt;= cap ?
+    for t in d:
+        if t &gt; cap: return False
+        if load + t &gt; cap: machines += 1; load = t
+        else: load += t
+    return machines &lt;= k
+
+def min_makespan(d, k):
+    lo, hi = max(d), sum(d)              # bornes triviales
+    while lo &lt; hi:                       # meme squelette que binary_search
+        mid = (lo + hi) // 2
+        if feasible(d, k, mid): hi = mid
+        else: lo = mid + 1
+    return lo                            # plus petite capacite faisable</code></pre>
+  L'invariant devient «&nbsp;\([lo, hi]\) contient la plus petite capacité
+  faisable&nbsp;». Même schéma : racine \(k\)-ième par encadrement, recherche du
+  \(\varepsilon\) de régularisation optimal, apprentissage du seuil de coupure optimal
+  d'un classifieur — et, en RL/module Optimal Transport, la recherche du multiplicateur de
+  Lagrange dans les projections entropiques.
+</div>
+
+<h3>4.6 Récursion et programmation dynamique</h3>
+
 <ul>
-  <li><strong>Tri fusion</strong> : diviser pour régner, \(\mathcal{O}(n \log n)\) garanti,
-  stable ; <strong>quicksort</strong> : \(\mathcal{O}(n \log n)\) attendu, \(\mathcal{O}(n^2)\)
-  pire cas, en place. <strong>trier par base</strong> (radix) : \(\mathcal{O}(n k)\) pour des
-  clés entières de taille bornée — utilisé pour trier des tokens.</li>
-  <li><strong>Dichotomie</strong> : recherche en tableau trié en \(\mathcal{O}(\log n)\) —
-  même principe que la <em>recherche bin­aire d'hyperparamètres</em> et la discrétisation de
-  grille en transport optimal (recherche de \(\varepsilon\) de Sinkhorn).</li>
-  <li><strong>Récursion &amp; programmation dynamique</strong> : mémoïser les sous-problèmes.
-  Exemples qui reviendront : distance d'édition (Levenshtein) en NLP, Viterbi pour les HMM,
-  équations de Bellman en RL — tous des DP déguisés.</li>
+  <li><strong>Mémoïser les sous-problèmes</strong> : transformer une récurrence
+  exponentielle en résolution de sous-problèmes partagés. Exemples qui reviendront :
+  distance d'édition (Levenshtein) en NLP, Viterbi pour les HMM, équations de Bellman en
+  RL — tous des DP déguisés.</li>
+  <li><strong>Réduction mémoire</strong> : la table \(m \times n\) de Levenshtein se
+  réduit à deux lignes (\(\mathcal{O}(\min(m,n))\)) car chaque cellule ne dépend que de la
+  ligne précédente.</li>
 </ul>
 
 <div class="ex">
-  <span class="tag">Exemple 4.1 — Distance d'édition (DP)</span>
+  <span class="tag">Exemple 4.7 — Distance d'édition (DP)</span>
 <pre class="code"><code>def levenshtein(a, b):
     m, n = len(a), len(b)
     dp = [[0]*(n+1) for _ in range(m+1)]
@@ -221,214 +1001,24 @@ def top_k(items, scores, k):
 
 print(levenshtein("graph", "giraffe"))  # 4</code></pre>
 </div>
-</section>
 
-<!-- ============================ CH 5 ============================ -->
-<section class="chapter" id="ch5">
-<h2>5. Algorithmes de graphes</h2>
-
-<p>Le module le plus important de ce refresher : le master s'appelle
-<em>Large Language Models, <strong>Graphs</strong> and Applications</em>. On réutilise
-l'objet «&nbsp;graphe&nbsp;» pendant deux ans ; il faut être à l'aise avec ses
-représentations et ses algorithmes classiques.</p>
-
-<div class="def">
-  <span class="tag">Définition 5.1 — Graphe</span>
-  Un graphe \(G = (V, E)\) est un ensemble de <strong>sommets</strong> \(V\) et un ensemble
-  d'<strong>arêtes</strong> \(E \subseteq V \times V\). Il est <em>non orienté</em> si les arêtes
-  sont symétriques, <em>orienté</em> sinon ; <em>pondéré</em> si chaque arête porte un poids
-  \(w : E \to \mathbb{R}\). Le <strong>voisinage</strong> de \(v\) est
-  \(\mathcal{N}(v) = \{u : (v,u) \in E\}\), son <strong>degré</strong> est \(|\mathcal{N}(v)|\).
-</div>
-
-<h3>5.1 Représentations</h3>
-<pre class="code"><code>import numpy as np
-from scipy import sparse
-
-# 1) Listes d'adjacence (référence en pratique — networkx, PyG)
-adj = {0: [1, 2], 1: [0, 2], 2: [0, 1, 3], 3: [2]}
-
-# 2) Matrice d'adjacence (dense O(|V|^2) mémoire, mais algèbre !)
-A = np.array([[0, 1, 1, 0],
-              [1, 0, 1, 0],
-              [1, 1, 0, 1],
-              [0, 0, 1, 0]])
-print((A @ A)[0, 3] > 0)   # True : il existe un chemin de longueur 2 entre 0 et 3
-
-# 3) Sparse COO/CSR : le format des vrais jeux de données (Cora ~ 10k arêtes)
-A_sp = sparse.coo_matrix(A)</code></pre>
-
-<div class="note">
-  <span class="tag">Pourquoi trois représentations&nbsp;?</span>
-  Listes d'adjacence → parcours efficaces&nbsp;; matrice dense → propriétés spectrales
-  (\(A^k\) compte les chemins, base du module Graph ML)&nbsp;; sparse → passage à l'échelle.
-  Savoir passer de l'une à l'autre est un réflexe du master.
-</div>
-
-<h3>5.2 Parcours en largeur et en profondeur</h3>
-<pre class="code"><code>from collections import deque
-
-def bfs(adj, s):
-    """Parcours en largeur : distances (non pondérées) et parents depuis s. O(|V|+|E|)"""
-    dist, parent = {s: 0}, {s: None}
-    q = deque([s])
-    while q:
-        u = q.popleft()
-        for v in adj[u]:
-            if v not in dist:
-                dist[v], parent[v] = dist[u] + 1, u
-                q.append(v)
-    return dist, parent
-
-def dfs(adj, u, visited=None):
-    """Parcours en profondeur (récursif) : composantes connexes, cycles, tri topologique."""
-    visited = visited if visited is not None else set()
-    visited.add(u)
-    for v in adj[u]:
-        if v not in visited:
-            dfs(adj, v, visited)
-    return visited</code></pre>
-
-<h3>5.3 Plus courts chemins et composantes</h3>
-<ul>
-  <li><strong>Dijkstra</strong> (poids \(\geq 0\))&nbsp;: \(\mathcal{O}((|V|+|E|)\log |V|)\) avec un tas —
-  le cœur des itinéraires (OSM), des dépendances de tâches et du <em>routing</em> d'agents&nbsp;;</li>
-  <li><strong>Bellman-Ford</strong> : gère les poids négatifs, détecte les cycles négatifs,
-  \(\mathcal{O}(|V||E|)\) — la relaxation répétée annonce la programmation dynamique de Bellman en RL&nbsp;;</li>
-  <li><strong>Composantes connexes</strong> : DFS/BFS (non orienté) ou Kosaraju/Tarjan
-  (fortement connexes, orienté) — utilisé pour partitionner des graphes de connaissances&nbsp;;</li>
-  <li><strong>Détection de cycles / tri topologique</strong> d'un DAG (Kahn) — les
-  <em>workflows d'agents</em> (orchestration de LLMs) sont des DAG précisément pour ça.</li>
-</ul>
-
-<div class="ex">
-  <span class="tag">Exemple 5.2 — Dijkstra avec heapq</span>
-<pre class="code"><code>import heapq
-
-def dijkstra(adj_w, s):           # adj_w[u] = [(v, w_uv), ...]
-    dist = {s: 0.0}; pq = [(0.0, s)]
-    while pq:
-        d, u = heapq.heappop(pq)
-        if d > dist.get(u, float("inf")):
-            continue               # entrée périmée
-        for v, w in adj_w[u]:
-            nd = d + w
-            if nd < dist.get(v, float("inf")):
-                dist[v] = nd
-                heapq.heappush(pq, (nd, v))
-    return dist                    # dist[v] = plus courte distance s -> v</code></pre>
-</div>
-</section>
-
-<!-- ============================ CH 6 ============================ -->
-<section class="chapter" id="ch6">
-<h2>6. NumPy&nbsp;: algèbre linéaire numérique</h2>
-
-<p>Tout le deep learning est de l'algèbre linéaire batchée. Rappels des opérations et de leurs
-coûts&nbsp;:</p>
-
-<pre class="code"><code>import numpy as np
-
-A = np.random.randn(1000, 500)
-x = np.random.randn(500)
-
-A @ x               # produit matrice-vecteur : O(n^2)
-A.T @ A             # produit matrice-matrice : O(n^3) — via BLAS, très optimisé
-
-np.linalg.norm(x)                       # norme euclidienne
-np.linalg.solve(A.T @ A, A.T @ x)       # résolution (mieux que inv() @ b !)
-w, V = np.linalg.eigh(np.array([[2,1],[1,2]]))   # valeurs/vecteurs propres (symétrique)</code></pre>
-
-<div class="prop">
-  <span class="tag">Rappels essentiels</span>
-  <ul style="margin:.3rem 0; padding-left:1.2rem;">
-    <li>\(\langle u, v\rangle = u^\top v\), \(\|u\| = \sqrt{u^\top u}\)&nbsp;; \(u \perp v \iff u^\top v = 0\)&nbsp;;</li>
-    <li>matrices symétriques&nbsp;: diagonalisables en base orthonormée, valeurs propres réelles — le socle spectral du module Graph ML&nbsp;;</li>
-    <li>décomposition en valeurs singulières \(M = U \Sigma V^\top\)&nbsp;: base de l'ACP et des embeddings&nbsp;;</li>
-    <li>diffusion&nbsp;: \((I - \alpha A)^{-1}\), séries de Neumann \(\sum_k \alpha^k A^k\) — c'est PageRank et les marches aléatoires&nbsp;;</li>
-    <li>stabilité numérique&nbsp;: ne jamais inverser une matrice (<code>np.linalg.solve</code>), soustraire le max avant <code>exp</code> (softmax), travailler en <code>float64</code> pour le calcul scientifique et <code>float32</code> pour l'apprentissage profond.</li>
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 4</p>
+  <ul>
+    <li>Quicksort : partition in-place, \(\approx 1{,}39 n\log_2 n\) en moyenne (télescopage
+    de la récurrence), pire cas évité par pivot aléatoire/médiane.</li>
+    <li>Mergesort : stable et garanti \(\Theta(n\log n)\) ; le même schéma compte les
+    inversions.</li>
+    <li>Radix : linéaire hors du modèle par comparaisons ; quickselect : médiane en
+    \(\Theta(n)\) attendu.</li>
+    <li>Dichotomie : invariant de boucle (preuve), \(\Theta(\log n)\), et le pattern
+    «&nbsp;recherche binaire sur la réponse&nbsp;» chaque fois qu'une faisabilité est
+    monotone.</li>
   </ul>
 </div>
 </section>
 
-<!-- ============================ CH 7 ============================ -->
-<section class="chapter" id="ch7">
-<h2>7. Génie logiciel minimal (OOP, tests, git)</h2>
-
-<ul>
-  <li><strong>Classes et héritage</strong>&nbsp;: en PyTorch, tout modèle hérite de
-  <code>nn.Module</code> et définit <code>forward</code>. Comprendre <code>__init__</code>,
-  <code>self</code>, <code>__call__</code>, <code>@property</code> suffit pour lire tout le code du master.</li>
-  <li><strong>Typage et docstrings</strong>&nbsp;: annotations (<code>def f(x: np.ndarray) -&gt; float</code>)
-  et docstrings à la NumPy — exigés dans les rendus de TP.</li>
-  <li><strong>Tests</strong>&nbsp;: <code>pytest</code>, tests unitaires sur des cas limites
-  (graphe vide, matrice singulière, texte vide). Un algorithme de GNN non testé sur un toy
-  graph est un algorithme faux.</li>
-  <li><strong>Git</strong>&nbsp;: <code>add/commit/push</code>, branches, pull requests — le travail
-  en binôme des TP et le projet transverse M2 s'organisent sur GitHub.</li>
-</ul>
-
-<pre class="code"><code># Le squelette que l'on réécrira 50 fois pendant le master
-import torch, torch.nn as nn
-
-class MLP(nn.Module):
-    def __init__(self, d_in, d_hidden, d_out):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(d_in, d_hidden), nn.ReLU(),
-            nn.Linear(d_hidden, d_out))
-    def forward(self, x):          # appelé par model(x)
-        return self.net(x)
-
-model = MLP(10, 64, 2)
-x = torch.randn(4, 10)
-assert model(x).shape == (4, 2)    # un test, même minimal, vaut mieux que rien</code></pre>
-</section>
-
-<!-- ============================ EXERCICES ============================ -->
-<section class="exercises" id="ex">
-<h3>Exercices</h3>
-<ol>
-  <li><strong>Complexité.</strong> Classer par complexité croissante&nbsp;:
-  recherche dichotomique, tri fusion, Dijkstra (tas), produit \(A^\top A\), parcours BFS,
-  calcul de toutes les paires de distances. Justifier chaque classe.</li>
-
-  <li><strong>Composantes connexes.</strong> Écrire <code>composantes(adj)</code> qui renvoie
-  une liste de composantes (ensembles de sommets) en utilisant DFS. Test sur un graphe à 3
-  composantes dont une réduite à un sommet isolé.</li>
-
-  <li><strong>Chemins de longueur k.</strong> Montrer que \((A^k)_{ij}\) compte les chemins de
-  longueur exactement \(k\) de \(i\) à \(j\) (récurrence sur \(k\)). Vérifier en NumPy sur un
-  petit graphe et conclure sur le coût du comptage exact vs. un produit matriciel sparse.</li>
-
-  <li><strong>Détection de cycle.</strong> Écrire une fonction détectant si un graphe orienté
-  contient un cycle (couleurs blanc/gris/noir), puis un tri topologique par l'algorithme de Kahn
-  appliqué au workflow&nbsp;: fetch → chunk → embed → index → answer.</li>
-
-  <li><strong>Anagrammes.</strong> Écrire <code>group_anagrams(words)</code> en
-  \(\mathcal{O}(n\,k\log k)\) via dictionnaire de signatures — et expliquer pourquoi la clé
-  <code>tuple(sorted(w))</code> donne une complexité en moyenne linéaire en \(n\).</li>
-</ol>
-</section>
-
-<!-- ============================ REFS ============================ -->
-<section class="chapter refs" id="refs">
-<h2>Références</h2>
-<ul>
-  <li>T. Cormen, C. Leiserson, R. Rivest, C. Stein, <em>Introduction to Algorithms</em> (CLRS), 4e éd., MIT Press, 2022 — la bible structures de données + graphes.</li>
-  <li>J. Kleinberg, É. Tardos, <em>Algorithm Design</em>, Pearson, 2005 — la meilleure source d'exercices de modélisation (graphe, greedy, DP).</li>
-  <li>R. Sedgewick, K. Wayne, <em>Algorithms</em>, 4e éd., Addison-Wesley, 2011 — implémentations Java lisibles, transférables en Python.</li>
-  <li>L. Ramalho, <em>Fluent Python</em>, 2e éd., O'Reilly, 2022 — pour les idiomes Python avancés.</li>
-  <li><a href="https://docs.python.org/3/tutorial/">The Python Tutorial</a> et <a href="https://numpy.org/doc/stable/user/absolute_beginners.html">NumPy: the absolute basics</a> — à garder ouverts pendant tous les TP.</li>
-  <li>D. Eppstein et al., <a href="https://networkx.org/documentation/stable/tutorial.html">NetworkX tutorial</a> — l'outil graphes utilisé au master.</li>
-</ul>
-</section>
-
-<nav class="pager">
-  <a href="m1p1-refresher-statistics.html"><span class="dir">← Précédent</span> Refresher in Statistics</a>
-  <a class="next" href="m1p1-machine-learning.html"><span class="dir">Suivant</span> Machine Learning</a>
-</nav>
-
+<!-- A_COMPLETER -->
 </div>
 </body>
 </html>
