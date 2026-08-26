@@ -1018,7 +1018,1077 @@ print(levenshtein("graph", "giraffe"))  # 4</code></pre>
 </div>
 </section>
 
-<!-- A_COMPLETER -->
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Algorithmes de graphes</h2>
+
+<p>Le module le plus important de ce refresher : le master s'appelle
+<em>Large Language Models, <strong>Graphs</strong> and Applications</em>. On réutilise
+l'objet «&nbsp;graphe&nbsp;» pendant deux ans ; il faut être à l'aise avec ses
+représentations et ses algorithmes classiques — et avec leurs <em>preuves</em>, car les
+GNN du module Graph ML héritent directement de cette combinatoire.</p>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — Graphe</span>
+  Un graphe \(G = (V, E)\) est un ensemble de <strong>sommets</strong> \(V\) et un ensemble
+  d'<strong>arêtes</strong> \(E \subseteq V \times V\). Il est <em>non orienté</em> si les arêtes
+  sont symétriques, <em>orienté</em> sinon ; <em>pondéré</em> si chaque arête porte un poids
+  \(w : E \to \mathbb{R}\). Le <strong>voisinage</strong> de \(v\) est
+  \(\mathcal{N}(v) = \{u : (v,u) \in E\}\), son <strong>degré</strong> est \(|\mathcal{N}(v)|\).
+</div>
+
+<h3>5.1 Représentations : listes, matrice, CSR</h3>
+
+<pre class="code"><code>import numpy as np
+from scipy import sparse
+
+# 1) Listes d'adjacence (référence en pratique — networkx, PyG)
+adj = {0: [1, 2], 1: [0, 2], 2: [0, 1, 3], 3: [2]}
+
+# 2) Matrice d'adjacence (dense O(|V|^2) mémoire, mais algèbre !)
+A = np.array([[0, 1, 1, 0],
+              [1, 0, 1, 0],
+              [1, 1, 0, 1],
+              [0, 0, 1, 0]])
+print((A @ A)[0, 3] &gt; 0)   # True : il existe un chemin de longueur 2 entre 0 et 3
+
+# 3) CSR (Compressed Sparse Row) : trois tableaux, le format des vrais graphes
+#    indptr[i] .. indptr[i+1] = plage des voisins de i dans indices[]
+rows  = np.array([0, 0, 1, 1, 2, 2, 2, 3], dtype=np.int32)   # COO : par arête
+cols  = np.array([1, 2, 0, 2, 0, 1, 3, 2], dtype=np.int32)
+A_csr = sparse.coo_matrix((np.ones(8), (rows, cols))).tocsr()
+print(A_csr.indptr, A_csr.indices)   # [0 2 4 7 8] [1 2 0 2 0 1 3 2]
+# Cora (reseau de citations) : ~5k sommets, ~20k arêtes :
+#   dense = 270 Mo de zeros ; CSR = quelques centaines de Ko.</code></pre>
+
+<div class="note">
+  <span class="tag">Pourquoi trois représentations&nbsp;?</span>
+  Listes d'adjacence → parcours efficaces en \(\mathcal{O}(|V|+|E|)\)&nbsp;; matrice dense →
+  propriétés spectrales (\(A^k\) compte les chemins, base du module Graph ML)&nbsp;;
+  CSR/sparse → passage à l'échelle et <em>format natif de PyTorch Geometric</em> (les
+  messages d'un GNN se propagent exactement comme un produit matriciel sparse).
+  Savoir passer de l'une à l'autre est un réflexe du master.
+</div>
+
+<h3>5.2 Parcours en largeur et en profondeur</h3>
+
+<pre class="code"><code>from collections import deque
+
+def bfs(adj, s):
+    """Parcours en largeur : distances (non pondérées) et parents depuis s. O(|V|+|E|)"""
+    dist, parent = {s: 0}, {s: None}
+    q = deque([s])
+    while q:
+        u = q.popleft()
+        for v in adj[u]:
+            if v not in dist:
+                dist[v], parent[v] = dist[u] + 1, u
+                q.append(v)
+    return dist, parent
+
+def dfs(adj, u, visited=None):
+    """Parcours en profondeur (récursif) : composantes connexes, cycles, tri topologique."""
+    visited = visited if visited is not None else set()
+    visited.add(u)
+    for v in adj[u]:
+        if v not in visited:
+            dfs(adj, v, visited)
+    return visited</code></pre>
+
+<div class="proof">
+  <strong>BFS calcule les distances exactes.</strong> Par récurrence forte sur \(d\) : tous
+  les sommets à distance \(d\) sont découverts à la profondeur \(d\) de la file, et aucun
+  plus tôt. Initialisation : \(s\), distance 0, découvert à la profondeur 0. Hérédité : un
+  sommet \(v\) à distance \(d+1\) a un prédécesseur \(u\) à distance \(d\) sur un plus
+  court chemin ; par hypothèse de récurrence \(u\) est découvert à la profondeur \(d\) avec
+  \(\mathrm{dist}[u] = d\), et \(v\) (pas encore découvert, sinon il serait plus proche)
+  reçoit \(\mathrm{dist}[v] = d+1\). La file sortant par ordre de découverte, les profondeurs
+  sont croissantes : cohérence totale. De plus, l'arbre des parents
+  \(\{v \to \mathrm{parent}[v]\}\) contient un plus court chemin de \(s\) à chaque sommet
+  atteint.
+  <span class="qed">∎</span>
+</div>
+
+<div class="proof">
+  <strong>DFS énumère les composantes connexes.</strong> Le DFS depuis \(s\) visite
+  exactement l'ensemble des sommets reliés à \(s\) (toute arête traversée maintient la
+  connexité ; réciproquement un sommet non visité après l'appel n'a aucun chemin vers
+  \(s\), sinon l'arête «&nbsp;de sortie&nbsp;» de sa composante aurait été proposée au
+  parcours). En relançant dfs sur chaque sommet non visité, on partitionne \(V\) :
+  \(\mathcal{O}(|V|+|E|)\) au total.
+  <span class="qed">∎</span>
+</div>
+
+<h3>5.3 Tri topologique d'un DAG (algorithme de Kahn)</h3>
+
+<pre class="code"><code>from collections import deque
+
+def topo_sort(adj, n):
+    """adj oriente sans cycle ; renvoie un ordre tel que u -&gt; v implique u avant v."""
+    indeg = [0] * n
+    for u in adj:
+        for v in adj[u]: indeg[v] += 1
+    q = deque(u for u in range(n) if indeg[u] == 0)
+    order = []
+    while q:
+        u = q.popleft(); order.append(u)
+        for v in adj[u]:
+            indeg[v] -= 1
+            if indeg[v] == 0: q.append(v)
+    return order if len(order) == n else None   # None =&gt; il y a un cycle
+
+# Workflow d'agents ( orchestration de LLMs ) :
+dag = {0: [1, 2], 1: [3], 2: [3], 3: []}        # fetch -&gt; {chunk, enrich} -&gt; index
+print(topo_sort(dag, 4))                        # [0, 1, 2, 3] ou [0, 2, 1, 3]</code></pre>
+
+<div class="proof">
+  <strong>Correction.</strong> Invariant : tout sommet entre dans la file seulement quand
+  tous ses prédécesseurs ont été émis ; donc chaque émission respecte les arêtes déjà
+  traitées, et par induction sur l'ordre d'émission, l'ordre final est topologique.
+  <strong>Complétude.</strong> Un DAG a toujours un sommet de degré entrant nul (sinon, en
+  remontant les arêtes entrantes indéfiniment, on revisiterait un sommet : cycle). Si
+  l'algorithme bloque avec \(\mathrm{len}(\mathrm{order}) \lt; n\), les sommets restants forment
+  un sous-graphe de degrés entrants tous \(&gt; 0\) dans ce sous-graphe : il contient un cycle.
+  L'algorithme est donc <em>aussi</em> un détecteur de cycles.
+  <span class="qed">∎</span>
+</div>
+
+<h3>5.4 Plus courts chemins</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Dijkstra (poids \(\geq 0\)), avec tas</span>
+  La version «&nbsp;paresseuse&nbsp;» ci-dessous calcule toutes les distances depuis \(s\)
+  en \(\mathcal{O}((|V|+|E|)\log |V|)\).
+</div>
+
+<pre class="code"><code>import heapq
+
+def dijkstra(adj_w, s):           # adj_w[u] = [(v, w_uv), ...]
+    dist = {s: 0.0}; pq = [(0.0, s)]
+    while pq:
+        d, u = heapq.heappop(pq)
+        if d &gt; dist.get(u, float("inf")):
+            continue               # entrée périmée
+        for v, w in adj_w[u]:
+            nd = d + w
+            if nd &lt; dist.get(v, float("inf")):
+                dist[v] = nd
+                heapq.heappush(pq, (nd, v))
+    return dist                    # dist[v] = plus courte distance s -&gt; v</code></pre>
+
+<div class="proof">
+  <strong>Invariant de correction.</strong> On prouve que tout sommet \(u\) extrait du tas
+  avec \(d = \mathrm{dist}[u]\) est <em>définitif</em> : \(\mathrm{dist}[u] = \delta(s,u)\)
+  (distance optimale). Supposons le contraire et prenons le <em>premier</em> sommet \(u\)
+  extrait avec \(\mathrm{dist}[u] &gt; \delta(s,u)\) ; soit \(P\) un plus court chemin
+  \(s \to u\), et \(x\) le premier sommet de \(P\) non définitif, de prédécesseur
+  \(y \in P\) définitif. Au moment où \(y\) est devenu définitif, la relaxation de
+  \((y,x)\) a posé \(\mathrm{dist}[x] \leq \delta(s,y) + w(y,x) = \delta(s,x)\) ; or
+  \(x\) est sur un plus court chemin vers \(u\), et les préfixes de plus courts chemins
+  sont optimaux, donc \(\delta(s,x) \leq \delta(s,u)\). En chaînant :
+  \(\mathrm{dist}[x] \leq \delta(s,u) &lt; \mathrm{dist}[u]\). Mais alors \(x\), de clé
+  plus petite, aurait été extrait <em>avant</em> \(u\) : contradiction. Les entrées
+  périmées du tas sont simplement ignorées (test <code>d &gt; dist[u]</code>).
+  <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">A* : Dijkstra guidé</span>
+  A* oriente la recherche vers la cible en extrayant selon \(f(v) = \mathrm{dist}[v] +
+  h(v)\), où \(h\) est une heuristique (estimation du coût restant). Si \(h\) est
+  <strong>admissible</strong> (\(h(v) \leq \delta(v, t)\), ne surestime jamais) et
+  <em>cohérente</em> (\(h(u) \leq w(u,v) + h(v)\)), A* est optimal et développe moins de
+  sommets que Dijkstra ; avec \(h = 0\) on retrouve Dijkstra exactement. Usage : jeux,
+  routage, planification de mouvement robotique, recherche beam des LLMs décodage (l'esprit
+  «&nbsp;guider la recherche&nbsp;», cf. module LLMs M2).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.3 — Bellman-Ford : poids négatifs, cycles négatifs</span>
+  \(n - 1\) passes de relaxation de <em>toutes</em> les arêtes suffisent à converger vers
+  les distances exactes (si aucun cycle négatif atteignable), en
+  \(\mathcal{O}(|V| \, |E|)\). Une \(n\)-ième passe qui améliore encore quelque distance
+  révèle un cycle négatif atteignable.
+</div>
+
+<div class="proof">
+  <em>Esquisse.</em> Par récurrence sur \(i\) : après la \(i\)-ième passe, tout plus court
+  chemin à \(\leq i\) arêtes est correct (la passe \(i\) relaxe la dernière arête d'un
+  chemin à \(i\) arêtes dont le préfixe est déjà correct). Un plus court chemin simple a au
+  plus \(|V| - 1\) arêtes : \(|V|-1\) passes suffisent. Si la passe \(|V|\) améliore
+  encore, c'est qu'un chemin améliorant a \(\geq |V|\) arêtes : il répète un sommet, et le
+  cycle ainsi fermé est de poids strictement négatif — on peut alors le parcourir
+  indéfiniment, aucune distance finie n'est optimale. La <em>relaxation répétée</em>
+  \(V(s) = \max_a [r + V(s')]\) annonce la programmation dynamique de Bellman en RL
+  (module RL), où les «&nbsp;passes&nbsp;» s'appellent des itérations de valeur.
+  <span class="qed">∎</span>
+</div>
+
+<pre class="code"><code>def bellman_ford(n, edges, s):          # edges = [(u, v, w), ...]
+    dist = [float("inf")] * n; dist[s] = 0.0
+    for _ in range(n - 1):
+        changed = False
+        for u, v, w in edges:
+            if dist[u] + w &lt; dist[v]:
+                dist[v] = dist[u] + w; changed = True
+        if not changed: break            # convergence anticipee
+    for u, v, w in edges:                # detection de cycle negatif
+        if dist[u] + w &lt; dist[v]:
+            return None                  # atteignable depuis s
+    return dist</code></pre>
+
+<div class="prop">
+  <span class="tag">Proposition 5.4 — Cas particuliers et généralisations</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>DAG</strong> : tri topologique + une passe de relaxation dans l'ordre —
+    \(\mathcal{O}(|V|+|E|)\), poids négatifs inclus (pas de cycle, donc aucun problème).
+    C'est l'algorithme de l'ordonnancement de tâches au plus tôt (chemin critique).</li>
+    <li><strong>Floyd-Warshall</strong> : toutes les paires par DP sur les sommets
+    intermédiaires — \(d^{(k)}_{ij} = \min(d^{(k-1)}_{ij}, d^{(k-1)}_{ik} +
+    d^{(k-1)}_{kj})\), \(\mathcal{O}(n^3)\) temps / \(\mathcal{O}(n^2)\) mémoire. Pour
+    \(n \leq\) ~1000, c'est souvent le plus simple ; matriciel, il se vectorise en
+    NumPy (min-plus produit — module Optimal Transport, structure de distance).</li>
+  </ul>
+</div>
+
+<h3>5.5 Arbres couvrants minimaux (MST)</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 5.5 — Kruskal et Prim</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Kruskal</strong> : trier les arêtes, ajouter celle qui ne crée pas de cycle
+    (union-find), \(\mathcal{O}(|E|\log|E|)\).</li>
+    <li><strong>Prim</strong> : faire croître une composante par extractions de tas,
+    \(\mathcal{O}((|V|+|E|)\log|V|)\) — Dijkstra sur poids = arêtes.</li>
+    <li><strong>Correction (propriété de coupe)</strong> : pour toute coupe \((S,
+    V \setminus S)\), l'arête de poids minimum traversant la coupe appartient à <em>un</em>
+    MST. Preuve : sinon, l'ajouter à un MST crée un cycle, qui traverse la coupe une autre
+    fois par une arête plus lourde qu'on échange contre elle — MST plus léger :
+    contradiction. Kruskal applique cette propriété coupe par coupe (chaque ajout isole un
+    nouveau sommet ou fusionne deux composantes par leur arête légère).</li>
+  </ul>
+  Applications : réseaux (électricité, fibre) au coût minimal, clustering single-link
+  (couper les \(k-1\) plus grosses arêtes du MST — approche historique du clustering de
+  graphes, cf. module Graph ML), approximation du TSP factor 2 (doublement du MST + marche
+  eulérienne).
+</div>
+
+<h3>5.6 Flux max et coupes</h3>
+
+<div class="note">
+  <span class="tag">Ford-Fulkerson, en intuition</span>
+  Un réseau : capacités \(c(u,v) \geq 0\), une source \(s\), un puits \(t\). Un
+  <em>flot</em> respecte capacités et conservation ; l'algorithme de Ford-Fulkerson
+  répète : trouver un <strong>chemin augmentant</strong> (dans le graphe résiduel : arêtes
+  avant de capacité restante + arêtes arrière de flot annulable), pousser le maximum le
+  long, jusqu'à blocage. Au blocage, les sommets atteignables dans le résiduel forment une
+  <strong>coupe</strong> dont la capacité — égale au flot courant — borne tout flot :
+  <em>flot max = coupe min</em> (théorème max-flow min-cut). Avec DFS : \(\mathcal{O}(|f|
+  \cdot |E|)\) ; avec BFS (Edmonds-Karp) : \(\mathcal{O}(|V||E|^2)\) ; Dinic : meilleur
+  encore. Applications : couverture minimale d'images (GrabCut), appariement, fiabilité de
+  réseaux, et le <strong>matching biparti</strong> : relier gauche et droite avec capacité
+  1 — un flot maximal de valeur \(k\) est un matching de taille \(k\).
+</div>
+
+<div class="note">
+  <span class="tag">Matching biparti : Hopcroft-Karp</span>
+  Le problème d'affectation (étudiants/projets, workers/tâches, utilisateurs/objets) est un
+  matching dans un graphe biparti. L'algorithme de Hopcroft-Karp trouve le matching maximal
+  en \(\mathcal{O}(|E|\sqrt{|V|})\) par vagues de chemins augmentants disjoints. En
+  pratique : <code>scipy.sparse.csgraph.maximum_bipartite_matching</code> ou la forme
+  hongroise (affectation pondérée, \(\mathcal{O}(n^3)\)) — qu'on retrouvera comme
+  sous-produit du transport optimal discret (module Optimal Transport, où le couplage
+  optimal <em>pondéré</em> généralise le matching).
+</div>
+
+<h3>5.7 Détection de communautés : label propagation</h3>
+
+<pre class="code"><code>import random
+
+def label_propagation(adj, n, rounds=20, seed=0):
+    """Chaque sommet adopte le label majoritaire de ses voisins ; consensus = communaute."""
+    rng = random.Random(seed)
+    labels = list(range(n))                        # initialisation distincte
+    for _ in range(rounds):
+        order = list(range(n)); rng.shuffle(order) # mise a jour asynchrone
+        for u in order:
+            if adj[u]:
+                counts = {}
+                for v in adj[u]:
+                    counts[labels[v]] = counts.get(labels[v], 0) + 1
+                labels[u] = max(counts, key=counts.get)
+    return labels
+# Simple, quasi lineaire, sans parametre — baseline des methodes de communautes ;
+# le module Graph ML montera en gamme : modulaire de Louvain, spectral, GNN.</code></pre>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 5</p>
+  <ul>
+    <li>Trois représentations (listes / dense / CSR) et leur coût ; CSR = format PyG.</li>
+    <li>BFS = distances (preuve par induction) ; DFS = composantes ; Kahn = tri topologique
+    + détection de cycles (invariant de degrés).</li>
+    <li>Dijkstra : invariant «&nbsp;extrait = définitif&nbsp;» (preuve par premier
+    contre-exemple) ; A* = heuristique admissible ; Bellman-Ford = relaxation,
+    cycles négatifs ; DAG = topo + une passe ; Floyd-Warshall O(n³).</li>
+    <li>MST : propriété de coupe ; flux max = coupe min ; matching biparti = flux ;
+    label propagation = baseline communautés.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. NumPy&nbsp;: algèbre linéaire numérique</h2>
+
+<p>Tout le deep learning est de l'algèbre linéaire batchée. Rappels des opérations et de leurs
+coûts, puis les trois pièges qui coûtent le plus en TP : broadcasting, vues/copies,
+dtypes.</p>
+
+<pre class="code"><code>import numpy as np
+
+A = np.random.randn(1000, 500)
+x = np.random.randn(500)
+
+A @ x               # produit matrice-vecteur : O(n^2)
+A.T @ A             # produit matrice-matrice : O(n^3) — via BLAS, très optimisé
+
+np.linalg.norm(x)                       # norme euclidienne
+np.linalg.solve(A.T @ A, A.T @ x)       # résolution (mieux que inv() @ b !)
+w, V = np.linalg.eigh(np.array([[2,1],[1,2]]))   # valeurs/vecteurs propres (symétrique)</code></pre>
+
+<h3>6.1 Broadcasting : les règles, démontrées sur exemples</h3>
+
+<div class="prop">
+  <span class="tag">Règles (à connaître par cœur)</span>
+  Deux tableaux de formes \(s\) et \(s'\) sont rendus compatibles en (1) alignant les
+  dimensions <em>à droite</em> ; (2) pour chaque axe, tailles égales, ou l'une vaut 1
+  (le tableau de taille 1 est alors <em>répliqué virtuellement</em>). Toute autre
+  combinaison : erreur.
+  <table class="tbl">
+  <thead><tr><th>Formes</th><th>Résultat</th><th>Mécanisme</th></tr></thead>
+  <tbody>
+  <tr><td>\((n,) + (1,)\)</td><td>\((n,)\)</td><td>scalaire répliqué</td></tr>
+  <tr><td>\((n, d) + (d,)\)</td><td>\((n, d)\)</td><td>le vecteur s'applique à chaque ligne (recentrage !)</td></tr>
+  <tr><td>\((n, 1) + (m,)\)</td><td>\((n, m)\)</td><td>colonne + ligne = table de toutes les paires (distance par paires !)</td></tr>
+  <tr><td>\((n, m) + (n,)\)</td><td><em>erreur</em></td><td>alignement à droite : il faut \((n,1)\)</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<pre class="code"><code># Centrer une matrice de donnees : X (n, d) -&gt; X - mean (d,) + (n,d)
+Xc = X - X.mean(axis=0)              # regle 2 : (n,d) + (d,)
+
+# Toutes les differences a la puissance 2 entre deux ensembles de points :
+a = rng.random((5, 3)); b = rng.random((7, 3))
+d2 = ((a[:, None, :] - b[None, :, :])**2).sum(-1)   # (5,1,3)-(1,7,3) -&gt; (5,7,3) -&gt; (5,7)
+# Le meme pattern code les matrices de distances des K-means, des kNN,
+# du attention score (Q @ K^T : "chaque requete contre chaque cle").
+
+# Le piege du vecteur (n,) vs (n,1) :
+v = np.ones(5); w = v[:, None]        # w : (5,1)
+v + w                                 # -&gt; (5,5) !! et non (5,1) : alignement a droite</code></pre>
+
+<h3>6.2 Vues contre copies</h3>
+
+<div class="note">
+  <span class="tag">Le piège n°1 des TP</span>
+  <code>y = x[2:5]</code> est une <strong>vue</strong> : même tampon mémoire, modifier
+  <code>y</code> modifie <code>x</code>. Sont des vues : le slicing de base,
+  <code>reshape</code> (quand c'est possible sans copie), les transposées. Sont des
+  <strong>copies</strong> : l'indexation avancée (<code>x[mask]</code>,
+  <code>x[[1,7,2]]</code>), les opérations arithmétiques. Diagnostic :
+  <code>np.shares_memory(x, y)</code> et <code>y.base is not None</code>. Conséquences :
+  (i) les vues sont gratuites — itérer par tranches ne coûte rien ; (ii) mais un
+  «&nbsp;extrait&nbsp;» modifié en place corrompt la source. Règle de sûreté du TP :
+  après un slicing destiné à être transformé, écrire <code>chunk = x[i:i+B].copy()</code>
+  si le résultat doit survivre.
+</div>
+
+<h3>6.3 axis, reshape, reductions</h3>
+
+<pre class="code"><code>X = rng.random((4, 3))
+X.sum(axis=0)        # collapse l'axe 0 (lignes) -&gt; (3,)   : par colonne
+X.sum(axis=1)        # collapse l'axe 1 (colonnes) -&gt; (4,) : par ligne
+X.mean(axis=0, keepdims=True)   # (1,3) : garde le nombre d'axes (broadcast-friendly)
+X.reshape(2, 6); X.reshape(-1)  # -1 = "deduis cette dimension" (lecture des strides)
+X.ravel()[::2]                   # vue aplatie, un element sur deux</code></pre>
+
+<h3>6.4 Algèbre : solve, lstsq, SVD et ACP en dix lignes</h3>
+
+<pre class="code"><code># Regle : JAMAIS inv(). solve(A, b) factorise puis resout : 2x plus rapide,
+# numeriquement plus stable (conditionnement), et lstsq gere le rang deficient.
+w = np.linalg.solve(A, B)                       # A w = B
+beta, res, rank, sv = np.linalg.lstsq(X, y, rcond=None)   # moindres carres
+
+# ACP par SVD (donnees centrees) : X = U S V^t, composantes = lignes de V^t
+Xc = X - X.mean(axis=0)
+U, S, Vt = np.linalg.svd(Xc, full_matrices=False)
+Z = U * S                       # projections (scores) sur les composantes
+explained = S**2 / (S**2).sum() # variance expliquee par composante
+k = int(np.searchsorted(np.cumsum(explained), 0.95) + 1)   # garder 95 %
+Zk = Z[:, :k]                   # donnees reduites : le "PCA(n_components=0.95)" de sklearn</code></pre>
+
+<div class="prop">
+  <span class="tag">Rappels essentiels</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>\(\langle u, v\rangle = u^\top v\), \(\|u\| = \sqrt{u^\top u}\)&nbsp;;
+    \(u \perp v \iff u^\top v = 0\)&nbsp;;</li>
+    <li>matrices symétriques&nbsp;: diagonalisables en base orthonormée, valeurs propres réelles — le socle spectral du module Graph ML (Laplacien !)&nbsp;;</li>
+    <li>décomposition en valeurs singulières \(M = U \Sigma V^\top\)&nbsp;: base de l'ACP et des embeddings, inverse généralisé (lstsq), rang&nbsp;;</li>
+    <li>diffusion&nbsp;: \((I - \alpha A)^{-1}\), séries de Neumann \(\sum_k \alpha^k A^k\) — c'est PageRank et les marches aléatoires&nbsp;;</li>
+    <li>stabilité numérique&nbsp;: ne jamais inverser une matrice (<code>np.linalg.solve</code>), soustraire le max avant <code>exp</code> (softmax), travailler en <code>float64</code> pour le calcul scientifique et <code>float32</code> pour l'apprentissage profond.</li>
+  </ul>
+</div>
+
+<h3>6.5 dtypes, précision et promotion</h3>
+
+<pre class="code"><code>a = np.array([1, 2, 3])             # int64 par defaut
+a.dtype, (a / 2).dtype              # int64, float64 : la division promeut
+np.array([1, 2], dtype=np.int32) + np.array([3.0])   # -&gt; float64 (promotion)
+np.int8(127) + np.int8(1)           # -128 : overflow silencieux !
+np.float32(1e8) + 1.0 == np.float32(1e8)   # True : 1 est sous la precision
+# Regles de TP : float64 pour l'analyse, float32 pour le GPU (2x de memoire
+# et de bande passante gagnes), jamais d'entier pour accumuler des moyennes.</code></pre>
+
+<h3>6.6 Vectorisation : benchmark commenté</h3>
+
+<pre class="code"><code># python -m timeit sur une machine de reference (ordres de grandeur) :
+#   boucle triple C[i,j] += A[i,k]*B[k,j]     ~ 2 500 ms
+#   trois boucles avec np.dot par ligne        ~  120 ms
+#   A @ B (BLAS, float64)                       ~    8 ms   # ~300x la boucle naive
+# Moralite : en NumPy, la boucle qui reste en Python est le bug de performance.</code></pre>
+
+<h3>6.7 scipy.sparse : COO, CSR, matvec</h3>
+
+<pre class="code"><code>from scipy import sparse
+# COO : triplets (ligne, colonne, valeur) — constructeur naturel (par arête)
+S = sparse.coo_matrix((data, (rows, cols)), shape=(n, m))
+S = S.tocsr()                        # CSR : parcours par ligne rapide, arithmetic
+y = S @ x                            # matvec : O(nnz), pas O(n*m)
+S.T @ S                              # comptes de co-occurrence (X^t X) creux — NLP
+# Combiner avec le chapitre 5 : A du graphe en CSR, degres = A @ np.ones(n),
+# normalisation D^-1/2 A D^-1/2 : la propagation d'un GNN est un matvec sparse.</code></pre>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 6</p>
+  <ul>
+    <li>Broadcasting : alignement à droite, dimensions 1 répliquées —
+    \((n,1)+(m,) \to (n,m)\) est le pattern «&nbsp;par paires&nbsp;».</li>
+    <li>Vues (slices, reshape) vs copies (indexation avancée) ;
+    <code>np.shares_memory</code> pour diagnostiquer.</li>
+    <li><code>solve</code>/<code>lstsq</code> plutôt que <code>inv</code> ; ACP en dix
+    lignes par SVD ; float64 analyse / float32 GPU.</li>
+    <li>Creux : COO pour construire, CSR pour calculer ; un GNN = produit sparse.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Génie logiciel minimal (OOP, tests, git)</h2>
+
+<h3>7.1 Héritage contre composition</h3>
+
+<div class="note">
+  <span class="tag">Deux relations, un choix</span>
+  <strong>Héritage</strong> («&nbsp;est un&nbsp;») : la sous-classe réutilise et spécialise.
+  <strong>Composition</strong> («&nbsp;a un&nbsp;») : l'objet <em>contient</em> d'autres objets
+  et délègue. Règle professionnelle : préférer la composition, l'héritage pour les
+  <em>interfaces</em> (frameworks). PyTorch illustre les deux :
+  <code>MLP(nn.Module)</code> <em>hérite</em> (le framework appelle vos
+  <code>forward</code>) mais <em>compose</em> ses couches
+  (<code>self.net = nn.Sequential(...)</code>). L'héritage profond (&gt; 3 niveaux) est un
+  marqueur de design fragile ; les GNN de PyG illustrent la bonne hybridation — hériter de
+  <code>MessagePassing</code>, composer des convolutions.
+</div>
+
+<pre class="code"><code># Le squelette que l'on réécrira 50 fois pendant le master
+import torch, torch.nn as nn
+
+class MLP(nn.Module):
+    def __init__(self, d_in, d_hidden, d_out):
+        super().__init__()                    # herite : parameters(), to(), train()
+        self.net = nn.Sequential(             # compose : les couches
+            nn.Linear(d_in, d_hidden), nn.ReLU(),
+            nn.Linear(d_hidden, d_out))
+    def forward(self, x):          # appelé par model(x)
+        return self.net(x)
+
+model = MLP(10, 64, 2)
+x = torch.randn(4, 10)
+assert model(x).shape == (4, 2)    # un test, même minimal, vaut mieux que rien</code></pre>
+
+<h3>7.2 Dunder methods : rendre un objet « natif »</h3>
+
+<pre class="code"><code>class Vec:
+    """Vecteur R^2 minimal illustant les dunder methods."""
+    __slots__ = ("x", "y")
+    def __init__(self, x, y): self.x, self.y = x, y
+    def __repr__(self): return f"Vec({self.x}, {self.y})"     # affichage debug
+    def __eq__(self, o): return (self.x, self.y) == (o.x, o.y)
+    def __hash__(self): return hash((self.x, self.y))          # requis si __eq__
+    def __add__(self, o): return Vec(self.x + o.x, self.y + o.y)
+    def __mul__(self, s): return Vec(self.x * s, self.y * s)
+    def __len__(self): return 2
+    def __getitem__(self, i): return (self.x, self.y)[i]
+
+v = Vec(1, 2); v + Vec(3, 4) * 2      # Vec(7, 10) — Python appelle les dunder
+# PyTorch/TensorFlow reposent entièrement là-dessus : a + b, x @ W, loss.backward()</code></pre>
+
+<h3>7.3 Exceptions : hiérarchie et bonnes pratiques</h3>
+
+<pre class="code"><code># Hiérarchie (extraits) : BaseException &gt; SystemExit, KeyboardInterrupt
+#                            Exception &gt; ArithmeticError &gt; ZeroDivisionError
+#                                        &gt; ValueError, TypeError, KeyError, OSError...
+class DataValidationError(Exception):
+    """Erreur metier : les donnees ne respectent pas le contrat."""
+
+def load_batch(path):
+    try:
+        with open(path, "rb") as f:
+            data = pickle.load(f)
+    except FileNotFoundError as e:
+        raise DataValidationError(f"batch absent : {path}") from e   # chainage
+    except (KeyError, ValueError) as e:
+        raise DataValidationError(f"batch corrompu : {path}") from e
+    return data
+
+# Bonnes pratiques :
+# - attraper le PLUS SPECIFIQUE possible ; jamais "except:" nu (avale Ctrl-C)
+# - "errors should never pass silently... unless explicitly silenced" (Zen)
+# - EAFP : demander pardon (try) plutot que la permission (if) — pythonique</code></pre>
+
+<h3>7.4 Logging, docstrings, pré-commit</h3>
+
+<pre class="code"><code># Logging : niveaux DEBUG &lt; INFO &lt; WARNING &lt; ERROR ; jamais de print en prod
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
+log.info("epoch %d loss %.4f", epoch, loss)   # formatage differe (gratuit si filtre)
+
+def fit(X, y, lr=1e-3, epochs=100):
+    """
+    Entraîne une régression ridge par descente de gradient.
+
+    Parameters
+    ----------
+    X : np.ndarray, shape (n, d)
+        Matrice de caractéristiques.
+    y : np.ndarray, shape (n,)
+        Cibles réelles.
+    lr : float, optional
+        Pas d'apprentissage (default 1e-3).
+    epochs : int, optional
+        Nombre d'itérations (default 100).
+
+    Returns
+    -------
+    w : np.ndarray, shape (d,)
+        Poids ajustés.
+
+    Examples
+    --------
+    &gt;&gt;&gt; w = fit(np.eye(3), np.arange(3.0))
+    """
+    ...
+# Docstrings au format NumPy : exigees dans les rendus du master.
+
+# .pre-commit-config.yaml : qualite automatique a chaque commit
+# repos:
+# - repo: https://github.com/astral-sh/ruff-pre-commit
+#   hooks: [{id: ruff}, {id: ruff-format}]
+# - repo: https://github.com/pre-commit/pre-commit-hooks
+#   hooks: [{id: end-of-file-fixer}, {id: check-yaml}, {id: check-merge-conflict}]</code></pre>
+
+<h3>7.5 Git avancé et revue</h3>
+
+<ul>
+  <li><strong>Branches</strong> : une branche par fonctionnalité (<code>feat/tokenizer</code>),
+  fusion par pull request — jamais de travail direct sur <code>main</code>.</li>
+  <li><strong>Merge vs rebase</strong> : merge conserve l'historique réel (arbre de merges) ;
+  <code>git rebase main</code> rejoue vos commits au sommet — historique linéaire, mais
+  réécrit : ne jamais rebaser une branche partagée. Le <em>rebase interactif</em>
+  (<code>git rebase -i main</code>) nettoie avant partage : squasher les commits de
+  WIP, reworder les messages (<code>feat: ...</code>, <code>fix: ...</code>).</li>
+  <li><strong>Revue de code</strong> : PR courtes, description structurée (quoi/pourquoi/
+  comment tester), relecteur qui vérifie tests et invariants ; le projet transverse M2
+  s'organise ainsi (binômes, protection de branche, CI).</li>
+  <li><strong>Debug historique</strong> : <code>git bisect</code> — dichotomie (chapitre 4&nbsp;!)
+  sur les commits pour trouver celui qui a cassé les tests.</li>
+</ul>
+
+<h3>7.6 Docker : un environnement reproductible</h3>
+
+<pre class="code"><code># Dockerfile minimal pour un TP du master
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN useradd -m student &amp;&amp; chown -R student /app
+USER student
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--no-browser"]
+# docker build -t llga-tp1 . &amp;&amp; docker run -p 8888:8888 llga-tp1
+# Le TP tourne alors a l'identique sur la machine de chaque binome :
+# "works on my machine" n'est plus une excuse recevable.</code></pre>
+
+<div class="note">
+  <span class="tag">Tests (rappel du chapitre 1)</span>
+  pytest avec fixtures, <code>parametrize</code> et invariants (somme des softmax = 1,
+  graphe vide, matrice singulière, texte vide). Un algorithme de GNN non testé sur un toy
+  graph est un algorithme faux ; le squelette «&nbsp;assert shape&nbsp;» du MLP ci-dessus est
+  le niveau minimal exigé dans chaque rendu.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 7</p>
+  <ul>
+    <li>Composition par défaut, héritage pour les interfaces (le duo
+    <code>nn.Module</code>) ; dunder methods = interopérabilité Python.</li>
+    <li>Exceptions : spécifiques, chaînées (<code>raise ... from</code>), jamais
+    <code>except:</code> nu ; logging à la place de print.</li>
+    <li>Docstrings NumPy + pré-commit + PR + revue = le contrat d'équipe ;
+    <code>git bisect</code> = dichotomie sur l'historique.</li>
+    <li>Docker minimal : image <code>slim</code>, requirements, utilisateur non
+    root — reproductibilité des TP.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Algorithmes géométriques et travaux de l'enseignant</h2>
+
+<p>Chapitre nouveau. La géométrie discrète est le socle du <em>geometric deep learning</em>
+et de toute donnée spatiale (nuages de points LiDAR, maillages 3D, cartes). L'enseignant de
+ce module, <strong>Amal Dev Parakkat</strong> (Télécom Paris, Institut Polytechnique de
+Paris), est un spécialiste international de la reconstruction géométrique et de la
+génération de maillages ; ses travaux terminent ce chapitre.</p>
+
+<h3>8.1 Primitives : orientation par produit vectoriel</h3>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Test d'orientation</span>
+  Pour trois points \(A, B, C\) du plan, le signe du déterminant
+  $$\mathrm{orient}(A,B,C) \;=\; \operatorname{signe}\det\begin{pmatrix}
+  B_x - A_x &amp; C_x - A_x \\ B_y - A_y &amp; C_y - A_y \end{pmatrix}$$
+  dit si le chemin \(A \to B \to C\) tourne à gauche (positif), à droite (négatif), ou est
+  aligné (nul) : c'est le produit vectoriel \((B-A) \times (C-A)\) projeté sur l'axe
+  sortant. Coût : trois soustractions, deux multiplications, une comparaison — la brique
+  de <em>tous</em> les algorithmes de ce chapitre.
+</div>
+
+<pre class="code"><code>def orient(a, b, c):
+    """&gt; 0 : contre-montre (gauche) ; &lt; 0 : droite ; = 0 : aligne."""
+    return (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0])</code></pre>
+
+<div class="note">
+  <span class="tag">Précision</span>
+  Le calcul flottant de l'orientation peut <em>mentir</em> pour des points quasi alignés :
+  les implémentations robustes (CGAL) utilisent des prédicats exacts en arithmétique
+  rationnelle pour les cas limites — au master, <code>float64</code> + marge
+  \(\varepsilon\) suffisent aux TP, mais sachez que le sujet existe (cf. module Geometric
+  DL M2 pour les géométries non euclidiennes).
+</div>
+
+<h3>8.2 Enveloppe convexe : Jarvis puis Graham</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 8.2 — Gift wrapping (marche de Jarvis), \(\mathcal{O}(nh)\)</span>
+  Partir du point le plus à gauche ; à chaque étape, choisir parmi tous les points celui qui
+  est «&nbsp;le plus à droite&nbsp;» vu du point courant (minimiser l'angle polaire relativement à
+  la direction précédente) : c'est le prochain sommet de l'enveloppe. S'arrête au retour au
+  départ. \(h\) = nombre de sommets de l'enveloppe : linéaire par sommet produit.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 8.3 — Graham scan, \(\mathcal{O}(n \log n)</span>
+  Trier les points par angle autour d'un pivot (le plus bas), puis parcourir en maintenant
+  une <strong>pile</strong> : si le trio (avant-dernier, dernier, nouveau) tourne à droite,
+  dépiler. À la fin, la pile contient l'enveloppe convexe.
+</div>
+
+<div class="proof">
+  <strong>Invariant :</strong> après le traitement du \(k\)-ième point, la pile contient
+  exactement l'enveloppe convexe des \(k\) premiers points (triés angulairement).
+  Initialisation : les deux premiers points. Conservation : le nouveau point \(p\) est
+  <em>à l'extérieur</em> de l'angle formé au sommet de la pile ; si
+  \(\mathrm{orient}(q_{m-1}, q_m, p) \leq 0\) (tour à droite ou alignement), alors \(q_m\)
+  est <em>à l'intérieur</em> du triangle \((q_{m-1}, p_{\text{suivant eventual}}, p)\) — plus
+  précisément dans le demi-plan convexe balayé — et ne peut pas être un sommet de
+  l'enveloppe de \(\{p_1,\dots,p_k\}\) : le dépiler restaure la convexité ; on répète tant
+  que la pile «&nbsp;tourne à droite&nbsp;». L'alignement (\(=0\)) doit dépiler aussi (point
+  cocyclique sur une arête : garder un seul représentant). Terminaison : chaque point est
+  empilé une fois, dépilé au plus une fois : \(\mathcal{O}(n)\) après le tri
+  \(\mathcal{O}(n\log n)\).
+  <span class="qed">∎</span>
+</div>
+
+<pre class="code"><code>import math
+
+def graham_scan(points):
+    pts = sorted(set(points), key=lambda p: (p[1], p[0]))   # pivot le plus bas
+    pivot = pts[0]
+    rest = sorted(pts[1:],
+                  key=lambda p: math.atan2(p[1]-pivot[1], p[0]-pivot[0]))  # par angle
+    hull = [pivot]
+    for p in rest:
+        while len(hull) &gt;= 2 and orient(hull[-2], hull[-1], p) &lt;= 0:
+            hull.pop()                       # tourne a droite ou aligne : evict
+        hull.append(p)
+    return hull
+
+# test : carre + point interieur
+hull = graham_scan([(0,0), (2,0), (2,2), (0,2), (1,1), (0,1)])
+assert set(hull) == {(0,0), (2,0), (2,2), (0,2)}</code></pre>
+
+<div class="note">
+  <span class="tag">Usages ML</span>
+  L'enveloppe convexe délimite le support d'un nuage : détection d'outliers, calibration
+  de boîtes englobantes, calcul du <em>hull</em> d'embeddings pour visualiser des classes ;
+  les SVM à marge maximale ne dépendent que des points sur ou hors de l'enveloppe des
+  marges (les vecteurs supports) — cf. module Machine Learning. En 3D :
+  <code>scipy.spatial.ConvexHull</code>.
+</div>
+
+<h3>8.3 Paire de points la plus proche</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 8.4 — Diviser pour régner en \(\mathcal{O}(n\log n)\)</span>
+  Tri par abscisse, coupe médiane, récursion sur les deux moitiés (\(d\) = meilleur des
+  deux), puis examen de la <strong>bande</strong> verticale de largeur \(2d\) autour de la
+  médiane : triée par ordonnée, chaque point n'a à être comparé qu'aux \(\leq 7\) suivants
+  (sinon des points de la même moitié seraient plus proches que \(d\), contradiction dans
+  un carré de côté \(d\)). Récurrence \(T(n) = 2T(n/2) + \mathcal{O}(n) = \mathcal{O}(n\log n)\)
+  (théorème 2.2 — encore lui). La force brute est \(\mathcal{O}(n^2)\) : sur \(10^6\) points,
+  une nuit contre une seconde. Usage : déduplication de points LiDAR, matching de
+  keypoints entre deux images.
+</div>
+
+<h3>8.4 Triangulations et Delaunay</h3>
+
+<div class="def">
+  <span class="tag">Définition 8.5 — Triangulation de Delaunay</span>
+  Une triangulation d'un ensemble de points est <em>de Delaunay</em> si pour chaque
+  triangle, son <strong>cercle circonscrit est vide</strong> : aucun autre point du nuage
+  n'est à son intérieur. Le <strong>dual</strong> de la construction est le diagramme de
+  Voronoi (cellules des points plus proches d'un site que de tout autre) : les sites dont
+  les cellules de Voronoi partagent une arête sont reliés dans Delaunay.
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi Delaunay ? Propriétés et algorithme par flips</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Qualité des triangles</strong> : parmi toutes les triangulations, Delaunay
+    <em>maximise le plus petit angle</em> (évite les triangles «&nbsp;ficelle&nbsp;») — d'où
+    son rôle central en éléments finis : des triangles bien conditionnés stabilisent les
+    simulations numériques.</li>
+    <li><strong>Algorithme par flips</strong> : toute arête partagée par deux triangles
+    formant un quadrilatère non convexe-vide peut être <em>flippée</em> (remplacée par
+    l'autre diagonale) pour restaurer la propriété de cercle vide ; l'énergie (somme des
+    angles opposés) augmente strictement à chaque flip, donc le processus converge en un
+    nombre fini de flips — la structure locale dicte la géométrie globale, exactement
+    comme les relaxations locales des chapitres 5 (flux) et du label propagation.</li>
+    <li><strong>Raffinement de Delaunay</strong> (Ruppert, Chew) : insérer itérativement le
+    centre des cercles circonscrits «&nbsp;trop gros&nbsp;» produit des maillages de qualité
+    garantie — la base de la <em>mesh generation</em> industrielle (voir les travaux
+    ci-dessous).</li>
+    <li><strong>En Python</strong> : <code>scipy.spatial.Delaunay</code> (Qhull) ; le graphe
+    de Delaunay d'un nuage de points est un graphe — et l'on retombe sur le chapitre 5 :
+    c'est un candidat naturel de «&nbsp;graphe de proximité&nbsp;» pour un GNN sur données
+    géométriques.</li>
+  </ul>
+</div>
+
+<pre class="code"><code>from scipy.spatial import Delaunay, Voronoi
+import numpy as np
+
+rng = np.random.default_rng(0)
+pts = rng.uniform(0, 1, (200, 2))
+tri = Delaunay(pts)
+print(tri.simplices.shape)        # (~390, 3) : autant de triangles, 3 sommets chacun
+# Graphe de proximite pour un GNN : aretes = aretes des triangles de Delaunay
+edges = set()
+for s in tri.simplices:
+    for i, j in [(0,1), (1,2), (0,2)]:
+        edges.add((min(s[i], s[j]), max(s[i], s[j])))
+print(len(edges), "aretes de proximite")     # cf. modules Graph ML / Advanced GNN M2</code></pre>
+
+<h3>8.5 Les travaux d'Amal Dev Parakkat</h3>
+
+<div class="note">
+  <span class="tag">Publication 1 — Reconnaissance de formes par points (2015)</span>
+  S. Methirumangalath, A. D. Parakkat, R. Muthuganapathy,
+  <a href="https://www.sciencedirect.com/science/article/abs/pii/S0097849315000722">«&nbsp;A
+  unified approach towards reconstruction of a planar point set&nbsp;»</a>, Computers &amp;
+  Graphics, 2015. À partir d'un nuage de points 2D <em>non structuré</em> — sans information
+  de connexité — l'article reconstruit la forme sous-jacente (bord, arêtes vives) en
+  s'appuyant sur la triangulation de Delaunay et des critères géométriques locaux
+  (disques vides). Le point d'entrée du domaine : unir «&nbsp;dot patterns&nbsp;» et
+  «&nbsp;boundary samples&nbsp;» sous une même méthode.
+</div>
+
+<div class="note">
+  <span class="tag">Publication 2 — Détection de trous (SMI 2017)</span>
+  S. Methirumangalath, A. D. Parakkat,
+  <a href="https://perso.telecom-paristech.fr/parakkat/PDF/smi17.pdf">«&nbsp;Hole detection
+  in a planar point set: an empty disk approach&nbsp;»</a>, Shape Modeling International
+  2017. Question : un nuage de points contient-il des <em>trous</em> (régions vides
+  intérieures, pas seulement le bord extérieur) ? Réponse : chercher les grands
+  <strong>disques vides</strong> — l'exact dual de la propriété de cercle vide de Delaunay,
+  appliquée comme <em>détecteur d'anomalie géométrique</em>. Application : contrôle de
+  qualité de maillages, complétude d'un scan.
+</div>
+
+<div class="note">
+  <span class="tag">Publication 3 — Reconstruction de surfaces 3D (Eurographics 2024)</span>
+  A. D. Parakkat et al.,
+  <a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/cgf.15019">«&nbsp;BallMerge:
+  High-quality Fast Surface Reconstruction via Voronoi Balls&nbsp;»</a>, Computer Graphics
+  Forum (Eurographics 2024). Reconstruction d'une surface 3D depuis des points non
+  structurés : la méthode fusionne des <strong>boules de Voronoi</strong> (les duals 3D
+  des cellules de Voronoi) pour reconstruire la surface de manière à la fois rapide et de
+  haute qualité — contre les approches plus lentes type Poisson. Le pipeline complet du
+  chapitre (Delaunay/Voronoi, disques vides, fusion) concentré en un algorithme
+  industriel.
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi ça compte pour ce master</span>
+  Un maillage <em>est</em> un graphe plongé dans l'espace : les travaux de l'enseignant
+  fabriquent exactement les données d'entrée des modules Graph ML (prédiction sur maillages
+  — simulation, CAO) et Geometric DL M2 (réseaux equivariants sur nuages de points) ; la
+  reconstruction de surface est aussi un jumeau géométrique de l'imputation du module
+  Statistics — <em>reconstruire l'information manquante avec des hypothèses de
+  régularité</em>. Sa page (perso.telecom-paristech.fr/parakkat/) liste également ses
+  travaux sur la vectorisation de croquis, la triangulation incrémentale et
+  l'enseignement de la géométrie algorithmique.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 8</p>
+  <ul>
+    <li>Orientation = signe d'un déterminant 2×2 : la brique universelle (prédicat O(1)).</li>
+    <li>Enveloppe convexe : Jarvis \(\mathcal{O}(nh)\), Graham \(\mathcal{O}(n\log n)\)
+    avec invariant de pile «&nbsp;toujours à gauche&nbsp;».</li>
+    <li>Paire la plus proche : bande médiane, \(\leq 7\) comparaisons par point,
+    \(\mathcal{O}(n\log n)\).</li>
+    <li>Delaunay = cercles vides, dual de Voronoi, maximise les angles, flips ; graphe de
+    proximité naturel pour les GNN ; trois publications de l'enseignant à citer
+    (2015, 2017, 2024).</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Complexité.</strong> Classer par complexité croissante&nbsp;:
+  recherche dichotomique, tri fusion, Dijkstra (tas), produit \(A^\top A\), parcours BFS,
+  calcul de toutes les paires de distances. Justifier chaque classe.
+  <div class="sol">Dichotomie \(\mathcal{O}(\log n)\) &lt; BFS \(\mathcal{O}(|V|+|E|)\) (linéaire en
+  la taille du graphe) &lt; tri fusion \(\mathcal{O}(n\log n)\) &lt; Dijkstra
+  \(\mathcal{O}((|V|+|E|)\log|V|)\) (BFS + un facteur tas par extraction) &lt; \(A^\top A\)
+  \(\mathcal{O}(nd^2)\) — pour \(A \in \mathbb{R}^{n\times d}\), chaque colonne rencontre
+  chaque colonne sur \(n\) lignes &lt; paires de distances \(\mathcal{O}(n^2)\) (et
+  \(\mathcal{O}(n^2 d)\) en coût total en dimension \(d\)).</div></li>
+
+  <li><strong>Master theorem.</strong> Résoudre : (a) \(T(n)=2T(n/2)+n\) ; (b)
+  \(T(n)=T(n/9)+n\) ; (c) \(T(n)=7T(n/2)+n^2\) (Strassen-like) ; (d) \(T(n) = 2T(\sqrt n) +
+  \log n\) <em>(indice : poser \(m = \log n\)).</em>
+  <div class="sol">(a) \(\Theta(n\log n)\) (égalité). (b) \(d=1 &gt; \log_9 1 = 0\) :
+  \(\Theta(n)\) (la racine domine). (c) \(\log_2 7 \approx 2{,}81 &gt; 2\) :
+  \(\Theta(n^{2{,}81})\) (les feuilles dominent). (d) \(S(m) = 2S(m/2) + m\) avec
+  \(m = \log n\) : \(\Theta(m\log m) = \Theta(\log n \log\log n)\).</div></li>
+
+  <li><strong>Tableau dynamique.</strong> Si le facteur de croissance était \(c = 1{,}1\)
+  au lieu de 2 (réallocation fréquente), montrer que append reste \(\mathcal{O}(1)\) amorti
+  mais avec une constante ~\(c/(c-1) = 11\) copies par insertion. Quel enseignement pour
+  les <code>list</code> Python ?
+  <div class="sol">Somme des copies : \(n(c^0 + c^{-1} + c^{-2} + \dots) \leq
+  n\frac{c}{c-1}\) (série géométrique de raison \(1/c\)). Avec \(c=1{,}1\) : 11n copies,
+  contre 2n pour \(c=2\) — amorti constant mais constantes 5× pires. D'où le choix de
+  croissances ~1,125 (Python, sur-allocation progressive) à 2 selon les usages :
+  compromis mémoire gaspillée / copies.</div></li>
+
+  <li><strong>Composantes connexes.</strong> Écrire <code>composantes(adj)</code> qui renvoie
+  une liste de composantes (ensembles de sommets) en utilisant DFS. Test sur un graphe à 3
+  composantes dont une réduite à un sommet isolé.
+  <div class="sol">
+<pre class="code"><code>def composantes(adj):
+    seen, comps = set(), []
+    for s in adj:
+        if s in seen: continue
+        comp = dfs(adj, s, visited=set())   # dfs du chapitre 5
+        seen |= comp; comps.append(sorted(comp))
+    return comps
+
+G = {0:[1], 1:[0], 2:[3], 3:[2], 4:[]}
+assert composantes(G) == [[0,1], [2,3], [4]]</code></pre></div></li>
+
+  <li><strong>Chemins de longueur k.</strong> Montrer que \((A^k)_{ij}\) compte les chemins de
+  longueur exactement \(k\) de \(i\) à \(j\) (récurrence sur \(k\)). Vérifier en NumPy sur un
+  petit graphe et conclure sur le coût du comptage exact vs. un produit matriciel sparse.
+  <div class="sol">Récurrence : \((A^{k+1})_{ij} = \sum_l (A^k)_{il} A_{lj}\) : un chemin de
+  longueur \(k+1\) vers \(j\) passe par un avant-dernier sommet \(l\), voisin de \(j\) —
+  on somme sur \(l\). Base \(k=1\) : \(A_{ij}\) = nombre d'arêtes \(i \to j\).
+<pre class="code"><code>A = np.array([[0,1,1,0],[1,0,1,0],[1,1,0,1],[0,0,1,0]])
+assert (np.linalg.matrix_power(A, 2))[0,3] == 1   # un seul chemin de longueur 2</code></pre>
+  Coût : \(k\) produits denses \(\mathcal{O}(n^3)\), ou sparse \(\mathcal{O}(k \cdot
+  \mathrm{nnz} \cdot \bar d)\) — le comptage exact explose avec \(k\), d'où les
+  <em>walks</em> tronqués et l'encodage positionnel des GNN (module Graph ML).</div></li>
+
+  <li><strong>Détection de cycle et tri topologique.</strong> Écrire une fonction détectant si un graphe orienté
+  contient un cycle (couleurs blanc/gris/noir), puis un tri topologique par l'algorithme de Kahn
+  appliqué au workflow&nbsp;: fetch → chunk → embed → index → answer.
+  <div class="sol">
+<pre class="code"><code>def has_cycle(adj, n):
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = [WHITE]*n
+    def visit(u):
+        color[u] = GRAY
+        for v in adj[u]:
+            if color[v] == GRAY: return True        # arete retour =&gt; cycle
+            if color[v] == WHITE and visit(v): return True
+        color[u] = BLACK; return False
+    return any(color[u] == WHITE and visit(u) for u in range(n))
+
+wf = {0:[1], 1:[2], 2:[3], 3:[4], 4:[]}            # fetch -&gt; chunk -&gt; embed -&gt; index -&gt; answer
+assert not has_cycle(wf, 5)
+assert topo_sort(wf, 5) == [0, 1, 2, 3, 4]
+wf[4].append(0)                                      # answer -&gt; fetch : cycle !
+assert has_cycle(wf, 5) and topo_sort(wf, 5) is None</code></pre>
+  L'arête «&nbsp;gris vers gris&nbsp;» caractérise un cycle parce qu'elle remonte dans la pile
+  de récursion : chemin de retour vers un ancêtre.</div></li>
+
+  <li><strong>Anagrammes.</strong> Écrire <code>group_anagrams(words)</code> en
+  \(\mathcal{O}(n\,k\log k)\) via dictionnaire de signatures — et expliquer pourquoi la clé
+  <code>tuple(sorted(w))</code> donne une complexité en moyenne linéaire en \(n\).
+  <div class="sol">
+<pre class="code"><code>from collections import defaultdict
+def group_anagrams(words):
+    groups = defaultdict(list)
+    for w in words:                       # n mots de longueur &lt;= k
+        groups[tuple(sorted(w))].append(w)   # signature : O(k log k), hash O(k)
+    return list(groups.values())
+assert group_anagrams(["chien", "niche", "chine", "chat"]) ==
+       [["chien", "niche", "chine"], ["chat"]]</code></pre>
+  La signature est la même ssi anagrammes ; l'insertion dans <code>defaultdict</code> est
+  \(\mathcal{O}(1)\) <em>en moyenne</em> (table de hachage, section 3.1) après le calcul de
+  la clé \(\mathcal{O}(k \log k)\) : total \(\mathcal{O}(n k \log k)\), la boucle étant
+  linéaire en \(n\) en moyenne.</div></li>
+
+  <li><strong>Générateurs.</strong> Écrire un pipeline à trois générateurs
+  <code>lignes(path) -&gt; tokens -&gt; ngrams(k)</code> produisant les \(k\)-grammes d'un corpus
+  sans jamais charger plus d'une ligne en mémoire. Pourquoi la consommation mémoire
+  est-elle \(\mathcal{O}(k)\)&nbsp;?
+  <div class="sol">
+<pre class="code"><code>def lignes(path):
+    with open(path, encoding="utf-8") as f:
+        yield from f
+
+def tokens(lines):
+    for line in lines:
+        yield from line.lower().split()
+
+def ngrams(toks, k):
+    window = deque(maxlen=k)              # O(k) en memoire, glissement O(1)
+    for t in toks:
+        window.append(t)
+        if len(window) == k:
+            yield tuple(window)
+
+# ngrams(tokens(lignes("corpus.txt")), 3)</code></pre>
+  Chaque étape ne stocke que son état minimal (position de fichier, deque de \(k\)
+  éléments) ; les valeurs transitent une à une : mémoire \(\mathcal{O}(k)\)
+  indépendante du corpus — c'est l'architecture des DataLoader de tokenisation en flux
+  (module NLP).</div></li>
+
+  <li><strong>Décorateur de nouvelle tentative (retry).</strong> Écrire
+  <code>@retry(times=3, delay=0.5)</code> qui relance la fonction décorée en cas d'exception,
+  avec pause exponentielle, et échoue avec la dernière exception. Testez-le sur une fonction
+  qui réussit au troisième tirage (compteur global).
+  <div class="sol">Indications : usine à décorateurs (une fonction qui <em>renvoie</em> le
+  décorateur), <code>functools.wraps</code>, boucle <code>for attempt in range(times)</code>
+  avec <code>try/except Exception</code>, <code>time.sleep(delay * 2**attempt)</code>, et
+  <code>raise</code> après le dernier essai. Le compteur de test valide que le résultat est
+  bien celui de la tentative réussie et que le nombre d'appels vaut 3.</div></li>
+
+  <li><strong>Autocomplétion.</strong> À partir du <code>Trie</code> de la section 3.5, ajouter
+  une pondération (fréquence) aux mots et renvoyer les <code>k</code> complétions les plus
+  fréquentes. Quelle est la complexité d'une complétion&nbsp;?
+  <div class="sol">Descendre le préfixe (\(\Theta(L)\)), puis DFS du sous-arbre collectant
+  les mots terminaux avec leur fréquence, et top-k par tas
+  (\(\Theta(M \log k)\), \(M\) mots du sous-arbre). Total :
+  \(\Theta(L + M\log k)\) — contre \(\Theta(N)\) pour scanner tout le vocabulaire.
+<pre class="code"><code># extension minimale : is_word -&gt; poids (0 = non mot), garder
+# les meilleurs k via heapq.nlargest sur (freq, mot).</code></pre></div></li>
+
+  <li><strong>Filtre de Bloom.</strong> Implémenter le filtre de l'exemple 3.7 avec \(m/n = 12\)
+  bits par élément : quelle valeur de \(k\) choisir, quel taux de faux positifs
+  théorique&nbsp;? Vérifier empiriquement sur 100&nbsp;000 chaînes insérées et 100&nbsp;000
+  absentes.
+  <div class="sol">\(k^\star = (m/n)\ln 2 \approx 8{,}3 \to k = 8\) ;
+  \(p = (1 - e^{-8/12})^8 \approx 4{,}9 \times 10^{-3}\). L'expérience doit donner une
+  proportion de faux positifs proche de 0,5&nbsp;% et <em>zéro</em> faux négatif — c'est
+  la propriété contractuelle du filtre.</div></li>
+
+  <li><strong>Broadcasting.</strong> Prédire (sans exécuter) les formes résultats :
+  (a) \((4,3) + (3,)\) ; (b) \((4,1) + (1,3)\) ; (c) \((4,3) + (4,)\) ; (d)
+  \((2,1,3) + (5,3)\) ; (e) \((6,) + (6,1)\). Laquelle lève une erreur&nbsp;?
+  <div class="sol">(a) \((4,3)\) ; (b) \((4,3)\) — outer sum ; (c) <em>erreur</em> :
+  \((4,)\) s'aligne sur le dernier axe (taille 3) ; (d) \((2,5,3)\) ;
+  (e) \((6,6)\) — le piège ligne/colonne. Corriger (c) avec
+  <code>x[:, None]</code> : \((4,1) + (4,3) \to (4,3)\).</div></li>
+
+  <li><strong>Dijkstra sur grille, puis A*.</strong> Sur une grille 50×50 avec 20&nbsp;% de
+  murs, comparer le nombre de sommets explorés par Dijkstra et par A* (heuristique :
+  distance de Manhattan) entre deux coins opposés. Vérifier que les distances finales
+  coïncident.
+  <div class="sol">Codage : graphe implicite (voisins = 4 directions), tas comme au
+  chapitre 5, compteur d'extractions. A* avec \(h\) = Manhattan (admissible sur grille
+  4-connexe unitaire) développe typiquement ~2× moins de sommets ; les distances
+  coïncident exactement (optimalité). C'est l'expérience qualitative qui justifie A* dans
+  les routiers et les jeux.</div></li>
+
+  <li><strong>Enveloppe convexe.</strong> Implémenter Graham scan (section 8.2) et le tester
+  sur : un carré plus point intérieur, un ensemble colinéaire, un nuage aléatoire de 1&nbsp;000
+  points (comparer à <code>scipy.spatial.ConvexHull</code>).
+  <div class="sol">Cas carré : voir le code de la section 8.2 (assert fourni). Colinéaire :
+  l'éviction en \(\leq 0\) ne garde que les deux extrémités — dégénérescence valide.
+  Aléatoire : les tailles d'enveloppe doivent coïncider avec scipy au nombre de sommets
+  près (points cocycliques sur les arêtes). Pour un tri angulaire robuste, remplacer le
+  <code>atan2</code> par un comparateur à produit en croix avec le pivot
+  (<code>functools.cmp_to_key</code>) : signe exact, pas d'égalités flottantes
+  d'angles.</div></li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>T. Cormen, C. Leiserson, R. Rivest, C. Stein, <em>Introduction to Algorithms</em> (CLRS), 4e éd., MIT Press, 2022 — la bible structures de données + graphes.</li>
+  <li>J. Kleinberg, É. Tardos, <em>Algorithm Design</em>, Pearson, 2005 — la meilleure source d'exercices de modélisation (graphe, greedy, DP).</li>
+  <li>R. Sedgewick, K. Wayne, <em>Algorithms</em>, 4e éd., Addison-Wesley, 2011 — implémentations Java lisibles, transférables en Python.</li>
+  <li>L. Ramalho, <em>Fluent Python</em>, 2e éd., O'Reilly, 2022 — pour les idiomes Python avancés (chapitres 1 et 7).</li>
+  <li>S. Cheng, T. Dey, J. Shewchuk, <em>Delaunay Mesh Generation</em>, CRC Press, 2012 — la référence du chapitre 8 (cercle vide, flips, raffinement).</li>
+  <li><a href="https://docs.python.org/3/tutorial/">The Python Tutorial</a>, <a href="https://numpy.org/doc/stable/user/absolute_beginners.html">NumPy: the absolute basics</a> et <a href="https://docs.pytest.org/">la documentation pytest</a> — à garder ouverts pendant tous les TP.</li>
+  <li>D. Eppstein et al., <a href="https://networkx.org/documentation/stable/tutorial.html">NetworkX tutorial</a> — l'outil graphes utilisé au master.</li>
+  <li>Travaux de l'enseignant (chapitre 8) :
+    <a href="https://www.sciencedirect.com/science/article/abs/pii/S0097849315000722">A unified approach towards reconstruction of a planar point set</a> (Computers &amp; Graphics, 2015) ·
+    <a href="https://perso.telecom-paristech.fr/parakkat/PDF/smi17.pdf">Hole detection in a planar point set: an empty disk approach</a> (SMI 2017) ·
+    <a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/cgf.15019">BallMerge: High-quality Fast Surface Reconstruction via Voronoi Balls</a> (Computer Graphics Forum / Eurographics 2024) ·
+    page de l'enseignant : <a href="https://perso.telecom-paristech.fr/parakkat/">perso.telecom-paristech.fr/parakkat</a>.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p1-refresher-statistics.html"><span class="dir">← Précédent</span> Refresher in Statistics</a>
+  <a class="next" href="m1p1-machine-learning.html"><span class="dir">Suivant</span> Machine Learning</a>
+</nav>
+
 </div>
 </body>
 </html>

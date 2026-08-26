@@ -551,7 +551,442 @@ class GraphormerLayer(nn.Module):
 </div>
 </section>
 
-<!-- A_COMPLETER -->
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Échelle&nbsp;: sampling, systèmes</h2>
+
+<div class="recap">
+  <div class="recap-title">Ce qui est supposé acquis (M1, ch. 7)</div>
+  NeighborSampler (fanouts, voisinage expansif \(1 + s_L(1 + s_{L-1}(\dots))\)),
+  Cluster-GCN (partition METIS, biais de partition), GraphSAINT (sous-graphes + normalisation
+  par couverture sans biais), et le triangle biais/variance/mémoire. Ici&nbsp;: la couche
+  <em>systèmes</em> et l'hygiène expérimentale.
+</div>
+
+<ul>
+  <li><strong>Multi-GPU et partitionnement</strong>&nbsp;: au-delà d'un GPU, partitionner le
+  graphe (METIS/vertex-cut) sur plusieurs machines&nbsp;; les arêtes frontalières sont
+  dupliquées (shadow nodes) — l'entraînement distribué du module Emerging ML s'applique
+  presque tel quel (parameter server vs all-reduce)&nbsp;; PinSage (M1, ch. 6) est la
+  référence industrielle&nbsp;;</li>
+  <li><strong>Caching et pipelining</strong>&nbsp;: l'échantillonnage voisinage est un problème
+  de <em>système</em> (I/O, réutilisation des sous-graphes entre batchs — d'où l'échantillon
+  par importance de PinSage qui fige les portes d'entrée)&nbsp;; les frameworks&nbsp;:
+  DGL, PyG + torch_geometric.sampler, Quiver&nbsp;;</li>
+  <li><strong>Complexités récapitulatives</strong>&nbsp;:
+  <table class="tbl">
+  <thead><tr><th>Méthode</th><th>Mémoire/batch</th><th>Biais</th><th>Notes</th></tr></thead>
+  <tbody>
+  <tr><td>full-batch</td><td>\(\mathcal{O}(|V| + |E|)\)</td><td>aucun</td><td>casse au-delà d'~1M nœuds</td></tr>
+  <tr><td>NeighborSampler</td><td>\(\mathcal{O}(\prod s_l)\)</td><td>variance</td><td>inductif, standard</td></tr>
+  <tr><td>Cluster-GCN</td><td>\(\mathcal{O}(|E|/k)\)</td><td>partition</td><td>profond possible</td></tr>
+  <tr><td>GraphSAINT</td><td>\(\mathcal{O}(|\mathcal{G}_s|)\)</td><td>corrigé</td><td>batchs denses</td></tr>
+  </tbody>
+  </table></li>
+  <li><strong>Benchmarks et hygiène</strong>&nbsp;: OGB (ogbn-arxiv 169k&nbsp;; ogbn-products
+  2,4M&nbsp;; PCQM4M 3,7M molécules), leaderboards publics&nbsp;; le papier «&nbsp;Benchmarking
+  Graph Neural Networks&nbsp;» (Dwivedi et al., 2020/2023) fixe le protocole&nbsp;: mêmes
+  budgets de paramètres, mêmes splits, <em>seeds multiples avec intervalles de
+  confiance</em> — beaucoup de «&nbsp;SOTA&nbsp;» meurent à cette aune&nbsp;; la recherche
+  d'hyperparamètres bayésienne est la règle (les gains &lt;&nbsp;0,5 point exigeant un
+  protocole strict)&nbsp;;</li>
+  <li><strong>Bonne pratique recherche</strong>&nbsp;: toujours publier la variance, tester
+  la significativité (tests appariés sur seeds), et vérifier la <em>fuite</em> (splits
+  temporels pour les graphes dynamiques — ch. 5).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Robustesse et privacy sur graphes</h2>
+
+<div class="thm">
+  <span class="tag">7.1 — Nettack (Zügner et al., 2018)&nbsp;: attaque par gradient, en détail</span>
+  Le scénario&nbsp;: <em>evasion</em> (l'attaquant modifie le graphe au moment du test) sur
+  une cible \(u\) et sa classe \(y_u\)&nbsp;; budget&nbsp;: \(\Delta\) modifications
+  (ajout/retrait d'arêtes, changements de features). Le dilemme de l'attaquant&nbsp;: le
+  modèle n'est pas différentiable <em>en</em> la structure discrète. La solution Nettack&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>entraîner un <em>surrogate</em> linéarisé (GCN à une couche, softmax)&nbsp;; sa
+    sortie \(Z_u(A)\) est alors polynomiale en \(A\) — continue, différentiable&nbsp;;</li>
+    <li><strong>score de première ordre</strong>&nbsp;: pour chaque modification candidate
+    \(\delta\) (flip d'une arête \((a,b)\) ou d'une feature),
+    $$\mathrm{score}(\delta) = -\nabla_{A}\, \mathcal{L}_{att}\big(Z_u(A)\big)\big|_{(a,b)} \cdot \big(\delta_{ab} - A_{ab}\big),$$
+    l'approximation de Taylor du changement de perte (produit du gradient avec la direction
+    du changement)&nbsp;; on retient la modification au score maximal&nbsp;;</li>
+    <li>itérer (modifier, re-score) jusqu'au budget&nbsp;; contraintes de «&nbsp;discrétion&nbsp;»&nbsp;:
+    n'ajouter que des arêtes plausibles (degrés, features communes).</li>
+  </ol>
+  Résultat historique&nbsp;: quelques flips suffisent à retourner la prédiction — et les
+  attaques <em>transfert</em> au vrai GCN (le surrogate suffit). La leçon LLGA&nbsp;: en
+  détection de fraude, l'attaquant <em>connaît</em> le modèle (ou son ombre)&nbsp;; la
+  robustesse est une exigence de conception, pas une option.
+</div>
+
+<div class="thm">
+  <span class="tag">7.2 — Empoisonnement&nbsp;: Meta-Self (Zügner &amp; Günnemann, 2019)</span>
+  Attaque <em>à l'entraînement</em> (poisoning)&nbsp;: le graphe est corrompu <em>avant</em>
+  l'apprentissage. Bilevel&nbsp;:
+  $$\min_{\delta}\ \mathcal{L}_{att}\big(f_{\theta^*}(A + \delta)\big) \quad \text{s.c.} \quad
+  \theta^* = \arg\min_\theta \mathcal{L}_{train}\big(f_\theta(A + \delta)\big),$$
+  résolu par <em>méta-gradient</em>&nbsp;: quelques pas de gradient interne sont déroulés
+  (differentiable), le gradient extérieur remonte à \(\delta\) — la même machinerie que le
+  MAML du module RL/Deep Learning. Variante «&nbsp;self-labeled&nbsp;» (Meta-Self)&nbsp;:
+  l'attaquant contrôle aussi quelques étiquettes. Défenses structurelles&nbsp;: le
+  <strong>pruning</strong> (les arêtes d'attaque sont souvent «&nbsp;suspectes&nbsp;» — grandes
+  distances features)&nbsp;; la <strong>purification</strong> (Pro-GNN&nbsp;: apprendre un
+  graphe propre \(A'\) régularisé proche de \(A\) tout en entraînant le GNN)&nbsp;; le
+  <strong>robust GCN</strong> (RGCN, Zhu et al., 2019)&nbsp;: couches gaussiennes dont la
+  variance absorbe l'attaque + attention sur les voisins fiables.
+</div>
+
+<div class="note">
+  <span class="tag">7.3 — Certification&nbsp;: esquisse</span>
+  Garantir qu'aucune attaque de budget \(\Delta\) ne change la prédiction&nbsp;: par
+  <em>randomized smoothing</em> appliqué aux graphes (majorité sur des graphes bruités par
+  flips aléatoires) ou par bornes spectrales (certificats liés à \(\lambda_{\max}\) du
+  ch. 2 — même monnaie)&nbsp;; l'état de l'art certifie de petits budgets sur des GCN
+  modérés&nbsp;: en pratique, on combine certification partielle + défenses ci-dessus +
+  monitoring (détecter les anomalies d'ajout d'arêtes).
+</div>
+
+<div class="thm">
+  <span class="tag">7.4 — Privacy&nbsp;: node-DP, edge-DP, réidentification</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>edge-DP</strong>&nbsp;: le mécanisme de base est la <em>randomized
+    response</em> — retourner chaque arête avec probabilité \(p\), calibrée pour
+    \((\varepsilon, 0)\)-DP&nbsp;; les requêtes de comptage (combien d'arêtes entre deux
+    groupes&nbsp;?) reçoivent du bruit Laplace sensibilité 1&nbsp;;</li>
+    <li><strong>node-DP</strong>&nbsp;: beaucoup plus dur — la sensibilité explose avec le
+    degré (retirer un nœud retire \(d\) arêtes)&nbsp;; recette&nbsp;: <em>projeter</em> le
+    graphe sur un graphe de degré borné \(k\) (garder les \(k\) voisins «&nbsp;les plus
+    importants&nbsp;»), puis appliquer les mécanismes bord&nbsp;; le prix&nbsp;: biais sur
+    les hubs&nbsp;;</li>
+    <li><strong>réidentification</strong>&nbsp;: les embeddings de graphe (M1, ch. 3) sont
+    des empreintes — re-router un nœud «&nbsp;anonymisé&nbsp;» dans un graphe public par
+    comparaison de voisinages (attaques par degrés, par sous-graphes — l'attaque de
+    Narayanan-Shmatikov transposée)&nbsp;; GraphRAG (M1, ch. 11) agrège des faits
+    dispersés&nbsp;: le risque de réidentification <em>croît</em> avec la qualité du
+    graphe&nbsp;;</li>
+    <li><strong>évaluation</strong>&nbsp;: mesurer trade-off utilité-privacy (AUC vs
+    \(\varepsilon\))&nbsp;; croisement avec le module sécurité des LLMs M2 (injection de
+    prompt sur le KG, fuite par génération).</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">7.5 — Équité structurelle</span>
+  Biais de degré&nbsp;: les nœuds à faible degré (minorités dans les réseaux sociaux,
+  nouveaux clients) sont moins bien prédits — moins de messages = moins de signal&nbsp;;
+  remèdes&nbsp;: features structurelles (RWSE, ch. 3), arêtes virtuelles, ré-échantillonnage
+  par degré, pertes repondérées&nbsp;; question ouverte&nbsp;: l'équité <em>structurelle</em>
+  (communautés) vs <em>individuelle</em> (nœuds) peut entrer en conflit — le pendant exact
+  des tensions fairness du module Optimal Transport (transporter des distributions de
+  nœuds&nbsp;; biais homophilie&nbsp;: un GNN homophile propage les biais des étiquettes).
+</div>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Travaux de l'équipe pédagogique</h2>
+
+<p>Le laboratoire DaSciM (LIX, École Polytechnique — M.&nbsp;Vazirgiannis, J.&nbsp;Lutzeyer)
+est le laboratoire d'accueil du master&nbsp;: ce chapitre étudie en profondeur ses articles,
+en les positionnant <em>par rapport au programme</em>. Les introductions grand public en ont
+été données au M1 (ch. 10)&nbsp;; ici on rentre dans la mécanique.</p>
+
+<div class="thm">
+  <span class="tag">8.1 — Path Neural Networks, en profondeur (Michel, Nikolentzos, Lutzeyer
+  &amp; Vazirgiannis, ICML 2023)</span>
+  <strong>Point de départ</strong>&nbsp;: la couche GNN canonique agrège les voisins à 1 saut
+  (M1, ch. 5)&nbsp;; empiler \(L\) couches revient — quand tout va bien — à agréger des
+  <em>marches</em> de longueur \(L\)&nbsp;; mais (i)&nbsp;les marches <em>répètent</em> des
+  nœuds (retours en arrière — information redondante)&nbsp;; (ii)&nbsp;la composition de
+  couches dégrade (over-smoothing/squashing, ch. 2)&nbsp;; (iii)&nbsp;1-WL — et donc le GNN
+  (th. 1.2) — n'agrège que des multiset de couleurs, sans la <em>séquence</em> du trajet.
+  <strong>L'opérateur de chemins</strong>&nbsp;: pour chaque nœud \(v\), énumérer des chemins
+  <em>simples</em> (sans répétition) partant de \(v\), longueur \(\ell\)&nbsp;; encoder chaque
+  chemin par GRU, agréger&nbsp;:
+  $$m_p = \mathrm{GRU}\big(h_{u_\ell}^{(\ell)}, \mathrm{GRU}(\dots \mathrm{GRU}(h_{u_1}^{(0)}, h_v^{(0)}) \dots )\big), \qquad
+  h_v^{(\ell)} = \mathrm{AGG}\big\{ m_p : p \in \mathcal{P}_v^{(\ell)} \big\}.$$
+  Trois variantes bornent le coût d'énumération&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>PathNN-s</strong> (shortest paths)&nbsp;: \(\mathcal{P}_v\) = plus courts
+    chemins vers toutes destinations (au plus \(n - 1\) chemins, \(\mathcal{O}(n)\) GRU par
+    nœud)&nbsp;; capture les <em>distances</em> — deux nœuds «&nbsp;proches de tout le
+    monde&nbsp;» vs «&nbsp;périphériques&nbsp;» se séparent&nbsp;;</li>
+    <li><strong>PathNN-r</strong> (random walks)&nbsp;: \(\mathcal{P}_v\) = marches
+    échantillonnées — le pont avec DeepWalk/NetMF (M1, ch. 3)&nbsp;;</li>
+    <li><strong>PathNN-n</strong> (neighborhood sampling)&nbsp;: chemins simples échantillonnés
+    localement — le compromis pratique pour les grands graphes.</li>
+  </ul>
+  <strong>Complexité</strong>&nbsp;: \(\mathcal{O}(P \cdot \ell \cdot d^2)\) par nœud
+  (\(P\) chemins échantillonnés) — du même ordre qu'un GAT si \(P \sim \bar d\).
+  <strong>Résultats</strong>&nbsp;: sur la classification de graphes (benchmarks standards
+  dont moléculaires — ZINC et datasets TU), PathNN égale ou dépasse GIN/GCN&nbsp;; sur les
+  tâches où <em>la géométrie des trajets</em> porte le signal (molécules&nbsp;: les chemins
+  sont des chaînes chimiques&nbsp;!), le gain est net. <strong>Positionnement théorique</strong>&nbsp;:
+  les chemins simples emportent des informations que les multiset de marches ignorent
+  (rappel&nbsp;: C6 vs 2C3, exemple 1.4 — les triangles se lisent dans les chemins de
+  longueur 3)&nbsp;; l'agrégation <em>ordonnée</em> par GRU est un cas particulier de la
+  famille «&nbsp;ordre + séquence&nbsp;» de GOAT (ci-dessous)&nbsp;; et PathNN est le sujet
+  d'exercice «&nbsp;papier&nbsp;» (exercice 7).
+</div>
+
+<div class="thm">
+  <span class="tag">8.2 — GOAT (Chatzianastasis, Lutzeyer, Dasoulas &amp; Vazirgiannis, AAAI 2023)</span>
+  Vu au M1 (ch. 10) côté génération&nbsp;; côté expressivité&nbsp;: l'agrégateur invariant
+  \(\mathrm{AGG}\) (th. 1.2-1.3) borne le GNN à 1-WL <em>précisément parce qu'il est
+  invariant</em>&nbsp;; GOAT apprend un <strong>ordre local</strong> par attention
+  (score des voisins par \((h_v, h_u)\), tri), puis traite la séquence par RNN — un
+  modèle de séquence <em>dans</em> le graphe&nbsp;: strictement plus expressif que
+  l'agrégation invariante (il distingue des distributions identiques d'un multiset dès que
+  l'ordre porte du signal), tout en restant équivariant <em>globalement</em> (l'ordre est
+  une fonction apprise des représentations, pas une numérotation externe). Positionnement
+  au M2&nbsp;: une réponse <em>architecturelle</em> à la question du ch. 1 — monter en
+  expressivité sans payer \(\mathcal{O}(n^k)\)&nbsp;; et une réponse au ch. 3 — l'ordre
+  local est un encodage de position <em>appris</em>.
+</div>
+
+<div class="thm">
+  <span class="tag">8.3 — NGG (Evdaimon et al., 2024)&nbsp;: génération latente conditionnée</span>
+  Le pont ch. M1-9 ↔ diffusion&nbsp;: un encodeur GNN projette les graphes dans un espace
+  latent compact&nbsp;; un modèle de diffusion (M1, ch. 9.5 — Multimodal GenAI) y apprend la
+  distribution <em>conditionnée par des features structurelles</em> (spectre, degrés,
+  comptages)&nbsp;; le décodeur régénère des graphes présentant les features demandées.
+  L'intérêt pour le M2&nbsp;: la diffusion <em>latente</em> contourne la discrétisation
+  (diffusion continue dans \(\mathbb{R}^d\) plutôt que sur les catégories de DiGress),
+  et le conditionnement spectral relie la génération au ch. 2 (le spectre commande la
+  communication — ici, il commande la <em>forme</em> des graphes générés).
+  Applications LLGA&nbsp;: données synthétiques fidèles (pré-entraînement&nbsp;!),
+  anonymisation distributionnelle, détection d'anomalies (un graphe réel loin du
+  support latent).
+</div>
+
+<div class="note">
+  <span class="tag">8.4 — Pseudo-code prompting (Skianis, Nikolentzos &amp; Vazirgiannis, 2024)</span>
+  Présenté au M1 (ch. 11) comme outil GraphRAG&nbsp;; la lecture M2&nbsp;: un benchmark de
+  <em>raisonnement algorithmique</em> — les LLMs exécutent mieux des graphes décrits en
+  pseudo-code qu'en langue (gains systématiques)&nbsp;; à relier au neural algorithmic
+  reasoning (ch. 9)&nbsp;: deux façons de faire exécuter des algorithmes sur graphes —
+  par un LLM prompté, ou par un GNN entraîné.
+</div>
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Passerelles LLGA&nbsp;: 3D, raisonnement algorithmique, GNN × LLM</h2>
+
+<div class="thm">
+  <span class="tag">9.1 — Molécules 3D&nbsp;: EGNN et l'équivariance E(n) (Satorras, Hoogeboom
+  &amp; Welling, 2021)</span>
+  Les positions \(x_i \in \mathbb{R}^3\) rendent le graphe moléculaire <em>géométrique</em>&nbsp;;
+  la physique est invariante par rotations/translations (E(3))&nbsp;; un GNN qui respecte
+  cette symétrie <em>par construction</em> apprend mieux avec moins de données (Bronstein
+  et al., la «&nbsp;charte&nbsp;» du Geometric DL). EGNN&nbsp;:
+  $$m_{ij} = \phi_e\big(h_i, h_j, \|x_i - x_j\|^2, e_{ij}\big),$$
+  $$x_i^{(\ell+1)} = x_i^{(\ell)} + C \sum_{j \in \mathcal{N}(i)} (x_i^{(\ell)} - x_j^{(\ell)})\, \phi_x(m_{ij}),$$
+  $$h_i^{(\ell+1)} = \phi_h\big(h_i^{(\ell)}, \textstyle\sum_{j} m_{ij}\big).$$
+  <em>Preuve d'équivariance (esquisse)</em>&nbsp;: sous \(x \mapsto Rx + t\) (\(R\)
+  orthogonale), les distances \(\|x_i - x_j\|\) sont invariantes donc \(m_{ij}\) aussi&nbsp;;
+  le pas de position \(\sum_j (x_i - x_j)\phi_x\) se transforme en
+  \(R \sum_j (x_i - x_j)\phi_x\) — équivariance exacte&nbsp;; le facteur \(C\) borne le pas.
+  Applications&nbsp;: prédiction de propriétés 3D, dynamique moléculaire apprise, <em>génération
+  3D</em> (EDM — diffusion équivariante&nbsp;; le module Geometric DL M2 généralise aux
+  groupes&nbsp;; le M1 ch. 9 couvre la version 2D).
+</div>
+
+<div class="thm">
+  <span class="tag">9.2 — Neural algorithmic reasoning (Veličković et al.)</span>
+  Apprendre à <em>exécuter</em> des algorithmes par GNN&nbsp;: encodage des entrées en graphe
+  (tri&nbsp;: liste = graphe de comparaisons&nbsp;; plus courts chemins&nbsp;: le graphe
+  lui-même), exécution par couches de message passing, décodage des sorties — le
+  <em>black-box</em> remplace le code. Le benchmark CLRS (Veličković et al., ICML 2023) teste
+  l'exécution fidèle d'algorithmes classiques (CLRS = Cormen, Leiserson, Rivest, Stein)&nbsp;;
+  résultats&nbsp;: les processors GNN généralisent à des tailles non vues <em>mieux</em> que
+  les transformers sur certaines familles (induction structurelle)&nbsp;; la leçon LLGA&nbsp;:
+  un algorithme appris est <em>différentiable</em> (on peut l'insérer dans un pipeline
+  entraîné de bout en bout&nbsp;: routing, scheduling, matching) et <em>approximativement
+  robuste</em> (entrées bruitées)&nbsp;; au prix de l'exactitude — le trade-off à maîtriser.
+  Boucle avec le Refresher CS&nbsp;: qu'est-ce qu'un «&nbsp;algorithme appris&nbsp;» peut de
+  plus qu'un algorithme&nbsp;? Répondre&nbsp;: s'entraîner sur des données, s'insérer dans
+  la descente de gradient — et le pseudo-code prompting du ch. 8.4 est le chemin dual
+  (le LLM <em>simule</em> l'exécution&nbsp;; le NAR <em>l'incarne</em>).
+</div>
+
+<div class="thm">
+  <span class="tag">9.3 — GNN × LLM&nbsp;: encoders injectés et benchmarks</span>
+  Trois architectures d'injection (M1, ch. 11.2, approfondies)&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>tokens structurels</strong>&nbsp;: les sorties d'un GNN (embeddings de
+    nœuds/graphes) sont projetées dans l'espace d'embedding du LLM comme des soft
+    tokens&nbsp;; le LLM lit la structure comme une langue&nbsp;;</li>
+    <li><strong>rappel structurel</strong>&nbsp;: le GNN (ou le parcours de graphe) retrouve
+    les faits pertinents, le LLM rédige — le RAG devient «&nbsp;graph-RAG&nbsp;»&nbsp;;
+    dans les deux cas, la question de l'<em>alignement</em> des espaces se pose
+    (contrastif&nbsp;: rapprocher l'embedding GNN du texte qui décrit le même nœud)&nbsp;;</li>
+    <li><strong>LLM-annotateur</strong>&nbsp;: le LLM enrichit les features de nœuds (résumés,
+    types) pour le GNN — le graphe devient text-attribué (le régime «&nbsp;TAG&nbsp;»)&nbsp;;
+    benchmarks&nbsp;: NLGraph (raisonnement sérialisé — M1, ch. 11.2), Talk like a Graph
+    (encodages&nbsp;: aucun ne domine partout), et les suites GraphRAG industrielles.</li>
+  </ul>
+  <strong>GraphRAG industriel</strong> (synthèse&nbsp;; détail au M1, ch. 11)&nbsp;: extraction
+  LLM → graphe d'entités → communautés Leiden + résumés → requêtes locales/globales&nbsp;;
+  le rôle du M2&nbsp;: la <em>qualité du graphe</em> (communautés robustes — ch. 7&nbsp;;
+  complétion KGC — M1 ch. 6) est le goulot du système&nbsp;; la spécialité rare que le
+  master fabrique&nbsp;: à la fois la théorie GNN <em>et</em> le pipeline LLM.
+</div>
+
+<div class="note">
+  <span class="tag">9.4 — Ce que le master attend de vous ici</span>
+  Savoir choisir&nbsp;: MPNN vs transformer (ch. 4), avec ou sans PE (ch. 3), profond ou
+  rewiré (ch. 2), certifié ou non (ch. 7) — et savoir <em>démontrer</em> les théorèmes
+  de ch. 1, reproduire les expériences du ch. 8, et lire un papier du domaine en une
+  heure. C'est le niveau «&nbsp;entrée recherche / R&amp;D avancée&nbsp;».
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>1-WL à la main.</strong> Exécuter 1-WL sur C6 et 2×C3 et vérifier
+  l'indistinguabilité (détailler l'exemple 1.4)&nbsp;; puis sur le graphe
+  «&nbsp;maison&nbsp;» (carré + toit) vs pentagone&nbsp;; conclure sur la famille exacte des
+  paires indiscernables. <em>Corrigé partiel</em>&nbsp;: maison vs pentagone — tous les nœuds
+  de degré 2 sauf le sommet du toit (degré 3)&nbsp;; le pentagone est 2-régulier, la maison
+  non → 1-WL les distingue dès l'itération 1 (couleur initiale = degré)&nbsp;; généralisation&nbsp;:
+  1-WL échoue exactement sur certaines paires de graphes réguliers de même suite de degrés
+  (plus finement&nbsp;: même arbre d'itération&nbsp;; les 2-réguliers connexes = cycles, tous
+  indistinguables entre eux).</li>
+
+  <li><strong>GIN vs GCN.</strong> Montrer que la moyenne n'est pas injective sur les
+  multisets (donner les contre-exemples {a, a, a} vs {a} et {a, a, b, b} vs {a, b}) et que
+  somme+MLP l'est (features discrètes)&nbsp;; vérifier expérimentalement&nbsp;: entraîner GIN
+  et GCN sur une paire 1-WL-indistinguable et mesurer. <em>Corrigé partiel</em>&nbsp;:
+  moyenne&nbsp;: {a, a, a} → a et {a} → a (collision)&nbsp;; somme discrète&nbsp;:
+  encoder a par \(\log 2\), b par \(\log 3\) — \(\{a,a,b,b\} \mapsto 2\log 2 + 2\log 3 =
+  \log 36\) et \(\{a, b\} \mapsto \log 6\) — pas de collision par unicité de la
+  factorisation (th. 1.3)&nbsp;; en pratique, la moyenne s'en sort mieux sur les features
+  réelles continues — discuter pourquoi (variance d'estimation).</li>
+
+  <li><strong>2-GNN minimal.</strong> Implémenter un 2-GNN sur les paires (représentation
+  \(h_{ij}\), messages entre paires adjacentes) et vérifier qu'il sépare C6 et 2C3 (sorties
+  de readout disjointes) là où GIN échoue. <em>Indication</em>&nbsp;: commencer par les
+  couleurs hashées (2-WL exact) avant d'apprendre.</li>
+
+  <li><strong>Over-squashing.</strong> Construire deux «&nbsp;communautés&nbsp;» reliées par
+  un seul nœud-bottleneck&nbsp;; mesurer la performance de classification d'un GCN en
+  fonction de la distance au bottleneck&nbsp;; comparer GPS (ch. 4) et GCN + arêtes
+  virtuelles (DIGL)&nbsp;; tracer \(\lambda_{\max}\) avant/après rewiring.
+  <em>Corrigé partiel (attendu)</em>&nbsp;: gradient de précision avec la distance pour le
+  GCN&nbsp;; GPS quasi uniforme&nbsp;; après DIGL, \(\lambda_{\max}\) baisse de plusieurs
+  pourcents et l'écart se réduit — la courbe \(\lambda_{\max}\) vs précision est le
+  graphique à produire.</li>
+
+  <li><strong>LapEig.</strong> Calculer les 2 premiers vecteurs propres non triviaux du
+  laplacien du graphe du club de karaté&nbsp;; projeter les nœuds&nbsp;; vérifier que la
+  séparation visualisée ≈ la partition réelle&nbsp;; relancer 5 fois et observer les flips
+  de signe&nbsp;; implémenter la correction SignNet (ch. 3.1) et mesurer la stabilité
+  (distance entre encodages de deux exécutions). <em>Corrigé partiel</em>&nbsp;:
+  \(\rho(V) = \mathrm{MLP}(\sum_i \phi(v_i) + \phi(-v_i))\) — la somme des deux parités
+  est invariante par flip&nbsp;; comparer à la baseline «&nbsp;signe fixé par la première
+  composante positive&nbsp;» (instable aux nœuds de valeur quasi nulle).</li>
+
+  <li><strong>RWSE à la main et au code.</strong> Retrouver les calculs de l'exemple 3.2
+  (triangle vs hexagone), puis calculer les RWSE (\(K = 4\)) de tous les nœuds du graphe du
+  club de karaté&nbsp;; montrer que deux nœuds 1-WL-équivalents d'un graphe régulier obtiennent
+  le même RWSE — et expliquer pourquoi c'est une <em>feature</em> (invariance par
+  automorphisme) et un <em>bug</em> (expressivité).</li>
+
+  <li><strong>Graphormer-PE.</strong> Implémenter le biais d'attention par distance de plus
+  court chemin (matrice de distances par BFS&nbsp;; table de biais apprise — squelette au
+  ch. 4.1)&nbsp;; entraîner sur ogbg-molhiv et comparer GCN / GIN / Graphormer-mini&nbsp;;
+  rapporter moyennes ± écarts-types sur 5 seeds. <em>Corrigé partiel</em>&nbsp;: BFS
+  \(\mathcal{O}(n(|V| + |E|))\) par graph — pré-calculer&nbsp;; clamp des distances à 5
+  (loi de pareto des SPD moléculaires)&nbsp;; attendu&nbsp;: petit mais systématique gain
+  du biais SPD sur GCN.</li>
+
+  <li><strong>Temporel.</strong> Sur un dataset TGN standard (Wikipedia/Reddit)&nbsp;:
+  entraîner un TGN (bibliothèque pytorch_geometric.nn.models.TGNMemory ou code du
+  papier)&nbsp;; ablation&nbsp;: retirer la mémoire (garder l'embedding TGAT)&nbsp;; tracer
+  l'AUC de link prediction future en fonction de l'horizon \(\Delta t\).
+  <em>Corrigé partiel (attendu)</em>&nbsp;: la mémoire domine sur les interactions
+  récentes&nbsp;; sans mémoire, l'AUC chute de plusieurs points aux petits \(\Delta t\)
+  (l'information des derniers événements n'est plus compressée).</li>
+
+  <li><strong>Attaque.</strong> Implémenter une attaque par retrait/ajout de \(k\) arêtes
+  ciblant un nœud (gradient sur les arêtes non existantes — ch. 7.1, surrogate
+  linéarisé)&nbsp;; mesurer le taux de flip de prédiction vs budget&nbsp;; tester une
+  défense (RGCN ou entraînement sur graphes perturbés). <em>Corrigé partiel</em>&nbsp;:
+  score = |gradient de la perte d'attaque par arête|&nbsp;; prendre le top-k&nbsp;; le
+  surrogate suffit (transfert)&nbsp;; avec RGCN, le budget nécessaire double environ —
+  jamais zéro&nbsp;; conclure sur la certification (ch. 7.3).</li>
+
+  <li><strong>Edge-DP.</strong> Démontrer que la randomized response (retourner chaque
+  arête avec probabilité \(p\)) est \((\varepsilon, 0)\)-DP avec
+  \(\varepsilon = \log \frac{p}{1-p}\) (analyser les deux mécanismes de sortie par
+  arête)&nbsp;; en déduire le bruit de Laplace équivalent pour un comptage d'arêtes.
+  <em>Corrigé</em>&nbsp;: pour deux graphes voisins en une arête, le rapport de vraisemblance
+  de n'importe quelle sortie borné par \(\frac{p}{1-p}\) (cas défavorable&nbsp;: l'arête
+  retournée)&nbsp;; d'où l'\(\varepsilon\)&nbsp;; comptage&nbsp;: chaque arête contribue
+  Bernoulli(\(1-p\)) vs Bernoulli(\(p\)), la somme de \(m\) Bernoulli a un bruit
+  binomial — approché par Laplace de variance \(m\,p(1-p)\), i.e. échelle
+  \(\sqrt{m\,p(1-p)}\).</li>
+
+  <li><strong>Projet recherche.</strong> Reproduire une expérience d'un article parmi
+  (PathNN / GOAT / GPS / TGN / NGG) sur OGB ou TU&nbsp;; rapport&nbsp;: protocole, seeds,
+  comparaison aux chiffres publiés, analyse d'échec — l'exercice «&nbsp;papier&nbsp;» du M2&nbsp;;
+  pour PathNN&nbsp;: comparer les trois variantes (s/r/n) sur un dataset moléculaire et
+  expliquer la hiérarchie observée via le ch. 8.1.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>K. Xu, W. Hu, J. Leskovec, S. Jegelka, <a href="https://arxiv.org/abs/1810.00826">How Powerful are Graph Neural Networks?</a> (GIN), ICLR 2019.</li>
+  <li>C. Morris et al., <a href="https://arxiv.org/abs/1810.02244">Weisfeiler and Leman Go Neural: Higher-Order Graph Neural Networks</a>, AAAI 2019.</li>
+  <li>C. Morris et al., <a href="https://arxiv.org/abs/2112.09992">Weisfeiler and Lehman Go Machine Learning: The Story so far</a> (survey), Machine Learning journal 2023.</li>
+  <li>U. Alon, E. Yahav, <a href="https://arxiv.org/abs/2006.05205">On the Bottleneck of Graph Neural Networks</a> (over-squashing), ICLR 2021.</li>
+  <li>J. Topping, F. Di Giovanni et al., <a href="https://arxiv.org/abs/2111.14522">Understanding over-squashing and bottlenecks on graphs via curvature</a> (SDRF), ICLR 2022.</li>
+  <li>J. Gasteiger et al., <a href="https://arxiv.org/abs/1911.05485">Diffusion Improves Graph Learning</a> (DIGL), NeurIPS 2021.</li>
+  <li>J. Klicpera et al., <a href="https://arxiv.org/abs/1810.05397">Predict then Propagate: Graph Neural Networks Meet Personalized PageRank</a> (APPNP), ICLR 2019.</li>
+  <li>M. Chen et al., <a href="https://arxiv.org/abs/2007.02133">Simple and Deep Graph Convolutional Networks</a> (GCNII), ICML 2020.</li>
+  <li>L. Rampasek et al., <a href="https://arxiv.org/abs/2205.12454">Recipe for a General, Powerful, Scalable Graph Transformer</a> (GPS), NeurIPS 2022.</li>
+  <li>C. Ying et al., <a href="https://arxiv.org/abs/2106.05234">Do Transformers Really Perform Bad for Graph Representation?</a> (Graphormer), NeurIPS 2021.</li>
+  <li>H. Shirzad et al., <a href="https://arxiv.org/abs/2303.08113">Exphormer: Sparse Transformers for Graphs</a>, ICML 2023.</li>
+  <li>E. Lim et al., <a href="https://arxiv.org/abs/2202.13013">Sign and Basis Invariant Networks for Spectral Graph Representation Learning</a> (SignNet), ICLR 2022.</li>
+  <li>R. Rossi et al., <a href="https://arxiv.org/abs/2006.10637">Temporal Graph Networks</a> (TGN), ICML 2020 (workshop).</li>
+  <li>D. Xu et al., <a href="https://arxiv.org/abs/2002.11698">Inductive Representation Learning on Temporal Graphs</a> (TGAT), ICLR 2020.</li>
+  <li>V. P. Dwivedi et al., <a href="https://arxiv.org/abs/2003.00982">Benchmarking Graph Neural Networks</a>, JMLR 2023 — l'hygiène expérimentale.</li>
+  <li>M. Bronstein et al., <a href="https://arxiv.org/abs/2104.13478">Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, Gauges</a>, 2021.</li>
+  <li>D. Zügner, A. Akbarnejad, S. Günnemann, <a href="https://arxiv.org/abs/1805.07984">Adversarial Attacks on Neural Networks for Graph Data</a> (Nettack), KDD 2018.</li>
+  <li>D. Zügner, S. Günnemann, <a href="https://arxiv.org/abs/1902.08412">Adversarial Attacks on Graph Neural Networks via Meta Learning</a> (Meta-Self), ICLR 2019.</li>
+  <li>D. Zügner, S. Günnemann, <a href="https://arxiv.org/abs/1901.00547">Certifiable Robustness and Stability for Graph Convolutional Networks</a> (RGCN robuste), ICLR 2019.</li>
+  <li>V. Garcia Satorras, E. Hoogeboom, M. Welling, <a href="https://arxiv.org/abs/2102.09844">E(n) Equivariant Graph Neural Networks</a> (EGNN), ICML 2021.</li>
+  <li>G. Michel, G. Nikolentzos, J. F. Lutzeyer, M. Vazirgiannis, <a href="https://arxiv.org/abs/2306.05955">Path Neural Networks: Expressive and Accurate Graph Neural Networks</a>, ICML 2023 — l'article «&nbsp;maison&nbsp;» à présenter.</li>
+  <li>M. Chatzianastasis, J. F. Lutzeyer, G. Dasoulas, M. Vazirgiannis, <a href="https://arxiv.org/abs/2204.05351">Graph Ordering Attention Networks</a> (GOAT), AAAI 2023.</li>
+  <li>I. Evdaimon et al., <a href="https://arxiv.org/abs/2403.01535">Neural Graph Generator: Feature-Conditioned Graph Generation using Latent Diffusion</a> (NGG), 2024.</li>
+  <li>K. Skianis, G. Nikolentzos, M. Vazirgiannis, <a href="https://arxiv.org/abs/2409.17906">Graph Reasoning with Large Language Models via Pseudo-code Prompting</a>, 2024.</li>
+  <li>P. Veličković et al., <a href="https://arxiv.org/abs/2205.15659">The CLRS Algorithmic Reasoning Benchmark</a>, ICML 2023.</li>
+  <li>H. Wang et al., <a href="https://arxiv.org/abs/2305.10037">Can Language Models Solve Graph Problems in Natural Language?</a> (NLGraph), NeurIPS 2023.</li>
+  <li>B. Fatemi, J. Halcrow, B. Perozzi, <a href="https://arxiv.org/abs/2310.04560">Talk like a Graph: Encoding Graphs for Large Language Models</a>, ICLR 2024.</li>
+  <li>G. Bevilacqua et al., <a href="https://arxiv.org/abs/2110.02910">Equivariant Subgraph Aggregation Networks</a> (ESGNN), ICLR 2022.</li>
+  <li>G. Bouritsas et al., <a href="https://arxiv.org/abs/2006.09252">Improving Graph Neural Network Expressivity via Subgraph Isomorphism Counting</a>, IEEE TPAMI 2022.</li>
+  <li>Pour les rappels M1&nbsp;: T. Kipf, M. Welling, <a href="https://arxiv.org/abs/1609.02907">GCN</a> ICLR 2017&nbsp;;
+  J. Qiu et al., <a href="https://arxiv.org/abs/1710.02971">NetMF</a> WSDM 2018&nbsp;;
+  T. Kipf, M. Welling, <a href="https://arxiv.org/abs/1611.07308">Variational Graph Auto-Encoders</a> 2016&nbsp;;
+  W.-L. Chiang et al., <a href="https://arxiv.org/abs/1905.07953">Cluster-GCN</a> KDD 2019&nbsp;;
+  H. Zeng et al., <a href="https://arxiv.org/abs/1907.04931">GraphSAINT</a> ICLR 2020&nbsp;;
+  J. You et al., <a href="https://arxiv.org/abs/1802.08773">GraphRNN</a> ICML 2018&nbsp;;
+  B. Samanta et al., <a href="https://arxiv.org/abs/1802.05283">NeVAE</a> AAAI 2019&nbsp;;
+  C. Vignac et al., <a href="https://arxiv.org/abs/2210.13934">DiGress</a> ICLR 2023.</li>
+  <li><a href="https://www.pyg.org">PyTorch Geometric</a>&nbsp;; <a href="https://ogb.stanford.edu">OGB</a> — TP et benchmarks.</li>
+</ul>
+</section>
+
 
 <nav class="pager">
   <a href="m2-large-language-models.html"><span class="dir">← Précédent</span> Large Language Models</a>
