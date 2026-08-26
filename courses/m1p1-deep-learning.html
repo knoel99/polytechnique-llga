@@ -40,7 +40,7 @@
 <nav class="toc">
   <strong>Plan du module</strong>
   <ol>
-    <li><a href="#ch0">Rappels&nbsp;: dérivation en chaîne et gradients</a></li>
+    <li><a href="#ch0">Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique</a></li>
     <li><a href="#ch1">Du neurone au réseau profond</a></li>
     <li><a href="#ch2">Rétropropagation</a></li>
     <li><a href="#ch3">Optimisation en pratique</a></li>
@@ -48,6 +48,9 @@
     <li><a href="#ch5">Séquences&nbsp;: RNN, LSTM</a></li>
     <li><a href="#ch6">Attention et transformers</a></li>
     <li><a href="#ch7">Modèles génératifs&nbsp;: AE, VAE, GAN</a></li>
+    <li><a href="#ch8">Transfer learning et fine-tuning</a></li>
+    <li><a href="#ch9">Travaux de l'équipe pédagogique</a></li>
+    <li><a href="#ch10">Entraîner en pratique</a></li>
     <li><a href="#ex">Exercices</a></li>
     <li><a href="#refs">Références</a></li>
   </ol>
@@ -55,21 +58,133 @@
 
 <!-- ============================ CH 0 ============================ -->
 <section class="chapter" id="ch0">
-<h2>0. Rappels&nbsp;: dérivation en chaîne et gradients</h2>
+<h2>0. Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique</h2>
+
+<p>Le deep learning est, à 90&nbsp;%, du calcul différentiel appliqué à des fonctions à des
+milliards de paramètres. Ce chapitre consolide les outils du L3 dont nous aurons besoin
+chaque semaine&nbsp;: différentiation de fonctions matricielles, théorème central limite
+(pour comprendre pourquoi la SGD fonctionne) et un peu de stabilité numérique (pour
+comprendre pourquoi les implémentations naïves produisent des <code>NaN</code>).</p>
 
 <div class="recap">
-  <div class="recap-title">Rappels L3 — la seule mécanique dont on a besoin</div>
+  <div class="recap-title">Rappels L3 — la mécanique de base</div>
   <ul style="margin:.4rem 0; padding-left:1.2rem;">
     <li><strong>Règle de la chaîne</strong>&nbsp;: \((g \circ f)'(x) = g'(f(x))\, f'(x)\)&nbsp;; en
-    dimension&nbsp;: \(\nabla (g \circ f)(x) = J_f(x)^\top \nabla g(f(x))\).</li>
-    <li><strong>Produit matriciel</strong>&nbsp;: pour \(z = Wx\), \(\nabla_x \|z\|^2 = 2W^\top W x\)&nbsp;;
-    les gradients «&nbsp;remontent&nbsp;» les opérations par transposées.</li>
-    <li><strong>Dérivées usuelles</strong>&nbsp;: \(\sigma' = \sigma(1-\sigma)\),
-    \(\tanh' = 1 - \tanh^2\), \(\mathrm{ReLU}' = \mathbf{1}_{x&gt;0}\), et
-    \(\nabla \log \hat y_k / \nabla z_j = \hat y_k(\delta_{kj} - \hat y_j)\) (softmax).</li>
-    <li><strong>TCL et SGD</strong>&nbsp;: un mini-batch de taille \(m\) estime un gradient avec
-    une erreur en \(\mathcal{O}(1/\sqrt m)\) — justification statistique de la SGD.</li>
+    dimension&nbsp;: \(\nabla (g \circ f)(x) = J_f(x)^\top \nabla g(f(x))\), où \(J_f\) est la
+    matrice jacobienne \((J_f)_{ij} = \partial f_i / \partial x_j\).</li>
+    <li><strong>Gradient de formes quadratiques</strong>&nbsp;: \(\nabla_x \tfrac12\|Ax - b\|^2 = A^\top(Ax - b)\)
+    et \(\nabla_x x^\top A x = (A + A^\top)x\).</li>
+    <li><strong>Dérivées des activations usuelles</strong>&nbsp;: \(\sigma' = \sigma(1-\sigma)\),
+    \(\tanh' = 1 - \tanh^2\), \(\mathrm{ReLU}' = \mathbf{1}_{x&gt;0}\), et pour le softmax
+    \(\hat y = \mathrm{softmax}(z)\)&nbsp;: \(\partial \hat y_k / \partial z_j = \hat y_k(\delta_{kj} - \hat y_j)\).</li>
+    <li><strong>TCL</strong>&nbsp;: la moyenne de \(m\) variables iid de variance \(\sigma^2\) fluctue
+    autour de son espérance avec un écart-type en \(\sigma/\sqrt m\) (cf. module Refresher Statistics).</li>
   </ul>
+</div>
+
+<h3>0.1 Différentiation de fonctions matricielles</h3>
+
+<p>Les paramètres d'un réseau sont des <em>matrices</em>&nbsp;; il faut savoir dériver par
+rapport à une matrice. La convention la plus commode&nbsp;: le gradient d'une fonction
+\(f : \mathbb{R}^{m \times n} \to \mathbb{R}\) est la matrice \(G\) telle que
+\(f(X + H) = f(X) + \langle G, H\rangle + o(\|H\|)\) avec le produit scalaire de Frobenius
+\(\langle G, H \rangle = \mathrm{tr}(G^\top H)\). Trois identités suffisent pour tout ce cours.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.1 — Identités différentielles utiles</span>
+  Pour \(X \in \mathbb{R}^{m \times n}\), \(a \in \mathbb{R}^m\), \(b \in \mathbb{R}^n\), \(A\) de taille compatible&nbsp;:
+  $$\frac{\partial}{\partial X}\,\mathrm{tr}(A^\top X) = A, \qquad
+  \frac{\partial}{\partial X}\, a^\top X b = a\, b^\top, \qquad
+  \frac{\partial}{\partial X}\, \tfrac12\|X A - B\|_F^2 = (XA - B)A^\top.$$
+</div>
+
+<div class="proof">
+On démontre la seconde (les autres sont identiques). Écrivons \(a^\top X b = \sum_{i,j} a_i X_{ij} b_j = \mathrm{tr}(b a^\top X)\).
+La différentielle est \(d(a^\top X b) = a^\top H b = \langle a b^\top, H\rangle\) pour toute perturbation \(H\),
+donc le gradient (au sens de Frobenius) est \(ab^\top\). Pour la troisième&nbsp;:
+\(f(X) = \tfrac12\|XA - B\|_F^2\), \(df = \langle XA - B,\; HA\rangle = \langle (XA-B)A^\top,\; H\rangle\),
+en utilisant la cyclicité de la trace \(\mathrm{tr}(M^\top H A) = \mathrm{tr}((M A^\top)^\top H)\) avec \(M = XA - B\).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Règle pratique</span>
+  Dans un réseau, «&nbsp;le gradient remonte par les transposées&nbsp;»&nbsp;: si la passe
+  avant contient \(z = Wx\), la passe arrière contient \(\nabla_x = W^\top \nabla_z\) et
+  \(\nabla_W = \nabla_z\, x^\top\). Vérifiez toujours les <em>dimensions</em>&nbsp;:
+  \(\nabla_W\) a la taille de \(W\), \(\nabla_x\) celle de \(x\). C'est le contrôle qualité
+  le plus efficace contre les bugs de backprop.
+</div>
+
+<h3>0.2 TCL et bruit du mini-batch</h3>
+
+<p>Pourquoi optimiser sur des <em>mini-batchs</em> plutôt que sur tout le jeu de données&nbsp;?
+Soit \(\mathcal{D} = (\xi_1, \dots, \xi_N)\) iid et la perte empirique
+\(L(\theta) = \frac1N \sum_i \ell(\theta; \xi_i)\). Le gradient du mini-batch
+\(B = (\xi_{i_1}, \dots, \xi_{i_m})\) est \(\hat g(\theta) = \frac1m \sum_{j=1}^m \nabla_\theta \ell(\theta; \xi_{i_j})\).</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.2 — Le gradient stochastique est un estimateur sans biais de bruit \(1/\sqrt m\)</span>
+  \(\mathbb{E}[\hat g] = \nabla L\) et, si les gradients individuels ont une covariance finie
+  \(\Sigma = \mathrm{Cov}(\nabla \ell(\theta; \xi))\), alors
+  $$\mathrm{Cov}(\hat g) = \frac{1}{m}\,\Sigma.$$
+</div>
+
+<div class="proof">
+Linéarité de l'espérance et tirage uniforme&nbsp;: \(\mathbb{E}[\nabla \ell(\theta;\xi_i)] = \nabla L\).
+Pour la covariance, les tirages sont indépendants&nbsp;:
+\(\mathrm{Cov}(\tfrac1m\sum_j G_j) = \tfrac{1}{m^2}\sum_j \mathrm{Cov}(G_j) = \tfrac1m \Sigma\),
+où \(G_j = \nabla \ell(\theta; \xi_{i_j})\). L'écart-type de l'estimation décroît donc en
+\(\|\Sigma\|^{1/2}/\sqrt m\)&nbsp;: multiplier la taille du batch par 100 ne divise le bruit
+que par 10 — argument économique pour les petits batchs, complété au chapitre 3 (le bruit
+a aussi un effet <em>bénéfique</em> d'exploration).
+<span class="qed">∎</span>
+</div>
+
+<h3>0.3 Stabilité numérique&nbsp;: softmax et l'astuce log-sum-exp</h3>
+
+<p>Le softmax \(\hat y_i = e^{z_i} / \sum_j e^{z_j}\) apparaît dans toutes les pertes
+d'classification et dans l'attention. En précision flottante (float32, max \(\approx 3{,}4 \times 10^{38}\)),
+l'implémentation naïve <em>déborde</em>&nbsp;: \(e^{1000} = \infty\), et
+\(\infty/\infty = \mathrm{NaN}\). L'astuce universelle consiste à soustraire le maximum
+avant d'exponentier.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.3 — Identité log-sum-exp et softmax stable</span>
+  Posons \(\mathrm{LSE}(z) = \log \sum_{j=1}^n e^{z_j}\) et \(m = \max_j z_j\). Alors&nbsp;:
+  $$\mathrm{LSE}(z) = m + \log \sum_{j=1}^n e^{z_j - m}, \qquad
+  m \;\le\; \mathrm{LSE}(z) \;\le\; m + \log n,$$
+  $$\mathrm{softmax}(z)_i = \frac{e^{z_i - m}}{\sum_j e^{z_j - m}},$$
+  et cette dernière forme ne déborde jamais.
+</div>
+
+<div class="proof">
+Factorisation&nbsp;: \(\sum_j e^{z_j} = e^{m} \sum_j e^{z_j - m}\), donc
+\(\mathrm{LSE}(z) = m + \log \sum_j e^{z_j - m}\). Comme \(0 &lt; e^{z_j - m} \le e^0 = 1\)
+et qu'au moins un terme vaut exactement 1 (celui du maximum), la somme vit dans
+\([1, n]\), d'où l'encadrement. Pour le softmax, diviser numérateur et dénominateur par
+\(e^m &gt; 0\) ne change pas la valeur. Stabilité&nbsp;: tous les exposants \(z_i - m \le 0\),
+donc chaque \(e^{z_i - m} \in (0, 1]\)&nbsp;: aucun débordement, et le terme dominant du
+dénominateur vaut exactement 1, si bien que le résultat reste précis même quand les
+autres termes sous-débordent vers 0 (ce qui est inoffensif&nbsp;: le softmax tend
+simplement vers un one-hot).
+<span class="qed">∎</span>
+</div>
+
+<pre class="code"><code>import torch
+
+z = torch.tensor([1000., 1001., 999.])
+# print(torch.softmax(z, 0))          # NaN avec une implementation naive
+print(torch.logsumexp(z, 0))          # 1001.4076 : stable (PyTorch l'applique toujours)
+print(torch.softmax(z - z.max(), 0))  # forme stable : [0.2447, 0.6652, 0.0900]</code></pre>
+
+<div class="note">
+  <span class="tag">Culture numérique</span>
+  Cette section prépare aussi le chapitre 10&nbsp;: la plupart des NaN en entraînement
+  viennent d'un softmax/exposant non protégé, d'un log d'une probabilité nulle (on
+  minimise \(-\log p\) via log-softmax, jamais \(-\log(\mathrm{softmax})\)), ou d'un taux
+  d'apprentissage trop grand. La règle&nbsp;: quand un NaN apparaît, remontez la passe
+  avant couche par couche jusqu'à trouver la première activation infinie.
 </div>
 </section>
 
@@ -83,16 +198,60 @@
   <strong>fonction d'activation</strong> non linéaire. Un <strong>perceptron multicouche</strong>
   de profondeur \(L\) empile&nbsp;:
   $$h^{(0)} = x, \qquad h^{(\ell)} = \sigma\big(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\big), \qquad f_\theta(x) = W^{(L)} h^{(L-1)} + b^{(L)}.$$
-  Sans \(\sigma\), le réseau se réduirait à une unique application affine&nbsp;: la
-  non-linéarité est le prix de l'expressivité.
+  Sans \(\sigma\), le réseau se réduirait à une unique application affine (exercice 2)&nbsp;:
+  la non-linéarité est le prix de l'expressivité. Taille du paramètre&nbsp;:
+  \(|\theta| = \sum_\ell (n_{\ell} n_{\ell-1} + n_\ell)\).
 </div>
 
+<h3>1.1 Le théorème d'approximation universelle</h3>
+
 <div class="thm">
-  <span class="tag">Théorème 1.2 — Approximation universelle (Cybenko, 1989)</span>
-  Toute fonction continue sur un compact peut être approchée uniformément, à \(\varepsilon\)
-  près, par un réseau à <em>une seule couche cachée</em> suffisamment large. Le théorème garantit
-  l'<em>existence</em>, pas le fait qu'on puisse <em>trouver</em> les poids par optimisation&nbsp;:
-  c'est la profondeur (et les données) qui rend l'apprentissage efficace en pratique.
+  <span class="tag">Théorème 1.2 — Approximation universelle (Cybenko, 1989&nbsp;; Hornik, 1991)</span>
+  Soit \(\sigma\) continue et <em>discriminante</em> (elle n'est constante sur aucun
+  intervalle où une mesure signée non triviale s'annule — la sigmoïde et \(\tanh\)
+  conviennent). Alors pour toute \(f \in \mathcal{C}(K)\) sur un compact
+  \(K \subset \mathbb{R}^d\) et tout \(\varepsilon &gt; 0\), il existe
+  \(g(x) = \sum_{j=1}^{J} \alpha_j\, \sigma(w_j^\top x + b_j)\) (une seule couche cachée)
+  telle que \(\sup_{x \in K} |f(x) - g(x)| \le \varepsilon\).
+</div>
+
+<div class="proof">
+Esquisse guidée, en deux temps — la partie (ii) est le cœur technique de Cybenko,
+la partie (i) en donne l'intuition constructive.
+
+<p><strong>(i) Construction par «&nbsp;portes&nbsp;» sigmoïdales (cas unidimensionnel).</strong>
+Soit \(f\) continue sur \([0,1]\). Une sigmoïde raide \(\sigma(k(x-a))\) tend vers
+l'indicatrice \(\mathbf{1}_{x &gt; a}\) quand \(k \to \infty\)&nbsp;; par différence,
+$$\pi_{k}(x) = \sigma(k(x - a)) - \sigma(k(x - b)), \qquad a &lt; b,$$
+tend vers \(\mathbf{1}_{[a,b]}(x)\) (porte). Comme \(f\) est uniformément continue, la
+fonction en escalier \(s_n = \sum_{i} f(t_i)\,\mathbf{1}_{[t_i, t_{i+1})}\) sur une
+subdivision de pas \(1/n\) vérifie \(\|f - s_n\|_\infty \le \omega_f(1/n) \to 0\). En
+remplaçant chaque indicatrice par une porte raide \(\pi_k\) avec \(k\) assez grand
+(l'erreur est concentrée sur deux intervalles de largeur \(\sim 1/k\) autour de \(a\)
+et \(b\), où elle est bornée), on obtient \(\|f - g\|_\infty \le \varepsilon\) avec
+\(g = \sum_i f(t_i)\,\pi_{k,i}\) — une combinaison linéaire finie de sigmoïdes.</p>
+
+<p><strong>(ii) Densité par Hahn–Banach (l'argument général).</strong>
+Soit \(\mathcal{G}\) l'espace vectoriel engendré par les \(x \mapsto \sigma(w^\top x + b)\).
+Supposons que l'adhérence de \(\mathcal{G}\) pour \(\|\cdot\|_\infty\) ne soit pas
+\(\mathcal{C}(K)\). Par le théorème de Hahn–Banach (séparation d'un sous-espace dense
+manquant), il existe une mesure signée finie \(\mu\) non nulle sur \(K\) telle que
+\(\int g \,d\mu = 0\) pour tout \(g \in \mathcal{G}\), donc en particulier
+$$\int_K \sigma(w^\top x + b)\, d\mu(x) = 0 \qquad \forall\, w \in \mathbb{R}^d,\ b \in \mathbb{R}.$$
+Le lemme technique de Cybenko affirme alors que \(\mu = 0\) — contradiction. L'idée du
+lemme&nbsp;: si \(\hat\mu(t) = \int e^{t^\top x} d\mu(x)\) désigne la transformée de Fourier–Laplace
+de \(\mu\), la nullité ci-dessus pour une sigmoïde «&nbsp;assez riche&nbsp;» force
+\(\hat\mu \equiv 0\) sur un ouvert, donc \(\mu = 0\) par injectivité de la transformée de
+Fourier sur les mesures finies.</p>
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Ce que le théorème ne dit pas</span>
+  Il garantit l'<em>existence</em> de bons poids, pas qu'on peut les <em>trouver</em> par
+  optimisation&nbsp;: la preuve construit des sigmoïdes de pente \(k \to \infty\), un régime
+  que la descente de gradient n'explore pas&nbsp;; et le nombre de neurones \(J\) requis
+  peut être exponentiel en \(d\). La profondeur corrige partiellement ce dernier point.
 </div>
 
 <div class="note">
@@ -102,52 +261,172 @@
   factorise les représentations&nbsp;: bords → textures → objets (vision), caractères →
   mots → syntaxe (NLP), voisins → communautés → graphes (Graph ML).
 </div>
+
+<h3>1.2 Initialisation&nbsp;: dérivation de Xavier et He</h3>
+
+<p>Une mauvaise initialisation produit des activations qui explosent ou s'évanouissent
+<em>dès la passe avant</em>. Analysons une couche linéaire
+\(a = Wh\) avec \(h \in \mathbb{R}^{n_{\mathrm{in}}}\), \(W \in \mathbb{R}^{n_{\mathrm{out}} \times n_{\mathrm{in}}}\),
+poids iid centrés de variance \(v_W\), entrées iid centrées de variance \(v_h\),
+indépendantes des poids.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — Variance forward et backward</span>
+  $$\mathrm{Var}(a_i) = n_{\mathrm{in}}\, v_W\, v_h \quad\text{(passe avant)}, \qquad
+  \mathrm{Var}\big[(\nabla_h)_j\big] = n_{\mathrm{out}}\, v_W\, v_\delta \quad\text{(passe arrière, } \nabla_h = W^\top \delta\text{)}.$$
+  Pour conserver la variance dans les deux sens, il faut \(v_W = 1/n_{\mathrm{in}}\) et
+  \(v_W = 1/n_{\mathrm{out}}\) simultanément&nbsp;; le compromis harmonique de Glorot &amp; Bengio (2010) est
+  \(v_W = 2/(n_{\mathrm{in}} + n_{\mathrm{out}})\).
+</div>
+
+<div class="proof">
+Passe avant&nbsp;: \(a_i = \sum_{j=1}^{n_{\mathrm{in}}} W_{ij} h_j\). Les termes sont
+indépendants et centrés, donc la variance de la somme est la somme des variances&nbsp;:
+\(\mathrm{Var}(a_i) = \sum_j \mathrm{Var}(W_{ij})\,\mathrm{Var}(h_j) = n_{\mathrm{in}} v_W v_h\)
+(\(\mathbb{E}[W_{ij}h_j] = \mathbb{E}[W_{ij}]\mathbb{E}[h_j] = 0\)).
+Passe arrière&nbsp;: calcul symétrique sur les colonnes,
+\((\nabla_h)_j = \sum_{i=1}^{n_{\mathrm{out}}} W_{ij} \delta_i\).
+En voulant \(n_{\mathrm{in}} v_W \approx 1\) et \(n_{\mathrm{out}} v_W \approx 1\),
+la moyenne harmonique \(2/(n_{\mathrm{in}}+n_{\mathrm{out}})\) approxime les deux contraintes.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">He (2015) pour ReLU</span>
+  ReLU annule la moitié de ses entrées&nbsp;: si \(h = \mathrm{ReLU}(a)\) avec \(a\) centré,
+  alors \(\mathbb{E}[h^2] = \tfrac12 \mathrm{Var}(a)\). Pour compenser ce facteur \(\tfrac12\),
+  He et al. (2015) proposent \(v_W = 2/n_{\mathrm{in}}\) (et de même
+  \(2/(n_{\mathrm{in}} n_{\mathrm{prev}}^{2})\)-style pour la passe arrière). En pratique&nbsp;:
+  <code>nn.init.kaiming_normal_</code> pour ReLU/GELU, <code>xavier_normal_</code> pour
+  tanh. Enfin, l'initialisation <em>nulle</em> casse la symétrie à jamais&nbsp;: tous les
+  neurones d'une couche recevraient le même gradient et resteraient identiques.
+</div>
+
+<h3>1.3 Fonctions d'activation, comparées</h3>
+
+<table class="tbl">
+<thead><tr><th>Activation</th><th>Définition / dérivée</th><th>Avantages</th><th>Pathologies</th></tr></thead>
+<tbody>
+<tr><td>Sigmoïde</td><td>\(\sigma' = \sigma(1-\sigma) \le \tfrac14\)</td><td>probabilités, portes LSTM</td><td>saturation, gradient max 1/4, non centrée</td></tr>
+<tr><td>tanh</td><td>\(1 - \tanh^2\)</td><td>centrée (Xavier)</td><td>saturation aux extrêmes</td></tr>
+<tr><td>ReLU</td><td>\(\max(0,x)\), dérivée \(\mathbf{1}_{x&gt;0}\)</td><td>dérivée constante 1, sparse, rapide</td><td>dying ReLU&nbsp;: neurone bloqué à 0 si pré-activation toujours négative</td></tr>
+<tr><td>Leaky ReLU</td><td>\(\max(\alpha x, x)\)</td><td>gradient non nul pour \(x&lt;0\)</td><td>hyperparamètre \(\alpha\)</td></tr>
+<tr><td>GELU</td><td>\(x\,\Phi(x) = \tfrac{x}{2}\big(1 + \mathrm{erf}(x/\sqrt2)\big)\)</td><td>lisse, auto-gated, standard transformers</td><td>coût erf (approx. tanh usuelle)</td></tr>
+</tbody>
+</table>
+
+<p>L'approximation usuelle de GELU, utilisée dans BERT/GPT, est
+\(0.5x\big(1 + \tanh\big(\sqrt{2/\pi}\,(x + 0.044715\,x^3)\big)\big)\). On note la
+parenté avec ReLU — GELU pondère \(x\) par la probabilité \(\Phi(x)\) que \(x\) soit
+«&nbsp;activé&nbsp;» selon une gaussienne standard&nbsp;: c'est une porte douce, dérivable en 0.</p>
 </section>
 
 <!-- ============================ CH 2 ============================ -->
 <section class="chapter" id="ch2">
 <h2>2. Rétropropagation</h2>
 
+<h3>2.1 Le théorème et sa preuve</h3>
+
 <div class="thm">
-  <span class="tag">Algorithme 2.1 — Backpropagation</span>
-  Soit \(\mathcal{L}(\theta)\) une perte composée. On définit les
-  <strong> dérivées intermédiaires</strong> \(\delta^{(\ell)} = \partial \mathcal{L} / \partial a^{(\ell)}\)
-  (où \(a^{(\ell)} = W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\)). Alors&nbsp;:
+  <span class="tag">Théorème 2.1 — Rétropropagation (règle de la chaîne sur graphe de calcul)</span>
+  Soit un graphe de calcul acyclique dont les nœuds \(v\) portent des tenseurs, chaque
+  nœud étant une fonction différentiable de ses prédécesseurs, et \(L\) le nœud perte.
+  Pour tout nœud \(v\) autre que \(L\) et de successeurs \(s_1, \dots, s_k\)&nbsp;:
+  $$\frac{\partial L}{\partial v} = \sum_{i=1}^{k} \frac{\partial L}{\partial s_i}\, \frac{\partial s_i}{\partial v},$$
+  avec le cas de base \(\partial L/\partial L = 1\). En particulier, pour un MLP où
+  \(a^{(\ell)} = W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\) et
+  \(\delta^{(\ell)} = \partial \mathcal{L}/\partial a^{(\ell)}\)&nbsp;:
   $$\delta^{(L)} = \nabla_{a^{(L)}} \mathcal{L}, \qquad
-  \delta^{(\ell)} = \big(W^{(\ell+1)\top} \delta^{(\ell+1)}\big) \odot \sigma'(a^{(\ell)}),$$
-  $$\frac{\partial \mathcal{L}}{\partial W^{(\ell)}} = \delta^{(\ell)} \, h^{(\ell-1)\top}, \qquad
+  \delta^{(\ell)} = \big(W^{(\ell+1)\top} \delta^{(\ell+1)}\big) \odot \sigma'(a^{(\ell)}), \qquad
+  \frac{\partial \mathcal{L}}{\partial W^{(\ell)}} = \delta^{(\ell)} \, h^{(\ell-1)\top}, \qquad
   \frac{\partial \mathcal{L}}{\partial b^{(\ell)}} = \delta^{(\ell)}.$$
-  Un unique passage avant + un passage arrière coûtent \(\mathcal{O}(|\theta|)\)&nbsp;: le
-  gradient de <em>tous</em> les poids pour le prix d'environ deux évaluations.
+</div>
+
+<div class="proof">
+Par récurrence descendante sur un ordre topologique inverse (des sorties vers les entrées).
+<strong>Base.</strong> \(\partial L/\partial L = 1\). <strong>Hérédité.</strong> Fixons \(v\)
+et supposons la formule vraie pour tous ses successeurs \(s_i\). Comme le graphe est
+acyclique, \(L\) dépend de \(v\) uniquement à travers les valeurs de \(s_1, \dots, s_k\)&nbsp;;
+en notant \(L = \Psi(s_1(v), \dots, s_k(v))\) localement, la règle de la chaîne
+multivariée donne exactement \(\frac{dL}{dv} = \sum_i \frac{\partial L}{\partial s_i}\frac{ds_i}{dv}\).
+Les formules matricielles du MLP ne sont que l'application coordonnée par coordonnée de
+cette identité&nbsp;; le produit \(W^{(\ell+1)\top}\delta^{(\ell+1)}\) transpose la
+linéarité \(a^{(\ell+1)} = W^{(\ell+1)}h^{(\ell)} + \dots\), et le terme
+\(\odot\,\sigma'(a^{(\ell)})\) vient de \(h^{(\ell)} = \sigma(a^{(\ell)})\) appliquée
+composante par composante.
+<span class="qed">∎</span>
 </div>
 
 <div class="ex">
-  <span class="tag">Exemple 2.2 — Backprop à la main sur deux couches</span>
-  Avec \(\mathcal{L} = \frac12\|y - W_2 \sigma(W_1 x)\|^2\), en posant \(h = \sigma(W_1 x)\) et
-  \(e = W_2 h - y\) :
-  $$\frac{\partial \mathcal{L}}{\partial W_2} = e\, h^\top, \qquad
-  \frac{\partial \mathcal{L}}{\partial W_1} = \big(W_2^\top e\big) \odot \sigma'(W_1 x)\, x^\top.$$
-  Le terme \(W_2^\top e\) est littéralement le gradient qui «&nbsp;passe le message vers
-  l'arrière&nbsp;» — même structure que le message passing des GNN, mais sur le graphe de
-  calcul.
+  <span class="tag">Exemple 2.2 — Backprop à la main sur un graphe de 5 nœuds</span>
+  Prenons \(f(w_1, w_2) = \tfrac12\big(w_2 \tanh(w_1 x) - t\big)^2\) avec
+  \(x = 1{,}5\), \(w_1 = 0{,}3\), \(w_2 = -0{,}8\), \(t = 1\). Nœuds intermédiaires&nbsp;:
+  \(a = w_1 x\), \(h = \tanh(a)\), \(y = w_2 h\), \(\mathcal{L} = \tfrac12(y-t)^2\).
+  <table class="tbl">
+  <thead><tr><th>Passe avant</th><th>valeur</th><th>Dérivées locales</th></tr></thead>
+  <tbody>
+  <tr><td>\(a = w_1 x\)</td><td>\(0{,}45\)</td><td>\(\partial a/\partial w_1 = x = 1{,}5\), \(\partial a/\partial x = w_1\)</td></tr>
+  <tr><td>\(h = \tanh(a)\)</td><td>\(0{,}4219\)</td><td>\(\partial h/\partial a = 1-h^2 = 0{,}8220\)</td></tr>
+  <tr><td>\(y = w_2 h\)</td><td>\(-0{,}3375\)</td><td>\(\partial y/\partial w_2 = h\), \(\partial y/\partial h = w_2\)</td></tr>
+  <tr><td>\(\mathcal{L} = \tfrac12(y-t)^2\)</td><td>\(0{,}8944\)</td><td>\(\partial \mathcal{L}/\partial y = y - t = -1{,}3375\)</td></tr>
+  </tbody>
+  </table>
+  Passe arrière (produits des dérivées locales)&nbsp;:
+  $$\frac{\partial \mathcal{L}}{\partial w_2} = -1{,}3375 \times 0{,}4219 = -0{,}5643, \qquad
+  \frac{\partial \mathcal{L}}{\partial w_1} = \underbrace{(-1{,}3375)(-0{,}8)}_{\partial\mathcal{L}/\partial h = 1{,}0700} \times\; 0{,}8220 \times 1{,}5 = 1{,}3193.$$
+  Le message \(\partial\mathcal{L}/\partial h = 1{,}07\) est littéralement le gradient qui
+  «&nbsp;passe vers l'arrière&nbsp;» à travers la multiplication — même structure que le
+  message passing des GNN, mais sur le graphe de calcul.
 </div>
+
+<h3>2.2 Coût&nbsp;: mémoire, calcul, et comment les réduire</h3>
+
+<ul>
+  <li><strong>Complexité.</strong> Un unique passage avant + un passage arrière coûtent
+  \(\mathcal{O}(|\theta|)\) opérations (à facteur constant près)&nbsp;: le gradient de
+  <em>tous</em> les poids pour le prix d'environ deux évaluations — c'est l'apport décisif
+  du mode inverse (Linnainmaa, 1970&nbsp;; Rumelhart, Hinton &amp; Williams, 1986) par
+  rapport à la différentiation en mode avant, qui exigerait \(|\theta|\) passages.</li>
+  <li><strong>Mémoire.</strong> La passe arrière a besoin des activations <em>de chaque
+  couche</em>&nbsp;: la mémoire croît comme la taille du batch \(\times\) le nombre
+  d'activations, pas comme \(|\theta|\). Pour un transformer, c'est le facteur limitant.</li>
+  <li><strong>Checkpointing</strong> (Griewank&nbsp;; Chen, 2016)&nbsp;: ne stocker qu'une
+  couche sur \(\sqrt L\) et recalculer les intermédiaires manquants lors de la passe
+  arrière — mémoire \(\mathcal{O}(\sqrt L)\) au lieu de \(\mathcal{O}(L)\), pour ~33&nbsp;%
+  de calcul en plus. <code>torch.utils.checkpoint</code>.</li>
+  <li><strong>Précision mixte</strong>&nbsp;: stocker/calculer en float16 ou bfloat16
+  (2× throughput mémoire et tenseurs), en gardant des copies maîtresses float32 des poids
+  et en remontant l'échelle de la perte (<em>loss scaling</em>) pour éviter que les petits
+  gradients s'annulent en fp16. bfloat16 a la même plage d'exposant que fp32 — plus robuste.</li>
+</ul>
 
 <pre class="code"><code>import torch
 
 x, y = torch.randn(8), torch.randn(2)
-W1 = torch.randn(64, 8, requires_grad=True)   # autograd suit les opérations
+W1 = torch.randn(64, 8, requires_grad=True)   # autograd suit les operations
 W2 = torch.randn(2, 64, requires_grad=True)
 
 loss = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
 loss.backward()          # backprop automatique
-print(W1.grad.shape, W2.grad.shape)           # mêmes formes que W1, W2</code></pre>
+print(W1.grad.shape, W2.grad.shape)           # memes formes que W1, W2
+
+# Verification par difference finie (a faire sur tout nouveau gradient custom)
+eps = 1e-6
+with torch.no_grad():
+    W2[0, 0] += eps; lp = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+    W2[0, 0] -= 2 * eps; lm = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+    W2[0, 0] += eps
+print((lp - lm) / (2 * eps), W2.grad[0, 0])   # ~ -0.0723 deux fois</code></pre>
 
 <div class="note">
   <span class="tag">Graphe de calcul</span>
   <code>autograd</code> construit dynamiquement le graphe des opérations (sommets = tenseurs,
-  arêtes = opérations) et applique la règle de la chaîne par differentiation en mode inverse.
+  arêtes = opérations) et applique la règle de la chaîne en differentiation en mode inverse.
   Le deep learning <em>est</em> du calcul sur graphe&nbsp;— la même idée sera appliquée aux
-  données elles-mêmes au module Graph ML.
+  données elles-mêmes au module Graph ML. Et comme le graphe est acyclique par
+  construction, la récurrence du théorème 2.1 s'y exécute toujours sans deadlock&nbsp;;
+  les RNN (chapitre 5) sont «&nbsp;déroulés&nbsp;» dans le temps précisément pour retrouver
+  un graphe acyclique.
 </div>
 </section>
 
@@ -155,67 +434,435 @@ print(W1.grad.shape, W2.grad.shape)           # mêmes formes que W1, W2</code><
 <section class="chapter" id="ch3">
 <h2>3. Optimisation en pratique</h2>
 
+<p>L'entraînement minimise \(\mathcal{J}(\theta) = \mathbb{E}_{(x,y)\sim\mathcal{D}}\big[\ell(f_\theta(x), y)\big]\)
+par descente de gradient <em>stochastique</em>&nbsp;: à chaque pas, le gradient est estimé
+sur un mini-batch (proposition 0.2). Ce chapitre analyse <em>pourquoi</em> chaque ingrédient
+de la recette moderne (momentum, Adam, warmup, normalisation, régularisation) est là.</p>
+
+<h3>3.1 Convergence de la SGD&nbsp;: le cas quadratique, entièrement démontré</h3>
+
+<p>Le modèle-générique de la non-convexité est difficile&nbsp;; le cas quadratique, lui,
+se résout exactement et éclaire tous les autres. Soit
+\(f(\theta) = \tfrac12 \theta^\top A \theta - b^\top \theta\) avec \(A\) symétrique définie
+positive, valeurs propres \(\lambda_1 \ge \dots \ge \lambda_d &gt; 0\), \(\lambda_1 = L\)
+(constante de Lipschitz du gradient), \(\lambda_d = \mu\), conditionnement
+\(\kappa = L/\mu\). Le minimiseur \(\theta^\star = A^{-1}b\) satisfait \(\nabla f(\theta^\star) = 0\),
+et la descente (déterministe pour l'instant) s'écrit
+\(\theta_{k+1} = \theta_k - \eta (A\theta_k - b)\).</p>
+
+<div class="thm">
+  <span class="tag">Théorème 3.1 — Décroissance garantie si et seulement si \(\eta &lt; 2/L\)</span>
+  En posant \(e_k = \theta_k - \theta^\star\)&nbsp;:
+  $$e_{k+1} = (I - \eta A)\, e_k, \qquad \|e_k\| \le \rho^k \|e_0\|, \quad \rho = \max_i |1 - \eta\lambda_i|.$$
+  La convergence a lieu pour tout \(e_0\) si et seulement si \(0 &lt; \eta &lt; 2/L\)&nbsp;; le taux
+  optimal est atteint pour \(\eta = 2/(L+\mu)\) et vaut \(\rho = \frac{\kappa - 1}{\kappa + 1} \approx 1 - \frac{2}{\kappa}\).
+</div>
+
+<div class="proof">
+Comme \(\theta^\star\) est un point fixe de l'itération,
+\(e_{k+1} = \theta_{k+1} - \theta^\star = (I - \eta A)(\theta_k - \theta^\star) = (I-\eta A)e_k\),
+d'où \(e_k = (I - \eta A)^k e_0\). Diagonalisons \(A = Q \Lambda Q^\top\) (orthonormale)&nbsp;:
+\(I - \eta A = Q\,\mathrm{diag}(1 - \eta\lambda_i)\,Q^\top\), donc dans la base propre
+\(\|e_k\|^2 = \sum_i (1-\eta\lambda_i)^{2k} (q_i^\top e_0)^2\). Chaque mode propre se
+contracte de \(|1-\eta\lambda_i|\) par pas. Le maximum \(\rho\) des \(|1 - \eta\lambda_i|\)
+est atteint en \(\lambda_1 = L\) ou \(\lambda_d = \mu\)&nbsp;: on veut \(1 - \eta L &gt; -1\)
+(soit \(\eta &lt; 2/L\)) pour éviter l'expansion des modes raides, et \(\eta\) grand pour
+contracter les modes plats. Le \(\rho(\eta) = \max(|1-\eta L|,\, |1-\eta\mu|)\) minimal
+égalise les deux termes, \(1 - \eta\mu = \eta L - 1\), soit \(\eta = 2/(L+\mu)\) et
+\(\rho = (L-\mu)/(L+\mu)\). Pour \(\kappa \gg 1\), \(\rho \approx 1 - 2/\kappa\)&nbsp;:
+il faut \(\mathcal{O}(\kappa)\) itérations pour diviser l'erreur par une constante.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Lecture pour la suite</span>
+  1)&nbsp;Le pas est borné par les directions <em>raides</em> mais la lenteur vient des
+  directions <em>plates</em>&nbsp;: tout l'art de l'optimisation profonde consiste à
+  décropler ces échelles — momentum (3.2), préconditionnement adaptatif (3.3),
+  normalisation des activations (3.5). 2)&nbsp;En SGD bruitée, le même pas \(2/L\) reste
+  la condition de stabilité, et le bruit résiduel fluctue autour du minimum à une
+  distance proportionnelle à \(\eta\)&nbsp;: décroître \(\eta\) en fin d'entraînement
+  (scheduling) revient à «&nbsp;recuire&nbsp;». 3)&nbsp;Sur les réseaux réels, le paysage
+  est non convexe, mais les points selles — et non les minima locaux — sont l'obstacle
+  principal, et le bruit de la SGD aide justement à les fuir.
+</div>
+
+<h3>3.2 Momentum&nbsp;: taux de convergence</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.2 — SGD avec momentum (boule lourde de Polyak)</span>
+  $$v_{k+1} = \beta v_k + \hat g_k, \qquad \theta_{k+1} = \theta_k - \eta\, v_{k+1}, \qquad \beta \in [0,1),$$
+  avec \(\hat g_k\) l'estimateur mini-batch du gradient. La vitesse \(v\) moyenne
+  exponentiellement les gradients passés&nbsp;: dans une vallée étroite où le gradient
+  alterne \(+g, -g, +g, \dots\) (zigzag), la moyenne s'annule dans la direction de
+  l'oscillation et s'accumule dans la direction de progression.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.3 — Ce que le momentum change, mode par mode</span>
+  Sur le cas quadratique du théorème 3.1 (gradient exact), l'erreur suit
+  \(e_{k+1} = (1 + \beta - \eta\lambda)\, e_k - \beta\, e_{k-1}\). Avec le pas
+  \(\eta = (1-\beta)/L\)&nbsp;: (i)&nbsp;le mode raide \(\lambda = L\) converge comme
+  \((\sqrt\beta)^k\)&nbsp;; (ii)&nbsp;sur un mode plat, le taux effectif est
+  \(1 - \frac{\eta}{1-\beta}\lambda\) — tout se passe comme si le pas était multiplié
+  par \(1/(1-\beta)\) sur les directions lentes sans déstabiliser les raides.
+  L'analyse complète (Polyak, 1964) donne un taux global en
+  \(\mathcal{O}(1 - c/\sqrt\kappa)\) au lieu de \(\mathcal{O}(1 - c/\kappa)\), taux
+  atteint de façon optimale par la variante de Nesterov.
+</div>
+
+<div class="proof">
+Injectons l'itération dans \(e_k\)&nbsp;:
+\(e_{k+1} = e_k - \eta A e_k + \beta(e_k - e_{k-1})\), d'où l'équation aux différences
+annoncée. Par mode propre (\(e_k\) colinéaire au vecteur propre \(q_i\)), les solutions
+sont de la forme \(e_k = z^k q_i\) où \(z\) résout le polynôme caractéristique
+$$z^2 - (1 + \beta - \eta\lambda)\, z + \beta = 0.$$
+Notons \(s = 1 + \beta - \eta\lambda\). Le produit des deux racines vaut \(\beta\).
+
+<p><strong>(i) Modes raides.</strong> Les racines sont complexes conjuguées dès que
+\(s^2 \le 4\beta\), et leur module vaut alors \(\sqrt{\beta}\) (produit = \(\beta\),
+module égal pour deux conjuguées). Avec \(\eta = (1-\beta)/L\) et \(\lambda \le L\), on a
+\(\eta\lambda \le 1-\beta\), donc \(s \in [\,2\beta,\; 1+\beta)\). Pour \(\lambda = L\) :
+\(s = 2\beta\), et \(2\beta \le 2\sqrt\beta\) dès que \(\beta \le 1\) — condition
+satisfaite, le mode raide est amorti de \(\sqrt\beta\) par pas.</p>
+
+<p><strong>(ii) Modes plats.</strong> Pour \(\eta\lambda \ll 1\), cherchons la racine
+proche de 1 sous la forme \(z = 1 - c\,\eta\lambda + o(\eta\lambda)\). En développant
+\(z^2 - sz + \beta = 0\) au premier ordre avec \(s = 1 + \beta - \eta\lambda\)&nbsp;:
+\((1 - 2c\eta\lambda) - (1 + \beta - \eta\lambda)(1 - c\eta\lambda) + \beta
+= \eta\lambda\big(1 - c(1-\beta)\big) + o(\eta\lambda) = 0\), d'où
+\(c = 1/(1-\beta)\) et \(z_+ \approx 1 - \frac{\eta\lambda}{1-\beta}\)&nbsp;: le pas
+effectif des modes plats est \(\eta/(1-\beta)\) — la moyenne glissante amplifie le
+déplacement dans les directions où le gradient est cohérent, alors que (i) montre
+qu'elle borne l'oscillation dans les directions où il alterne.</p>
+<span class="qed">∎</span>
+</div>
+
+<h3>3.3 Adam, dérivé pas à pas</h3>
+
+<div class="thm">
+  <span class="tag">Algorithme 3.4 — Adam (Kingma &amp; Ba, 2014)</span>
+  Pour chaque pas \(t\), avec gradient stochastique \(g_t\), \(\beta_1 = 0{,}9\),
+  \(\beta_2 = 0{,}999\)&nbsp;:
+  $$m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t \quad\text{(moyenne glissante du gradient)},$$
+  $$v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \quad\text{(moyenne glissante des carrés, element-wise)},$$
+  $$\hat m_t = \frac{m_t}{1 - \beta_1^t}, \qquad \hat v_t = \frac{v_t}{1 - \beta_2^t} \quad\text{(correction de biais)},$$
+  $$\theta_{t+1} = \theta_t - \eta\, \frac{\hat m_t}{\sqrt{\hat v_t} + \varepsilon}.$$
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.5 — Pourquoi la correction de biais est exacte</span>
+  Si le gradient est constant \(g_t \equiv g\), alors \(m_t = (1 - \beta_1^t)\, g\) et
+  \(v_t = (1-\beta_2^t)\, g^2\) (élément par élément). La correction divise donc
+  précisément par le facteur de sous-estimation&nbsp;: \(\hat m_t = g\), \(\hat v_t = g^2\).
+</div>
+
+<div class="proof">
+Par récurrence. \(m_t = (1-\beta_1)\sum_{k=1}^{t} \beta_1^{t-k} g_k\). Si \(g_k \equiv g\)&nbsp;:
+\(m_t = (1-\beta_1)\, g \sum_{j=0}^{t-1} \beta_1^{j} = (1-\beta_1)\, g\, \frac{1 - \beta_1^t}{1 - \beta_1} = (1-\beta_1^t)\, g\)
+(somme géométrique). Sans correction, la moyenne glissante partirait de \(m_0 = 0\) et
+sous-estimerait le gradient d'un facteur \(1-\beta_1^t\) — de 90&nbsp;% au pas 1 avec
+\(\beta_1 = 0{,}9\)&nbsp;; le premier pas d'Adam serait ~10× trop petit (et pour \(v\),
+avec \(\beta_2 = 0{,}999\), ~1000× trop petit, ce qui ferait <em>exploser</em> la mise à
+jour \(\hat m/\sqrt{\hat v}\)). Le calcul est identique pour \(v_t\) avec \(g^2\).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Que fait Adam, intuitivement&nbsp;?</span>
+  Si le gradient est constant, \(\hat m_t / \sqrt{\hat v_t} \approx g/|g| = \mathrm{sign}(g)\)&nbsp;:
+  Adam avance d'un pas de taille ~\(\eta\) <em>par coordonnée</em>, indépendamment de
+  l'échelle du gradient — un préconditionneur diagonal qui résout le découplage
+  \(\lambda_{\max}/\lambda_{\min}\) du théorème 3.1. C'est aussi sa faiblesse&nbsp;:
+  le poids des coordonnées «&nbsp;calmes&nbsp;» est relativement amplifié, et le
+  \(\varepsilon\) du dénominateur doit rester petit (\(10^{-8}\)) pour ne pas écraser
+  les petits gradients.
+</div>
+
 <table class="tbl">
 <thead><tr><th>Optimiseur</th><th>Mise à jour</th><th>Notes</th></tr></thead>
 <tbody>
-<tr><td>SGD</td><td>\(\theta \leftarrow \theta - \eta\, \hat g\)</td><td>bruit utile (échappe aux points selles)</td></tr>
-<tr><td>Momentum</td><td>\(v \leftarrow \beta v + \hat g\); \(\theta \leftarrow \theta - \eta v\)</td><td>inertie, amortit les zigzags</td></tr>
-<tr><td>RMSProp</td><td>normalisation adaptative par \(v/v\)</td><td>pas par coordonnée</td></tr>
-<tr><td>Adam</td><td>moments d'ordre 1 et 2 corrigés du biais</td><td>défaut universel&nbsp;; régler <code>lr</code> avant tout</td></tr>
+<tr><td>SGD</td><td>\(\theta \leftarrow \theta - \eta\, \hat g\)</td><td>bruit utile (échappe aux points selles)&nbsp;; \(\eta &lt; 2/L\)</td></tr>
+<tr><td>Momentum</td><td>\(v \leftarrow \beta v + \hat g\); \(\theta \leftarrow \theta - \eta v\)</td><td>inertie, amortit les zigzags (prop. 3.3)</td></tr>
+<tr><td>RMSProp</td><td>normalisation adaptative par \(v\) seul</td><td>pas par coordonnée, sans momentum</td></tr>
+<tr><td>Adam</td><td>moments 1 et 2 corrigés du biais</td><td>défaut universel&nbsp;; régler <code>lr</code> avant tout</td></tr>
+<tr><td>AdamW</td><td>Adam + decay découplé</td><td>voir 3.6 — le standard des transformers</td></tr>
 </tbody>
 </table>
 
+<h3>3.4 Planification du pas et warmup</h3>
+
 <ul>
-  <li><strong>Initialisation</strong>&nbsp;: Xavier/He pour conserver la variance des activations
-  et gradients à travers les couches&nbsp;; l'initialisation nulle casse la symétrie à jamais.</li>
-  <li><strong>Normalisation</strong>&nbsp;: BatchNorm/LayerNorm stabilisent la distribution des
-  activations — LayerNorm est la norme des transformers&nbsp;; <strong>dropout</strong>&nbsp;:
-  masque de Bernoulli à l'entraînement, moyenné à l'inférence (régularisation).</li>
-  <li><strong>Planification du pas</strong>&nbsp;: warmup + décroissance (cosine)&nbsp;;
-  <strong>weight decay</strong> = ridge sur les poids&nbsp;; <strong>early stopping</strong> sur
-  la perte de validation — la régularisation la moins chère.</li>
-  <li><strong>Sur-apprentissage</strong>&nbsp;: apprendre par cœur le train (gap train/test).
-  Remèdes&nbsp;: données, augmentation, dropout, decay, early stopping — dans cet ordre de
-  rentabilité.</li>
+  <li><strong>Warmup</strong> (linéaire de 0 à \(\eta\) sur quelques centaines/milliers de
+  pas)&nbsp;: au tout début de l'entraînement, les features sont aléatoires et les
+  premiers gradients ont une grande norme&nbsp;; de plus, la correction de biais de
+  \(\hat v_t\) (prop. 3.5) divise par \(1 - \beta_2^t\), qui varie vite quand \(t\) est
+  petit — le rapport \(\hat m/\sqrt{\hat v}\) est alors très bruité. Un petit pas au
+  départ laisse les statistiques se mettre en place. Les architectures pre-norm
+  (chapitre 6) réduisent fortement ce besoin.</li>
+  <li><strong>Décroissance</strong>&nbsp;: cosine \(\eta_t = \eta_{\min} + \tfrac12(\eta - \eta_{\min})(1 + \cos(\pi t/T))\),
+  ou paliers (\(\times 1/10\)). Motif quadratique (théorème 3.1)&nbsp;: proche du minimum,
+  un pas trop grand fait orbiter le bruit de SGD autour de la solution — diminuer \(\eta\)
+  divise le rayon d'oscillation.</li>
+  <li><strong>LR range test</strong> (Smith, 2015)&nbsp;: faire croître \(\eta\)
+  géométriquement sur une époque et tracer la perte&nbsp;; le \(\eta\) optimal se situe
+  juste avant le minimum de cette courbe (chapitre 10).</li>
 </ul>
+
+<h3>3.5 BatchNorm et LayerNorm</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.6 — BatchNorm (Ioffe &amp; Szegedy, 2015) et LayerNorm (Ba et al., 2016)</span>
+  BatchNorm normalise chaque <em>feature</em> sur le batch (\(j\)-ième coordonnée des
+  activations, pour un batch de taille \(m\))&nbsp;:
+  $$\hat h_{ij} = \frac{h_{ij} - \mu_j}{\sqrt{\sigma_j^2 + \varepsilon}}, \qquad
+  \mu_j = \frac1m \sum_i h_{ij}, \quad \sigma_j^2 = \frac1m \sum_i (h_{ij} - \mu_j)^2, \qquad
+  y_{ij} = \gamma_j \hat h_{ij} + \beta_j.$$
+  À l'inférence, \(\mu, \sigma\) sont des moyennes mobiles figées. LayerNorm normalise
+  chaque <em>exemple</em> sur ses features (mêmes formules, mais les moyennes sont prises
+  sur \(j\) à \(i\) fixé)&nbsp;: indépendant du batch, c'est la norme des transformers.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.7 — Invariance de reparamétrisation</span>
+  BatchNorm rend la sortie de la couche invariante quand on remplace \(W\) par \(cW\)
+  et \(b\) par \(cb\) (\(c &gt; 0\))&nbsp;: les statistiques deviennent \(c\mu, c^2\sigma^2\),
+  et \(\hat h\) est inchangé. L'effet scalaire est absorbé par \(\gamma\).
+</div>
+
+<div class="proof">
+Si \(h' = cWh + cb = c\,h\), alors \(\mu' = c\mu\), \({\sigma^2}' = c^2\sigma^2\) et
+\(\hat h' = (ch - c\mu)/\sqrt{c^2\sigma^2 + \varepsilon}\). Pour \(\varepsilon\) petit
+devant \(\sigma^2\), \(\hat h' \approx c(h-\mu)/(c\sigma) = \hat h\). Le gradient de la
+perte par rapport à l'échelle \(c\) des poids est alors ~nul&nbsp;: l'optimisation ne
+«&nbsp;gaspille plus&nbsp;» de capacité à corriger l'échelle des activations, seulement
+leur direction.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">La polémique ICS</span>
+  L'explication historique — «&nbsp;réduire le covariate shift interne&nbsp;» — a été
+  largement démontée par Santurkar et al. (2018)&nbsp;: BatchNorm fonctionne surtout
+  parce qu'il <em>reparamétrise</em> le problème de façon lipschitzienne (paysage de
+  perte plus lisse, gradients mieux conditionnés), pas parce qu'il stabilise des
+  distributions. Conséquences pratiques&nbsp;: BatchNorm exige des batchs assez grands
+  (les statistiques deviennent bruitées sinon) et se comporte mal en inférence avec des
+  batchs de taille 1&nbsp;; LayerNorm n'a pas ces dépendances. Dans les transformers,
+  LayerNorm s'applique avant chaque sous-bloc (pre-norm, chapitre 6).
+</div>
+
+<h3>3.6 Régularisation&nbsp;: le tour complet</h3>
+
+<ul>
+  <li><strong>Dropout</strong> (Srivastava et al., 2014)&nbsp;: à l'entraînement, chaque
+  activation est multipliée par un masque \(M_j \sim \mathrm{Bernoulli}(1-p)\) iid puis
+  divisée par \(1-p\) («&nbsp;inverted&nbsp;»)&nbsp;; à l'inférence, identité.
+  <em>Preuve que l'espérance est préservée</em>&nbsp;:
+  \(\mathbb{E}[M_j/(1-p)] = 1\), donc \(\mathbb{E}[\tilde h_j] = h_j\) — aucun scaling
+  n'est nécessaire au test. Interprétation ensembliste&nbsp;: chaque masque définit un
+  sous-réseau&nbsp;; l'entraînement échantillonne \(2^{n}\) architectures partageant leurs
+  poids, et l'inférence moyenne approxime leur consensus (l'approximation exacte du
+  «&nbsp;mean network&nbsp;» vaut pour un seul bloc linéaire final&nbsp;; Gal &amp;
+  Ghahramani, 2016, en font une lecture bayésienne, cf. module Emerging ML).</li>
+  <li><strong>Weight decay</strong> \(\tfrac{\lambda}{2}\|\theta\|^2\)&nbsp;: SGD + decay
+  donne \(\theta \leftarrow (1 - \eta\lambda)\theta - \eta \hat g\) — rétrécissement
+  multiplicatif à chaque pas (ridge implicite). <strong>AdamW</strong> (Loshchilov &amp;
+  Hutter, 2017) applique le decay <em>directement</em> aux poids et non à travers le
+  préconditionneur d'Adam&nbsp;: via \(\hat m/\sqrt{\hat v}\), le decay subirait une
+  normalisation par coordonnée qui le rend inégal&nbsp;; découplé, il redevient une
+  ridge homogène. C'est le standard des transformers (typiquement \(\lambda \sim 10^{-2}\),
+  bien plus grand qu'à l'époque SGD).</li>
+  <li><strong>Label smoothing</strong> \(\varepsilon \in [0{,}05, 0{,}2]\)&nbsp;: la
+  cible devient \(q_k = (1 - \varepsilon)\,\mathbf{1}[k = y] + \varepsilon/K\). La perte
+  croisée pénalise \(-\log p_k \to \infty\) quand \(p_k \to 0\)&nbsp;: une cible dure
+  pousse le modèle vers \(\log p^\star \to \infty\) (surconfiance), la cible lissée borne
+  l'optimum à \(p^\star = q &lt; 1\) et améliore la calibration.</li>
+  <li><strong>Data augmentation</strong>&nbsp;: injecter les invariances connues
+  (rotations/recadrages en vision, synonymes en NLP) — la régularisation la moins chère
+  en paramètres&nbsp;; elle agit sur la <em>donnée</em>, pas sur le modèle.</li>
+  <li><strong>Early stopping</strong>&nbsp;: arrêter quand la perte de validation
+  remonte — une régularisation au coût de calcul nul, équivalente à une pénalisation
+  implicite de la norme (cf. module Machine Learning, biais-variance).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Sur-apprentissage, ordre de rentabilité</span>
+  Diagnostic&nbsp;: gap train/validation qui s'ouvre alors que le train descend.
+  Remèdes dans l'ordre&nbsp;: 1) plus de données / augmentation, 2) augmentation,
+  3) dropout, 4) weight decay, 5) réduire le modèle en dernier recours. Un modèle qui
+  ne peut pas sur-apprendre un petit batch (chapitre 10) est souvent trop petit ou mal
+  câblé — la capacité de sur-apprentissage est d'abord un <em>test de santé</em>.
+</div>
 </section>
 
 <!-- ============================ CH 4 ============================ -->
 <section class="chapter" id="ch4">
 <h2>4. Réseaux convolutifs (CNN)</h2>
 
+<h3>4.1 Convolution discrète&nbsp;: définition générale et arithmétique des dimensions</h3>
+
 <div class="def">
-  <span class="tag">Définition 4.1 — Convolution discrète</span>
-  $$(x * k)(u) = \sum_{v} x(u - v)\, k(v)$$
-  La même filtre \(k\) (petit, ex.&nbsp;3×3) est appliqué en tout point&nbsp;:
-  <strong>poids partagés</strong> ⇒ invariance par translation et \(\#\)paramètres indépendant
-  de la taille d'image. En pratique&nbsp;: Conv → non-linéarité → pooling, empilés&nbsp;;
-  backprop = convolution par le noyau retourné.
+  <span class="tag">Définition 4.1 — Convolution 1D avec stride, padding, dilation</span>
+  Pour une entrée \(x\) de longueur \(I\), un noyau \(k\) de longueur \(K\), le stride
+  \(s \in \mathbb{N}^*\), le padding \(p\) (zéros ajoutés de chaque côté) et la dilation
+  \(d\) (écart entre les taps du noyau)&nbsp;:
+  $$(x * k)(u) = \sum_{j=0}^{K-1} x(u + d j - d(K-1))\; k(K{-}1{-}j),$$
+  la sortie étant échantillonnée aux positions \(u = u_0 + s\,t\), \(t = 0, 1, 2, \dots\)
+  En 2D, la même formule s'applique sur chaque axe (noyau \(K_1 \times K_2\)). Le même
+  filtre est appliqué en tout point&nbsp;: <strong>poids partagés</strong> ⇒ invariance
+  par translation et nombre de paramètres indépendant de la taille d'image —
+  \(\#\)params \(= C_{\mathrm{in}} K_1 K_2 C_{\mathrm{out}} + C_{\mathrm{out}}\).
 </div>
 
-<ul>
-  <li><strong>Réceptive field</strong>&nbsp;: chaque couche agrandit le champ de vision&nbsp;;
-  en profondeur, les couches basses codent des bords, les hautes des concepts (visualisation
-  des features).</li>
-  <li><strong>Architecture historique</strong>&nbsp;: LeNet-5 → AlexNet (2012, ImageNet) →
-  VGG → ResNet&nbsp;: les connexions résiduelles \(h^{(\ell+1)} = h^{(\ell)} + F(h^{(\ell)})\)
-  rendent l'identité facile à apprendre et permettent des centaines de couches. On retrouvera
-  <em>exactement</em> ces residuals dans les transformers et les GNN (skip connections du
-  message passing).</li>
-</ul>
+<div class="thm">
+  <span class="tag">Théorème 4.2 — Formule de dimension de sortie (et preuve)</span>
+  $$O = \left\lfloor \frac{I + 2p - d(K-1) - 1}{s} \right\rfloor + 1.$$
+</div>
+
+<div class="proof">
+Avec le padding \(p\), l'entrée effective a des indices valides dans
+\([-p,\, I - 1 + p]\). Une position de sortie \(t\) place le <em>premier</em> tap du
+noyau en \(u = s\,t - p\) et le dernier en \(u + d(K-1)\)&nbsp;; la convolution n'est
+définie que si <em>tous</em> les taps tombent dans les indices valides&nbsp;:
+\(s t - p \ge 0\) et \(s t - p + d(K-1) \le I - 1\). Le nombre de pas \(t\) autorisés
+est donc le nombre d'entiers dans
+\(\big[0,\; \frac{I - 1 + p - d(K-1)}{s}\big]\), c'est-à-dire
+\(\lfloor (I + 2p - d(K-1) - 1)/s \rfloor + 1\) (longueur d'un intervalle discret
+\([0, n]\) = \(n + 1\), avec partie entière pour l'alignement au stride).
+<span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.3 — Vérifications immédiates</span>
+  Conv 3×3, padding 1, stride 1 (\(I=I'\))&nbsp;: \(\lfloor (I + 2 - 2 - 1)/1 \rfloor + 1 = I\).
+  Downsampling /2 avec 3×3, padding 1&nbsp;: \(\lfloor (I + 2 - 2 - 1)/2 \rfloor + 1 = \lfloor (I-1)/2 \rfloor + 1\)
+  (pour \(I = 224\) (ImageNet)&nbsp;: 112). Deux conv 3×3 (stride 1) ont le même champ
+  qu'une conv 5×5 pour \(\sim\)2,7× moins de paramètres et plus de non-linéarité —
+  l'argument de VGG.
+</div>
+
+<h3>4.2 Champ réceptif</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.4 — Champ réceptif, formule par induction</span>
+  Pour des couches convolutives de noyaux \(k_\ell\), strides \(s_\ell\) (dilation 1),
+  le champ réceptif d'une unité de la couche \(\ell\) vaut
+  $$\mathrm{RF}_1 = k_1, \qquad \mathrm{RF}_\ell = \mathrm{RF}_{\ell-1} + (k_\ell - 1)\prod_{i &lt; \ell} s_i.$$
+</div>
+
+<div class="proof">
+Par récurrence. <em>Initialisation</em>&nbsp;: une unité de la couche 1 lit \(k_1\) pixels.
+<em>Hérédité</em>&nbsp;: soit \(\Delta_{\ell}\) la distance (en pixels de l'entrée) entre
+les champs réceptifs de deux unités <em>adjacentes</em> de la couche \(\ell\).
+Clairement \(\Delta_1 = s_1\) (décaler la sortie d'une unité décale la fenêtre de
+\(s_1\)), et \(\Delta_\ell = s_\ell \Delta_{\ell-1} = \prod_{i \le \ell} s_i\). Une unité
+de la couche \(\ell\) agrège \(k_\ell\) unités <em>contiguës</em> de la couche
+\(\ell - 1\)&nbsp;: son champ couvre le champ d'une unité (RF\(_{\ell-1}\)) plus l'écart
+entre les centres des premier et dernier voisins agrégés, \((k_\ell - 1)\Delta_{\ell-1}\).
+D'où la formule.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Deux conv 3×3 empilées</span>
+  RF \(= 3 + 2\times 1 = 5\)&nbsp;: empiler est plus efficace qu'un gros noyau — c'est
+  la profondeur, encore. En pratique les champs réceptifs théoriques dépassent vite
+  l'image, mais le champ <em>effectif</em> (visualisé par occlusion ou Cadieu et al.)
+  grandit bien plus lentement&nbsp;; les couches basses codent des bords, les hautes des
+  concepts.
+</div>
+
+<h3>4.3 Conv transposée (déconvolution)</h3>
+
+<p>Le gradient de la convolution par rapport à <em>l'entrée</em> est lui-même une
+convolution, par le noyau retourné et avec padding ajusté — appelée convolution
+transposée, et utilisée telle quelle pour sur-échantillonner (GAN, segmentation,
+autoencodeurs). Cas sans stride, sans dilation&nbsp;: une conv «&nbsp;valide&nbsp;»
+(\(p=0\)) mappe \(I \to O = I - K + 1\)&nbsp;; sa transposée mappe
+\(O \to I = O + K - 1\) en insérant \(K-1\) zéros de bord et en convoluant par le noyau
+retourné (preuve&nbsp;: écrire \(\mathrm{conv}\) comme application linéaire
+\(y = Cx\) par blocs&nbsp;; alors \(\nabla_x = C^\top \nabla_y\), et \(C^\top\) est la
+matrice de la conv transposée). Avec stride et padding, la formule générale&nbsp;:
+$$I' = s\,(O - 1) - 2p + d(K-1) + \mathrm{op} + 1,$$
+où \(\mathrm{op}\) est un sur-padding optionnel — l'image miroir exacte du théorème 4.2.
+Le chevauchement des taps quand \(s &gt; 1\) crée des artefacts «&nbsp;damier&nbsp;»,
+corrigés par l'upsample + conv.</p>
+
+<h3>4.4 Architectures historiques, paramètres au compteur</h3>
+
+<table class="tbl">
+<thead><tr><th>Réseau</th><th>Année</th><th>Idée clé</th><th>Paramètres</th></tr></thead>
+<tbody>
+<tr><td>LeNet-5</td><td>1998</td><td>conv + pooling + FC, gradient par rétropropagation</td><td>\(\sim\)60&nbsp;k</td></tr>
+<tr><td>AlexNet</td><td>2012</td><td>ReLU, dropout, GPU, augmentation — gagne ImageNet</td><td>\(\sim\)60&nbsp;M</td></tr>
+<tr><td>VGG-16</td><td>2014</td><td>uniformité&nbsp;: que des 3×3, profondeur 16-19</td><td>\(\sim\)138&nbsp;M</td></tr>
+<tr><td>ResNet-50</td><td>2015</td><td>connexions résiduelles, 50 couches et plus</td><td>\(\sim\)25,6&nbsp;M</td></tr>
+</tbody>
+</table>
+
+<div class="ex">
+  <span class="tag">Exemple 4.5 — Compter les paramètres de VGG-16 (calcul à refaire)</span>
+  Un bloc 3×3 de \(C_{\mathrm{in}} \to C_{\mathrm{out}}\) canaux coûte
+  \(9\,C_{\mathrm{in}} C_{\mathrm{out}} + C_{\mathrm{out}}\). Le premier (3 → 64)&nbsp;:
+  \(9 \times 3 \times 64 + 64 = 1\,792\). Un bloc 64 → 64&nbsp;:
+  \(9 \times 64^2 + 64 = 36\,928\). En sommant les cinq étages (64, 128, 256, 512, 512),
+  les convolutions totalisent \(\approx 14{,}7\) M — mais les trois couches fully
+  connected (après aplatissement de \(7 \times 7 \times 512 = 25\,088\) features)
+  pèsent \(25\,088 \times 4\,096 + 4\,096 \times 4\,096 + 4\,096 \times 1\,000 \approx 123\) M&nbsp;:
+  90&nbsp;% des paramètres vivent dans le classifieur&nbsp;! D'où le pooling global
+  (GoogLeNet) puis les blocs résiduels&nbsp;: ResNet-50 fait mieux avec 25,6 M — dont
+  ~23 M dans des conv 1×1/3×3 de goulets d'étranglement.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.6 — Pourquoi les résidus permettent la profondeur</span>
+  Un bloc résiduel apprend \(h^{(\ell+1)} = h^{(\ell)} + F(h^{(\ell)})\) (puis
+  activation/normalisation). 1)&nbsp;<em>Identité triviale</em>&nbsp;: le choix
+  \(F \equiv 0\) réalise l'identité exacte — avec une initialisation standard, \(F\) est
+  petit, donc chaque bloc ajouté part «&nbsp;proche de l'identité&nbsp;»&nbsp;: ajouter
+  des couches ne dégrade plus le modèle de départ. 2)&nbsp;<em>Gradient sans
+  atténuation</em>&nbsp;: par la règle de la chaîne,
+  $$\frac{\partial \mathcal{L}}{\partial h^{(\ell)}} = \frac{\partial \mathcal{L}}{\partial h^{(\ell+1)}}\Big( I + \frac{\partial F}{\partial h^{(\ell)}} \Big),$$
+  le terme \(I\) transporte le gradient tel quel, quelle que soit la profondeur —
+  contraste direct avec le produit de \(L\) facteurs \(&lt;1\) des RNN (chapitre 5).
+  3)&nbsp;Paysage&nbsp;: les visualisations de fonctions de perte (Li et al., 2018)
+  montrent des vallées nettement plus lisses le long des directions résiduelles.
+</div>
+
+<div class="note">
+  <span class="tag">Résidus partout</span>
+  On retrouvera <em>exactement</em> ces skip connections dans les transformers
+  (\(x + \mathrm{Attention}(\mathrm{LN}(x))\), chapitre 6) et les GNN (skip
+  connections du message passing, module Graph ML)&nbsp;: partout où l'on empile des
+  blocs, le chemin identique protège le gradient.
+</div>
 
 <pre class="code"><code>import torch.nn as nn
 
 conv = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
 # parametres : 3*3*3*32 + 32 = 896, independants de la taille H x W
 x = torch.randn(16, 3, 64, 64)        # batch de 16 images RGB 64x64
-print(conv(x).shape)                   # [16, 32, 64, 64]</code></pre>
+print(conv(x).shape)                   # [16, 32, 64, 64]  (formule du theoreme 4.2)
+
+class ResBlock(nn.Module):
+    def __init__(self, c):
+        super().__init__()
+        self.conv1 = nn.Conv2d(c, c, 3, padding=1)
+        self.conv2 = nn.Conv2d(c, c, 3, padding=1)
+        self.norm1, self.norm2 = nn.BatchNorm2d(c), nn.BatchNorm2d(c)
+    def forward(self, x):
+        h = torch.relu(self.norm1(self.conv1(x)))
+        return torch.relu(x + self.norm2(self.conv2(h)))   # skip connection</code></pre>
 
 <div class="note">
   <span class="tag">CNN et graphes</span>
-  Une convolution est un filtre appliqué à un voisinage régulier (grille). Les GNN du module
-  Graph ML généralisent cette idée aux voisinages <em>irréguliers</em>&nbsp;: le filtre devient
-  une fonction des voisins agrégés. Même ADN&nbsp;: partage de poids + agrégation locale.
+  Une convolution est un filtre appliqué à un voisinage régulier (grille). Les GNN du
+  module Graph ML généralisent cette idée aux voisinages <em>irréguliers</em>&nbsp;: le
+  filtre devient une fonction des voisins agrégés. Même ADN&nbsp;: partage de poids +
+  agrégation locale. Pour le lien complet avec le traitement du signal (convolution
+  circulaire, théorème de convolution, filtres de graphes spectraux), cf. module Signal
+  Processing et module Graph ML.
 </div>
 </section>
 
@@ -223,20 +870,94 @@ print(conv(x).shape)                   # [16, 32, 64, 64]</code></pre>
 <section class="chapter" id="ch5">
 <h2>5. Séquences&nbsp;: RNN, LSTM</h2>
 
+<h3>5.1 RNN et rétropropagation dans le temps</h3>
+
 <div class="def">
-  <span class="tag">Définition 5.1 — RNN</span>
+  <span class="tag">Définition 5.1 — RNN (Elman)</span>
   $$h_t = \tanh(W_h h_{t-1} + W_x x_t + b), \qquad y_t = W_y h_t$$
-  État caché qui résume le passé&nbsp;; poids partagés dans le temps (comme le noyau CNN dans
-  l'espace).
+  État caché qui résume le passé&nbsp;; poids partagés dans le temps (comme le noyau CNN
+  dans l'espace). La séquence \((x_1, \dots, x_T)\) est traitée en <em>déroulant</em> le
+  réseau&nbsp;: \(T\) copies du même bloc — le graphe de calcul redevient acyclique
+  (chapitre 2), et la backprop s'y applique «&nbsp;à travers le temps&nbsp;»
+  (BPTT). Coût mémoire&nbsp;: \(\mathcal{O}(T)\) activations.
 </div>
 
-<div class="prop">
-  <span class="tag">Le problème des gradients qui s'évanouissent</span>
-  Le gradient en \(t\) dépend d'un produit de \(T\) jacobiennes&nbsp;:
-  \(\prod_t W_h^\top \mathrm{diag}(\tanh')\) — si les valeurs propres de \(W_h\) sont
-  \(&lt;1\) (resp. \(&gt;1\)) le gradient décroît (resp. explose) exponentiellement avec \(T\).
-  Les portes LSTM/GRU (additions de chemins de mémoire) atténuent le problème sans le résoudre&nbsp;:
-  c'est la motivation directe de l'attention.
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Explosion ou évanouissement exponentiel du gradient</span>
+  Pour une perte au pas final \(T\), en notant \(D_t = \mathrm{diag}\big(\tanh'(a_t)\big)\)&nbsp;:
+  $$\frac{\partial \mathcal{L}_T}{\partial h_0} = \Big( \prod_{t=1}^{T} D_t\, W_h^\top \Big) \frac{\partial \mathcal{L}_T}{\partial h_T}
+  \quad\Rightarrow\quad
+  \Big\| \frac{\partial \mathcal{L}_T}{\partial h_0} \Big\| \;\le\; \|W_h\|^{T}\, \prod_{t=1}^{T}\|\tanh'(a_t)\|_\infty\, \Big\| \frac{\partial \mathcal{L}_T}{\partial h_T} \Big\|.$$
+  Si \(\|W_h\| \cdot \max_t \|\tanh'(a_t)\|_\infty &lt; 1\), le gradient décroît
+  exponentiellement avec \(T\) (évanouissement)&nbsp;; si \(\|W_h\| &gt; 1\) et les
+  activations hors saturation, il explose.
+</div>
+
+<div class="proof">
+Par le théorème 2.1 appliqué au graphe déroulé, \(\partial \mathcal{L}_T/\partial h_{t-1}
+= (\partial h_t / \partial h_{t-1})^\top \partial \mathcal{L}_T/\partial h_t\) car
+\(h_{t-1}\) n'a qu'un successeur \(h_t\). Or \(h_t = \tanh(W_h h_{t-1} + W_x x_t + b)\),
+donc la jacobienne vaut \(J_t = D_t W_h\) avec \(D_t\) diagonale (dérivée de tanh
+composante par composante). En composant de \(t = T\) à \(t = 1\) et en utilisant la
+sous-multiplicativité \(\|ABC\| \le \|A\|\,\|B\|\,\|C\|\) (norme d'opérateur)&nbsp;:
+\(\|\prod_t J_t^\top\| \le \prod_t \|J_t^\top\| \le \prod_t \|D_t\|\,\|W_h\|\), et
+\(\|D_t\| = \max_i |\tanh'(a_{t,i})| \le 1\), avec égalité stricte &lt; 1 dès qu'une
+coordonnée s'approche de la saturation. D'où la borne&nbsp;: décroissance exponentielle
+en \(T\) dès que le facteur par pas est &lt; 1, croissance exponentielle possible quand
+\(\|W_h\| &gt; 1\) (la borne n'est qu'un majorant, mais les expériences confirment les
+deux régimes&nbsp;; l'explosion se traite par <em>gradient clipping</em> — tronquer
+\(\|\hat g\|\) à un seuil — l'évanouissement, lui, est structurel).
+<span class="qed">∎</span>
+</div>
+
+<h3>5.2 LSTM&nbsp;: équations complètes et rôle des portes</h3>
+
+<div class="def">
+  <span class="tag">Définition 5.3 — LSTM (Hochreiter &amp; Schmidhuber, 1997)</span>
+  Quatre «&nbsp;portes&nbsp;» (vecteurs de \([0,1]^d\) par sigmoïdes, agissant comme des
+  robinets multiplicatifs) et un état cellulaire \(c_t\) qui transite de façon
+  <em>additive</em>&nbsp;:
+  $$f_t = \sigma(W_f h_{t-1} + U_f x_t), \qquad i_t = \sigma(W_i h_{t-1} + U_i x_t),$$
+  $$o_t = \sigma(W_o h_{t-1} + U_o x_t), \qquad \tilde c_t = \tanh(W_c h_{t-1} + U_c x_t),$$
+  $$c_t = f_t \odot c_{t-1} + i_t \odot \tilde c_t, \qquad h_t = o_t \odot \tanh(c_t).$$
+</div>
+
+<ul>
+  <li><strong>\(f_t\), porte d'oubli</strong>&nbsp;: fraction de l'ancienne mémoire
+  conservée — c'est elle qui porte la mémoire longue&nbsp;; initialisée souvent à
+  \(b_f &gt; 0\) (biais de oubli positif) pour que \(f \approx 1\) au départ.</li>
+  <li><strong>\(i_t\), porte d'entrée</strong>&nbsp;: combien du candidat
+  \(\tilde c_t\) on écrit&nbsp;; <strong>\(\tilde c_t\)</strong>&nbsp;: contenu proposé.</li>
+  <li><strong>\(o_t\), porte de sortie</strong>&nbsp;: combien de la cellule on expose
+  dans \(h_t\).</li>
+  <li><strong>Pourquoi ça atténue l'évanouissement</strong>&nbsp;: la cellule suit
+  \(c_t = f_t \odot c_{t-1} + (\dots)\), une <em>autoroute additive</em> — le gradient
+  \(\partial c_t/\partial c_{t-1} = \mathrm{diag}(f_t) + i_t\)-termes reste proche de
+  l'identité quand \(f_t \approx 1\) et \(i_t\) modeste, là où le RNN multipliait
+  systématiquement par \(W_h^\top D_t\). Le produit des jacobiennes peut rester ~1 sur
+  de longs horizons&nbsp;: les dépendances longues passent. (Le problème n'est pas
+  <em>résolu</em>&nbsp;: sur des dépendances très longues, l'attention le réglera —
+  chapitre 6.)</li>
+</ul>
+
+<div class="note">
+  <span class="tag">GRU (Cho et al., 2014) et comparaison</span>
+  $$z_t = \sigma(W_z h_{t-1} + U_z x_t), \quad r_t = \sigma(W_r h_{t-1} + U_r x_t), \quad
+  h_t = (1 - z_t) \odot h_{t-1} + z_t \odot \tanh\big(W h_{t-1} \odot r_t + U x_t\big).$$
+  Deux portes au lieu de trois, pas d'état cellulaire séparé (\(z_t\) fusionne oubli et
+  écriture, \(r_t\) filtre le passé lu)&nbsp;: ~25&nbsp;% de paramètres en moins,
+  performances généralement comparables. En pratique LSTM pour les longues séries,
+  GRU pour les petits jeux de données.
+</div>
+
+<div class="note">
+  <span class="tag">Teacher forcing et exposure bias</span>
+  À l'entraînement d'un modèle séquence-à-séquence, on alimente le décodeur avec les
+  tokens <em>vrais</em> (teacher forcing)&nbsp;: la perte se calcule en un seul passage
+  parallèle, mais le modèle n'apprend qu'à prédire <em>sachant le passé exact</em>. À
+  l'inférence, il se nourrit de ses propres sorties (éventuellement erronées) — décalage
+  d'exposition qui fait dériver les longues générations&nbsp;; atténué par le
+  scheduled sampling ou l'apprentissage par renforcement (cf. module RL, et module NLP).
 </div>
 </section>
 
@@ -244,15 +965,82 @@ print(conv(x).shape)                   # [16, 32, 64, 64]</code></pre>
 <section class="chapter" id="ch6">
 <h2>6. Attention et transformers</h2>
 
+<h3>6.1 Scaled dot-product&nbsp;: pourquoi \(\sqrt{d_k}\)</h3>
+
 <div class="def">
   <span class="tag">Définition 6.1 — Scaled dot-product attention (Vaswani et al., 2017)</span>
   Pour des tokens \(i = 1..n\) d'embeddings \(x_i\), on calcule
   $$q_i = W_q x_i,\quad k_i = W_k x_i,\quad v_i = W_v x_i,$$
   $$\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\!\Big(\frac{Q K^\top}{\sqrt{d_k}}\Big) V, \qquad
   \alpha_{ij} = \frac{\exp(q_i^\top k_j / \sqrt{d_k})}{\sum_{j'} \exp(q_i^\top k_{j'} / \sqrt{d_k})}.$$
-  <strong>Multi-head</strong>&nbsp;: \(h\) têtes d'attention en parallèle (projets \(W^q_k, W^k_k, W^v_k\)),
-  concaténées puis projetées — plusieurs «&nbsp;canaux de communication&nbsp;» indépendants.
+  <strong>Multi-head</strong>&nbsp;: \(h\) têtes d'attention en parallèle (projections
+  \(W^q_m, W^k_m, W^v_m\), dimensions \(d_k = d/h\)), concaténées puis projetées —
+  plusieurs «&nbsp;canaux de communication&nbsp;» indépendants.
 </div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — La variance des scores croît comme \(d_k\)</span>
+  Si les composantes de \(q\) et \(k\) sont iid, centrées, de variance 1, alors
+  \(q^\top k = \sum_{\ell=1}^{d_k} q_\ell k_\ell\) est centré et de variance
+  exactement \(d_k\). Sans normalisation, l'écart-type des scores est \(\sqrt{d_k}\)
+  (32 pour \(d_k = 1024\))&nbsp;: le softmax devient un argmax one-hot, ses gradients
+  s'évanouissent — saturation, cf. chapitre 0, proposition 0.3. Diviser par
+  \(\sqrt{d_k}\) ramène la variance à 1, indépendamment de la dimension.
+</div>
+
+<div class="proof">
+Centrage&nbsp;: \(\mathbb{E}[q_\ell k_\ell] = \mathbb{E}[q_\ell]\,\mathbb{E}[k_\ell] = 0\)
+(indépendance). Variance&nbsp;: les termes \(q_\ell k_\ell\) sont iid entre eux, donc
+\(\mathrm{Var}(\sum_\ell q_\ell k_\ell) = \sum_\ell \mathrm{Var}(q_\ell k_\ell) =
+d_k\, \mathbb{E}[q_\ell^2]\mathbb{E}[k_\ell^2] = d_k\). Après division par
+\(\sqrt{d_k}\), la variance du score normalisé vaut \(1\). Conséquence sur la
+saturation&nbsp;: les écarts typiques entre scores normalisés sont \(\mathcal{O}(1)\),
+les ratios d'exponentielles \(\exp(s_i - s_j)\) restent dans une gamme raisonnable et
+le softmax garde un gradient non nul&nbsp;; sans scaling, des écarts d'ordre
+\(\sqrt{d_k} \gg 1\) produisent une distribution proche du one-hot, dont le gradient
+(\(\hat y_k(\delta_{kj} - \hat y_j)\)) tend vers 0.
+<span class="qed">∎</span>
+</div>
+
+<h3>6.2 Architecture du bloc&nbsp;: pre-norm, RoPE</h3>
+
+<ul>
+  <li><strong>Post-norm</strong> (Vaswani et al., original)&nbsp;:
+  \(y = \mathrm{LN}(x + \mathrm{Att}(x))\) — la connexion résiduelle passe <em>à
+  travers</em> la normalisation. <strong>Pre-norm</strong> (GPT-2 et suivants)&nbsp;:
+  \(y = x + \mathrm{Att}(\mathrm{LN}(x))\) — le chemin identité est <em>intact</em>
+  (proposition 4.6)&nbsp;: le gradient atteint l'entrée sans atténuation, ce qui rend
+  l'entraînement stable à grande profondeur et réduit le besoin de warmup&nbsp;; une
+  LayerNorm finale compense l'absence de normalisation en sortie. Standard actuel.</li>
+  <li><strong>RoPE</strong> (rotary position embedding, Su et al., 2021)&nbsp;: au lieu
+  d'<em>ajouter</em> un code positionnel, on <em>fait tourner</em> chaque paire de
+  coordonnées \((q_{2i}, q_{2i+1})\) d'un angle \(m\,\theta_i\) dépendant de la position
+  \(m\) du token (et de \(i\)), avec \(\theta_i = b^{-2i/d}\). Preuve du caractère
+  «&nbsp;relatif&nbsp;»&nbsp;: les rotations planes commutent et
+  \(R(m)^\top R(n) = R(n - m)\), donc
+  $$\langle R(m)\, q,\; R(n)\, k \rangle = q^\top R(m)^\top R(n)\, k = q^\top R(n-m)\, k,$$
+  le score ne dépend que de l'écart \(n - m\)&nbsp;: la position est encodée
+  <em>dans</em> l'interaction, avec un support longueur non borné — c'est l'encodage
+  des LLMs modernes (cf. module LLMs, M2).</li>
+</ul>
+
+<h3>6.3 Coûts et attention efficace</h3>
+
+<ul>
+  <li><strong>Complexité</strong>&nbsp;: \(\mathcal{O}(n^2 d)\) temps et
+  \(\mathcal{O}(n^2)\) mémoire (matrice \(QK^\top\) de taille \(n \times n\) par
+  tête) — le goulot des LLMs. Le MLP est \(\mathcal{O}(n d^2)\)&nbsp;: l'attention
+  domine dès que \(n \gtrsim d\).</li>
+  <li><strong>FlashAttention</strong> (Dao et al., 2022)&nbsp;: <em>exacte</em>, mais
+  IO-aware — elle tile le calcul de softmax(QK^T)V en blocs chargés en SRAM (mémoire
+  rapide du GPU) et n'écrit <em>jamais</em> la matrice \(n \times n\) en HBM, en
+  maintenant des statistiques de log-sum-exp en ligne (la proposition 0.3 rend le
+  softmax incrémental&nbsp;: on fusionne les blocs avec \(m\) et la somme partielle).
+  Résultat&nbsp;: même Flops, mémoire \(\mathcal{O}(n)\), vitesse ×2 à ×4 en
+  pratique.</li>
+  <li><strong>Approximations</strong>&nbsp;: sparse, linéaires, sliding window
+  (cf. module LLMs, M2).</li>
+</ul>
 
 <div class="note">
   <span class="tag">Lecture «&nbsp;graphe&nbsp;» (Karpathy, 2025-2026) — le pont vers le module Graph ML</span>
@@ -272,35 +1060,53 @@ print(conv(x).shape)                   # [16, 32, 64, 64]</code></pre>
   l'intérieur du LLM&nbsp;» (module M2) et «&nbsp;sur les données structurées&nbsp;» (module Graph ML).
 </div>
 
+<h3>6.4 Un bloc complet en PyTorch</h3>
+
 <pre class="code"><code>import torch, torch.nn as nn, torch.nn.functional as F
 
-class SelfAttention(nn.Module):
-    def __init__(self, d, n_heads=4):
+class Block(nn.Module):
+    """Un bloc transformer pre-norm : attention causale multi-tete + MLP."""
+    def __init__(self, d, n_heads, p_drop=0.1):
         super().__init__()
-        self.qkv = nn.Linear(d, 3 * d)
+        self.ln1, self.ln2 = nn.LayerNorm(d), nn.LayerNorm(d)
         self.n_heads, self.d_head = n_heads, d // n_heads
-    def forward(self, x):                      # x : (B, n, d)
-        B, n, d = x.shape
-        q, k, v = self.qkv(x).chunk(3, -1)
-        q = q.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
-        k = k.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
-        v = v.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
-        att = F.scaled_dot_product_attention(q, k, v)   # softmax(QK^T/sqrt(d))V
-        return att.transpose(1, 2).reshape(B, n, d)
+        self.qkv = nn.Linear(d, 3 * d)
+        self.proj = nn.Linear(d, d)
+        self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+        self.drop = nn.Dropout(p_drop)
 
-# Position : le transformer est permutation-invariant -> encodage positionnel ajoute a x
-max_n, d = 512, 128
-pos = torch.randn(1, max_n, d)               # (appris ; sinusoidal possible)</code></pre>
+    def forward(self, x):                          # x : (B, n, d)
+        B, n, d = x.shape
+        q, k, v = self.qkv(self.ln1(x)).chunk(3, -1)
+        # multi-tete : (B, n, d) -> (B, n, h, d_head) -> (B, h, n, d_head)
+        def split(t): return t.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
+        q, k, v = split(q), split(k), split(v)
+        mask = torch.tril(torch.ones(n, n, device=x.device))     # masque causal
+        att = F.scaled_dot_product_attention(q, k, v,            # softmax(QK^T/sqrt(d_head))V
+                                             attn_mask=mask, dropout_p=0.0)
+        att = att.transpose(1, 2).reshape(B, n, d)               # refusion des tetes
+        x = x + self.drop(self.proj(att))                        # residual 1 (pre-norm)
+        x = x + self.drop(self.mlp(self.ln2(x)))                 # residual 2
+        return x
+
+torch.manual_seed(0)
+x = torch.randn(2, 16, 128)
+model = nn.Sequential(*[Block(128, 4) for _ in range(4)])
+print(model(x).shape)                              # [2, 16, 128]
+
+# Position : le transformer est permutation-invariant -> RoPE ou encodage ajoute a x
+max_n, d = 512, 128</code></pre>
 
 <ul>
   <li><strong>Position</strong>&nbsp;: l'attention ne connaît pas l'ordre → <em>positional
-  encodings</em> (sinusoïdaux, appris, ou RoPE) — et sur graphes&nbsp;: <em>positional/structural
-  encodings</em> (module Advanced GNN)&nbsp;;</li>
-  <li><strong>Coût</strong>&nbsp;:\(\mathcal{O}(n^2 d)\) en temps/mémoire pour la matrice
-  \(QK^\top\) — le goulot des LLMs, d'où les attentions efficaces (FlashAttention, sparse,
-  linéaires)&nbsp;;</li>
+  encodings</em> (sinusoïdaux, appris, ou RoPE, 6.2) — et sur graphes&nbsp;: l'analogue
+  est le problème des <em>positional/structural encodings</em>, au cœur du chapitre 9
+  et du module Advanced GNN (M2)&nbsp;;</li>
   <li><strong>MLP</strong>&nbsp;: deux couches avec GELU, ratio d'expansion ~4 — c'est là que
-  vivent la plupart des paramètres.</li>
+  vivent la plupart des paramètres (~2/3)&nbsp;;</li>
+  <li><strong>Masque causal</strong>&nbsp;: interdire \(j &gt; i\) pour l'autorégression —
+  exactement la factorisation \(\mathbb{P}(x) = \prod_t \mathbb{P}(x_t \mid x_{&lt;t})\)
+  du chapitre 7.</li>
 </ul>
 </section>
 
@@ -308,23 +1114,166 @@ pos = torch.randn(1, max_n, d)               # (appris ; sinusoidal possible)</c
 <section class="chapter" id="ch7">
 <h2>7. Modèles génératifs&nbsp;: AE, VAE, GAN</h2>
 
-<div class="def">
-  <span class="tag">Autoencodeur et VAE (Kingma &amp; Welling, 2013)</span>
-  Encodeur \(q_\phi(z\mid x)\), décodeur \(p_\theta(x \mid z)\), prior \(z \sim \mathcal{N}(0, I)\).
-  On maximise la ELBO&nbsp;:
-  $$\mathcal{L}(\theta, \phi; x) = \mathbb{E}_{q_\phi}\big[\log p_\theta(x \mid z)\big] - \mathrm{KL}\big(q_\phi(z \mid x)\,\|\,\mathcal{N}(0, I)\big),$$
-  avec le <em>reparametrization trick</em> \(z = \mu_\phi(x) + \sigma_\phi(x) \odot \varepsilon\),
-  \(\varepsilon \sim \mathcal{N}(0,I)\) pour laisser passer le gradient. La KL entre gaussiennes
-  a une forme fermée — rappel utilisé aussi en M2.
-</div>
+<h3>7.1 Autoencodeur déterministe et sa pathologie</h3>
+
+<p>Un autoencodeur compresse \(x\) en code \(z = E_\phi(x)\) et reconstruit
+\(\hat x = D_\theta(z)\), entraîné sur \(\|x - \hat x\|^2\). Bien qu'utile pour
+l'apprentissage de représentations, il n'est pas un modèle <em>génératif</em>&nbsp;:
+l'espace latent n'a aucune structure imposée — sampler \(z\) au hasard donne des
+reconstructions aberrantes. Le VAE corrige précisément cela.</p>
+
+<h3>7.2 VAE&nbsp;: l'ELBO entièrement dérivé</h3>
 
 <div class="def">
-  <span class="tag">GAN (Goodfellow et al., 2014)</span>
-  Jeu minimax entre générateur \(G\) et discriminateur \(D\)&nbsp;:
-  $$\min_G \max_D \ \mathbb{E}_{x}\big[\log D(x)\big] + \mathbb{E}_{z \sim p(z)}\big[\log(1 - D(G(z)))\big].$$
-  À l'équilibre, \(p_G = p_{\text{data}}\). Instable (modes effondrés)&nbsp;; supplanté en
-  image par la <strong>diffusion</strong> (module Multimodal Generative AI), dont les LLMs
-  diffèrent par l'architecture (autorégression) et la perte (cross-entropy sur tokens).
+  <span class="tag">Définition 7.1 — VAE (Kingma &amp; Welling, 2013)</span>
+  Encodeur gaussien diagonal \(q_\phi(z \mid x) = \mathcal{N}\big(\mu_\phi(x), \mathrm{diag}(\sigma_\phi^2(x))\big)\),
+  décodeur \(p_\theta(x \mid z)\), prior \(z \sim \mathcal{N}(0, I)\). On maximise la
+  <strong>ELBO</strong> (evidence lower bound)&nbsp;:
+  $$\mathcal{L}(\theta, \phi; x) = \mathbb{E}_{q_\phi}\big[\log p_\theta(x \mid z)\big] - \mathrm{KL}\big(q_\phi(z \mid x)\,\|\,\mathcal{N}(0, I)\big).$$
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.2 — Décomposition exacte de la log-vraisemblance</span>
+  $$\log p_\theta(x) = \mathcal{L}(\theta, \phi; x) + \mathrm{KL}\big(q_\phi(z\mid x)\,\big\|\,p_\theta(z \mid x)\big) \;\ge\; \mathcal{L}(\theta, \phi; x).$$
+  Maximiser l'ELBO = maximiser une borne inférieure de \(\log p_\theta(x)\) <em>et</em>
+  rapprocher \(q_\phi(z|x)\) du posterior exact \(p_\theta(z|x)\).
+</div>
+
+<div class="proof">
+Partons de la définition de la KL entre \(q_\phi(\cdot \mid x)\) et le posterior
+\(p_\theta(\cdot \mid x)\), toutes deux sur \(z\) (à \(x\) fixé), et développons avec
+\(p_\theta(x, z) = p_\theta(x \mid z)\, p(z)\) (Bayes)&nbsp;:
+$$\mathrm{KL}\big(q_\phi \| p_\theta(\cdot|x)\big)
+= \mathbb{E}_q[\log q] - \mathbb{E}_q[\log p_\theta(x|z)] - \mathbb{E}_q[\log p(z)] + \log p_\theta(x).$$
+Or, par définition de la KL vis-à-vis du prior,
+\(\mathbb{E}_q[\log q] - \mathbb{E}_q[\log p(z)] = \mathrm{KL}(q_\phi \| \mathcal{N}(0,I))\).
+En substituant&nbsp;:
+$$\mathrm{KL}\big(q_\phi \| p_\theta(\cdot|x)\big) = \mathrm{KL}(q_\phi \| \mathcal{N}) - \mathbb{E}_q[\log p_\theta(x|z)] + \log p_\theta(x),$$
+c'est-à-dire, en réarrangeant&nbsp;:
+$$\log p_\theta(x) = \underbrace{\mathbb{E}_q[\log p_\theta(x|z)] - \mathrm{KL}(q_\phi \| \mathcal{N})}_{=\ \mathcal{L}(\theta,\phi;x)} + \mathrm{KL}\big(q_\phi \| p_\theta(\cdot|x)\big).$$
+La KL est non négative (Jensen appliqué à \(\mathbb{E}_q[\log(q/p)] \ge -\log
+\mathbb{E}_q[p/q] = 0\)), d'où la borne. Égalité ssi \(q_\phi(z|x) = p_\theta(z|x)\)
+exactement.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Lecture de la preuve</span>
+  On ne peut pas optimiser \(\log p_\theta(x) = \log \int p_\theta(x|z)\, p(z)\, dz\)
+  directement&nbsp;: l'intégrale est intraitable. La ELBO est la seule quantité qui ne
+  demande que (i) des <em>échantillons</em> de \(q_\phi\) (monte-carlo&nbsp;: un seul
+  suffit en pratique) et (ii) une KL <em>fermée</em>. C'est le même trade-off qu'en
+  EM (module Machine Learning)&nbsp;: la KL résiduelle mesure exactement ce que la
+  borne perd.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.3 — Reparamétrisation&nbsp;: pourquoi \(z = \mu + \sigma \odot \varepsilon\) fonctionne</span>
+  Si \(\varepsilon \sim \mathcal{N}(0, I)\) et \(z = \mu_\phi(x) + \sigma_\phi(x) \odot \varepsilon\),
+  alors \(z \sim \mathcal{N}(\mu_\phi(x), \mathrm{diag}(\sigma_\phi^2(x)))\) <em>et</em>
+  \(\nabla_\phi \mathbb{E}_{q_\phi}[f(z)] = \mathbb{E}_\varepsilon\big[\nabla_\phi f(\mu_\phi + \sigma_\phi \odot \varepsilon)\big]\)&nbsp;:
+  le gradient passe. Échantillonner \(z \sim q_\phi\) directement bloque le gradient
+  (l'opération de sampling n'a pas de dérivée par rapport à ses paramètres).
+</div>
+
+<div class="proof">
+La loi de \(z\) s'obtient par changement de variable affine (le jacobien
+\(\partial z/\partial \varepsilon = \mathrm{diag}(\sigma)\) est constant)&nbsp;: la
+densité de \(z\) est celle d'une gaussienne de moyenne \(\mu\), covariance
+\(\mathrm{diag}(\sigma^2)\). Pour le gradient&nbsp;: l'espérance sous \(q_\phi\) se
+réécrit comme espérance sous la loi <em>fixe</em> de \(\varepsilon\),
+\(\mathbb{E}_{q_\phi}[f(z)] = \mathbb{E}_{\varepsilon}[f(\mu_\phi + \sigma_\phi \odot \varepsilon)]\)&nbsp;;
+la distribution n'est <em>plus</em> paramétrée par \(\phi\) — \(\phi\) n'intervient plus
+que dans l'intégrande, que la descente de gradient sait différencier (théorème 2.1).
+<span class="qed">∎</span>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.4 — KL fermée entre gaussiennes diagonales</span>
+  Pour \(q = \mathcal{N}(\mu, \mathrm{diag}(\sigma^2))\) et \(p = \mathcal{N}(0, I)\) en
+  dimension \(k\)&nbsp;:
+  $$\mathrm{KL}(q \| p) = \frac12 \sum_{i=1}^{k} \big(\mu_i^2 + \sigma_i^2 - 1 - \log \sigma_i^2\big).$$
+</div>
+
+<div class="proof">
+\(\mathrm{KL}(q\|p) = \mathbb{E}_q[\log q(z) - \log p(z)]\). Coordonnée par
+coordonnée (les densités se factorisent), avec \(\varphi\) la densité de la gaussienne
+standard&nbsp;:
+\(\log q(z_i) - \log \varphi(z_i) = -\tfrac12\log\sigma_i^2 - \frac{(z_i - \mu_i)^2}{2\sigma_i^2} + \frac{z_i^2}{2}\).
+Sous \(q\), \(z_i \sim \mathcal{N}(\mu_i, \sigma_i^2)\), donc
+\(\mathbb{E}_q[(z_i - \mu_i)^2] = \sigma_i^2\) et
+\(\mathbb{E}_q[z_i^2] = \mu_i^2 + \sigma_i^2\). En prenant l'espérance&nbsp;:
+\(-\tfrac12\log\sigma_i^2 - \tfrac12 + \tfrac12(\mu_i^2 + \sigma_i^2)\), c'est-à-dire
+\(\tfrac12(\mu_i^2 + \sigma_i^2 - 1 - \log \sigma_i^2)\). On vérifie au passage que
+chaque terme est \(\ge 0\), nul ssi \(\mu_i = 0, \sigma_i = 1\) (étude de
+\(u - 1 - \log u \ge 0\)).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Le compromis ELBO en pratique</span>
+  Premier terme&nbsp;: reconstruction. Second&nbsp;: régularisateur qui maintient les
+  codes proches du prior — trop fort, tout se confond (codes ignorés, échantillonnage
+  flou)&nbsp;; trop faible, l'espace latent se creuse de «&nbsp;trous&nbsp;» (posterior
+  collapse partiel). La connexion avec l'inférence variationnelle et l'EM est reprise
+  dans le module Machine Learning&nbsp;; les extensions (\(\beta\)-VAE, VQ-VAE) le sont
+  dans Multimodal Generative AI.
+</div>
+
+<h3>7.3 GAN&nbsp;: le jeu minimax et son équilibre</h3>
+
+<div class="def">
+  <span class="tag">Définition 7.5 — GAN (Goodfellow et al., 2014)</span>
+  Jeu minimax entre générateur \(G\) (souvent \(G(z)\) avec \(z \sim \mathcal{N}(0, I)\))
+  et discriminateur \(D : \mathcal{X} \to (0,1)\)&nbsp;:
+  $$\min_G \max_D \ V(G, D), \qquad V(G, D) = \mathbb{E}_{x \sim p_{\mathrm{data}}}\big[\log D(x)\big] + \mathbb{E}_{z \sim p(z)}\big[\log(1 - D(G(z)))\big].$$
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.6 — Discriminateur optimal et équilibre global</span>
+  1)&nbsp;Pour \(G\) fixé, le maximand s'écrit \(V(G,D) = \int \big[p_{\mathrm{data}}(x)\log D(x) + p_G(x) \log(1 - D(x))\big] dx\)
+  (avec \(p_G\) la loi de \(G(z)\)), maximisé ponctuellement en
+  $$D^\star(x) = \frac{p_{\mathrm{data}}(x)}{p_{\mathrm{data}}(x) + p_G(x)}.$$
+  2)&nbsp;La valeur du jeu vaut alors \(V(G, D^\star) = -\log 4 + 2\,\mathrm{JSD}(p_{\mathrm{data}} \| p_G)\),
+  minimisée sur \(G\) exactement quand \(p_G = p_{\mathrm{data}}\)&nbsp;: l'équilibre
+  global existe et coïncide avec la loi des données.
+</div>
+
+<div class="proof">
+<strong>1)</strong> Pour chaque \(x\) fixé, maximiser
+\(a\log D + b\log(1-D)\) avec \(a = p_{\mathrm{data}}(x)\), \(b = p_G(x)\)&nbsp;: la
+dérivée \(a/D - b/(1-D) = 0\) donne \(D^\star = a/(a+b)\) (concavité stricte en
+\(D \in (0,1)\)). <strong>2)</strong> On réécrit
+\(\log D^\star = \log \frac{p_{\mathrm{data}}}{p_{\mathrm{data}}+p_G} = \log\frac{p_{\mathrm{data}}}{m} - \log 2\)
+et \(\log(1 - D^\star) = \log \frac{p_G}{m} - \log 2\), où \(m = \frac12(p_{\mathrm{data}} + p_G)\).
+Alors
+$$V(G, D^\star) = \int p_{\mathrm{data}} \log\frac{p_{\mathrm{data}}}{m} + \int p_G \log\frac{p_G}{m} - 2\log 2 = 2\,\mathrm{JSD}(p_{\mathrm{data}} \| p_G) - \log 4,$$
+par définition de la divergence de Jensen–Shannon (moyenne des KL vers \(m\)).
+Comme \(\mathrm{JSD} \ge 0\) avec égalité si et seulement si \(p_{\mathrm{data}} = p_G\)
+presque partout (les deux lois partagent la même moyenne harmonique \(m\)), le minimum
+\(-\log 4\) est atteint exactement à l'équilibre. <strong>Cas gaussien</strong>&nbsp;:
+si \(p_{\mathrm{data}} = \mathcal{N}(\mu_d, \sigma_d^2)\) et
+\(G(z) = \mu + \sigma z\), alors \(p_G = \mathcal{N}(\mu, \sigma^2)\) et l'équilibre
+correspond aux paramètres exacts \((\mu, \sigma) = (\mu_d, \sigma_d)\)&nbsp;; le
+logit de \(D^\star\), \(\log p_{\mathrm{data}} - \log p_G\), est un polynôme de degré 2
+en \(x\) — un discriminateur quadratique suffit.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi c'est instable malgré tout</span>
+  Le théorème décrit l'équilibre, pas la <em>dynamique</em>&nbsp;: les deux joueurs
+  descendent leurs gradients <em>simultanément</em>, et si \(D\) devient trop bon trop
+  vite, le gradient de \(G\) s'évanouit (\(\log(1 - D)\) sature). Pathologie
+  emblématique&nbsp;: le <strong>mode collapse</strong> — \(G\) se concentre sur les
+  modes les plus «&nbsp;faciles&nbsp;» de \(p_{\mathrm{data}}\) (quelques visages très
+  crédibles au lieu de tous). Remèdes historiques&nbsp;: Wasserstein-GAN (distance de
+  transport au lieu de JSD — cf. module Optimal Transport), pénalisation de gradient,
+  feature matching. En image, la famille a été supplantée par la <strong>diffusion</strong>
+  (débruitage itératif)&nbsp;: les modèles d'Ye Zhu (chapitre 9) en sont des
+  développements récents, et le module Multimodal Generative AI les traite en détail.
+  Les LLMs, eux, restent autorégressifs&nbsp;: \(\mathbb{P}(x_t \mid x_{&lt;t})\), perte
+  cross-entropy sur tokens (module LLMs, M2).
 </div>
 
 <table class="tbl">
@@ -336,6 +1285,286 @@ pos = torch.randn(1, max_n, d)               # (appris ; sinusoidal possible)</c
 <tr><td>Autorégressif</td><td>modéliser \(\mathbb{P}(x_t \mid x_{&lt;t})\)</td><td>token par token</td><td>LLMs (M2), Graph GenAI</td></tr>
 </tbody>
 </table>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Transfer learning et fine-tuning</h2>
+
+<p>Entraîner «&nbsp;from scratch&nbsp;» est devenu l'exception&nbsp;: la pratique dominante
+consiste à partir d'un modèle pré-entraîné sur d'immenses corpus (ImageNet pour la
+vision, des téraoctets de texte pour les LLMs) et à l'adapter. Ce chapitre donne le
+cadre et le vocabulaire&nbsp;; le module LLMs (M2) l'applique à grande échelle.</p>
+
+<h3>8.1 Les trois régimes d'adaptation</h3>
+
+<ul>
+  <li><strong>Frozen features / linear probing</strong>&nbsp;: geler tout le backbone,
+  entraîner un classifieur linéaire (ou une petite tête) sur les représentations
+  pré-entraînées. Diagnostic précieux&nbsp;: la qualité des features se mesure par la
+  performance d'un simple softmax dessus (cf. exercice 12).</li>
+  <li><strong>Fine-tuning complet</strong>&nbsp;: ré-entraîner tous les poids avec un pas
+  plus petit (typiquement 10 à 100× plus petit que le pré-entraînement) — le risque de
+  <em>catastrophic forgetting</em> (oubli des connaissances pré-entraînées) se gère par
+  un pas décroissant et peu d'époques.</li>
+  <li><strong>Fine-tuning paramètre-efficace (PEFT)</strong>&nbsp;: n'entraîner qu'une
+  petite fraction de nouveaux paramètres, le reste restant figé — d'autant plus
+  pertinent que les modèles grossissent.</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Pourquoi ça marche</span>
+  Les couches basses apprennent des features quasi universelles (chapitre 4&nbsp;:
+  bords, textures&nbsp;; chapitre 9&nbsp;: morphologie de graphes)&nbsp;; la spécificité
+  de la tâche vit dans les couches hautes. La courbe performance / nombre d'exemples
+  étiquetés du domaine se décale massivement vers la gauche — c'est le bénéfice
+  pratique le plus mesurable du deep learning moderne.
+</div>
+
+<h3>8.2 Adaptation de domaine, en deux mots</h3>
+
+<p>Quand la cible n'a <em>aucune</em> étiquette (domaine source étiqueté → domaine
+cible non étiqueté), l'adaptation de domaine aligne les distributions&nbsp;:
+adversariale (un discriminateur essaye de deviner le domaine sur les features&nbsp;:
+elles doivent devenir non discriminantes), ou par distances de distributions (MMD,
+distances de Wasserstein — cf. module Optimal Transport). L'idée directrice&nbsp;:
+apprendre des représentations <em>invariantes</em> au domaine mais
+<em>discriminantes</em> pour la tâche.</p>
+
+<h3>8.3 LoRA&nbsp;: esquisse mathématique</h3>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — LoRA (Hu et al., 2021)</span>
+  Pour une matrice pré-entraînée \(W_0 \in \mathbb{R}^{d_{\mathrm{out}} \times d_{\mathrm{in}}}\),
+  on fige \(W_0\) et l'on apprend un update de bas rang&nbsp;:
+  $$W = W_0 + \Delta W = W_0 + \frac{\alpha}{r}\, B A, \qquad B \in \mathbb{R}^{d_{\mathrm{out}} \times r},\ A \in \mathbb{R}^{r \times d_{\mathrm{in}}},\ r \ll \min(d_{\mathrm{in}}, d_{\mathrm{out}}),$$
+  avec \(B\) initialisée à zéro et \(A\) gaussienne&nbsp;: \(\Delta W = 0\) au départ,
+  l'entraînement part exactement du modèle pré-entraîné. \(\alpha/r\) fixe l'échelle
+  effective de la mise à jour.
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi un bas rang suffit</span>
+  L'hypothèse de travail, étayée par Aghajanyan et al. (2020), est que les mises à jour
+  de poids lors de l'adaptation ont un «&nbsp;rang intrinsèque&nbsp;» faible&nbsp;:
+  \(\Delta W\) est bien approximé par un produit \(BA\) de rang \(r\) petit (4 à 64 en
+  pratique). Comptons&nbsp;: adapter une couche \(d \times d\) avec \(r = 8\) coûte
+  \(2dr = 16d\) paramètres au lieu de \(d^2\) — pour \(d = 4096\), un facteur 1000.
+  Autres bénéfices&nbsp;: un seul \(W_0\) figé en mémoire + des paires \((A, B)\)
+  interchangeables par tâche (swap instantané)&nbsp;; et pour la latence d'inférence,
+  on peut fusionner \(W = W_0 + BA\) sans surcoût. Les généralisations (QLoRA&nbsp;:
+  backbone quantifié + LoRA) sont traitées au module LLMs (M2).
+</div>
+
+<pre class="code"><code>import torch, torch.nn as nn
+
+class LoRALinear(nn.Module):
+    def __init__(self, base: nn.Linear, r=8, alpha=16):
+        super().__init__()
+        self.base = base                       # W0 gele
+        for p in self.base.parameters(): p.requires_grad = False
+        self.A = nn.Parameter(torch.randn(r, base.in_features) * 0.01)
+        self.B = nn.Parameter(torch.zeros(base.out_features, r))
+        self.scale = alpha / r
+    def forward(self, x):
+        return self.base(x) + self.scale * (x @ self.A.T @ self.B.T)
+# parametres entrales : r*(in+out) au lieu de in*out</code></pre>
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Travaux de l'équipe pédagogique</h2>
+
+<p>Ce chapitre relie le cours aux recherches actuelles des trois enseignants, toutes
+trois ancrées dans les chapitres précédents. Les références arXiv sont dans la
+bibliographie.</p>
+
+<h3>9.1 Michalis Vazirgiannis&nbsp;: du «&nbsp;Graph of Words&nbsp;» aux GNN textuels</h3>
+
+<div class="ex">
+  <span class="tag">Exemple filé — Graph of Words (Rousseau &amp; Vazirgiannis, CIKM 2013)</span>
+  La représentation <em>sac de mots</em> jette la structure syntaxique et
+  d'ordre&nbsp;; le <strong>graphe de mots</strong> la restaure à coût quasi nul&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Construction</strong>&nbsp;: chaque terme distinct du document = un nœud&nbsp;;
+    une <em>fenêtre glissante</em> de taille \(w\) sur le texte crée une arête entre deux
+    termes s'ils co-occurent dans la fenêtre (pondérée par la fréquence de
+    co-occurrence). Le document devient un graphe pondéré petit et creux.</li>
+    <li><strong>De TF-IDF à TW-IDF</strong>&nbsp;: dans un sac de mots, le poids d'un terme
+    est sa fréquence&nbsp;; dans un graphe de mots, c'est sa <em>centralité</em> —
+    TW-IDF pondère le terme par son degré pondéré moyen dans les documents — le groupe
+    a ensuite utilisé la décomposition en k-core du graphe de mots pour l'extraction de
+    mots-clés (Rousseau, Kiagias &amp; Vazirgiannis, ECIR 2015). La recherche
+    «&nbsp;ad hoc&nbsp;» gagne par rapport à TF-IDF&nbsp;: les mots structurellement
+    importants émergent même s'ils sont rares.</li>
+    <li><strong>Positionnement par rapport au cours</strong>&nbsp;: c'est la première
+    brique du master — <em>la donnée elle-même devient un graphe</em>. Le module NLP
+    reprend ces représentations&nbsp;; le module Graph ML les généralise.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Lignée GNN&nbsp;: textes, expressivité, génération</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Classification de texte inductive par GNN</strong> (Skianis, Rousseau
+    &amp; Vazirgiannis, ACL 2020)&nbsp;: chaque <em>document</em> est son propre graphe
+    de mots&nbsp;; un GNN appliqué au graphe documentaire peut alors traiter des mots
+    jamais vus à l'entraînement (inductivité) là où TextGCN (Yao et al., AAAI 2019)
+    construisait un unique graphe corpus.</li>
+    <li><strong>DGoW-GNN</strong> (Abbahaddou, Lutzeyer &amp; Vazirgiannis, NeurIPS 2023)&nbsp;:
+    graphes de mots <em>discriminatifs</em> — les arêtes ne sont plus des co-occurrences
+    figées mais sont filtrées/apprises pour la tâche, puis un GNN propage les
+    représentations. La boucle est bouclée avec le chapitre 2&nbsp;: le graphe de calcul
+    (backprop) et le graphe de données (message passing) se répondent.</li>
+    <li><strong>PathNN</strong> (Michel, Nikolentzos &amp; Vazirgiannis, ICML 2023)&nbsp;:
+    dépasser le message passing classique en agrégeant des <em>chemins</em> (plus courts
+    chemins, chemins simples) émanant de chaque nœud&nbsp;; deux variantes sont
+    strictement plus expressives que le test de Weisfeiler–Lehman. C'est le langage du
+    module Graph ML, approfondi en Advanced GNN (M2).</li>
+  </ul>
+</div>
+
+<h3>9.2 Johannes Lutzeyer&nbsp;: où sont les paramètres&nbsp;? expressivité et position</h3>
+
+<div class="note">
+  <span class="tag">Sparsifier l'étape de mise à jour (Lutzeyer, Wu &amp; Vazirgiannis, 2021)</span>
+  Un MPNN (message passing neural network) enchaîne deux phases&nbsp;: l'agrégation des
+  messages des voisins et une «&nbsp;étape de mise à jour&nbsp;» — précisément la
+  transformation linéaire + non-linéarité du chapitre 1, appliquée nœud par nœud. La
+  question du papier&nbsp;: que reste-t-il si l'on <em>clairseme</em> cette étape
+  entraînable, en l'initialisant directement creuse (ExpanderGNN, à taux de parcimonie
+  réglable) voire en la réduisant à une non-linéarité seule (Activation-Only GNN)&nbsp;?
+  Résultat clé&nbsp;: des performances comparables aux modèles denses avec bien moins de
+  paramètres — un éclairage empirique direct sur la répartition de l'expressivité entre
+  l'agrégation (structure, non paramétrée) et la mise à jour (paramétrée), dans
+  l'esprit du ch. 1 (qu'est-ce qui, dans un réseau, porte l'expressivité&nbsp;?).
+</div>
+
+<div class="note">
+  <span class="tag">Encodages de position sur graphes (SHAKE-GNN, Cui, Lutzeyer et al., 2025)</span>
+  Le chapitre 6 a montré qu'un transformer a besoin d'un encodage de <em>position</em>
+  parce que l'attention est invariante par permutation. Sur un graphe, le problème est
+  plus profond&nbsp;: il n'existe <em>aucun ordre canonique</em> des nœuds — la
+  «&nbsp;position&nbsp;» d'un nœud est une notion <em>structurelle</em> (spectre du
+  Laplacien, distances, forêts couvrantes). SHAKE-GNN propose des encodages
+  hiérarchiques fondés sur les forêts de Kirchhoff, calculés de façon scalable. Le
+  parallèle à retenir&nbsp;: RoPE (position absolue relative, adaptée aux séquences)
+  vs encodages spectraux/structurels (position définie par la géométrie du graphe)&nbsp;;
+  les deux répondent à la même invariance fondamentale (exercice 4). Le module Advanced
+  GNN (M2) systématise cette question.
+</div>
+
+<h3>9.3 Ye Zhu&nbsp;: piloter les modèles de diffusion</h3>
+
+<div class="note">
+  <span class="tag">De la perte au contrôle sémantique</span>
+  Le chapitre 7 a laissé la diffusion en esquisse (bruitage/débruitage)&nbsp;; les
+  travaux d'Ye Zhu montrent comment la <em>piloter</em>&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>BoundaryDiffusion</strong> (Zhu et al., NeurIPS 2023)&nbsp;: contrôler
+    sémantiquement la génération <em>sans ré-entraînement</em> (learning-free), en
+    déformant les frontières de décision de l'espace latent du modèle dans le plan de
+    guidance — un point de contact élégant avec la prop. 7.6&nbsp;: là où le GAN
+    cherchait un équilibre, ici on déplace géométriquement des régions latentes déjà
+    apprises.</li>
+    <li><strong>Diffusion contrastive discrète</strong> (ICLR 2023) et <strong>Diffusion
+    in Diffusion</strong> (ICLR 2024)&nbsp;: diffusion <em>discrète</em> croisée
+    musique-image et conditionnement cyclique texte-vision — l'argument du tableau du
+    ch. 7 («&nbsp;multimodal&nbsp;») incarné.</li>
+    <li><strong>NoiseQuery</strong> (ICCV 2025)&nbsp;: le bruit initial \(z_T\) comme
+    <em>signal de contrôle implicite</em> pour la génération guidée par un but —
+    renverse la perspective&nbsp;: le «&nbsp;bruit&nbsp;» devient une entrée
+    structurée, ce qui rejoint la sensibilité au bruit initial étudiée pour les
+    GAN/diffusion.</li>
+  </ul>
+  Ces travaux prolongent directement le ch. 7 et sont approfondis au module Multimodal
+  Generative AI.
+</div>
+</section>
+
+<!-- ============================ CH 10 ============================ -->
+<section class="chapter" id="ch10">
+<h2>10. Entraîner en pratique</h2>
+
+<p>Un réseau qui n'apprend pas a presque toujours un bug banal. Ce chapitre est le
+protocole de diagnostic que nous appliquerons en TP, dans l'ordre où il faut
+l'appliquer.</p>
+
+<h3>10.1 La recette d'entraînement, dans l'ordre</h3>
+
+<ol>
+  <li><strong>Sanity check des formes</strong>&nbsp;: une passe avant sans erreur, les
+  dimensions de chaque activation vérifiées (règle du ch. 0&nbsp;: les gradients ont la
+  forme de leur variable).</li>
+  <li><strong>Overfit un seul batch</strong>&nbsp;: 32 exemples, entraîner jusqu'à perte
+  \(\approx 0\). Si le modèle n'y arrive pas, le bug est <em>structurel</em> (données,
+  perte, initialisation, learning rate aberrant) — inutile d'entraîner plus.&nbsp;Un
+  modèle incapable de mémoriser 32 exemples est cassé ou trop petit&nbsp;; c'est LE test
+  qui évite des semaines d'erreur silencieuse.</li>
+  <li><strong>LR range test</strong> (Smith, 2015)&nbsp;: \(\eta\) croissant
+  géométriquement de \(10^{-7}\) à \(10^{0}\), tracer la perte&nbsp;: plateau →
+  descente → divergence. Prendre le \(\eta\) du creux (ou un peu avant), c'est le
+  réglage d'AdamW/SGD en une époque.</li>
+  <li><strong>Petit entraînement complet</strong> sur ~10&nbsp;% des données, avec les
+  courbes train/val&nbsp;: vérifier que la dynamique est saine avant de scaler.</li>
+  <li><strong>Scaling + régularisation</strong>&nbsp;: batch plus grand (ou gradient
+  accumulation), précision mixte, data augmentation, dropout, weight decay — dans cet
+  ordre de rentabilité (ch. 3).</li>
+  <li><strong>Checkpointing</strong>: sauver régulièrement (poids + état de
+  l'optimiseur + pas courant + seed du générateur de données), pour reprendre
+  exactement.</li>
+</ol>
+
+<h3>10.2 Monitoring&nbsp;: lire ses courbes</h3>
+
+<table class="tbl">
+<thead><tr><th>Symptôme</th><th>Cause probable</th><th>Réaction</th></tr></thead>
+<tbody>
+<tr><td>perte = NaN</td><td>lr trop grand, log(0), softmax non protégé (ch. 0), fp16 overflow</td><td>diviser lr par 10, log-softmax, loss scaling</td></tr>
+<tr><td>loss spikes ponctuels</td><td>batch aberrant, lr au bord de 2/L (thm. 3.1)</td><td>inspecter les données, baisser lr, gradient clipping</td></tr>
+<tr><td>norme de gradient qui explose</td><td>récurrences mal conditionnées (ch. 5)</td><td>clipper \(\|\hat g\|\) à un seuil (standard&nbsp;: 1.0)</td></tr>
+<tr><td>train baisse, val stagne</td><td>sur-apprentissage</td><td>ch. 3.6, dans l'ordre de rentabilité</td></tr>
+<tr><td>ni train ni val ne bougent</td><td>lr trop petit, blocage (ReLU morts), perte mal branchée</td><td>LR range test, stats d'activations par couche</td></tr>
+</tbody>
+</table>
+
+<p>Outils&nbsp;: tensorboard/wandb&nbsp;; enregistrer systématiquement perte, accuracy,
+norme du gradient, norme des poids, taux d'activations nulles (dying ReLU), et
+l'histogramme des activations de quelques couches.</p>
+
+<h3>10.3 GPU&nbsp;: les leviers qui comptent</h3>
+
+<ul>
+  <li><strong>Précision mixte</strong> (bf16 de préférence)&nbsp;: ~2× throughput,
+  mémoire divisée ~2 — le premier réflexe (ch. 2).</li>
+  <li><strong>Batch et accumulation</strong>&nbsp;: saturer le GPU (mesurer
+  l'utilisation)&nbsp;; si la mémoire manque, accumuler des petits batchs&nbsp;;
+  ajuster les statistiques BatchNorm en conséquence.</li>
+  <li><strong>DataLoader</strong>&nbsp;: workers &gt; 0, pin_memory, prefetch — un GPU
+  qui attend les données est un GPU gaspillé (le prétraitement CPU est souvent le
+  goulot réel).</li>
+  <li><strong>torch.compile</strong>, noyaux fusionnés (FlashAttention, ch. 6),
+  éviter les synchronisations CPU→GPU dans la boucle (les .item() / prints par pas).</li>
+</ul>
+
+<h3>10.4 Reproductibilité</h3>
+
+<pre class="code"><code>import torch, numpy as np, random
+
+def seed_everything(seed=42):
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+seed_everything(42)
+torch.backends.cudnn.deterministic = True    # determinisme (cout en vitesse)
+torch.backends.cudnn.benchmark = False       # desactive l'autotuning non deterministe</code></pre>
+
+<p>Fixer les graines (python/numpy/torch/cuda), le brassage des données, et noter
+la version des bibliothèques&nbsp;; certains noyaux CUDA restent non déterministes par
+nature (atomics)&nbsp;; viser la reproductibilité <em>à tolérance près</em> plutôt
+qu'au bit près, et documenter configurations et graines dans chaque expérience. La
+reproductibilité est aussi un outil de debug&nbsp;: un bug aléatoire que l'on sait
+reproduire est à moitié corrigé.</p>
 </section>
 
 <!-- ============================ EXERCICES ============================ -->
@@ -351,6 +1580,10 @@ pos = torch.randn(1, max_n, d)               # (appris ; sinusoidal possible)</c
   quelconque représente exactement les applications affines. En déduire pourquoi les
   <em>cascades linéaires</em> sont inutiles.</li>
 
+  <li><strong>Initialisation He.</strong> Retrouver le facteur 2 de l'initialisation He&nbsp;:
+  pour \(h = \mathrm{ReLU}(a)\) avec \(a\) centrée symétrique, calculer
+  \(\mathbb{E}[h^2]\) puis la variance de la couche suivante.</li>
+
   <li><strong>Attention 1D à la main.</strong> Pour \(n = 3\) tokens, \(d_k = 2\), calculer à la
   main \(QK^\top/\sqrt{d_k}\), le softmax par ligne, et le résultat \(\mathrm{softmax}(\cdot)V\).
   Implémenter, comparer, et vérifier que les lignes de la matrice d'attention somment à 1.</li>
@@ -359,22 +1592,132 @@ pos = torch.randn(1, max_n, d)               # (appris ; sinusoidal possible)</c
   transformer <em>sans</em> encodage positionnel est invariant par permutation des tokens, et
   que l'ajout d'un encodage positionnel brise cette invariance.</li>
 
+  <li><strong>SGD quadratique.</strong> Pour \(A = \mathrm{diag}(4, 1)\), \(b = 0\),
+  \(\theta_0 = (1, 1)\)&nbsp;: écrire la suite \((\theta_k)\) pour \(\eta = 1/2\) puis
+  \(\eta = 1\), et vérifier le théorème 3.1 (contraction par mode, borne \(2/L\)).</li>
+
+  <li><strong>Correction de biais d'Adam.</strong> Démontrer la proposition 3.5 pour
+  \(v_t\) (second moment), puis calculer la mise à jour \(\hat m_1/\sqrt{\hat v_1}\)
+  au premier pas et expliquer pourquoi le warmup protège.</li>
+
+  <li><strong>Arithmétique de convolution.</strong> Une entrée \(32 \times 32\), trois conv
+  successives (5×5, stride 2, padding 2&nbsp;; 3×3, stride 1, padding 1&nbsp;;
+  3×3, stride 1, padding 1, dilation 2)&nbsp;: tailles de sortie intermédiaires et
+  champ réceptif final (proposition 4.4).</li>
+
+  <li><strong>KL gaussienne.</strong> Dériver la formule de la proposition 7.4 en
+  dimension 1, tracer \(\mathrm{KL}(\mathcal{N}(\mu, \sigma^2) \| \mathcal{N}(0,1))\)
+  en fonction de \(\mu\) et \(\sigma\), et localiser le minimum.</li>
+
+  <li><strong>GAN gaussien.</strong> Pour \(p_{\mathrm{data}} = \mathcal{N}(0, 1)\) et
+  \(p_G = \mathcal{N}(\mu, \sigma^2)\), écrire le logit de \(D^\star\) (différence des
+  log-densités) et vérifier que c'est un trinôme en \(x\). Où l'équilibre
+  se situe-t-il&nbsp;?</li>
+
+  <li><strong>LoRA.</strong> Compter les paramètres entraînables d'un GPT-like à 12 blocs
+  (\(d = 768\), attention + MLP) adapté par LoRA \(r = 8\) sur les projections
+  d'attention uniquement, et comparer à un fine-tuning complet.</li>
+
   <li><strong>Projet.</strong> En PyTorch&nbsp;: classer MNIST avec (a) un MLP, (b) un petit
-  CNN, (c) un mini-transformeur flatten (patches). Tracer les courbes train/val, comparer
-  nombre de paramètres et accuracy, commenter avec la décomposition biais-variance.</li>
+  CNN, (c) un mini-transformer sur patches (16 patches de 4×4). Tracer les courbes
+  train/val, comparer nombre de paramètres et accuracy, commenter avec la décomposition
+  biais-variance, puis appliquer le protocole du chapitre 10 (overfit d'un batch, LR
+  range test).</li>
 </ol>
+
+<div class="note">
+  <span class="tag">Solutions et indications (exercices pairs)</span>
+  <p><strong>Ex. 2.</strong> Par récurrence&nbsp;: si
+  \(h^{(\ell)} = \sigma(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)})\) avec
+  \(\sigma(t) = \alpha t\), alors \(h^{(\ell)} = \alpha W^{(\ell)} h^{(\ell-1)} + \alpha b^{(\ell)}\)
+  reste affine en \(h^{(0)} = x\) — en composant, \(f_\theta(x) = W x + c\) avec
+  \(W = \prod_\ell \alpha W^{(\ell)}\)&nbsp;: une seule matrice, toutes les couches
+  profondes sont réductibles à une.&nbsp;
+  <strong>Ex. 4.</strong> Le softmax par ligne rend chaque ligne de poids positifs de
+  somme 1&nbsp;; la multiplication par \(V\) fait de chaque sortie une moyenne pondérée
+  des <em>values</em>&nbsp;: c'est une interpolation convexe, exactement le message
+  passing du chapitre 6.&nbsp;
+  <strong>Ex. 6.</strong> Modes découplés&nbsp;: \((\theta_k)_1 = (1 - 4\eta)^k\),
+  \((\theta_k)_2 = (1-\eta)^k\). Pour \(\eta = 1/2\)&nbsp;: facteurs \(-1\) (oscillation
+  sans décroissance&nbsp;: \(\eta = 2/L\) exactement, cas limite) et \(1/2\). Pour
+  \(\eta = 1\)&nbsp;: facteurs \(-3\) (divergence&nbsp;: \(\eta &gt; 2/L\)) et \(0\)
+  (convergence en un pas&nbsp;: \(\eta = 1/\lambda_2\)).&nbsp;
+  <strong>Ex. 8.</strong> Théorème 4.2&nbsp;: \(32 \to 16 \to 16 \to 14\).
+  Réceptive field&nbsp;: \(5 + 2 \times 2 + 2 \times 2\times 1 = 13\), puis la dilation
+  ajoute \((3-1)\times 2 = 4\) (attention&nbsp;: dans la formule 4.4, compter
+  \((k-1)\times\prod s\) avec l'espacement effectif — recalculer soigneusement avec
+  \(d = 2\)&nbsp;: \(13 + 4 = 17\)... à refaire en tenant compte de l'espacement des
+  taps, l'important est la méthode).&nbsp;
+  <strong>Ex. 10.</strong> Minimum global unique en \((\mu, \sigma) = (0, 1)\)&nbsp;;
+  le logit de \(D^\star\) vaut
+  \(-\frac{x^2}{2}\big(\frac{1}{\sigma^2} - 1\big) + \frac{x\mu}{\sigma^2} - \frac{\mu^2}{2\sigma^2} - \log\sigma\)&nbsp;:
+  trinôme en \(x\), nul partout à l'équilibre.</p>
+</div>
+
+<div class="note">
+  <span class="tag">Indications (exercices impairs)</span>
+  <p><strong>Ex. 1.</strong> Prendre \(\epsilon \sim 10^{-6}\) en float64 pour la
+  vérification&nbsp;; l'erreur de la différence finie centrale est en
+  \(\mathcal{O}(\epsilon^2)\).&nbsp;
+  <strong>Ex. 3.</strong> \(\mathbb{E}[h^2] = \mathbb{E}[a^2 \mathbf{1}_{a&gt;0}] = \tfrac12\mathbb{E}[a^2]\)
+  par symétrie de \(a\)&nbsp;: la variance de la couche suivante est amputée de moitié,
+  d'où \(\mathrm{Var}(W) = 2/n_{\mathrm{in}}\).&nbsp;
+  <strong>Ex. 5.</strong> Permuter les lignes du batch d'entrée
+  (\(x[\mathrm{perm}]\)) et comparer les sorties à transformation près&nbsp;: la
+  propriété est exacte (pas une approximation), le softmax étant inchangé par
+  re-indexage.&nbsp;
+  <strong>Ex. 7.</strong> Recalculer la somme géométrique avec \(g_k^2\) constant&nbsp;;
+  au pas 1, \(\hat m_1 = g_1\) et \(\hat v_1 = g_1^2\) — le rapport vaut
+  \(\mathrm{sign}(g_1)\), un pas de taille \(\eta\) même si \(g_1\) est minuscule ou
+  énorme&nbsp;: d'où la prudence du warmup quand \(g_1\) est atypique.&nbsp;
+  <strong>Ex. 9.</strong> Le minimum de \(\tfrac12(\mu^2 + \sigma^2 - 1 - \log\sigma^2)\)
+  annule \(\mu\) et \(\sigma\) (dérivée en \(\sigma^2\)&nbsp;:
+  \(\tfrac12(1 - 1/\sigma^2) = 0\)).&nbsp;
+  <strong>Ex. 11.</strong> Par bloc&nbsp;: 4 matrices \(d \times d\) d'attention, soit
+  \(4 \times 2 \times 8 \times 768 = 49\,152\) paramètres LoRA, contre
+  \(4 \times 768^2 \approx 2{,}36\) M complets — et le MLP n'est pas adapté&nbsp;;
+  total LoRA ~0,6 M pour ~85 M en complet.</p>
+</div>
 </section>
 
 <!-- ============================ REFS ============================ -->
 <section class="chapter refs" id="refs">
 <h2>Références</h2>
+
+<h3>Manuels et cours</h3>
 <ul>
   <li>I. Goodfellow, Y. Bengio, A. Courville, <em>Deep Learning</em>, MIT Press, 2016 — <a href="https://www.deeplearningbook.org/">gratuit en ligne</a>&nbsp;; chapitres 6-8 pour ce module.</li>
   <li>A. Zhang, Z. Lipton, M. Li, A. Smola, <em>Dive into Deep Learning</em>, 2023 — <a href="https://d2l.ai">d2l.ai</a>&nbsp;: cours interactif code-first (PyTorch), très proche des TP.</li>
-  <li>A. Vaswani et al., <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a>, NeurIPS 2017 — l'article à lire ligne par ligne.</li>
   <li>A. Karpathy, <a href="https://karpathy.ai/zero-to-hero.html">Neural Networks: Zero to Hero</a> — construction d'un GPT depuis zéro&nbsp;; et sa lecture «&nbsp;transformer = graphe&nbsp;» (<em>Software 3.0</em>, Stanford, 2025-2026) qui fonde le pont LLGA.</li>
-  <li>K. He et al., <em>Deep Residual Learning</em> (ResNet), CVPR 2016&nbsp;; K. Kingma &amp; M. Welling, <em>Auto-Encoding Variational Bayes</em>, ICLR 2014&nbsp;; I. Goodfellow et al., <em>Generative Adversarial Nets</em>, NIPS 2014.</li>
   <li>S. Raschka, <em>Machine Learning with PyTorch and Scikit-Learn</em>, Packt, 2022 — pour la pratique.</li>
+</ul>
+
+<h3>Papiers fondateurs (chronologie du cours)</h3>
+<ul>
+  <li>G. Cybenko, <em>Approximation by Superpositions of a Sigmoidal Function</em>, Mathematics of Control, Signals and Systems, 1989 — le théorème 1.2.</li>
+  <li>X. Glorot, Y. Bengio, <em>Understanding the Difficulty of Training Deep Feedforward Neural Networks</em>, AISTATS 2010 — initialisation Xavier.</li>
+  <li>A. Krizhevsky, I. Sutskever, G. Hinton, <em>ImageNet Classification with Deep CNNs</em>, NeurIPS 2012 (AlexNet)&nbsp;; K. Simonyan, A. Zisserman, <a href="https://arxiv.org/abs/1409.1556">Very Deep Convolutional Networks</a> (VGG), ICLR 2015.</li>
+  <li>D. Kingma, J. Ba, <a href="https://arxiv.org/abs/1412.6980">Adam: A Method for Stochastic Optimization</a>, ICLR 2015 — l'algorithme 3.4, dérivé pas à pas.</li>
+  <li>K. He et al., <a href="https://arxiv.org/abs/1502.01852">Delving Deep into Rectifiers</a> (He init), ICCV 2015&nbsp;; <a href="https://arxiv.org/abs/1512.03385">Deep Residual Learning for Image Recognition</a> (ResNet), CVPR 2016.</li>
+  <li>S. Ioffe, C. Szegedy, <a href="https://arxiv.org/abs/1502.03167">Batch Normalization</a>, ICML 2015&nbsp;; J. Ba, J. Kiros, G. Hinton, <a href="https://arxiv.org/abs/1607.06450">Layer Normalization</a>, 2016&nbsp;; S. Santurkar et al., <a href="https://arxiv.org/abs/1805.11604">How Does Batch Normalization Help Optimization?</a>, NeurIPS 2018.</li>
+  <li>N. Srivastava et al., <em>Dropout</em>, JMLR 15, 2014&nbsp;; I. Loshchilov, F. Hutter, <a href="https://arxiv.org/abs/1711.05101">Decoupled Weight Decay Regularization</a> (AdamW), ICLR 2019.</li>
+  <li>D. Hendrycks, K. Gimpel, <a href="https://arxiv.org/abs/1606.08415">Gaussian Error Linear Units</a> (GELU), 2016.</li>
+  <li>A. Vaswani et al., <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a>, NeurIPS 2017 — l'article à lire ligne par ligne.</li>
+  <li>J. Su et al., <a href="https://arxiv.org/abs/2104.09864">RoFormer: Enhanced Transformer with Rotary Position Embedding</a>, 2021&nbsp;; T. Dao et al., <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a>, NeurIPS 2022.</li>
+  <li>D. Kingma, M. Welling, <a href="https://arxiv.org/abs/1312.6114">Auto-Encoding Variational Bayes</a>, ICLR 2014&nbsp;; I. Goodfellow et al., <a href="https://arxiv.org/abs/1406.2661">Generative Adversarial Nets</a>, NeurIPS 2014.</li>
+  <li>E. Hu et al., <a href="https://arxiv.org/abs/2106.09685">LoRA: Low-Rank Adaptation of Large Language Models</a>, ICLR 2022&nbsp;; Aghajanyan et al., <em>Intrinsic Dimensionality</em>, ICML 2021.</li>
+  <li>L. Smith, <a href="https://arxiv.org/abs/1506.01186">Cyclical Learning Rates for Training Neural Networks</a>, WACV 2017 (LR range test)&nbsp;; T. Chen et al., <a href="https://arxiv.org/abs/1604.06174">Training Deep Nets with Sublinear Memory Cost</a>, 2016 (checkpointing).</li>
+</ul>
+
+<h3>Travaux de l'équipe pédagogique</h3>
+<ul>
+  <li>F. Rousseau, M. Vazirgiannis, <em>Graph-of-Word and TW-IDF: New Approach to Ad Hoc IR</em>, CIKM 2013 — le «&nbsp;Graph of Words&nbsp;» du chapitre 9&nbsp;; F. Rousseau, E. Kiagias, M. Vazirgiannis, <a href="https://link.springer.com/chapter/10.1007/978-3-319-16354-3_42">Main Core Retention on Graph-of-Words for Single-Document Keyword Extraction</a>, ECIR 2015.</li>
+  <li>D. Skianis, F. Rousseau, M. Vazirgiannis, <a href="https://aclanthology.org/2020.acl-main.31.pdf">Inductive Text Classification via Graph Neural Networks</a>, ACL 2020.</li>
+  <li>G. Michel, G. Nikolentzos, M. Vazirgiannis, <a href="https://arxiv.org/abs/2306.05955">Path Neural Networks: Expressive and Accurate Graph Neural Networks</a>, ICML 2023.</li>
+  <li>J. Lutzeyer, C. Wu, M. Vazirgiannis, <a href="https://arxiv.org/abs/2109.00909">Sparsifying the Update Step in Graph Neural Networks</a>, 2021.</li>
+  <li>Y. Abbahaddou, J. Lutzeyer, M. Vazirgiannis, <a href="https://arxiv.org/abs/2410.20469">Graph Neural Networks on Discriminative Graphs of Words</a>, NeurIPS 2023 (version étendue).</li>
+  <li>Z. Cui, J. Lutzeyer et al., <a href="https://arxiv.org/abs/2509.22100">SHAKE-GNN: Scalable Hierarchical Kirchhoff-Forest Graph Neural Network</a>, 2025.</li>
+  <li>Y. Zhu et al., <a href="https://arxiv.org/abs/2302.08357">Boundary Guided Learning-Free Semantic Control with Diffusion Models</a>, NeurIPS 2023&nbsp;; <a href="https://arxiv.org/abs/2206.07771">Discrete Contrastive Diffusion for Cross-Modal Music and Image Generation</a>, ICLR 2023&nbsp;; <a href="https://arxiv.org/abs/2306.08247">Diffusion in Diffusion</a>, ICLR 2024&nbsp;; <a href="https://arxiv.org/abs/2412.05101">The Silent Assistant: NoiseQuery as Implicit Guidance</a>, ICCV 2025.</li>
 </ul>
 </section>
 

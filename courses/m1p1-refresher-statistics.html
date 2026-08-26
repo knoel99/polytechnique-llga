@@ -47,7 +47,9 @@
     <li><a href="#ch5">Estimation paramétrique</a></li>
     <li><a href="#ch6">Intervalles de confiance et tests</a></li>
     <li><a href="#ch7">Régression linéaire</a></li>
-    <li><a href="#ch8">De la statistique au machine learning</a></li>
+    <li><a href="#ch8">Statistique bayésienne</a></li>
+    <li><a href="#ch9">Données manquantes et travaux de l'enseignante</a></li>
+    <li><a href="#ch10">De la statistique au machine learning</a></li>
     <li><a href="#ex">Exercices</a></li>
     <li><a href="#refs">Références</a></li>
   </ol>
@@ -59,14 +61,30 @@
 
 <p>Le machine learning est, avant tout, un calculus de l'incertitude : on modélise des données
 comme réalisations de phénomènes aléatoires, puis on raisonne sur ces modèles. On reprend ici
-le vocabulaire avec le niveau de rigueur attendu en master, mais en gardant l'intuition L3.</p>
+le vocabulaire avec le niveau de rigueur attendu en master, mais en gardant l'intuition L3.
+Chaque définition est accompagnée d'exemples numériques : ce cours doit vous rendre
+<em>opérationnel</em> pour tous les modules suivants.</p>
 
 <div class="def">
   <span class="tag">Définition 1.1 — Espace probabilisable</span>
   Un <strong>espace probabilisable</strong> est un couple \((\Omega, \mathcal{F})\) où \(\Omega\)
   est l'ensemble des résultats possibles (<em>univers</em>) et \(\mathcal{F} \subseteq 2^\Omega\)
   est une <strong>tribu</strong> : une famille de parties de \(\Omega\) contenant \(\Omega\),
-  stable par passage au complémentaire et par union dénombrable.
+  stable par passage au complémentaire et par union dénombrable. Les éléments de
+  \(\mathcal{F}\) sont les <strong>événements</strong> : ce sont exactement les questions
+  auxquelles le modèle autorise une réponse probabiliste.
+</div>
+
+<div class="note">
+  <span class="tag">Intuition : la tribu comme « information disponible »</span>
+  Pourquoi ne pas prendre simplement \(\mathcal{F} = 2^\Omega\) ? Deux raisons.
+  (i) <em>Techniquement</em>, sur \(\Omega = [0,1]\) muni de la longueur, il existe des parties
+  non mesurables (construction de Vitali) : vouloir mesurer <em>tous</em> les sous-ensembles
+  mène à des contradictions. (ii) <em>Conceptuellement</em>, une tribu encode une information :
+  si l'expérience est « lancer un dé » mais que l'observateur ne voit que la parité, la tribu
+  pertinente est \(\{\varnothing, \{1,3,5\}, \{2,4,6\}, \Omega\}\). Cette lecture
+  « tribu = information » est la clé des filtrations \((\mathcal{F}_t)\) en processus, du
+  conditionnement et des modèles à données manquantes du chapitre 9.
 </div>
 
 <div class="def">
@@ -78,43 +96,187 @@ le vocabulaire avec le niveau de rigueur attendu en master, mais en gardant l'in
   Le triplet \((\Omega, \mathcal{F}, \mathbb{P})\) est un <strong>espace probabilisé</strong>.
 </div>
 
-<h3>1.1 Probabilité conditionnelle et formule de Bayes</h3>
+<div class="prop">
+  <span class="tag">Proposition 1.3 — Propriétés immédiates</span>
+  Pour tous événements \(A, B\) :
+  \(\mathbb{P}(A^c) = 1 - \mathbb{P}(A)\)&nbsp;;
+  \(A \subseteq B \Rightarrow \mathbb{P}(A) \leq \mathbb{P}(B)\) (monotonie)&nbsp;;
+  <strong>union bornée</strong> : \(\mathbb{P}(A \cup B) \leq \mathbb{P}(A) + \mathbb{P}(B)\)&nbsp;;
+  et pour une suite croissante \((A_n) \uparrow A\) :
+  \(\mathbb{P}(A_n) \uparrow \mathbb{P}(A)\) (continuité séquentielle croissante).
+</div>
 
-<p>Pour deux événements avec \(\mathbb{P}(B) > 0\), la probabilité de \(A\) <em>sachant</em> \(B\) est
-\(\mathbb{P}(A\mid B) = \mathbb{P}(A \cap B)/\mathbb{P}(B)\). Deux événements sont
-<strong>indépendants</strong> si \(\mathbb{P}(A\cap B) = \mathbb{P}(A)\,\mathbb{P}(B)\).</p>
+<div class="proof">
+  Complémentaire : \(\Omega = A \sqcup A^c\), donc \(1 = \mathbb{P}(A) + \mathbb{P}(A^c)\).
+  Monotonie : \(B = A \sqcup (B \setminus A)\) et \(\mathbb{P}(B\setminus A) \geq 0\).
+  Union bornée : \(A \cup B = A \sqcup (B \setminus A)\) et
+  \(B \setminus A \subseteq B\). Continuité croissante : poser
+  \(C_1 = A_1\), \(C_n = A_n \setminus A_{n-1}\) ; les \(C_n\) sont disjoints, de réunion \(A\),
+  et \(\sum_{k \leq n} \mathbb{P}(C_k) = \mathbb{P}(A_n)\) ; on conclut par σ-additivité.
+  <span class="qed">∎</span>
+</div>
+
+<h3>1.1 Conditionnement et probabilités totales</h3>
+
+<div class="def">
+  <span class="tag">Définition 1.4 — Probabilité conditionnelle</span>
+  Si \(\mathbb{P}(B) > 0\) :
+  \(\mathbb{P}(A \mid B) = \dfrac{\mathbb{P}(A \cap B)}{\mathbb{P}(B)}\).
+  L'application \(A \mapsto \mathbb{P}(A \mid B)\) est elle-même une probabilité sur
+  \((\Omega, \mathcal{F})\) : tout ce qui suit s'y applique.
+</div>
 
 <div class="thm">
-  <span class="tag">Théorème 1.3 — Formule de Bayes</span>
+  <span class="tag">Théorème 1.5 — Probabilités totales</span>
+  Si \((B_i)_{i \in I}\) est une partition de \(\Omega\) en événements de probabilité non nulle,
+  alors pour tout événement \(A\) :
+  $$\mathbb{P}(A) \;=\; \sum_{i \in I} \mathbb{P}(A \mid B_i)\,\mathbb{P}(B_i).$$
+</div>
+
+<div class="proof">
+  Les ensembles \(A \cap B_i\) sont deux à deux disjoints (car les \(B_i\) le sont) et leur
+  réunion est \(A\) (car \(\bigcup_i B_i = \Omega\)). Par σ-additivité puis par définition du
+  conditionnement, \(\mathbb{P}(A) = \sum_i \mathbb{P}(A \cap B_i)
+  = \sum_i \mathbb{P}(A \mid B_i)\,\mathbb{P}(B_i)\).
+  <span class="qed">∎</span>
+</div>
+
+<p>La <strong>formule de multiplication</strong> s'en détourne immédiatement :
+\(\mathbb{P}(A \cap B) = \mathbb{P}(A \mid B)\mathbb{P}(B)\), itérée en
+\(\mathbb{P}(A \cap B \cap C) = \mathbb{P}(C \mid A \cap B)\,\mathbb{P}(B \mid A)\,\mathbb{P}(A)\) —
+c'est le squelette des modèles séquentiels (chaînes de Markov, arbres de décision,
+autoregression des LLMs).</p>
+
+<h3>1.2 Indépendance</h3>
+
+<div class="def">
+  <span class="tag">Définition 1.6 — Indépendance (trois niveaux)</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Événements</strong> : \(A\) et \(B\) sont indépendants si
+    \(\mathbb{P}(A \cap B) = \mathbb{P}(A)\,\mathbb{P}(B)\) — « connaître \(B\) ne change rien
+    à \(A\) ». Une famille est <em>mutuellement</em> indépendante si toute sous-famille finie
+    factorise ; l'indépendance deux à deux ne suffit pas (voir la note ci-dessous).</li>
+    <li><strong>Variables</strong> : \(X\) et \(Y\) sont indépendantes si
+    \(\mathbb{P}(X \in A, Y \in B) = \mathbb{P}(X \in A)\,\mathbb{P}(Y \in B)\) pour tous
+    boréliens \(A, B\). En termes de densités : \(f(x,y) = f_X(x) f_Y(y)\).</li>
+    <li><strong>Tribus</strong> : \(\mathcal{G}\) et \(\mathcal{H}\) sont indépendantes si
+    \(\mathbb{P}(G \cap H) = \mathbb{P}(G)\mathbb{P}(H)\) pour tous \(G \in \mathcal{G},
+    H \in \mathcal{H}\). C'est le bon niveau pour les processus : « le futur est indépendant du
+    passé sachant le présent ».</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Deux pièges classiques</span>
+  <strong>Indépendance ≠ incompatibilité.</strong> Deux événements disjoints de probabilités non
+  nulles ne sont <em>jamais</em> indépendants : \(\mathbb{P}(A \cap B) = 0 \neq
+  \mathbb{P}(A)\mathbb{P}(B)\).
+  <strong>Deux à deux ≠ mutuelle.</strong> Deux dés équitables : \(A\) = « le premier dé est
+  pair », \(B\) = « le second dé est pair », \(C\) = « la somme est paire ». Alors
+  \(\mathbb{P}(A)=\mathbb{P}(B)=\mathbb{P}(C)=\tfrac12\), chaque paire factorise
+  (\(\mathbb{P}(A \cap B) = \tfrac14\), etc.), mais
+  \(\mathbb{P}(A \cap B \cap C) = \tfrac14 \neq \tfrac18\) : la famille n'est pas mutuellement
+  indépendante. En apprentissage, les caractéristiques « presque indépendantes » se comportent
+  souvent ainsi — c'est exactement ce que le classifieur naïf bayésien du module NLP choisit
+  d'ignorer.
+</div>
+
+<h3>1.3 Formule de Bayes</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 1.7 — Formule de Bayes</span>
   Si \((B_i)_{i\in I}\) est une partition de \(\Omega\) (événements disjoints de probabilités
   non nulles et de réunion \(\Omega\)), alors pour tout événement \(A\) de probabilité non nulle :
   $$\mathbb{P}(B_k \mid A) \;=\; \frac{\mathbb{P}(A \mid B_k)\,\mathbb{P}(B_k)}{\sum_{i\in I} \mathbb{P}(A \mid B_i)\,\mathbb{P}(B_i)}.$$
 </div>
 
-<div class="note">
-  <span class="tag">Pourquoi c'est central en ML</span>
-  La formule de Bayes est le moteur de l'<strong>inférence bayésienne</strong> : on voit
-  \(B_k\) comme un « paramètre/model » \(M\) et \(A\) comme les « données » \(D\). Alors
-  \(\mathbb{P}(M \mid D) \propto \mathbb{P}(D \mid M)\,\mathbb{P}(M)\) :
-  <em>posterior</em> \(\propto\) <em>vraisemblance</em> × <em>prior</em>. Le maximum de
-  vraisemblance (chapitre 5) et les modèles génératifs du master repos sur ce squelette.
+<div class="proof">
+  Numérateur : \(\mathbb{P}(A \mid B_k)\mathbb{P}(B_k) = \mathbb{P}(A \cap B_k)
+  = \mathbb{P}(B_k \mid A)\mathbb{P}(A)\). Dénominateur : probabilités totales (théorème 1.5)
+  appliquées à \(\mathbb{P}(A)\). On divise.
+  <span class="qed">∎</span>
 </div>
 
-<h3>1.2 Espérance et fonction de répartition</h3>
-<p>Pour une variable aléatoire réelle \(X\) (définie rigoureusement au chapitre 2), l'<strong>espérance</strong>
-\(\mathbb{E}[X]\) est la moyenne pondérée par les probabilités ; la <strong>variance</strong> est
-\(\mathrm{Var}(X) = \mathbb{E}\big[(X - \mathbb{E}X)^2\big] = \mathbb{E}[X^2] - (\mathbb{E}X)^2\),
-et l'<strong>écart-type</strong> en est la racine carrée. La <strong>covariance</strong> de deux
-variables est \(\mathrm{Cov}(X,Y)=\mathbb{E}[XY]-\mathbb{E}[X]\,\mathbb{E}[Y]\) ; le
-<strong>coefficient de corrélation</strong> est
-\(\rho_{X,Y} = \mathrm{Cov}(X,Y)/(\sigma_X \sigma_Y) \in [-1,1]\).</p>
+<div class="ex">
+  <span class="tag">Exemple 1.8 — Test médical (l'exemple à retenir à vie)</span>
+  Une maladie touche 1&nbsp;% de la population (<em>prior</em>). Un test a une sensibilité de
+  99&nbsp;% (\(\mathbb{P}(+ \mid M) = 0{,}99\)) et une spécificité de 95&nbsp;%
+  (\(\mathbb{P}(- \mid M^c) = 0{,}95\), donc \(\mathbb{P}(+ \mid M^c) = 0{,}05\)).
+  Un patient tire un positif : quelle est la probabilité qu'il soit malade&nbsp;?
+  $$\mathbb{P}(M \mid +) = \frac{0{,}99 \times 0{,}01}{0{,}99 \times 0{,}01 + 0{,}05 \times 0{,}99}
+  = \frac{0{,}0099}{0{,}0594} \approx 0{,}167.$$
+  Seulement 17&nbsp;% ! Sur 10&nbsp;000 personnes : ~99 malades testés positifs, mais
+  ~495 faux positifs. L'intuition échoue car elle ignore la <strong>prévalence</strong> ; la
+  formule de Bayes la réintroduit automatiquement. C'est la raison pour laquelle on ne dépiste
+  pas n'importe quelle maladie rare dans n'importe quelle population.
+</div>
 
-<div class="prop">
-  <span class="tag">Proposition 1.4 — Linéarité de l'espérance</span>
-  \(\mathbb{E}[aX + bY] = a\,\mathbb{E}[X] + b\,\mathbb{E}[Y]\) <em>sans aucune hypothèse
-  d'indépendance</em>. En revanche \(\mathrm{Var}(aX+bY) = a^2\mathrm{Var}(X) + b^2\mathrm{Var}(Y)
-  + 2ab\,\mathrm{Cov}(X,Y)\), et si \(X \perp Y\) alors \(\mathbb{E}[XY] = \mathbb{E}X\,\mathbb{E}Y\)
-  et les variances s'additionnent.
+<div class="ex">
+  <span class="tag">Exemple 1.9 — Filtre anti-spam (Bayes naïf, avec chiffres)</span>
+  Base : 40&nbsp;% des mails sont des spam. Le mot «&nbsp;gratuit&nbsp;» apparaît dans
+  70&nbsp;% des spam et 5&nbsp;% des mails légitimes. Partition \(\{S, S^c\}\) :
+  $$\mathbb{P}(S \mid \text{mot}) = \frac{0{,}7 \times 0{,}4}{0{,}7 \times 0{,}4 + 0{,}05 \times 0{,}6}
+  = \frac{0{,}28}{0{,}31} \approx 0{,}90.$$
+  Avec plusieurs mots supposés (approximativement) indépendants sachant la classe, on multiplie
+  les vraisemblances : c'est le <em>classifieur naïf bayésien</em>, encore une baseline redoutable
+  en NLP (cf. module NLP). L'exemple montre aussi la direction du raisonnement génératif&nbsp;:
+  on spécule \(\mathbb{P}(\text{mail} \mid S)\) — facile à estimer par comptage — et on inverse
+  par Bayes pour obtenir \(\mathbb{P}(S \mid \text{mail})\) — ce dont l'utilisateur a besoin.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 1.10 — Classification : règle de Bayes</span>
+  Pour classer un \(x\) among \(K\) classes, la théorie recommande de prédire
+  $$\hat{y}(x) \;=\; \arg\max_k\; \mathbb{P}(y = k \mid x) \;\overset{\text{Bayes}}{=}\;
+  \arg\max_k\; \underbrace{\mathbb{P}(x \mid y = k)}_{\text{vraisemblance}}\;
+  \underbrace{\mathbb{P}(y = k)}_{\text{prior de classe}}.$$
+  Ce prédicteur, dit <strong>règle de Bayes</strong>, minimise l'erreur de classification ;
+  son taux d'erreur est l'<strong>erreur de Bayes</strong>, plancher inatteignable. Chaque
+  classifieur du master (régression logistique, softmax, LLM qui choisit le token suivant)
+  est une façon d'estimer \(\mathbb{P}(y \mid x)\) puis d'appliquer l'argmax.
+</div>
+
+<h3>1.4 Le paradoxe de Simpson</h3>
+
+<div class="ex">
+  <span class="tag">Exemple 1.11 — Une corrélation qui s'inverse</span>
+  Un hôpital teste deux protocoles, A et B. Résultats (patients guéris / traités)&nbsp;:
+  <table class="tbl">
+  <thead><tr><th>Groupe</th><th>Protocole A</th><th>Protocole B</th></tr></thead>
+  <tbody>
+  <tr><td>Cas légers</td><td><strong>95&nbsp;/&nbsp;100 = 95&nbsp;%</strong></td><td>470&nbsp;/&nbsp;500 = 94&nbsp;%</td></tr>
+  <tr><td>Cas sévères</td><td><strong>80&nbsp;/&nbsp;200 = 40&nbsp;%</strong></td><td>8&nbsp;/&nbsp;50 = 16&nbsp;%</td></tr>
+  <tr><td><strong>Ensemble</strong></td><td>175&nbsp;/&nbsp;300 = 58&nbsp;%</td><td><strong>478&nbsp;/&nbsp;550 = 87&nbsp;%</strong></td></tr>
+  </tbody>
+  </table>
+  A est meilleur <em>dans chaque sous-groupe</em>, mais B est meilleur <em>sur l'ensemble</em> !
+  Mécanisme : A a reçu surtout des cas sévères (200/300) et B surtout des cas légers (500/550) ;
+  la gravité est un <strong>facteur de confusion</strong>, et le tableau global la mélange.
+</div>
+
+<div class="note">
+  <span class="tag">Simpson, fairness et ML</span>
+  Le paradoxe de Simpson est l'exemple le plus simple de corrélation non causale. Il hante le
+  <em>fairness</em> : un modèle d'embauche «&nbsp;neutre en moyenne&nbsp;» par genre peut être
+  discriminatoire dans chaque filière d'origine, ou l'inverse ; de même pour un modèle médical
+  «&nbsp;calibré globalement&nbsp;» mais biaisé par sous-groupe ethnique. Moralité technique :
+  <strong>toujours stratifier</strong> avant de conclure, et se rappeler qu'un modèle entraîné
+  sur des données biaisées par un facteur de confusion apprend la confusion. Ce thème est
+  approfondi dans le module Machine Learning (chapitre sur l'évaluation et les biais) et
+  préparé par le chapitre 9 du présent cours.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 1</p>
+  <ul>
+    <li>Tribu = ensemble d'événements <em>et</em> niveau d'information ; probabilité = masse
+    totale 1, σ-additive.</li>
+    <li>Probabilités totales : découper selon une partition ; Bayes : inverser conditionnement,
+    le prior pèse autant que la vraisemblance.</li>
+    <li>Indépendance mutuelle (pas seulement deux à deux) ; indépendance ≠ incompatibilité.</li>
+    <li>Simpson : une association agrégée peut s'inverser par stratification — penser facteur
+    de confusion.</li>
+  </ul>
 </div>
 </section>
 
@@ -128,30 +290,232 @@ variables est \(\mathrm{Cov}(X,Y)=\mathbb{E}[XY]-\mathbb{E}[X]\,\mathbb{E}[Y]\) 
   \(X : \Omega \to \mathbb{R}\) (i.e. \(X^{-1}(B) \in \mathcal{F}\) pour tout borélien \(B\)).
   Elle est <strong>discrète</strong> si son image est au plus dénombrable, <strong>à densité</strong>
   (continue) s'il existe \(f \geq 0\) avec \(\int f = 1\) telle que
-  \(\mathbb{P}(X \in A) = \int_A f(x)\,dx\).
+  \(\mathbb{P}(X \in A) = \int_A f(x)\,dx\). La <strong>loi</strong> de \(X\) est la mesure image
+  \(\mathbb{P}_X\) : tout ce qui se calcule avec \(X\) ne dépend que de sa loi, pas de \(\Omega\).
 </div>
 
-<ul>
-  <li><strong>Loi / distribution</strong> de \(X\) : la mesure image \(\mathbb{P}_X\). Pour le discret,
-  la fonction de masse \(p(x) = \mathbb{P}(X = x)\) ; pour le continu, la densité \(f\).</li>
-  <li><strong>Fonction de répartition</strong> \(F(t) = \mathbb{P}(X \leq t)\) : croissante, càdlàg,
-  \(\lim_{-\infty} F = 0\), \(\lim_{+\infty} F = 1\). On a \(f = F'\) là où \(F\) est dérivable.</li>
-  <li><strong>Variables iid</strong> : indépendantes et de même loi — le modèle standard d'un
-  <em>jeu de données</em> \(D = (X_1, \dots, X_n)\) en apprentissage statistique.</li>
-</ul>
+<p>Un <em>jeu de données</em> standard en apprentissage est un \(n\)-uplet
+\(X_1, \dots, X_n\) <strong>iid</strong> (indépendants, identiquement distribués) selon une loi
+inconnue \(P\) : tout le chapitre 4 consiste à décrire ce qui se passe quand \(n\) grandit.</p>
 
-<h3>2.1 Vecteurs aléatoires et loi conditionnelle</h3>
+<h3>2.1 Fonction de répartition</h3>
+
+<div class="def">
+  <span class="tag">Définition 2.2</span>
+  \(F(t) = \mathbb{P}(X \leq t)\), définie sur \(\mathbb{R}\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.3 — Propriétés caractéristiques</span>
+  \(F\) est croissante, càdlàg (continue à droite, limitée à gauche), avec
+  \(\lim_{t \to -\infty} F(t) = 0\) et \(\lim_{t \to +\infty} F(t) = 1\). Réciproquement, toute
+  fonction vérifiant ces propriétés est la fonction de répartition d'une unique loi. En outre
+  \(\mathbb{P}(a \lt X \leq b) = F(b) - F(a)\) et
+  \(\mathbb{P}(X = a) = F(a) - F(a^-)\) : <strong>\(F\) détermine entièrement la loi</strong>.
+</div>
+
+<div class="proof">
+  Croissance : si \(s \leq t\) alors \(\{X \leq s\} \subseteq \{X \leq t\}\), donc
+  \(F(s) \leq F(t)\) par monotonie (proposition 1.3). Différence :
+  \(\{X \leq b\} = \{X \leq a\} \sqcup \{a \lt X \leq b\}\), d'où la formule par additivité.
+  Limites : \(\{X \leq n\} \uparrow \Omega\) quand \(n \to \infty\), donc
+  \(F(n) \to 1\) par continuité croissante ; de même \(\{X \leq -n\} \downarrow \varnothing\)
+  donne \(F(-n) \to 0\). Masse en un point :
+  \(\{a - \tfrac1m \lt X \leq a\} \downarrow \{X = a\}\), donc
+  \(\mathbb{P}(X=a) = F(a) - \lim_m F(a - \tfrac1m)\). Pour l'unicité (réciproque), on vérifie
+  que la formule \(\mathbb{P}((a,b]) = F(b)-F(a)\) se prolonge en une probabilité sur les
+  boréliens — c'est le théorème d'extension de Carathéodory, admis ici.
+  <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Usage : la méthode inverse de simulation</span>
+  Si \(U \sim \mathcal{U}[0,1]\) et \(F\) est une fonction de répartition continue strictement
+  croissante, alors \(X = F^{-1}(U)\) a pour loi \(F\) : en effet
+  \(\mathbb{P}(F^{-1}(U) \leq x) = \mathbb{P}(U \leq F(x)) = F(x)\). C'est ainsi que les
+  générateurs pseudo-aléatoires produisent toutes les lois à partir d'uniformes — cœur de toute
+  simulation Monte Carlo et de l'échantillonnage des modèles génératifs (cf. module Deep
+  Learning, échantillonnage par inversion de CDF ou par transformée).
+</div>
+
+<h3>2.2 Variables à densité : changement de variables</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 2.4 — Formule de la jacobienne</span>
+  Soit \(X\) à densité \(f_X\) sur un ouvert \(D \subseteq \mathbb{R}^d\) et
+  \(g : D \to \mathbb{R}^d\) un \(C^1\)-difféomorphisme. Alors \(Y = g(X)\) a pour densité
+  $$f_Y(y) \;=\; f_X\big(g^{-1}(y)\big)\,\Big|\det J_{g^{-1}}(y)\Big|,$$
+  où \(J_{g^{-1}}\) est la matrice jacobienne de \(g^{-1}\).
+</div>
+
+<div class="proof">
+  Cas \(d=1\), \(g\) croissante : pour tout \(t\),
+  \(\mathbb{P}(Y \leq t) = \mathbb{P}(g(X) \leq t) = \mathbb{P}(X \leq g^{-1}(t))
+  = F_X(g^{-1}(t))\). En dérivant (composée) :
+  \(f_Y(t) = f_X(g^{-1}(t)) \cdot (g^{-1})'(t)\). Si \(g\) est décroissante, le sens de
+  l'inégalité s'inverse et la dérivée est négative : la valeur absolue restaure la formule.
+  Cas vectoriel : même raisonnement avec le théorème de changement de variables dans les
+  intégrales multiples, qui introduit \(|\det J|\) ; l'aire locale se dilate exactement du
+  facteur jacobien, et une densité doit se compenser inversement pour que la masse reste 1.
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.5 — Deux transformations à savoir refaire</span>
+  <strong>(a) Exponentielle par inversion.</strong> \(U \sim \mathcal{U}[0,1]\),
+  \(X = -\tfrac1\lambda \ln U\). Ici \(g(u) = -\ln(\lambda u)/\lambda\)... prenons le chemin
+  direct : \(F_X(x) = 1 - e^{-\lambda x}\) pour \(x \geq 0\), réciproque
+  \(F^{-1}(u) = -\tfrac1\lambda\ln(1-u)\) : \(X = -\tfrac{1}{\lambda}\ln(1-U)\) suit
+  \(\mathcal{E}(\lambda)\). Comme \(1-U \sim \mathcal{U}[0,1]\), on écrit aussi \(X = -\tfrac1\lambda \ln U\).
+  <strong>(b) Standardisation gaussienne.</strong> \(X \sim \mathcal{N}(\mu, \sigma^2)\),
+  \(Y = \tfrac{X - \mu}{\sigma}\) : \(g^{-1}(y) = \sigma y + \mu\), \((g^{-1})'(y) = \sigma\),
+  donc \(f_Y(y) = \tfrac{1}{\sigma\sqrt{2\pi}} e^{-\frac{(\sigma y + \mu - \mu)^2}{2\sigma^2}}
+  \cdot \sigma = \tfrac{1}{\sqrt{2\pi}} e^{-y^2/2}\) : \(Y \sim \mathcal{N}(0,1)\).
+</div>
+
+<h3>2.3 Espérance, moments, fonction génératrice des moments</h3>
+
+<div class="def">
+  <span class="tag">Définition 2.6 — Espérance</span>
+  Discrète : \(\mathbb{E}[X] = \sum_x x\, p(x)\) (si \(\sum |x| p(x) \lt \infty\)).
+  À densité : \(\mathbb{E}[X] = \int x f(x)\,dx\) (si \(\int |x| f \lt \infty\)). Plus
+  généralement \(\mathbb{E}[h(X)] = \int h \,d\mathbb{P}_X\) — la <em>formule de transfert</em>.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.7 — Linéarité, positivité, Tonelli</span>
+  \(\mathbb{E}[aX+bY] = a\,\mathbb{E}[X]+b\,\mathbb{E}[Y]\) <em>sans hypothèse
+  d'indépendance</em>. Positivité : \(X \geq 0 \Rightarrow \mathbb{E}[X] \geq 0\), avec
+  égalité ssi \(X = 0\) ps. <strong>Théorème de Tonelli</strong> : pour \(h \geq 0\) mesurable,
+  \(\int h\,d(\mathbb{P}_X \otimes \mathbb{P}_Y) = \iint h\,d\mathbb{P}_X d\mathbb{P}_Y\)
+  s'interpète en toute liberté (Fubini sans hypothèse d'intégrabilité dès que tout est positif) ;
+  Fubini généralise aux fonctions intégrables. Conséquence : si \(X \perp Y\),
+  \(\mathbb{E}[XY] = \mathbb{E}[X]\mathbb{E}[Y]\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.8 — Variance et moments</span>
+  \(\mathrm{Var}(X) = \mathbb{E}[(X-\mathbb{E}X)^2] = \mathbb{E}[X^2] - (\mathbb{E}X)^2\)
+  (formule de König-Huygens, à redémontrer en développant le carré) ;
+  \(\mathrm{Var}(aX+b) = a^2\mathrm{Var}(X)\) ;
+  \(\mathrm{Var}(aX+bY) = a^2\mathrm{Var}(X) + b^2\mathrm{Var}(Y) + 2ab\,\mathrm{Cov}(X,Y)\),
+  qui se réduit à la somme quand \(\mathrm{Cov}=0\). Le <strong>k-ième moment</strong> est
+  \(\mathbb{E}[X^k]\) ; moment centré d'ordre 3 normalisé = <em>skewness</em>, d'ordre 4 =
+  <em>kurtosis</em> (diagnostics de loi, cf. module Signal Processing).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.9 — Fonction génératrice des moments (MGF)</span>
+  \(M_X(t) = \mathbb{E}[e^{tX}]\), définie sur un voisinage de \(0\) si \(X\) a des moments de
+  tous ordres à croissance exponentielle modérée. Propriétés :
+  (i) \(M_X^{(k)}(0) = \mathbb{E}[X^k]\) — d'où son nom : on « lit » les moments en dérivant ;
+  (ii) si \(X \perp Y\), \(\boxed{M_{X+Y}(t) = M_X(t)\,M_Y(t)}\) ;
+  (iii) si \(M_X\) existe autour de 0, elle caractérise la loi (théorème de continuité de Lévy).
+</div>
+
+<div class="proof">
+  (ii) : par Tonelli/Fubini justifié par l'indépendance,
+  \(\mathbb{E}[e^{t(X+Y)}] = \mathbb{E}[e^{tX}e^{tY}]
+  = \mathbb{E}[e^{tX}]\,\mathbb{E}[e^{tY}]\).
+  (i) : on dérive sous l'espérance \(\frac{d^k}{dt^k}\mathbb{E}[e^{tX}] = \mathbb{E}[X^k e^{tX}]\)
+  puis on évalue en \(t=0\).
+  Exemples à connaître : Bernoulli(\(p\)) : \(1-p+pe^t\) ; Poisson(\(\lambda\)) :
+  \(e^{\lambda(e^t-1)}\) ; \(\mathcal{N}(\mu,\sigma^2)\) : \(e^{\mu t + \sigma^2 t^2/2}\) ;
+  exponentielle : \(\frac{\lambda}{\lambda - t}\) (\(t \lt \lambda\)).
+  <span class="qed">∎</span>
+</div>
+
+<h3>2.4 Inégalités de base</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 2.10 — Markov</span>
+  Si \(X \geq 0\) et \(a > 0\) :
+  \(\mathbb{P}(X \geq a) \leq \dfrac{\mathbb{E}[X]}{a}\).
+</div>
+
+<div class="proof">
+  \(\mathbb{E}[X] = \mathbb{E}[X\,\mathbf{1}_{X \lt a}] + \mathbb{E}[X\,\mathbf{1}_{X \geq a}]
+  \geq 0 + a\,\mathbb{P}(X \geq a)\), car sur l'événement \(\{X \geq a\}\) on a \(X \geq a\)
+  et \(\mathbb{E}[X\mathbf{1}_{X\geq a}] \geq a\,\mathbb{E}[\mathbf{1}_{X \geq a}]\) par
+  positivité. On isole \(\mathbb{P}(X \geq a)\).
+  <span class="qed">∎</span>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.11 — Tchebychev (et Bienaymé)</span>
+  Si \(\mathrm{Var}(X) \lt \infty\) et \(t > 0\) :
+  \(\mathbb{P}\big(|X - \mathbb{E}X| \geq t\big) \leq \dfrac{\mathrm{Var}(X)}{t^2}\).
+</div>
+
+<div class="proof">
+  On applique Markov à la variable non négative \(Y = (X - \mathbb{E}X)^2\) avec \(a = t^2\) :
+  \(\mathbb{P}(|X-\mathbb{E}X| \geq t) = \mathbb{P}(Y \geq t^2) \leq \mathbb{E}[Y]/t^2
+  = \mathrm{Var}(X)/t^2\).
+  <span class="qed">∎</span>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.12 — Cauchy-Schwarz</span>
+  \(|\mathbb{E}[XY]| \leq \sqrt{\mathbb{E}[X^2]\,\mathbb{E}[Y^2]}\), avec égalité ssi \(X\) et
+  \(Y\) sont colinéaires dans \(L^2\). En particulier
+  \(|\rho_{X,Y}| \leq 1\) pour tout couple de corrélation.
+</div>
+
+<div class="proof">
+  Pour tout \(\lambda \in \mathbb{R}\), \(0 \leq \mathbb{E}[(X + \lambda Y)^2]
+  = \mathbb{E}[X^2] + 2\lambda\,\mathbb{E}[XY] + \lambda^2\mathbb{E}[Y^2]\) : c'est un trinôme
+  en \(\lambda\) positif ou nul, donc de discriminant \(\leq 0\), soit
+  \(4\,\mathbb{E}[XY]^2 - 4\,\mathbb{E}[X^2]\mathbb{E}[Y^2] \leq 0\).
+  <span class="qed">∎</span>
+</div>
+
+<h3>2.5 Covariance, corrélation, indépendance : démêler</h3>
+
+<div class="def">
+  <span class="tag">Définition 2.13</span>
+  \(\mathrm{Cov}(X,Y) = \mathbb{E}[(X-\mathbb{E}X)(Y-\mathbb{E}Y)]
+  = \mathbb{E}[XY] - \mathbb{E}X\,\mathbb{E}Y\) ;
+  \(\rho_{X,Y} = \mathrm{Cov}(X,Y)/(\sigma_X\sigma_Y) \in [-1,1]\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.14 — Le sens des implications</span>
+  Indépendance \(\Rightarrow\) \(\mathrm{Cov}(X,Y) = 0\) (et plus : factorisation de toutes
+  les fonctions). Les réciproques sont <strong>fausses</strong> :
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Décorrélé mais lié.</strong> \(X\) uniforme sur \(\{-1,0,1\}\),
+    \(Y = X^2\). Alors \(\mathrm{Cov}(X,Y) = \mathbb{E}[X^3] - \mathbb{E}[X]\mathbb{E}[X^2]
+    = 0 - 0 = 0\), alors que \(Y\) est une <em>fonction déterministe</em> de \(X\). La
+    corrélation linéaire ne voit pas les dépendances non linéaires — défaut exploité par
+    certaines adversarial attacks et excuse des «&nbsp;maximum entropy&nbsp;» features.</li>
+    <li><strong>Corrélation sans lien direct.</strong> Deux variables provoquées par une
+    troisième (confusion) peuvent être très corrélées (cf. Simpson, exemple 1.11).</li>
+    <li>\( |\rho| = 1\) \(\iff\) il existe \(a,b\) avec \(Y = aX+b\) ps : la corrélation
+    extrême est uniquement l'affine.</li>
+  </ul>
+</div>
+
+<h3>2.6 Vecteurs aléatoires et espérance conditionnelle</h3>
+
 <p>Un vecteur aléatoire \(X = (X_1, \dots, X_d) \in \mathbb{R}^d\) admet une densité jointe
 \(f(x_1,\dots,x_d)\). Les <strong>lois marginales</strong> s'obtiennent en intégrant les autres
 variables : \(f_{X_1}(x_1) = \int f(x_1, x_2,\dots,x_d)\,dx_2 \dots dx_d\), et la
-<strong>densité conditionnelle</strong> est \(f_{X|Y}(x \mid y) = f(x,y)/f_Y(y)\).</p>
+<strong>densité conditionnelle</strong> est \(f_{X|Y}(x \mid y) = f(x,y)/f_Y(y)\). La
+<strong>version bayésienne</strong> du conditionnement s'écrit
+\(f_{Y|X}(y \mid x) \propto f_{X|Y}(x\mid y)\, f_Y(y)\) : exactement Bayes en densités.</p>
 
 <div class="def">
-  <span class="tag">Définition 2.2 — Espérance conditionnelle</span>
+  <span class="tag">Définition 2.15 — Espérance conditionnelle</span>
   L'<strong>espérance conditionnelle</strong> de \(X\) sachant \(Y=y\) est
   \(g(y) = \mathbb{E}[X \mid Y = y] = \int x \, f_{X|Y}(x\mid y)\,dx\). La variable
   \(\mathbb{E}[X \mid Y] = g(Y)\) est la <em>meilleure approximation de \(X\) par une fonction de
-  \(Y\)</em> au sens des moindres carrés.
+  \(Y\)</em> au sens des moindres carrés : pour toute \(h\),
+  \(\mathbb{E}[(X - h(Y))^2] \geq \mathbb{E}[(X - g(Y))^2]\) — c'est le théorème de projection
+  dans \(L^2\). Propriété de la tour (tower property) :
+  \(\mathbb{E}[\mathbb{E}[X \mid Y]] = \mathbb{E}[X]\), et
+  \(\mathrm{Var}(X) = \mathbb{E}[\mathrm{Var}(X\mid Y)] + \mathrm{Var}(\mathbb{E}[X \mid Y])\)
+  (variance totale : variance <em>au sein</em> + variance <em>entre</em> groupes — c'est
+  l'identité au cœur de l'ANOVA, chapitre 6).
 </div>
 
 <div class="note">
@@ -159,24 +523,46 @@ variables : \(f_{X_1}(x_1) = \int f(x_1, x_2,\dots,x_d)\,dx_2 \dots dx_d\), et l
   En apprentissage supervisé, on cherche à prédire \(Y\) à partir de \(X\). Le
   prédicteur optimal au sens de l'erreur quadratique moyenne est exactement la <strong>fonction de
   régression</strong> \(x \mapsto \mathbb{E}[Y \mid X = x]\). C'est l'objet que tous nos modèles
-  (linéaire, réseaux de neurones, forêts…) tentent d'approcher.
+  (linéaire, réseaux de neurones, forêts…) tentent d'approcher ; l'erreur irréductible est
+  \(\mathbb{E}[\mathrm{Var}(Y\mid X)]\).
 </div>
 
-<h3>2.2 Générer et manipuler des lois en Python</h3>
+<h3>2.7 Générer et manipuler des lois en Python</h3>
+
 <pre class="code"><code>import numpy as np
 
 rng = np.random.default_rng(seed=42)          # générateur moderne (PCG64)
 x = rng.normal(loc=0.0, scale=1.0, size=1000) # 1000 tirages N(0,1)
-u = rng.uniform(0, 1, size=1000)
+u = rng.uniform(0, 1, size=100_000)
 
-# Loi empirique (fonction de répartition empirique) et histogramme (densité empirique)
+# Méthode inverse (théorème 2.4 + note 2.1) : U uniforme -&gt; exponentielle
+lam = 2.0
+expo = -np.log(1.0 - u) / lam
+print(expo.mean().round(4), (1/lam))          # ~0.5 = E[X] de E(2)
+
+# Fonction de répartition empirique, histogramme (densité empirique)
 import matplotlib.pyplot as plt
 plt.hist(x, bins=40, density=True, alpha=.6, label='échantillon')
 grid = np.linspace(-4, 4, 200)
 plt.plot(grid, np.exp(-grid**2/2)/np.sqrt(2*np.pi), 'r', label='densité N(0,1)')
 plt.legend(); plt.show()
 
-print(x.mean(), x.var(ddof=1))   # moyenne empirique, variance (non biaisée)</code></pre>
+print(x.mean(), x.var(ddof=1))   # moyenne empirique, variance (non biaisée)
+print(np.quantile(x, [0.25, 0.5, 0.75]))  # statistiques d'ordre (chap. 3)</code></pre>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 2</p>
+  <ul>
+    <li>La fonction de répartition caractérise la loi ; la méthode inverse simule toute loi
+    continue depuis des uniformes.</li>
+    <li>Changement de variables : \(f_Y(y) = f_X(g^{-1}(y))\,|\!\det J_{g^{-1}}(y)|\) — la
+    jacobienne compense la dilatation locale.</li>
+    <li>MGF : moments par dérivation, produit pour les sommes d'indépendantes.</li>
+    <li>Markov \(\to\) Tchebychev \(\to\) (chapitre 4) la loi des grands nombres : la chaîne
+    des inégalités est aussi une chaîne de preuves.</li>
+    <li>Décorrélé \(\neq\) indépendant (contre-exemple \(Y = X^2\)).</li>
+  </ul>
+</div>
 </section>
 
 <!-- ============================ CH 3 ============================ -->
@@ -184,19 +570,27 @@ print(x.mean(), x.var(ddof=1))   # moyenne empirique, variance (non biaisée)</c
 <h2>3. Lois usuelles</h2>
 
 <p>Ce sont les « briques » que le master réutilise en permanence. Il faut connaître leurs
-support, paramètres, espérance et variance, et savoir <em>quand</em> elles apparaissent.</p>
+support, paramètres, espérance et variance, et savoir <em>quand</em> elles apparaissent. Le
+tableau ci-dessous est votre carte de référence ; les scénarios ML indiquent dans quel module
+la loi revient.</p>
 
 <table class="tbl">
 <thead><tr><th>Loi</th><th>Paramètres</th><th>Espérance</th><th>Variance</th><th>Usage typique en ML</th></tr></thead>
 <tbody>
 <tr><td>Bernoulli \(p\)</td><td>\(p \in [0,1]\)</td><td>\(p\)</td><td>\(p(1-p)\)</td><td>étiquette binaire, classifieur</td></tr>
 <tr><td>Binomiale \(\mathcal{B}(n,p)\)</td><td>\(n, p\)</td><td>\(np\)</td><td>\(np(1-p)\)</td><td>nombre de succès / erreurs sur \(n\) essais</td></tr>
+<tr><td>Multinomiale \(\mathrm{Mult}(n, (p_1,\dots,p_K))\)</td><td>\(n\), probas \(p_k\)</td><td>\(n p_k\) (par cellule)</td><td>\(n p_k(1-p_k)\)</td><td>comptes de classes, sortie softmax, test \(\chi^2\) (chap. 6)</td></tr>
+<tr><td>Géométrique \(p\)</td><td>\(p\)</td><td>\(1/p\)</td><td>\((1-p)/p^2\)</td><td>nombre d'essais avant le premier succès ; sampling avec rejet</td></tr>
+<tr><td>Hypergéométrique</td><td>\(N, K, n\)</td><td>\(nK/N\)</td><td>\(n\frac{K}{N}(1-\frac{K}{N})\frac{N-n}{N-1}\)</td><td>échantillonnage <em>sans</em> remise (lots de production, A/B)</td></tr>
 <tr><td>Uniforme \(\mathcal{U}[a,b]\)</td><td>\(a&lt;b\)</td><td>\(\tfrac{a+b}{2}\)</td><td>\(\tfrac{(b-a)^2}{12}\)</td><td>initialisation, simulation (méthode inverse)</td></tr>
-<tr><td>Exponentielle \(\mathcal{E}(\lambda)\)</td><td>\(\lambda&gt;0\)</td><td>\(1/\lambda\)</td><td>\(1/\lambda^2\)</td><td>durées de vie, files d'attente</td></tr>
-<tr><td>Poisson \(\mathcal{P}(\lambda)\)</td><td>\(\lambda&gt;0\)</td><td>\(\lambda\)</td><td>\(\lambda\)</td><td>comptages d'événements rares</td></tr>
+<tr><td>Exponentielle \(\mathcal{E}(\lambda)\)</td><td>\(\lambda&gt;0\)</td><td>\(1/\lambda\)</td><td>\(1/\lambda^2\)</td><td>durées de vie, files d'attente, temps d'attente Poisson</td></tr>
+<tr><td>Poisson \(\mathcal{P}(\lambda)\)</td><td>\(\lambda&gt;0\)</td><td>\(\lambda\)</td><td>\(\lambda\)</td><td>comptages d'événements rares ; régularisation L2 «&nbsp;à la Laplace&nbsp;» (via la loi double-exponentielle)</td></tr>
+<tr><td>Gamma \(\Gamma(a, b)\) (forme \(a\), échelle \(b\))</td><td>\(a,b&gt;0\)</td><td>\(ab\)</td><td>\(ab^2\)</td><td>durées agrégées, priors conjugués (précision), Modèle de Hawkes (Emerging ML)</td></tr>
+<tr><td>Beta \(\mathrm{Beta}(a,b)\)</td><td>\(a,b&gt;0\)</td><td>\(\tfrac{a}{a+b}\)</td><td>\(\tfrac{ab}{(a+b)^2(a+b+1)}\)</td><td>loi d'une probabilité inconnue ; prior conjugué de la Bernoulli (chap. 8)</td></tr>
 <tr><td>Gaussienne \(\mathcal{N}(\mu,\sigma^2)\)</td><td>\(\mu, \sigma^2\)</td><td>\(\mu\)</td><td>\(\sigma^2\)</td><td>bruit, loi a posteriori, diffusion</td></tr>
-<tr><td>Chi-deux \(\chi^2_k\)</td><td>\(k \in \mathbb{N}^*\)</td><td>\(k\)</td><td>\(2k\)</td><td>tests d'adéquation, déviations quadratiques</td></tr>
+<tr><td>Chi-deux \(\chi^2_k\)</td><td>\(k \in \mathbb{N}^*\)</td><td>\(k\)</td><td>\(2k\)</td><td>tests d'adéquation, déviations quadratiques, variance empirique</td></tr>
 <tr><td>Student \(t_k\)</td><td>\(k\)</td><td>\(0\ (k&gt;1)\)</td><td>\(\tfrac{k}{k-2}\ (k&gt;2)\)</td><td>intervalles de confiance en petite dimension</td></tr>
+<tr><td>Fisher \(\mathcal{F}(d_1, d_2)\)</td><td>\(d_1, d_2\)</td><td>\(\tfrac{d_2}{d_2-2}\ (d_2&gt;2)\)</td><td>\(\tfrac{2d_2^2(d_1+d_2-2)}{d_1(d_2-2)^2(d_2-4)}\)</td><td>comparaison de variances, ANOVA (chap. 6)</td></tr>
 </tbody>
 </table>
 
@@ -206,14 +600,140 @@ support, paramètres, espérance et variance, et savoir <em>quand</em> elles app
   covariance symétrique définie positive, si \(X\) admet la densité
   $$f(x) = \frac{1}{(2\pi)^{d/2}\,|\Sigma|^{1/2}} \exp\!\Big(-\tfrac12 (x-\mu)^\top \Sigma^{-1} (x-\mu)\Big).$$
   Si les composantes sont <em>non corrélées</em> (\(\Sigma\) diagonale), elles sont
-  <em>indépendantes</em> — propriété exclusive de la gaussienne.
+  <em>indépendantes</em> — propriété exclusive de la gaussienne. Caractérisation équivalente et
+  souvent plus maniable : \(X\) est gaussienne ssi toute combinaison linéaire
+  \(a^\top X\) est une gaussienne réelle.
+</div>
+
+<h3>3.1 Gaussiennes : marginales et conditionnelles</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 3.2 — Conditionnement gaussien</span>
+  Soit \((X, Y)\) gaussienne vectorielle de moyenne \((\mu_X, \mu_Y)\) et de covariance par blocs
+  \(\Sigma = \begin{pmatrix} \Sigma_{XX} &amp; \Sigma_{XY} \\ \Sigma_{YX} &amp; \Sigma_{YY}\end{pmatrix}\).
+  Alors :
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>marginales gaussiennes</strong> : \(X \sim \mathcal{N}(\mu_X, \Sigma_{XX})\)
+    (les projections d'un gaussien sont gaussiennes — par la caractérisation linéaire) ;</li>
+    <li><strong>conditionnelle gaussienne</strong> :
+    $$Y \mid X = x \;\sim\; \mathcal{N}\big(\mu_Y + \Sigma_{YX}\Sigma_{XX}^{-1}(x - \mu_X),\;\;
+    \Sigma_{YY} - \Sigma_{YX}\Sigma_{XX}^{-1}\Sigma_{XY}\big).$$
+    La moyenne conditionnelle est <em>affine en \(x\)</em> et la covariance conditionnelle est
+    <em>constante</em> (homoscédasticité).</li>
+  </ul>
+</div>
+
+<div class="proof">
+  On suppose \(\Sigma_{XX}\) inversible et on complète le carré dans l'exposant. Par la
+  caractérisation, il suffit d'identifier moyenne et covariance. Posons
+  \(A = \Sigma_{YX}\Sigma_{XX}^{-1}\) et \(Z = Y - \mu_Y - A(x-\mu_X)\) pour \(x\) fixé. Écrivons
+  le vecteur \(\binom{X-\mu_X}{Z}\) : c'est une transformation <em>affine</em> inversible du
+  gaussien \((X,Y)\), donc gaussien. Sa covariance croisée :
+  \(\mathrm{Cov}(X - \mu_X, Z) = \Sigma_{XY} - \Sigma_{XX}\Sigma_{XX}^{-1}\Sigma_{XY} = 0\).
+  Pour un gaussien, covariance nulle \(\Rightarrow\) indépendance (définition 3.1) : donc
+  \(Z\) est <em>indépendant de \(X\)</em>, \(Z \sim \mathcal{N}(0, \Sigma_{YY} -
+  \Sigma_{YX}\Sigma_{XX}^{-1}\Sigma_{XY})\). En réarrangeant,
+  \(Y = \mu_Y + A(x - \mu_X) + Z\) : pour \(X=x\) fixé, \(Y\) est la somme d'une constante et
+  d'un gaussien indépendant de \(x\), d'où la loi conditionnelle annoncée.
+  <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Ce théorème travaille partout au master</span>
+  Régression gaussienne (chapitre 7 : \(\mathbb{E}[Y \mid X]\) affine retrouve les moindres
+  carrés), filtre de Kalman, processus gaussiens, kriging, modèles à variables latentes
+  gaussiennes, diffusion (chaque étape conditionne un bruit gaussien — cf. module Deep
+  Learning), variational autoencoders (posterior gaussien diagonal — module Multimodal GenAI).
+  Retenez le mantra : <em>conditionner un gaussien affine la moyenne et diminue la covariance
+  (de \(\Sigma_{YX}\Sigma_{XX}^{-1}\Sigma_{XY}\), gain symétrique défini positif).</em>
+</div>
+
+<h3>3.2 Sommes de variables : stabilité par convolution</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — Sommes d'indépendantes</span>
+  Si \(X \perp Y\), la loi de \(X+Y\) est le <strong>produit de convolution</strong>
+  \(f_{X+Y}(z) = \int f_X(x) f_Y(z-x)\,dx\), et via la MGF (proposition 2.9) :
+  \(M_{X+Y} = M_X M_Y\). Familles <strong>stables</strong> par somme d'indépendantes :
+  <table class="tbl">
+  <thead><tr><th>Famille</th><th>Somme</th><th>Vérification MGF</th></tr></thead>
+  <tbody>
+  <tr><td>\(\mathcal{B}(n_1,p)\), \(\mathcal{B}(n_2,p)\)</td><td>\(\mathcal{B}(n_1+n_2,p)\)</td><td>\((1-p+pe^t)^{n_1+n_2}\)</td></tr>
+  <tr><td>\(\mathcal{P}(\lambda_1)\), \(\mathcal{P}(\lambda_2)\)</td><td>\(\mathcal{P}(\lambda_1+\lambda_2)\)</td><td>\(e^{(\lambda_1+\lambda_2)(e^t-1)}\)</td></tr>
+  <tr><td>\(\Gamma(a_1,b)\), \(\Gamma(a_2,b)\)</td><td>\(\Gamma(a_1+a_2,b)\) (même échelle)</td><td>\((1-bt)^{-(a_1+a_2)}\)</td></tr>
+  <tr><td>\(\mathcal{N}(\mu_1,\sigma_1^2)\), \(\mathcal{N}(\mu_2,\sigma_2^2)\)</td><td>\(\mathcal{N}(\mu_1+\mu_2,\sigma_1^2+\sigma_2^2)\)</td><td>\(e^{(\mu_1+\mu_2)t + (\sigma_1^2+\sigma_2^2)t^2/2}\)</td></tr>
+  <tr><td>\(\chi^2_{k_1}\), \(\chi^2_{k_2}\)</td><td>\(\chi^2_{k_1+k_2}\)</td><td>cas particulier gamma</td></tr>
+  </tbody>
+  </table>
+  La moyenne de \(n\) iid garde la famille quand elle est stable, avec espérance constante et
+  variance divisée par \(n\) — c'est la «&nbsp;concentration&nbsp;» quantitative qui prépare le TCL.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 3.4 — Somme gaussienne, en une ligne de MGF</span>
+  \(M_{X+Y}(t) = e^{\mu_1 t + \sigma_1^2 t^2/2}\,e^{\mu_2 t + \sigma_2^2 t^2/2}
+  = e^{(\mu_1+\mu_2)t + (\sigma_1^2+\sigma_2^2)t^2/2}\) : on reconnaît la MGF de
+  \(\mathcal{N}(\mu_1+\mu_2, \sigma_1^2+\sigma_2^2)\), et la MGF caractérise la loi
+  (théorème 2.9 (iii)). Les variances s'<em>additionnent</em> : les écarts-types s'additionnent
+  en \(\sqrt{\sigma_1^2+\sigma_2^2}\) — d'où la réduction en \(1/\sqrt n\) de la moyenne
+  empirique (chapitre 4).
+</div>
+
+<h3>3.3 Statistiques d'ordre</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 3.5 — Lois du minimum et du maximum</span>
+  Pour \(X_1, \dots, X_n\) iid de fonction de répartition \(F\) :
+  $$\mathbb{P}(\max_i X_i \leq t) = F(t)^n, \qquad
+  \mathbb{P}(\min_i X_i \leq t) = 1 - \big(1 - F(t)\big)^n.$$
+  Plus généralement \(X_{(k)}\) (le \(k\)-ième plus petit) sert à définir les
+  <strong>quantiles</strong> : le quantile empirique d'ordre \(q\) est
+  \(X_{(\lceil qn \rceil)}\).
+</div>
+
+<div class="proof">
+  \(\{\max \leq t\} = \bigcap_i \{X_i \leq t\}\) et les événements sont indépendants : produit
+  des \(n\) probabilités \(F(t)\). De même
+  \(\{\min > t\} = \bigcap_i \{X_i > t\}\), de probabilité \((1-F(t))^n\).
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 3.6 — Maximum de uniformes et quantiles en code</span>
+  Si \(X_i \sim \mathcal{U}[0,1]\), \(\max_i X_i\) a pour densité \(n t^{n-1}\) (dérivée de
+  \(t^n\)) : c'est une loi \(\mathrm{Beta}(n,1)\) d'espérance \(\frac{n}{n+1}\). Avec
+  \(n = 9\) essais, le meilleur score attendu est déjà \(0{,}9\). Cette «&nbsp;loge de la
+  chance du meilleur&nbsp;» explique pourquoi il suffit de peu d'essais pour améliorer nettement
+  un hyperparamètre (recherche aléatoire), et pourquoi le maximum de \(n\) échantillons
+  s'échappe vers l'extrême (théorie des valeurs extrêmes, utile en risque et en RL).
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(0)
+x = rng.uniform(0, 1, size=(10_000, 9))
+print(x.max(axis=1).mean().round(3))   # ~0.900 = n/(n+1)
+q = np.quantile(rng.normal(size=100_000), [0.05, 0.25, 0.5, 0.75, 0.95])
+print(q.round(3))                      # boxplot : [-1.645 -0.674 0 0.674 1.645]</code></pre>
 </div>
 
 <div class="note">
   <span class="tag">Gaussienne et ML</span>
   La loi gaussienne est omniprésente : modèle du bruit en régression, initialisation des poids
   des réseaux de neurones, processus de diffusion en IA générative, distribution a priori
-  bayésienne conjugée. Sa stabilité par combinaison linéaire et le TCL (chapitre 4) expliquent ce rôle.
+  bayésienne conjugée. Sa stabilité par combinaison linéaire (théorème 3.3) et le TCL
+  (chapitre 4) expliquent ce rôle ; son conditionnement affine (théorème 3.2) explique le
+  reste.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 3</p>
+  <ul>
+    <li>Tableau des lois : savoir citer espérance/variance <em>et</em> un scénario ML.</li>
+    <li>Gaussien vectoriel : marginales et conditionnelles gaussiennes, moyenne conditionnelle
+    affine — l'outil le plus réutilisé du master.</li>
+    <li>Sommes d'indépendantes : convolution ; familles stables (binomiale, Poisson, gamma,
+    gaussienne, \(\chi^2\)).</li>
+    <li>Statistiques d'ordre : \(\max \to F^n\), \(\min \to 1-(1-F)^n\) ; quantiles
+    empiriques = ordre + interpolation.</li>
+  </ul>
 </div>
 </section>
 
@@ -222,31 +742,155 @@ support, paramètres, espérance et variance, et savoir <em>quand</em> elles app
 <h2>4. Convergences et théorèmes limites</h2>
 
 <p>En ML, on optimise sur un échantillon <em>fini</em> et on espère un bon comportement en
-généralisation&nbsp;: la théorie asymptotique justifie ce passage de l'empirique au vrai risque.</p>
+généralisation&nbsp;: la théorie asymptotique justifie ce passage de l'empirique au vrai risque.
+Ce chapitre est le pivot conceptuel du master : LLN et TCL y sont démontrés (ou esquissés),
+car ils réapparaissent dans chaque preuve de consistance.</p>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Modes de convergence</span>
+  Soit \((X_n)\) et \(X\) des variables réelles.
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Presque sûre (ps)</strong> : \(\mathbb{P}\big(\lim X_n = X\big) = 1\) ;</li>
+    <li><strong>En probabilité</strong> : \(\forall \varepsilon > 0,\;
+    \mathbb{P}(|X_n - X| &gt; \varepsilon) \to 0\) ;</li>
+    <li><strong>Dans \(L^p\)</strong> : \(\mathbb{E}|X_n - X|^p \to 0\) ;</li>
+    <li><strong>En loi</strong> : \(F_{X_n}(t) \to F_X(t)\) en tout point de continuité de
+    \(F_X\).</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Implications (et leurs preuves)</span>
+  Presque sûre \(\Rightarrow\) en probabilité \(\Rightarrow\) en loi&nbsp;;
+  \(L^p\) \(\Rightarrow\) en probabilité. Les réciproques sont fausses.
+</div>
+
+<div class="proof">
+  <strong>\(L^p \Rightarrow\) probabilité</strong> : Markov (2.10) appliqué à
+  \(|X_n - X|^p\) donne \(\mathbb{P}(|X_n-X| &gt; \varepsilon) \leq \mathbb{E}|X_n-X|^p/\varepsilon^p \to 0\).
+  <strong>ps \(\Rightarrow\) probabilité</strong> : notons
+  \(A_n(\varepsilon) = \bigcup_{k \geq n}\{|X_k - X| &gt; \varepsilon\}\), suite décroissante
+  d'événements ; \(\bigcap_n A_n(\varepsilon)\) est l'ensemble des \(\omega\) tels que
+  \(|X_k(\omega) - X(\omega)| &gt; \varepsilon\) une infinité de fois, inclus dans le
+  complémentaire de la convergence ps : probabilité nulle. Par continuité décroissante
+  (proposition 1.3), \(\mathbb{P}(A_n) \downarrow 0\), or
+  \(\mathbb{P}(|X_n - X| &gt; \varepsilon) \leq \mathbb{P}(A_n)\).
+  <strong>probabilité \(\Rightarrow\) loi</strong> : en un point de continuité \(t\),
+  \(F_n(t) = \mathbb{P}(X_n \leq t) \leq \mathbb{P}(X \leq t + \varepsilon) +
+  \mathbb{P}(|X_n - X| &gt; \varepsilon)\), et de même dans l'autre sens avec \(t - \varepsilon\)
+  ; on encadre \(\limsup F_n(t)\) et \(\liminf F_n(t)\) par \(F(t \pm \varepsilon)\) puis on
+  fait \(\varepsilon \downarrow 0\) (continuité de \(F\) en \(t\)).
+  <strong>Contre-exemple réciproque</strong> : \(X_n = n\) avec probabilité \(1/n\), \(0\)
+  sinon. \(\mathbb{P}(|X_n| &gt; \varepsilon) = 1/n \to 0\) (donc aussi en loi), mais
+  \(\mathbb{E}|X_n| = 1\) (pas de \(L^1\)) et \(\sum_n \mathbb{P}(|X_n| &gt; \varepsilon)
+  = \sum 1/n = \infty\), donc (Borel-Cantelli, indépendance des dyadiques mise à part) la
+  convergence ps échoue : les «&nbsp;gros sauts rares&nbsp;» passent en probabilité mais
+  détruisent les moyennes.
+  <span class="qed">∎</span>
+</div>
 
 <div class="thm">
-  <span class="tag">Théorème 4.1 — Loi (faible) des grands nombres</span>
+  <span class="tag">Théorème 4.3 — Loi (faible) des grands nombres</span>
   Soit \((X_n)\) iid avec \(\mathbb{E}|X_1| &lt; \infty\) et \(\mu = \mathbb{E}X_1\). Alors
   $$\bar{X}_n = \frac{1}{n}\sum_{i=1}^n X_i \;\xrightarrow[n\to\infty]{\mathbb{P}}\; \mu .$$
 </div>
 
+<div class="proof">
+  Preuve élémentaire sous hypothèse de variance finie \(\sigma^2 &lt; \infty\).
+  Par linéarité \(\mathbb{E}[\bar X_n] = \mu\) (pas de biais), et par indépendance
+  (proposition 2.8) :
+  $$\mathrm{Var}(\bar X_n) = \frac{1}{n^2}\sum_{i=1}^n \mathrm{Var}(X_i) = \frac{\sigma^2}{n}.$$
+  Tchebychev (2.11) donne alors, pour tout \(\varepsilon &gt; 0\) :
+  $$\mathbb{P}\big(|\bar X_n - \mu| \geq \varepsilon\big) \;\leq\; \frac{\sigma^2}{n\,\varepsilon^2} \;\xrightarrow[n\to\infty]{}\; 0.$$
+  La version générale (\(\mathbb{E}|X_1| &lt; \infty\) suffit) est due à Kolmogorov et exige
+  la loi forte ; la version \(L^2\) ci-dessus est celle qu'on réutilisera partout.
+  <span class="qed">∎</span>
+</div>
+
 <div class="thm">
-  <span class="tag">Théorème 4.2 — Théorème central limite (TCL)</span>
+  <span class="tag">Théorème 4.4 — Théorème central limite (TCL)</span>
   Soit \((X_n)\) iid, \(\mu = \mathbb{E}X_1\), \(\sigma^2 = \mathrm{Var}(X_1) &lt; \infty\). Alors
   $$\frac{\bar{X}_n - \mu}{\sigma / \sqrt{n}} \;\xrightarrow[n\to\infty]{(\text{loi})}\; \mathcal{N}(0,1).$$
   Autrement dit : \(\bar X_n \approx \mathcal{N}\big(\mu, \tfrac{\sigma^2}{n}\big)\) pour \(n\) grand.
 </div>
 
-<div class="prop">
-  <span class="tag">Proposition 4.3 — Modes de convergence</span>
-  Presque sûre \(\Rightarrow\) en probabilité \(\Rightarrow\) en loi ;
-  \(L^2\) \(\Rightarrow\) en probabilité. Les réciproques sont fausses. Le \(1/\sqrt n\)
-  du TCL est l'<strong>ordre de grandeur fondamental de la statistique</strong> : pour diviser
-  l'erreur d'estimation par 2, il faut 4 fois plus de données.
+<div class="proof">
+  <strong>Idées de la preuve par les MGF</strong> (esquisse). Posons \(Z_i =
+  \frac{X_i - \mu}{\sigma}\) (centrée, réduite) et \(S_n = \frac1{\sqrt n}\sum_i Z_i\).
+  Pour \(n\) grand, \(e^{t Z_i/\sqrt n} \approx 1 + \frac{t Z_i}{\sqrt n} +
+  \frac{t^2 Z_i^2}{2n} + o(1/n)\) (développement limité, moments finis) ; en prenant les
+  espérances : \(M_{Z}(t/\sqrt n) \approx 1 + \frac{t^2}{2n}\) (car \(\mathbb{E}Z_i = 0\),
+  \(\mathbb{E}Z_i^2 = 1\)). Par indépendance (proposition 2.9 (ii)) :
+  $$M_{S_n}(t) = \Big(1 + \frac{t^2}{2n} + o\Big(\frac1n\Big)\Big)^{\!n}
+  \;\xrightarrow[n\to\infty]{}\; e^{t^2/2},$$
+  en utilisant \((1 + a/n)^n \to e^a\). On reconnaît la MGF de \(\mathcal{N}(0,1)\)
+  (exemple sous 2.9), et le théorème de continuité de Lévy convertit la convergence des MGF en
+  convergence en loi. La limite est gaussienne <em>quelle que soit la loi de départ</em> —
+  c'est ce qui rend la gaussienne universelle.
+  <span class="qed">∎</span>
 </div>
 
+<div class="prop">
+  <span class="tag">Proposition 4.5 — La vitesse \(1/\sqrt n\), avec ordres de grandeur</span>
+  L'écart-type de \(\bar X_n\) vaut \(\sigma/\sqrt n\). Concrètement :
+  <table class="tbl">
+  <thead><tr><th>\(n\)</th><th>10</th><th>100</th><th>10&nbsp;000</th><th>1&nbsp;000&nbsp;000</th></tr></thead>
+  <tbody><tr><td>facteur de réduction de l'erreur</td><td>3,2</td><td>10</td><td>100</td><td>1&nbsp;000</td></tr></tbody>
+  </table>
+  Diviser l'erreur par 2 exige <strong>4 fois plus de données</strong>; la diviser par 10 en
+  exige 100 fois. Ce \(1/\sqrt n\) est l'ordre de grandeur fondamental de la statistique : il
+  borne les gains d'échantillonnage et explique les méthodes de réduction de variance
+  (échantillonnage préférentiel, variables antithétiques — cf. module RL pour les estimations
+  Monte Carlo du retour).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.6 — Méthode delta</span>
+  Si \(\sqrt n (\bar X_n - \mu) \to \mathcal{N}(0, \sigma^2)\) et \(g\) est \(C^1\) au
+  voisinage de \(\mu\) avec \(g'(\mu) \neq 0\) :
+  $$\sqrt n\,\big(g(\bar X_n) - g(\mu)\big) \;\xrightarrow{(\text{loi})}\;
+  \mathcal{N}\big(0,\; \sigma^2\, g'(\mu)^2\big).$$
+</div>
+
+<div class="proof">
+  Développement de Taylor : \(g(\bar X_n) = g(\mu) + g'(\mu)(\bar X_n - \mu) +
+  o(|\bar X_n - \mu|)\). En multipliant par \(\sqrt n\), le reste est
+  \(o(\sqrt n |\bar X_n - \mu|) = o_p(1)\) car \(\sqrt n(\bar X_n - \mu)\) est tendu (TCL) ;
+  il reste une version linéarisée à laquelle on applique le TCL et le lemme de Slutsky.
+  <strong>Exemple</strong> : \(g = \log\). \(\sqrt n(\log \bar X_n - \log\mu) \to
+  \mathcal{N}(0, \sigma^2/\mu^2)\) : l'IC pour \(\log\mu\) (paramètre d'échelle) se déduit de
+  celui de \(\mu\). Autre usage massif : transformer un estimateur de rapport ou de probabilité
+  vers l'échelle logit (module Machine Learning, inférence sur les odds-ratios).
+  <span class="qed">∎</span>
+</div>
+
+<h3>4.1 Quantiles empiriques et bootstrap</h3>
+
+<p>La <strong>fonction de répartition empirique</strong>
+\(F_n(t) = \frac1n \sum_i \mathbf{1}_{X_i \leq t}\) est un estimateur «&nbsp;plug-in&nbsp;» de
+\(F\) ; le théorème de Glivenko-Cantelli renforce la LLN :
+\(\sup_t |F_n(t) - F(t)| \to 0\) presque sûrement. Le <strong>quantile empirique</strong>
+d'ordre \(q\) s'en déduit par inversion (proposition 3.5). Pour construire des intervalles de
+confiance sur des statistiques non linéaires (médiane, ratio, AUC), le
+<strong>bootstrap non paramétrique</strong> rééchantillonne \(B\) fois <em>avec remise</em>
+dans l'échantillon observé, recalcule la statistique, et lit les quantiles de sa loi
+bootstrap :</p>
+
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(0)
+x = rng.standard_t(df=3, size=200)          # loi asymétrique, médiane non triviale
+
+B = 5_000
+boot_med = np.array([np.median(rng.choice(x, size=len(x), replace=True))
+                     for _ in range(B)])
+lo, hi = np.quantile(boot_med, [0.025, 0.975])
+print(f"IC bootstrap 95% de la médiane : [{lo:.3f}, {hi:.3f}]")
+# Justification : F_n -&gt; F (Glivenko-Cantelli), donc la loi de la statistique
+# recalculée sur F_n approche sa loi vraie ; les quantiles [2.5%, 97.5%] donnent
+# l'intervalle "percentile". Prudence : échoue sur statistiques extrêmes (max).</code></pre>
+
 <div class="ex">
-  <span class="tag">Exemple 4.4 — Vérification numérique du TCL</span>
+  <span class="tag">Exemple 4.7 — Vérification numérique du TCL</span>
 <pre class="code"><code>import numpy as np
 rng = np.random.default_rng(0)
 for n in [1, 5, 30, 200]:
@@ -257,7 +901,21 @@ for n in [1, 5, 30, 200]:
           f"(théorie 1/sqrt(12 n) = {1/np.sqrt(12*n):.4f})")</code></pre>
   L'écart-type de \(\bar X_n\) décroît exactement en \(1/\sqrt n\) : c'est le TCL en action,
   et la raison pour laquelle « plus de données » est la première réponse à presque tous les
-  problèmes de généralisation.
+  problèmes de généralisation. Notez aussi la quasi-gaussianité dès \(n = 30\) — origine de la
+  règle empirique des « 30 échantillons ».
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 4</p>
+  <ul>
+    <li>ps \(\Rightarrow\) probabilité \(\Rightarrow\) loi ; \(L^2 \Rightarrow\) probabilité ;
+    réciproques fausses (contre-exemple des sauts rares).</li>
+    <li>LLN : Tchebychev + variance de la moyenne \(\sigma^2/n\), preuve complète.</li>
+    <li>TCL : \(\sqrt n\) standardisation, preuve par MGF esquissée, vitesse \(1/\sqrt n\)
+    (×4 données pour ÷2 erreur).</li>
+    <li>Méthode delta : propager le TCL par dérivée ; bootstrap : recalculer la loi d'une
+    statistique par rééchantillonnage.</li>
+  </ul>
 </div>
 </section>
 
@@ -267,19 +925,46 @@ for n in [1, 5, 30, 200]:
 
 <p>On suppose que la loi des données appartient à une famille paramétrée
 \(\{p_\theta : \theta \in \Theta\}\) et on cherche à identifier \(\theta\) à partir d'un
-échantillon \(X_1, \dots, X_n\) iid.</p>
+échantillon \(X_1, \dots, X_n\) iid. Ce chapitre construit le socle : biais/variance,
+vraisemblance, Fisher, Cramér-Rao — puis le chapitre 6 en tire des intervalles et des tests.</p>
 
 <div class="def">
   <span class="tag">Définition 5.1 — Estimateur, biais, risque quadratique</span>
   Un <strong>estimateur</strong> \(\hat\theta_n = g(X_1,\dots,X_n)\) est une statistique à valeurs
   dans \(\Theta\). Son <strong>biais</strong> est \(b(\hat\theta) = \mathbb{E}[\hat\theta] - \theta\),
-  son <strong>risque quadratique</strong> est \(\mathbb{E}[(\hat\theta - \theta)^2]\), et l'on a la
-  décomposition <strong>biais-variance</strong> :
-  $$\mathbb{E}[(\hat\theta - \theta)^2] = \underbrace{b(\hat\theta)^2}_{\text{biais}^2} + \underbrace{\mathrm{Var}(\hat\theta)}_{\text{variance}}.$$
+  son <strong>risque quadratique</strong> (erreur quadratique moyenne, EQM) est
+  \(\mathbb{E}[(\hat\theta - \theta)^2]\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Décomposition biais-variance</span>
+  $$\mathbb{E}[(\hat\theta - \theta)^2] = \underbrace{\big(\mathbb{E}[\hat\theta] - \theta\big)^2}_{\text{biais}^2} + \underbrace{\mathrm{Var}(\hat\theta)}_{\text{variance}}.$$
+</div>
+
+<div class="proof">
+  Posons \(m = \mathbb{E}[\hat\theta]\) et écrivons \(\hat\theta - \theta =
+  (\hat\theta - m) + (m - \theta)\). En développant le carré et en prenant l'espérance :
+  \(\mathbb{E}[(\hat\theta - m)^2] + 2(m-\theta)\,\underbrace{\mathbb{E}[\hat\theta - m]}_{=0}
+  + (m - \theta)^2 = \mathrm{Var}(\hat\theta) + b(\hat\theta)^2\). Le terme croisé est nul
+  <em>par définition</em> de l'espérance : c'est toute la magie de la décomposition.
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 5.3 — Pourquoi \(n-1\) : biais de la variance empirique</span>
+  Soit \(S_n^2 = \frac1n\sum_i (X_i - \bar X_n)^2\). On calcule
+  \(\sum_i (X_i - \bar X_n)^2 = \sum_i (X_i - \mu)^2 - n(\bar X_n - \mu)^2\) (développer les
+  carrés, le terme croisé s'annule). En espérance :
+  \(n\sigma^2 - n \cdot \frac{\sigma^2}{n} = (n-1)\sigma^2\), donc
+  \(\mathbb{E}[S_n^2] = \frac{n-1}{n}\sigma^2 \lt \sigma^2\) : \(S_n^2\) est biaisée vers le
+  bas. Corriger en divisant par \(n-1\) donne l'estimateur sans biais usuel
+  \(\frac{1}{n-1}\sum_i (X_i - \bar X_n)^2\). Le biais vient de l'estimation <em>interne</em>
+  de \(\mu\) par \(\bar X_n\), qui «&nbsp;colle&nbsp;» déjà aux données. Ce petit calcul est le
+  prototype de tous les compromis biais-variance qui suivent.
 </div>
 
 <div class="def">
-  <span class="tag">Définition 5.2 — Vraisemblance et maximum de vraisemblance (MLE)</span>
+  <span class="tag">Définition 5.4 — Vraisemblance et maximum de vraisemblance (MLE)</span>
   La <strong>vraisemblance</strong> d'un échantillon iid est
   \(L(\theta) = \prod_{i=1}^n p_\theta(X_i)\) (densité ou masse) et la
   <strong>log-vraisemblance</strong> \(\ell(\theta) = \sum_i \log p_\theta(X_i)\).
@@ -287,23 +972,103 @@ for n in [1, 5, 30, 200]:
   \(\hat\theta_{\mathrm{MLE}} \in \arg\max_\theta \ell(\theta)\).
 </div>
 
+<h3>5.1 Score et information de Fisher</h3>
+
+<div class="def">
+  <span class="tag">Définition 5.5 — Score</span>
+  Le <strong>score</strong> est la dérivée de la log-vraisemblance d'une observation :
+  \(s(\theta) = \nabla_\theta \log p_\theta(X)\) (pour l'échantillon : \(\sum_i s_i(\theta)\),
+  somme de termes iid).
+</div>
+
 <div class="thm">
-  <span class="tag">Théorème 5.3 — Propriétés asymptotiques du MLE</span>
+  <span class="tag">Théorème 5.6 — Deux propriétés du score</span>
+  Sous régularité (dérivation sous l'intégrale permise) :
+  $$\text{(i)}\;\; \mathbb{E}_\theta[s(\theta)] = 0, \qquad
+  \text{(ii)}\;\; \mathrm{Var}_\theta[s(\theta)] = \mathbb{E}_\theta\big[-\nabla^2_\theta \log p_\theta(X)\big] =: I(\theta).$$
+  \(I(\theta)\) est l'<strong>information de Fisher</strong> : la variance du score, ou
+  encore l'opposée de la courbure moyenne de la log-vraisemblance.
+</div>
+
+<div class="proof">
+  (i) \(1 = \int p_\theta(x)\,dx\) pour tout \(\theta\) ; en dérivant sous l'intégrale :
+  \(0 = \int \nabla_\theta p_\theta(x)\,dx = \int \frac{\nabla_\theta p_\theta(x)}{p_\theta(x)}
+  p_\theta(x)\,dx = \mathbb{E}[\nabla_\theta \log p_\theta(X)] = \mathbb{E}[s(\theta)]\).
+  (ii) Dérivons <em>encore</em> l'identité \(\int \nabla_\theta p_\theta = 0\) :
+  \(0 = \int \nabla^2_\theta p_\theta = \mathbb{E}[\nabla^2_\theta \log p_\theta(X)] +
+  \mathbb{E}\big[\nabla_\theta \log p_\theta \,\nabla_\theta \log p_\theta^\top\big]\)
+  (règle du produit sur \(\nabla^2 p = (\nabla^2 \log p)\,p + (\nabla\log p)(\nabla\log p)^\top p\)).
+  D'où \(\mathbb{E}[s s^\top] = -\mathbb{E}[\nabla^2 \log p] = I(\theta)\) ; comme
+  \(\mathbb{E}[s] = 0\) par (i), \(\mathrm{Var}(s) = \mathbb{E}[ss^\top] = I(\theta)\) : les
+  deux lectures coïncident.
+  <span class="qed">∎</span>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.7 — Borne de Cramér-Rao</span>
+  Pour tout estimateur \(\hat\theta\) sans biais (et régulier) :
+  $$\mathrm{Var}(\hat\theta) \;\geq\; \frac{1}{I_n(\theta)}\,, \qquad
+  I_n(\theta) = n\,I(\theta)\; \text{ (échantillon iid)}.$$
+  <em>Interprétation :</em> aucune méthode ne peut estimer \(\theta\) avec une variance plus
+  petite que l'inverse de l'information : plus la loi est «&nbsp;sensible&nbsp;» à \(\theta\)
+  (score variable), mieux on peut l'estimer. L'efficacité d'un estimateur est le rapport
+  \(1/(I_n\,\mathrm{Var})\) ; le MLE l'atteint <em>asymptotiquement</em> (théorème 5.8).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.8 — Propriétés asymptotiques du MLE</span>
   Sous hypothèses de régularité, \(\hat\theta_{\mathrm{MLE}}\) est <em>consistant</em>
   (\(\hat\theta_n \to \theta^\star\)), <em>asymptotiquement normal</em> :
   $$\sqrt{n}\,(\hat\theta_n - \theta^\star) \xrightarrow{(\text{loi})} \mathcal{N}\big(0,\, I(\theta^\star)^{-1}\big),$$
-  où \(I(\theta) = \mathbb{E}\big[-\nabla^2_\theta \log p_\theta(X)\big]\) est l'<strong>information
-  de Fisher</strong>, et <em>asymptotiquement efficace</em> (variance minimale).
+  et <em>asymptotiquement efficace</em> (variance minimale : il atteint Cramér-Rao à la
+  limite). C'est <em>la</em> raison d'être du MLE comme estimateur universel : cohérent avec
+  le \(1/\sqrt n\) du chapitre 4, avec la meilleure constante possible.
+</div>
+
+<h3>5.2 MLE des lois usuelles, dérivés complètement</h3>
+
+<div class="ex">
+  <span class="tag">Exemple 5.9 — MLE gaussien</span>
+  Pour \(X_i \sim \mathcal{N}(\mu, \sigma^2)\), la log-vraisemblance est
+  \(\ell = -\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}\sum_i (X_i - \mu)^2\).
+  \(\partial_\mu \ell = \frac{1}{\sigma^2}\sum_i (X_i - \mu) = 0 \Rightarrow
+  \hat\mu_{\mathrm{MLE}} = \bar X_n\) ;
+  \(\partial_{\sigma^2} \ell = -\frac{n}{2\sigma^2} + \frac{1}{2\sigma^4}\sum_i(X_i-\mu)^2 = 0
+  \Rightarrow \hat\sigma^2_{\mathrm{MLE}} = \frac1n \sum_i (X_i - \bar X_n)^2\).
+  On retrouve l'exemple 5.3 : \(\hat\sigma^2_{\mathrm{MLE}}\) est <em>biaisée</em> (diviser par
+  \(n-1\) corrige le biais, au prix — ironie — d'une EQM parfois plus grande). Le MLE n'est pas
+  sacré : c'est un point de départ dont on connaît les propriétés asymptotiques.
 </div>
 
 <div class="ex">
-  <span class="tag">Exemple 5.4 — MLE gaussien</span>
-  Pour \(X_i \sim \mathcal{N}(\mu, \sigma^2)\), la log-vraisemblance est
-  \(\ell = -\frac{n}{2}\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}\sum_i (X_i - \mu)^2\).
-  En annulant les dérivées partielles :
-  $$\hat\mu_{\mathrm{MLE}} = \bar X_n, \qquad \hat\sigma^2_{\mathrm{MLE}} = \frac1n \sum_i (X_i - \bar X_n)^2.$$
-  On notera que \(\hat\sigma^2_{\mathrm{MLE}}\) est <em>biaisée</em> (diviser par \(n-1\) corrige le
-  biais) — le compromis biais/variance commence dès la deuxième statistique de cours.
+  <span class="tag">Exemple 5.10 — MLE exponentielle</span>
+  \(p_\lambda(x) = \lambda e^{-\lambda x}\), donc
+  \(\ell(\lambda) = n\log\lambda - \lambda\sum_i X_i\).
+  \(\ell'(\lambda) = \frac n\lambda - \sum_i X_i = 0 \Rightarrow
+  \boxed{\hat\lambda = \frac{n}{\sum_i X_i} = \frac{1}{\bar X_n}}\).
+  On vérifie \(\ell''&lt; 0\) : maximum. Remarquez la non-linéarité :
+  \(\hat\lambda = 1/\bar X_n\) alors que \(\mathbb{E}[X] = 1/\lambda\) — l'estimateur est
+  biaisé (\(\mathbb{E}[1/\bar X_n] \neq 1/\mathbb{E}[\bar X_n]\)), cohérent par LLN +
+  méthode delta.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 5.11 — MLE Bernoulli</span>
+  \(\ell(p) = k\log p + (n-k)\log(1-p)\) avec \(k = \sum X_i\).
+  \(\ell'(p) = \frac kp - \frac{n-k}{1-p} = 0 \Rightarrow p(1-p)\)-équation résolue en
+  \(\boxed{\hat p = k/n}\) : la fréquence empirique. Ce calcul minuscule est monstrueusement
+  important : \(-\ell(p)/n\) est exactement la <strong>cross-entropy binaire</strong>, perte
+  d'entraînement de tous les classifieurs binaires du master.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 5.12 — MLE Poisson</span>
+  \(p_\lambda(x) = e^{-\lambda}\lambda^x/x!\), donc
+  \(\ell(\lambda) = -n\lambda + (\sum_i X_i)\log\lambda - \sum_i \log(X_i!)\).
+  \(\ell' = -n + \frac{\sum X_i}{\lambda} = 0 \Rightarrow
+  \boxed{\hat\lambda = \bar X_n}\). Là encore : la moyenne empirique ; et
+  \(-\ell/n\) est la perte «&nbsp;Poisson log-likelihood&nbsp;» utilisée pour les comptages
+  (modèles de risque, comptages de clicks).
 </div>
 
 <div class="note">
@@ -311,7 +1076,41 @@ for n in [1, 5, 30, 200]:
   Maximiser \(\ell\) revient à <em>minimiser la perte empirique moyenne</em>
   \(\frac1n\sum_i -\log p_\theta(X_i)\). Pour la gaussienne, \(-\log p_\theta\) redonne l'erreur
   quadratique ; pour la Bernoulli, la <em>cross-entropy</em>. Le MLE est donc l'ancêtre direct
-  de la fonction de coût des réseaux de neurones.
+  de la fonction de coût des réseaux de neurones — le chapitre 10 formalise ce pont.
+</div>
+
+<h3>5.3 Méthode des moments et plug-in</h3>
+
+<div class="def">
+  <span class="tag">Définition 5.13 — Méthode des moments</span>
+  Égaler les \(k\) premiers moments théoriques aux moments empiriques
+  \(m_k = \frac1n\sum X_i^k\) et résoudre. Gaussienne : \(\mu = m_1\),
+  \(\sigma^2 = m_2 - m_1^2\) — on retrouve la variance <em>biaisée</em> (exemple 5.3) : la
+  méthode des moments est simple, consistante par LLN, mais généralement moins efficace que le
+  MLE (variance asymptotique \(\geq\) Cramér-Rao). Elle reste la solution de choix quand le MLE
+  n'a pas de forme fermée ou comme initialisation d'un algorithme itératif (EM — cf. module
+  Machine Learning, chapitre modèles de mélange).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 5.14 — Principe plug-in</span>
+  Toute fonctionnelle de la loi \(T(F)\) est estimée par \(T(F_n)\) où \(F_n\) est la loi
+  empirique : moyenne \(\to\) moyenne empirique, \(\mathbb{P}(X&gt;0) \to\) proportion
+  empirique, quantile \(\to\) quantile empirique. Fondement : Glivenko-Cantelli
+  (chapitre 4.1). Le <em>risque empirique</em> du chapitre 10 est un plug-in.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 5</p>
+  <ul>
+    <li>EQM = biais² + variance (preuve : terme croisé nul).</li>
+    <li>Score : espérance nulle ; Fisher : variance du score = -courbure moyenne ; Cramér-Rao
+    borne inférieure \(1/(nI)\).</li>
+    <li>MLE : gaussien \(\bar X, S_n^2\) ; exponentielle \(1/\bar X\) ; Bernoulli \(k/n\) ;
+    Poisson \(\bar X\) — tous à savoir redériver.</li>
+    <li>Méthode des moments : rapide, consistante, moins efficace ; plug-in : estimateur
+    universel via \(F_n\).</li>
+  </ul>
 </div>
 </section>
 
@@ -319,43 +1118,222 @@ for n in [1, 5, 30, 200]:
 <section class="chapter" id="ch6">
 <h2>6. Intervalles de confiance et tests</h2>
 
-<h3>6.1 Intervalles de confiance</h3>
+<h3>6.1 Intervalles de confiance : construction par quantité pivotale</h3>
+
 <div class="def">
   <span class="tag">Définition 6.1</span>
   Un <strong>intervalle de confiance</strong> de niveau \(1-\alpha\) pour un paramètre \(\theta\)
   est une statistique \(I(X_1,\dots,X_n)\) telle que
   \(\mathbb{P}_\theta(\theta \in I) \geq 1-\alpha\) pour tout \(\theta\).
 </div>
-<div class="ex">
-  <span class="tag">Exemple 6.2 — Moyenne gaussienne, variance connue</span>
+
+<div class="thm">
+  <span class="tag">Théorème 6.2 — Intervalle z (variance connue), construction</span>
   Si \(X_i \sim \mathcal{N}(\mu, \sigma^2)\) avec \(\sigma\) connu, alors
-  $$\bar X_n \pm z_{1-\alpha/2}\,\frac{\sigma}{\sqrt n}$$
+  $$I = \Big[\bar X_n - z_{1-\alpha/2}\frac{\sigma}{\sqrt n},\;\;
+  \bar X_n + z_{1-\alpha/2}\frac{\sigma}{\sqrt n}\Big]$$
   est un intervalle de confiance exact de niveau \(1-\alpha\) (\(z_q\) le quantile gaussien :
-  \(z_{0.975} \approx 1.96\)). Variance inconnue : remplacer \(\sigma\) par l'écart-type
-  empirique et \(z\) par le quantile de Student à \(n-1\) degrés de liberté.
+  \(z_{0{,}975} \approx 1{,}96\)).
 </div>
 
-<h3>6.2 Tests d'hypothèses</h3>
-<p>Un test oppose \(H_0\) (hypothèse nulle) à \(H_1\). On choisit une statistique de test \(T\)
-et une région de rejet \(R\) ; les erreurs sont : <strong>type I</strong> (rejeter \(H_0\) à tort,
-probabilité \(\alpha\), le « risque » du test) et <strong>type II</strong> (ne pas rejeter à tort,
-probabilité \(\beta\)). La <strong>p-value</strong> est la probabilité, sous \(H_0\), d'observer
-une statistique au moins aussi extrême : on rejette si \(p \leq \alpha\).</p>
+<div class="proof">
+  La <strong>quantité pivotale</strong> \(T = \frac{\bar X_n - \mu}{\sigma/\sqrt n}\) est une
+  fonction des données <em>et</em> du paramètre dont la loi ne dépend <em>d'aucun</em> paramètre
+  : par somme de gaussiennes (théorème 3.3), \(\bar X_n \sim \mathcal{N}(\mu, \sigma^2/n)\),
+  donc \(T \sim \mathcal{N}(0,1)\). Ainsi
+  \(\mathbb{P}(-z \leq T \leq z) = 1-\alpha\) avec \(z = z_{1-\alpha/2}\). L'événement
+  \(\{-z \leq T \leq z\}\) est <em>équivalent</em> à
+  \(\{\bar X_n - z\sigma/\sqrt n \leq \mu \leq \bar X_n + z\sigma/\sqrt n\}\) (inégalités
+  réarrangées en \(\mu\)) : même probabilité \(1-\alpha\). L'intervalle est aléatoire, \(\mu\)
+  est fixe — c'est <em>l'intervalle</em> qui contient \(\mu\) avec probabilité \(1-\alpha\),
+  pas l'inverse.
+  <span class="qed">∎</span>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.3 — Student et khi-deux</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Intervalles t (variance inconnue)</strong> : remplacer \(\sigma\) par
+    \(S = \sqrt{\frac{1}{n-1}\sum(X_i - \bar X_n)^2}\) change la loi du pivot : par le théorème
+    de Cochran, \(\frac{\bar X_n - \mu}{S/\sqrt n} \sim t_{n-1}\) (Student à \(n-1\) degrés de
+    liberté). Idée de la structure : numérateur \(\mathcal{N}(0,1)\), dénominateur
+    \(\sqrt{\chi^2_{n-1}/(n-1)}\) <em>indépendant</em> (l'estimation de \(\mu\) et celle de
+    \(\sigma^2\) sont orthogonales — même géométrie que la régression, chapitre 7). L'intervalle
+    \(\bar X_n \pm t_{1-\alpha/2,\,n-1} S/\sqrt n\) est légèrement plus large que le z, et le
+    rejoint quand \(n \to \infty\) (le TCL donne \(t_k \to \mathcal N(0,1)\)).</li>
+    <li><strong>IC pour la variance</strong> : le pivot \(\frac{(n-1)S^2}{\sigma^2} \sim
+    \chi^2_{n-1}\) donne l'intervalle <em>asymétrique</em>
+    \(\Big[\frac{(n-1)S^2}{\chi^2_{1-\alpha/2,\,n-1}},\;
+    \frac{(n-1)S^2}{\chi^2_{\alpha/2,\,n-1}}\Big]\) : la loi du \(\chi^2\) étant asymétrique,
+    aucune raison de symétriser.</li>
+  </ul>
+</div>
+
+<h3>6.2 Tests d'hypothèses : le cadre de Neyman-Pearson</h3>
+
+<p>Un test oppose \(H_0\) (hypothèse nulle) à \(H_1\) (alternative). On choisit une statistique
+de test \(T\) et une région de rejet \(R\) ; les erreurs sont :</p>
 
 <table class="tbl">
-<thead><tr><th>Test</th><th>Statistique</th><th>Usage</th></tr></thead>
+<thead><tr><th></th><th>On accepte \(H_0\)</th><th>On rejette \(H_0\)</th></tr></thead>
 <tbody>
-<tr><td>Test z / t (moyenne)</td><td>\(\sqrt n (\bar X - \mu_0)/s\)</td><td>comparer une moyenne à une référence</td></tr>
-<tr><td>Test du \(\chi^2\) d'adéquation</td><td>\(\sum_k \frac{(O_k - n p_k)^2}{n p_k}\)</td><td>adéquation à une loi discrète</td></tr>
-<tr><td>Test du \(\chi^2\) d'indépendance</td><td>idem sur table de contingence</td><td>indépendance de deux variables qualitatives</td></tr>
+<tr><td>\(H_0\) vraie</td><td>correct (proba \(1-\alpha\))</td><td><strong>erreur de type I</strong> (proba \(\alpha\), le «&nbsp;niveau&nbsp;»)</td></tr>
+<tr><td>\(H_1\) vraie</td><td><strong>erreur de type II</strong> (proba \(\beta\))</td><td>correct (proba \(1-\beta\), la <strong>puissance</strong>)</td></tr>
 </tbody>
 </table>
 
+<p>La <strong>p-value</strong> est la probabilité, sous \(H_0\), d'observer une statistique au
+moins aussi extrême que celle observée : on rejette si \(p \leq \alpha\). Diminuer \(\alpha\)
+augmente \(\beta\) : à taille d'échantillon fixée, tout est compromis ; augmenter \(n\)
+(puissance \(\to\) 1) est la seule réponse gratuite — via le \(1/\sqrt n\) du chapitre 4.</p>
+
+<div class="thm">
+  <span class="tag">Théorème 6.4 — Lemme de Neyman-Pearson</span>
+  Pour tester \(H_0 : \theta = \theta_0\) contre \(H_1 : \theta = \theta_1\) (de densités
+  \(f_0, f_1\)) au niveau \(\alpha\), le test le plus puissant rejette lorsque le
+  <strong>rapport de vraisemblance</strong> \(\dfrac{f_1(X)}{f_0(X)}\) dépasse un seuil \(c\)
+  choisi pour \(\mathbb{P}_{0}(f_1(X)/f_0(X) &gt; c) = \alpha\).
+</div>
+
+<div class="proof">
+  Soit \(\varphi = \mathbf{1}_{f_1/f_0 &gt; c}\) (notre test) et \(\psi\) un test quelconque de
+  niveau \(\leq \alpha\), i.e. \(\mathbb{E}_0[\psi] \leq \alpha = \mathbb{E}_0[\varphi]\). Sur
+  \(\{f_1/f_0 &gt; c\}\) on a \(f_1 - c f_0 &gt; 0\), donc
+  \((\varphi - \psi)(f_1 - c f_0) \geq 0\) point par point (vérifier les quatre cas de signes :
+  si \(\varphi = 1, \psi = 0\) le produit est \(\geq 0\) car \(f_1 - cf_0 &gt; 0\) ; si
+  \(\varphi = 0, \psi = 1\) il vaut \(-(f_1 - cf_0) \geq 0\) sur le complémentaire ; etc.).
+  En intégrant :
+  \(\mathbb{E}_1[\varphi] - \mathbb{E}_1[\psi] \;\geq\; c\,\big(\mathbb{E}_0[\varphi] -
+  \mathbb{E}_0[\psi]\big) \geq 0\) : la puissance de \(\varphi\) dépasse celle de \(\psi\).
+  <span class="qed">∎</span>
+</div>
+
 <div class="note">
-  <span class="tag">Tests et ML</span>
-  Comparer deux modèles, mesurer si un ajout de feature est significatif, vérifier l'hypothèse
-  gaussienne des résidus : ce sont des problèmes de tests. Attention à l'usage industriel :
-  une p-value n'est <em>pas</em> la probabilité que \(H_0\) soit vraie.
+  <span class="tag">Portée</span>
+  Le rapport de vraisemblance est donc la <em>statistique de test optimale</em> pour deux
+  hypothèses simples. Tous les tests usuels (t, chi-deux, rapport de vraisemblance généralisé)
+  en sont des approximations asymptotiques ; le classifieur de Bayes (exemple 1.10) en est
+  l'analogue en discrimination ; et la détection de signal (module Signal Processing) repose
+  sur ce même lemme.
+</div>
+
+<h3>6.3 Tests sur les moyennes : z, t, Welch</h3>
+
+<table class="tbl">
+<thead><tr><th>Test</th><th>Statistique</th><th>Hypothèses</th><th>Usage</th></tr></thead>
+<tbody>
+<tr><td>z (une moyenne)</td><td>\(\sqrt n (\bar X - \mu_0)/\sigma\)</td><td>\(\sigma\) connu, normalité ou \(n\) grand</td><td>comparer une moyenne à une référence</td></tr>
+<tr><td>t sur un échantillon</td><td>\(\sqrt n (\bar X - \mu_0)/S\)</td><td>\(\sim t_{n-1}\) sous \(H_0\)</td><td>idem, \(\sigma\) inconnu</td></tr>
+<tr><td>t apparié</td><td>sur les différences \(D_i = X_i - Y_i\)</td><td>paires (avant/après)</td><td>A/B test sur mêmes unités</td></tr>
+<tr><td>t à deux échantillons (poolé)</td><td>\(\frac{\bar X - \bar Y}{S_p\sqrt{1/n + 1/m}}\)</td><td>variances égales supposées</td><td>comparer deux groupes</td></tr>
+<tr><td>Welch</td><td>\(\frac{\bar X - \bar Y}{\sqrt{S_X^2/n + S_Y^2/m}}\)</td><td>variances inégales, dl ajustés (Welch-Satterthwaite)</td><td>le choix <em>défaut</em> en pratique</td></tr>
+</tbody>
+</table>
+
+<pre class="code"><code>from scipy import stats
+import numpy as np
+rng = np.random.default_rng(3)
+a = rng.normal(10.2, 2.0, 50)      # groupe A
+b = rng.normal( 9.4, 2.4, 60)      # groupe B (variance différente)
+
+t_stat, p_value = stats.ttest_ind(a, b, equal_var=False)   # Welch
+print(f"t = {t_stat:.3f}, p = {p_value:.4f}")
+# p &lt; 0.05 : on rejette l'égalité des moyennes au niveau 5 %.
+# Attention : p ne dit PAS "probabilité que les moyennes soient égales".</code></pre>
+
+<h3>6.4 Tests du chi-deux</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 6.5 — Adéquation</span>
+  Pour tester \(H_0 : X \sim (p_1, \dots, p_K)\) (loi discrète spécifiée) avec \(O_k\) les
+  comptes observés et \(E_k = n p_k\) attendus :
+  $$T = \sum_{k=1}^{K} \frac{(O_k - E_k)^2}{E_k} \;\xrightarrow[n\to\infty]{(\text{loi})}\; \chi^2_{K-1}.$$
+  <em>Esquisse</em> : le vecteur des comptes \((O_k)\) suit une multinomiale (tableau chapitre 3) ;
+  le TCL vectoriel le rend gaussien, mais ses \(K\) fluctuations somment à zéro — la covariance
+  est de rang \(K-1\) — et une forme quadratique de gaussien de rang \(r\) suit \(\chi^2_r\).
+  On perd un degré de liberté par contrainte linéaire.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 6.6 — Un dé est-il équilibré&nbsp;?</span>
+  120 lancers, comptes observés \((18, 20, 16, 22, 24, 20)\), attendus \(20\) partout :
+  \(T = \frac{(18-20)^2 + (20-20)^2 + (16-20)^2 + (22-20)^2 + (24-20)^2 + (20-20)^2}{20}
+  = \frac{4+0+16+4+16+0}{20} = 2{,}0\). Avec \(K - 1 = 5\) degrés de liberté, la p-value
+  \(\approx 0{,}85\) : rien à signaler.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.7 — Indépendance sur table de contingence</span>
+  Pour une table \(r \times c\) (effectifs \(O_{ij}\), marges \(n_{i\cdot}, n_{\cdot j}\)),
+  attendus \(E_{ij} = n_{i\cdot} n_{\cdot j}/n\) sous indépendance, et
+  $$T = \sum_{i,j} \frac{(O_{ij} - E_{ij})^2}{E_{ij}} \;\to\; \chi^2_{(r-1)(c-1)}.$$
+  Même esquisse : multinomiale + contraintes des marges \((r-1)(c-1)\) degrés de liberté. En
+  2×2, \(T = \frac{n(ad - bc)^2}{(a+b)(c+d)(a+c)(b+d)}\). Usage ML :
+  sélection de variables catégorielles, audit de calibration d'un classifieur par tranches.
+</div>
+
+<h3>6.5 ANOVA à un facteur</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 6.8 — Décomposition et test F</span>
+  \(K\) groupes de tailles \(n_k\), observations \(Y_{kj}\), moyenne par groupe \(\bar Y_k\),
+  moyenne générale \(\bar Y\). Décomposition :
+  $$\underbrace{\sum_{k,j}(Y_{kj} - \bar Y)^2}_{\text{SCT (total)}} \;=\;
+  \underbrace{\sum_k n_k(\bar Y_k - \bar Y)^2}_{\text{SCI (inter-groupes)}} \;+\;
+  \underbrace{\sum_{k,j}(Y_{kj} - \bar Y_k)^2}_{\text{SCE (résiduel)}}$$
+  (le terme croisé s'annule : \(\sum_j (Y_{kj} - \bar Y_k) = 0\) groupe par groupe).
+  Sous \(H_0\) : moyennes égales (et gaussienité, variances égales) :
+  $$F = \frac{\mathrm{SCI}/(K-1)}{\mathrm{SCE}/(n-K)} \;\sim\; \mathcal{F}(K-1,\, n-K),$$
+  et l'on rejette si \(F\) est grand. Idée : c'est l'identité de variance totale
+  (définition 2.15) appliquée au facteur «&nbsp;groupe&nbsp;» — variance <em>entre</em> contre
+  variance <em>au sein</em>. L'ANOVA est aussi le modèle linéaire catégoriel (chapitre 7 avec
+  indicatrices de groupes), et le test F sera celui du chapitre 7 pour «&nbsp;au moins un
+  coefficient non nul&nbsp;».
+</div>
+
+<pre class="code"><code>from scipy import stats
+rng = np.random.default_rng(0)
+g1, g2, g3 = rng.normal(5.0, 1, 30), rng.normal(5.3, 1, 30), rng.normal(5.1, 1, 30)
+F, p = stats.f_oneway(g1, g2, g3)
+print(f"F = {F:.3f}, p = {p:.4f}")   # p ~ 0.4 : différences non significatives</code></pre>
+
+<h3>6.6 p-values : lecture correcte et tests multiples</h3>
+
+<div class="note">
+  <span class="tag">Pièges et bonnes pratiques</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>Une p-value n'est <strong>pas</strong> \(\mathbb{P}(H_0 \mid \text{données})\) — c'est
+    \(\mathbb{P}(\text{données au moins aussi extrêmes} \mid H_0)\). Dire «&nbsp;p = 0{,}03,
+    donc \(H_0\) a 3&nbsp;% de chances d'être vraie&nbsp;» est la faute d'interprétation n°1,
+    exactement l'erreur du test médical inversé (exemple 1.8).</li>
+    <li>\(p &gt; \alpha\) n'est pas «&nbsp;preuve d'absence d'effet&nbsp;» : absence de preuve
+    \(\neq\) preuve d'absence (penser puissance).</li>
+    <li>Avec \(n\) énorme, tout devient «&nbsp;significatif&nbsp;» (des différences
+    négligeables en pratique ont p \(\lt\) 0,001) : rapporter des tailles d'effet et des IC,
+    pas seulement des p.</li>
+    <li><strong>Tests multiples</strong> : à 20 tests indépendants au niveau 5&nbsp;%,
+    \(\mathbb{P}(\text{au moins un faux positif}) = 1 - 0{,}95^{20} \approx 64\)% — le
+    «&nbsp;p-hacking&nbsp;» n'est que l'exploitation systématique de ce fait. Correction de
+    <strong>Bonferroni</strong> : tester chaque hypothèse au niveau \(\alpha/m\) (où \(m\) =
+    nombre de tests), car \(\mathbb{P}(\cup A_i) \leq \sum \mathbb{P}(A_i) = m \cdot \alpha/m\).
+    conservateur ; la procédure de Benjamini-Hochberg contrôle la fausse découverte (FDR) et
+    est préférée en grande dimension — on la retrouvera pour l'analyse différentielle en
+    génomique et le screening de features.</li>
+  </ul>
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 6</p>
+  <ul>
+    <li>Construction d'IC = quantité pivotale de loi connue ; z, t, \(\chi^2\) : trois pivots
+    à savoir dériver.</li>
+    <li>Neyman-Pearson : le rapport de vraisemblance est optimal (preuve par majoration
+    intégrale).</li>
+    <li>Welch par défaut pour deux moyennes ; \(\chi^2\) : comptes contre attendus, dl =
+    contraintes ; ANOVA : SCI/SCE et test F.</li>
+    <li>p-value : probabilité des données sous \(H_0\), jamais \(\mathbb{P}(H_0)\) ;
+    Bonferroni contre les faux positifs multiples.</li>
+  </ul>
 </div>
 </section>
 
@@ -364,71 +1342,655 @@ une statistique au moins aussi extrême : on rejette si \(p \leq \alpha\).</p>
 <h2>7. Régression linéaire</h2>
 
 <p>La régression linéaire est le premier modèle supervisé du master et le socle conceptuel de
-toute la suite : fonction de perte, optimisation, biais-variance, régularisation.</p>
+toute la suite : fonction de perte, optimisation, biais-variance, régularisation. On observe
+\(y = X\beta^\star + \varepsilon\) avec \(X \in \mathbb{R}^{n \times p}\) (chaque ligne un
+exemple), \(\beta^\star \in \mathbb{R}^p\), \(\varepsilon \sim \mathcal{N}(0, \sigma^2 I_n)\)
+(hypothèse gaussienne à des fins d'<em>inférence</em> ; l'estimation n'en a pas besoin).</p>
 
-<div class="def">
-  <span class="tag">Modèle 7.1</span>
-  On observe \(y = X\beta^\star + \varepsilon\) avec \(X \in \mathbb{R}^{n \times p}\)
-  (chaque ligne un exemple), \(\beta^\star \in \mathbb{R}^p\), et
-  \(\varepsilon \sim \mathcal{N}(0, \sigma^2 I_n)\). L'estimateur des <strong>moindres carrés</strong>
-  minimise \(\|y - X\beta\|^2\) et admet la forme fermée
-  $$\hat\beta = (X^\top X)^{-1} X^\top y$$
-  (si \(X^\top X\) est inversible).
+<h3>7.1 Moindres carrés : géométrie de la projection</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 7.1 — Caractérisation géométrique</span>
+  Le minimiseur de \(\|y - X\beta\|^2\) — quand il existe — est caractérisé par
+  $$X^\top(y - X\hat\beta) = 0 \qquad (\text{équations normales}),$$
+  i.e. le <strong>résidu est orthogonal aux colonnes de \(X\)</strong> : \(\hat y = X\hat\beta\)
+  est la projection orthogonale de \(y\) sur \(\mathrm{Im}(X)\), et
+  \(\hat\beta = (X^\top X)^{-1}X^\top y\) si les colonnes de \(X\) sont indépendantes.
 </div>
 
-<div class="prop">
-  <span class="tag">Théorème de Gauss-Markov 7.2</span>
+<div class="proof">
+  <em>Par le calcul</em> : \(f(\beta) = \|y - X\beta\|^2\) est différentiable et strictement
+  convexe sur l'espace des solutions ; \(\nabla f(\beta) = 2X^\top(X\beta - y)\), d'où le
+  point stationnaire. <em>Par la géométrie</em> : décomposons \(y = \Pi_{\mathrm{Im}(X)} y +
+  (I - \Pi) y\) (projection orthogonale, théorème de Pythagore dans \(\mathbb{R}^n\)). Pour
+  tout \(\beta\) : \(\|y - X\beta\|^2 = \|(I-\Pi)y\|^2 + \|\Pi y - X\beta\|^2\) car les deux
+  vecteurs sont orthogonaux (l'un dans \(\mathrm{Im}(X)^\perp\), l'autre dans
+  \(\mathrm{Im}(X)\)). Le premier terme ne dépend pas de \(\beta\) ; on minimise donc le
+  second, nul ssi \(X\beta = \Pi y\). D'où : le résidu \(y - \hat y = (I - \Pi)y\) est dans
+  \(\mathrm{Im}(X)^\perp\), c'est-à-dire orthogonal aux colonnes (ce qui réécrit
+  \(X^\top(y - X\hat\beta) = 0\)). On en tire aussi la décomposition de Pythagore
+  \(\|y\|^2 = \|\hat y\|^2 + \|y - \hat y\|^2\) — base du \(R^2\).
+  <span class="qed">∎</span>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.2 — Gauss-Markov</span>
   Parmi les estimateurs <em>linéaires en \(y\)</em> et <em>sans biais</em> de \(\beta^\star\),
-  \(\hat\beta\) est de variance minimale («&nbsp;BLUE&nbsp;»). De plus, sous bruit gaussien,
-  \(\hat\beta\) est exactement le <strong>MLE</strong>.
+  \(\hat\beta\) est de variance minimale («&nbsp;BLUE&nbsp;»), au sens de l'ordre matriciel des
+  covariances. De plus, sous bruit gaussien, \(\hat\beta\) est exactement le
+  <strong>MLE</strong>.
+</div>
+
+<div class="proof">
+  Linéarité + non-biais : \(\delta = Cy\) avec \(CX = I_p\). Posons
+  \(D = C - (X^\top X)^{-1}X^\top\), de sorte que \(DX = 0\). Alors
+  \(C y = (X^\top X)^{-1}X^\top y + Dy = \hat\beta + Dy\), et
+  \(\mathrm{Cov}(\delta) = \sigma^2 CC^\top\). Or
+  \(CC^\top = \big[(X^\top X)^{-1}X^\top + D\big]\big[(X^\top X)^{-1}X^\top + D\big]^\top
+  = (X^\top X)^{-1} + D D^\top\), car le terme croisé
+  \((X^\top X)^{-1}X^\top D^\top = (X^\top X)^{-1}(DX)^\top = 0\). Donc
+  $$\mathrm{Cov}(\delta) = \mathrm{Cov}(\hat\beta) + \sigma^2 DD^\top \;\succcurlyeq\;
+  \mathrm{Cov}(\hat\beta) = \sigma^2 (X^\top X)^{-1},$$
+  \(DD^\top\) étant semi-définie positive : \(\mathrm{Var}(\text{toute forme linéaire de }
+  \delta) \geq\) celle de \(\hat\beta\). MLE : la log-vraisemblance gaussienne en \(\beta\)
+  vaut \(-\frac{1}{2\sigma^2}\|y - X\beta\|^2 + \text{cte}\) — maximiser revient à minimiser
+  les moindres carrés.
+  <span class="qed">∎</span>
+</div>
+
+<h3>7.2 Inférence sur les coefficients</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 7.3 — Loi exacte de \(\hat\beta\) sous bruit gaussien</span>
+  $$\hat\beta \sim \mathcal{N}\big(\beta^\star,\; \sigma^2 (X^\top X)^{-1}\big), \qquad
+  \frac{(n - p)\,\hat\sigma^2}{\sigma^2} \sim \chi^2_{n-p} \;\; \text{indépendant de }
+  \hat\beta, \qquad \hat\sigma^2 = \frac{\|y - X\hat\beta\|^2}{n - p}.$$
+</div>
+
+<div class="proof">
+  \(\hat\beta = (X^\top X)^{-1}X^\top y = \beta^\star + \underbrace{(X^\top X)^{-1}X^\top
+  \varepsilon}_{\text{combinaison linéaire du gaussien } \varepsilon}\) : c'est donc un
+  vecteur gaussien, de moyenne \(\beta^\star\) et de covariance
+  \(\sigma^2 (X^\top X)^{-1} X^\top X (X^\top X)^{-1} = \sigma^2(X^\top X)^{-1}\)
+  (définition 3.1, caractérisation linéaire). Pour \(\hat\sigma^2\) : le résidu
+  \(r = (I - H)\varepsilon\) avec \(H = X(X^\top X)^{-1}X^\top\) le projecteur orthogonal ;
+  \(I - H\) étant un projecteur de rang \(n - p\),
+  \(\|r\|^2 = \varepsilon^\top (I-H)\varepsilon \sim \sigma^2 \chi^2_{n-p}\) (forme
+  quadratique d'un gaussien blanc sur un sous-espace de dimension \(n-p\)). L'indépendance
+  vient de \(H(I - H) = 0\) : deux gaussiens de covariance croisée nulle sont indépendants.
+  On reconnaît au passage la <em>perte de degrés de liberté</em> : on estime \(p\) paramètres,
+  il reste \(n - p\) dimensions de bruit — exactement le \(n-1\) de l'exemple 5.3 quand
+  \(p = 1\).
+  <span class="qed">∎</span>
 </div>
 
 <div class="prop">
-  <span class="tag">Proposition 7.3 — Coefficient de détermination</span>
-  \(R^2 = 1 - \frac{\sum_i (y_i - \hat y_i)^2}{\sum_i (y_i - \bar y)^2}\) mesure la part de
-  variance expliquée. Il augmente mécaniquement avec le nombre de variables — d'où le
-  \(R^2\) ajusté, et surtout la validation croisée, introduites dans le module Machine Learning.
+  <span class="tag">Proposition 7.4 — Tests t et intervalles par coefficient</span>
+  En standardisant \(\hat\beta_j\) par son écart-type estimé :
+  $$t_j = \frac{\hat\beta_j}{\hat\sigma\sqrt{[(X^\top X)^{-1}]_{jj}}} \;\sim\; t_{n-p}
+  \;\;\text{sous } H_0 : \beta_j = 0,$$
+  d'où tests et IC \(\hat\beta_j \pm t_{1-\alpha/2,\,n-p}\,\hat\sigma
+  \sqrt{[(X^\top X)^{-1}]_{jj}}\). C'est la mécanique exacte derrière les tableaux de
+  régression de <code>statsmodels</code>.
 </div>
 
 <pre class="code"><code>import numpy as np
+from scipy import stats
 rng = np.random.default_rng(1)
 n, p = 200, 3
 X = np.column_stack([np.ones(n), rng.uniform(0, 10, n), rng.normal(0, 1, n)])
 beta_star = np.array([1.0, 2.0, -0.5])
 y = X @ beta_star + rng.normal(0, 2.0, n)
 
-# Moindres carrés (forme fermée, via lstsq pour la stabilité numérique)
-beta_hat, *_ = np.linalg.lstsq(X, y, rcond=None)
+# Moindres carrés + inférence complète à la main (théorème 7.3)
+XtX_inv = np.linalg.inv(X.T @ X)
+beta_hat = XtX_inv @ X.T @ y
 resid = y - X @ beta_hat
-print("beta_hat :", beta_hat.round(3))
-print("R^2      :", 1 - resid.var() / y.var())
+sigma2_hat = resid @ resid / (n - p)
+se = np.sqrt(np.diag(XtX_inv) * sigma2_hat)
+t_stat = beta_hat / se
+pvals = 2 * stats.t.sf(np.abs(t_stat), df=n - p)
+print(np.c_[beta_hat, se, t_stat, pvals].round(4))
+# Chaque coefficient est récupéré avec |t| grand et p minuscule ; si l'on
+# ajoute une colonne de bruit pur, son |t| ~ 1 et p ~ 0.3 : c'est le test
+# de significativité que l'on appliquera aux features en ML.
 
-# Même chose en 4 lignes avec scikit-learn
+# Même chose en 4 lignes avec scikit-learn (estimation seule)
 from sklearn.linear_model import LinearRegression
 print(LinearRegression().fit(X[:, 1:], y).coef_.round(3))</code></pre>
+
+<h3>7.3 Qualité d'ajustement et diagnostics</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 7.5 — \(R^2\) et \(R^2\) ajusté</span>
+  \(R^2 = 1 - \frac{\sum_i (y_i - \hat y_i)^2}{\sum_i (y_i - \bar y)^2}
+  = \frac{\mathrm{SCI}}{\mathrm{SCT}}\) (part de variance expliquée ; dans le cadre gaussien,
+  \(F = \frac{R^2/(p-1)}{(1-R^2)/(n-p)}\) — l'ANOVA du modèle). Il augmente
+  <em>mécaniquement</em> avec le nombre de variables (le résidu ne peut que diminuer sur
+  l'espace croissant \(\mathrm{Im}(X)\)) ; le <strong>\(R^2\) ajusté</strong>
+  \(1 - (1-R^2)\frac{n-1}{n-p}\) pénalise ce «&nbsp;gratuit&nbsp;», mais la vraie réponse est
+  la validation croisée — introduite dans le module Machine Learning.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.6 — Diagnostics à vérifier systématiquement</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Résidus vs valeurs prédites</strong> : nuage sans structure (moyenne nulle,
+    dispersion constante). Un entonnoir = hétéroscédasticité (les tests t ci-dessus sont alors
+    approximatifs) ; une courbure = biais du modèle (il manque des termes).</li>
+    <li><strong>QQ-plot des résidus</strong> : normalité (hypothèse des lois exactes t/F).</li>
+    <li><strong>Leverages</strong> : \(h_{ii} = [H]_{ii} \in [0,1]\), \(\sum_i h_{ii} = p\).
+    Une observation à fort leverage (valeur extrême en \(x\)) tire la droite à elle seule ;
+    règle usuelle : s'inquiéter si \(h_{ii} &gt; 2p/n\). Les résidus <em>studentisés</em> et la
+    distance de Cook combinent leverage et résidu pour détecter les points influents.</li>
+    <li><strong>Multicolinéarité</strong> : colonnes presque dépendantes \(\Rightarrow\)
+    \((X^\top X)^{-1}\) explosive, \(\hat\beta\) instable (grosses variances, signes
+    contraires à l'intuition). Remèdes : supprimer/redondancer, ridge (module Machine
+    Learning).</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.7 — Intervalle de confiance vs intervalle de prédiction</span>
+  Pour un nouveau point \(x_0\) : l'IC porte sur la <em>moyenne</em>
+  \(\mathbb{E}[y \mid x_0] = x_0^\top\beta^\star\) :
+  \(\hat y_0 \pm t_{1-\alpha/2,n-p}\,\hat\sigma\sqrt{x_0^\top (X^\top X)^{-1} x_0}\) ;
+  l'intervalle de <em>prédiction</em> porte sur l'observation \(y_0\) elle-même et rajoute le
+  bruit individuel :
+  \(\hat y_0 \pm t_{1-\alpha/2,n-p}\,\hat\sigma\sqrt{1 + x_0^\top (X^\top X)^{-1} x_0}\).
+  Le «&nbsp;\(1 + \)&nbsp;» rend le second toujours plus large : prédire une observation
+  individuelle est plus incertain que prédire sa moyenne — confusion fréquente en industrie
+  (promettre un CA moyen vs promettre une vente individuelle).
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 7</p>
+  <ul>
+    <li>OLS = projection orthogonale : résidu \(\perp\) colonnes de \(X\), équations normales,
+    Pythagore pour le \(R^2\).</li>
+    <li>Gauss-Markov : BLUE (preuve par \(C = S + D\), \(DX = 0\)) ; MLE si bruit gaussien.</li>
+    <li>\(\hat\beta\) gaussien exact, \(\hat\sigma^2\) en \(\chi^2_{n-p}\) indépendant, tests
+    t standardisés — tout le tableau de régression découle de ces deux lois.</li>
+    <li>IC de moyenne ≠ intervalle de prédiction (le «&nbsp;1+&nbsp;») ; diagnostics avant
+    toute conclusion.</li>
+  </ul>
+</div>
 </section>
 
 <!-- ============================ CH 8 ============================ -->
 <section class="chapter" id="ch8">
-<h2>8. De la statistique au machine learning</h2>
+<h2>8. Statistique bayésienne</h2>
 
-<p>Ce dernier chapitre tisse le lien explicite entre ce refresher et les modules suivants :</p>
+<p>Le cadre fréquentiste traite \(\theta\) comme une constante inconnue. Le cadre
+<strong>bayésien</strong> le traite comme une variable aléatoire dont on encode la connaissance
+a priori, puis la met à jour par les données. Ce chapitre — nouveau par rapport à un L3
+standard — est indispensable au master : VAE, diffusion et calibration de LLMs sont des
+machines bayésiennes déguisées.</p>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Prior, posterior</span>
+  $$\pi(\theta \mid X_1, \dots, X_n) \;=\; \frac{L(\theta)\,\pi(\theta)}
+  {\int L(u)\,\pi(u)\,du} \qquad (\text{posterior} \propto \text{vraisemblance} \times
+  \text{prior}).$$
+  Le dénominateur (évidence) ne dépend pas de \(\theta\) : on travaille souvent à constante
+  près. Le posterior d'aujourd'hui est le prior de demain : l'inférence est
+  <em>séquentielle</em> par nature.
+</div>
+
+<h3>8.1 Conjugaison : Bernoulli-Beta</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 8.2</span>
+  Si \(\theta \sim \mathrm{Beta}(a, b)\) (prior) et \(X_i \mid \theta \sim
+  \mathrm{Bernoulli}(\theta)\) iid, alors
+  $$\theta \mid X_1, \dots, X_n \;\sim\; \mathrm{Beta}\big(a + k,\; b + n - k\big),
+  \qquad k = \sum_i X_i.$$
+</div>
+
+<div class="proof">
+  Densité du prior : \(\pi(\theta) \propto \theta^{a-1}(1-\theta)^{b-1}\) sur \([0,1]\).
+  Vraisemblance : \(L(\theta) = \theta^k (1-\theta)^{n-k}\). Produit :
+  $$\pi(\theta \mid x) \propto \theta^{a + k - 1}(1-\theta)^{b + n - k - 1},$$
+  qu'on reconnaît comme la densité (non normalisée) d'une \(\mathrm{Beta}(a+k, b+n-k)\) — la
+  constante de normalisation est fournie par la fonction beta d'Euler. Aucun calcul
+  d'intégrale : la famille Beta est <em>fermée</em> sous l'opération «&nbsp;multiplier par la
+  vraisemblance bernoullienne&nbsp;», c'est la <strong>conjugaison</strong>.
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 8.3 — Mise à jour séquentielle, avec chiffres</span>
+  Prior \(\mathrm{Beta}(1,1)\) (= uniforme, «&nbsp;on ne sait rien&nbsp;»). On observe 8 succès
+  en 10 essais : posterior \(\mathrm{Beta}(9, 3)\). Moyenne posterior :
+  \(\frac{9}{12} = 0{,}75\) (vs MLE \(0{,}8\) : le prior tire légèrement vers \(1/2\)).
+  IC crédible à 95&nbsp;% : quantiles 2,5&nbsp;% et 97,5&nbsp;% de \(\mathrm{Beta}(9,3)\),
+  environ \([0{,}43 ; 0{,}94]\). Chaque nouvel essai met à jour \((a,b)\) : c'est exactement
+  la structure des compteurs de spam de l'exemple 1.9 et des bandits bayésiens (module RL,
+  Thompson sampling).
+<pre class="code"><code>from scipy import stats
+post = stats.beta(9, 3)
+print(post.mean().round(3), post.ppf([0.025, 0.975]).round(3))</code></pre>
+</div>
+
+<h3>8.2 Conjugaison gaussienne-gaussienne</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 8.4</span>
+  Modèle : \(X_i \mid \mu \sim \mathcal{N}(\mu, \sigma^2)\) (\(\sigma\) connu), prior
+  \(\mu \sim \mathcal{N}(\mu_0, \tau^2)\). Alors
+  $$\mu \mid \bar X_n \;\sim\; \mathcal{N}\!\left(\frac{\mu_0/\tau^2 + n\bar X_n/\sigma^2}
+  {1/\tau^2 + n/\sigma^2},\;\; \frac{1}{1/\tau^2 + n/\sigma^2}\right).$$
+</div>
+
+<div class="proof">
+  En notant \(p = 1/\tau^2\), \(q = n/\sigma^2\) (les <strong>précisions</strong>), la densité
+  jointe en \((\mu, \text{données})\) vue comme fonction de \(\mu\) est proportionnelle à
+  \(\exp\big(-\frac{p}{2}(\mu - \mu_0)^2 - \frac{q}{2}(\mu - \bar X_n)^2\big)\). On
+  <em>complète le carré</em> : la somme des deux termes quadratiques en \(\mu\) vaut
+  \(-\frac{p+q}{2}\Big(\mu - \frac{p\mu_0 + q\bar X_n}{p+q}\Big)^2 + \text{cte}(\mu)\), où la
+  constante ne dépend pas de \(\mu\). On reconnaît un noyau gaussien de précision \(p + q\) et
+  de moyenne la <em>moyenne pondérée par les précisions</em> — moyenne posterior harmonique
+  entre prior et données.
+  <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Les précisions s'additionnent</span>
+  La variance posterior est plus petite que chacune : \(1/(p+q) \lt 1/p\). Quand \(n \to
+  \infty\), \(q = n/\sigma^2\) écrase \(p\) : la moyenne posterior tend vers \(\bar X_n\),
+  la variance vers \(\sigma^2/n\) — le bayésien <em>retrouve</em> le fréquentiste (et l'IC z
+  du théorème 6.2). Le prior ne compte que sur petits \(n\). Cette phrase — «&nbsp;le prior
+  est une donnée virtuelle de précision \(1/\tau^2\)&nbsp;» — est le meilleur moyen de
+  paramétrer un prior honnêtement.
+</div>
+
+<h3>8.3 Intervalle crédible vs intervalle de confiance</h3>
+
+<div class="def">
+  <span class="tag">Définition 8.5 — Intervalle crédible</span>
+  Un intervalle crédible à \(1-\alpha\) est un ensemble \(C\) tel que
+  \(\mathbb{P}(\theta \in C \mid \text{données}) = 1 - \alpha\) — une probabilité <em>sur
+  \(\theta\)</em>, conditionnellement aux données observées. L'intervalle de confiance
+  (définition 6.1) est une probabilité <em>sur les données</em>, avant observation, pour un
+  \(\theta\) fixe.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 8.6 — La même expérience, deux lectures</span>
+  \(\sigma = 1\) connu, \(n = 1\) observation \(x = 0{,}7\), prior plat.
+  <em>Fréquentiste</em> : l'intervalle \([x - 1{,}96, x + 1{,}96] = [-1{,}26, 2{,}66]\) a une
+  propriété de <em>procédure</em> : sur 100 répétitions de l'expérience, ~95 des intervalles
+  construits contiendront le \(\mu\) fixe. Dire «&nbsp;\(\mu\) a 95&nbsp;% de chances d'être
+  dans <em>celui-ci</em>&nbsp;» n'a pas de sens fréquentiste (\(\mu\) n'est pas aléatoire).
+  <em>Bayésien</em> (prior plat) : \(\mu \mid x \sim \mathcal{N}(x, 1)\) et
+  \([-1{,}26, 2{,}66]\) vérifie réellement \(\mathbb{P}(\mu \in C \mid x) = 0{,}95\) — c'est
+  une déclaration de croyance rationalisée. Les <em>nombres</em> coïncident ici (prior plat +
+  pivot), mais la <em>sémantique</em> diffère, et ils diffèrent dès que le prior n'est plus
+  plat ou le modèle non gaussien. En pratique industrielle, la question posée («&nbsp;quelle
+  est la probabilité que le paramètre soit dans cette plage, sachant ce que j'ai vu ?&nbsp;»)
+  est bayésienne ; savoir laquelle des deux vous calculer est une compétence du master.
+</div>
+
+<h3>8.4 MAP vs MLE</h3>
+
+<div class="def">
+  <span class="tag">Définition 8.7 — Estimateur MAP</span>
+  Le <strong>maximum a posteriori</strong> maximise \(\pi(\theta)L(\theta)\) au lieu de
+  \(L(\theta)\) seul : \(\hat\theta_{\mathrm{MAP}} = \arg\max_\theta
+  \big[\log L(\theta) + \log \pi(\theta)\big]\). Le MLE est le MAP d'un prior uniforme.
+  <strong>Exemple</strong> : Beta(2,2) et 3 succès en 4 essais : MAP \(= \frac{3+1}{4+2}
+  = \frac23\) contre MLE \(= \frac34\).
+</div>
+
+<div class="note">
+  <span class="tag">MAP = MLE régularisé</span>
+  \(\log \pi(\theta)\) se comporte comme une <em>pénalité</em> ajoutée à la log-vraisemblance.
+  Prior gaussien sur \(\theta\) \(\Leftrightarrow\) pénalité \(\ell_2\) (ridge) ; prior de
+  Laplace \(\Leftrightarrow\) pénalité \(\ell_1\) (lasso). Toute la régularisation du module
+  Machine Learning se relit bayésiennement : régulariser = exprimer un prior. Cette double
+  lecture est systématiquement exploitée en deep learning (weight decay = prior gaussien sur
+  les poids).
+</div>
+
+<h3>8.5 Le bayésien en génération</h3>
+
+<div class="note">
+  <span class="tag">Pont vers les modules avancés</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>VAE</strong> (module Deep Learning) : le posterior \(\pi(z \mid x)\) est
+    intractable ; on l'approxime par \(q_\phi(z\mid x)\) gaussien et l'on maximise l'ELBO —
+    une version approximée de la mise à jour bayésienne du théorème 8.4, faite par réseau de
+    neurones.</li>
+    <li><strong>Diffusion</strong> : prior gaussien sur le bruit, chaîne de conditionnements
+    gaussiens (théorème 3.2 appliqué en cascade).</li>
+    <li><strong>Calibration et incertitude</strong> : les intervals crédibles quantifient
+    l'incertitude <em>épistémique</em> (réductible par données) — objet du module Emerging ML.</li>
+  </ul>
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 8</p>
+  <ul>
+    <li>Posterior \(\propto\) vraisemblance × prior ; conjugaison : Beta-Bernoulli et
+    Gaussien-Gaussien (les deux à savoir démontrer).</li>
+    <li>Précisions additives : le prior est une donnée virtuelle ; asymptotiquement les données
+    gagnent.</li>
+    <li>Crédible (probabilité sur \(\theta\)) ≠ confiance (probabilité sur la procédure).</li>
+    <li>MAP = MLE + pénalité ; ridge/lasso sont des MAP.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Données manquantes et travaux de l'enseignante</h2>
+
+<p>Chapitre nouveau, et volontairement orienté recherche : dans toute donnée réelle
+(dossiers patients, capteurs industriels, enquêtes, logs), des valeurs sont manquantes.
+L'enseignante de ce module, <strong>Marine Le Morvan</strong> (chercheuse Inria, équipe
+«&nbsp;Causal Inference and Missing Data&nbsp;»), a construit une partie de son programme de
+recherche sur cette question, au point de faire des données incomplètes un objet
+d'apprentissage à part entière. Ce chapitre vous donne les définitions canoniques
+(Rubin), les pièges quantifiés, puis présente ses articles — que vous devez pouvoir citer à la
+fin du master.</p>
+
+<h3>9.1 Mécanismes de missingness : MCAR, MAR, MNAR</h3>
+
+<div class="def">
+  <span class="tag">Définition 9.1 — Le formalisme de Rubin (1976)</span>
+  On observe un couple \((X, M)\) où \(X\) est la donnée complète et \(M\) la
+  <strong>matrice d'indicateurs de missingness</strong> (\(M_{ij} = 1\) si \(X_{ij}\) est
+  manquant). Le mécanisme est décrit par la loi de \(M\) conditionnellement aux données :
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>MCAR</strong> (<em>Missing Completely At Random</em>) : \(M \perp X\).
+    Le fait de manquer n'a rien à voir avec les valeurs, observées ou non.
+    <em>Exemple :</em> un capteur tombe en panne à des instants aléatoires ; des tubes de
+    prélèvements cassés au laboratoire.</li>
+    <li><strong>MAR</strong> (<em>Missing At Random</em>) : \(M \perp X_{\text{manquant}}
+    \mid X_{\text{observé}}\). La probabilité de manquer ne dépend que des valeurs
+    <em>observées</em>. <em>Exemple :</em> les jeunes déclarent moins leur revenu ; si l'âge
+    est observé, le missingness est expliqué par une variable observée.</li>
+    <li><strong>MNAR</strong> (<em>Missing Not At Random</em>) : la probabilité de manquer
+    dépend de la valeur manquante elle-même. <em>Exemple :</em> les hauts revenus déclarent
+    moins leur revenu <em>à âge observé égal</em> ; un patient grave ne remplit pas le
+    questionnaire de satisfaction.</li>
+  </ul>
+  MCAR est un cas particulier de MAR ; MAR «&nbsp;bien spécifié&nbsp;» rend le mécanisme
+  <em>ignorable</em> pour l'inférence sur \(X\) (au sens de Rubin : la loi de \(M\) n'a pas
+  besoin d'être modélisée). MNAR exige de modéliser le mécanisme — et n'est jamais
+  testable à partir des seules données observées.
+</div>
+
+<h3>9.2 Le biais des solutions naïves : exemples chiffrés</h3>
+
+<div class="ex">
+  <span class="tag">Exemple 9.2 — Suppression de lignes (listwise deletion)</span>
+  1&nbsp;000 clients, deux variables \((X_1, X_2)\) standardisées corrélées
+  \(\rho = 0{,}6\), 30&nbsp;% de \(X_2\) manquant. Si MCAR : supprimer les lignes incomplètes
+  garde un échantillon non biaisé (juste plus petit : ~700 lignes, variances d'estimation
+  gonflées de \(1/0{,}7 \approx 1{,}43\)). Mais si le missingness dépend de \(X_1\)
+  (MAR : on perd \(X_2\) surtout quand \(X_1\) est grand), la moyenne de \(X_2\) sur les
+  lignes conservées est biaisée vers le bas : \(E[X_2 \mid \text{conservé}] =
+  \rho\,E[X_1 \mid X_1 \lt q_{0{,}7}] \approx 0{,}6 \times (-0{,}52) \approx -0{,}31\).
+  La suppression silencieuse a déplacé la moyenne d'un tiers d'écart-type.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 9.3 — Imputation par la moyenne</span>
+  Même données ; on remplace chaque \(X_2\) manquant par \(\bar X_2 \approx 0\). Effets :
+  (i) la moyenne est (presque) préservée ; (ii) la <em>variance</em> de \(X_2\) s'effondre
+  (30&nbsp;% des points empilés en un Dirac), la covariance \(\mathrm{Cov}(X_1, X_2)\) est
+  divisée par \(\approx 1/0{,}7\) (seuls les couples complets contribuent :
+  \(\mathrm{Cov}_{\text{imp}} \approx 0{,}7 \times 0{,}6 = 0{,}42\)) — donc toute
+  régression de \(Y\) sur \((X_1, X_2)\) estimée sur les données imputées a des coefficients
+  <strong>biaisés</strong>. L'intuition : l'imputation par constante fabrique de fausses
+  données «&nbsp;moyennes&nbsp;» qui tirent les pentes vers zéro. C'est un cas particulier du
+  résultat de non-consistance de Le Morvan et al. (AISTATS 2020) présenté ci-dessous.
+</div>
+
+<h3>9.3 Faire mieux : imputation par régression et au-delà</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 9.4 — Imputation par régression (MAR)</span>
+  Sous MAR, la bonne cible pour imputer \(X_2\) est
+  \(\mathbb{E}[X_2 \mid X_{\text{observé}}]\) (chapitre 2, espérance conditionnelle) : on
+  régresse \(X_2\) sur \(X_1\) pour les lignes complètes, et on prédit les trous. Cette
+  méthode est <em>consistante pour estimer la moyenne</em>, mais elle sous-estime encore la
+  variance (on impute le centre de la loi conditionnelle, pas un tirage). D'où les
+  raffinements : <strong>imputation stochastique</strong> (régression + bruit calibré),
+  <strong>imputation multiple</strong> (Rubin : générer \(B\) jeux imputés, combiner estimateurs
+  et variances), <strong>EM / MICE</strong> (imputation itérative conditionnelle par blocs,
+  chainées). Mais pour <em>prédire</em> \(Y\) — et pas estimer des paramètres — le théorème
+  suivant change la perspective.
+</div>
+
+<h3>9.4 Les travaux de Marine Le Morvan</h3>
+
+<div class="note">
+  <span class="tag">Article 1 — Quand l'imputation détruit la consistance (AISTATS 2020)</span>
+  M. Le Morvan, J. Josse, T. Moreau, E. Scornet, G. Varoquaux,
+  <a href="https://arxiv.org/abs/2002.00658">«&nbsp;Linear predictor on linearly-generated
+  data with missing values: non consistency and solutions&nbsp;»</a>, AISTATS 2020 (PMLR v108).
+  Résultat central : même dans le cadre idéalement linéaire (\(y\) fonction linéaire de \(x\)),
+  la procédure «&nbsp;imputer par une constante puis régresser linéairement&nbsp;» n'est
+  <strong>pas consistante</strong> dès que le missingness n'est pas MCAR : le prédicteur
+  limite n'est pas le Bayes prédicteur. Les solutions consistentes imposent des modèles
+  <em>par motif de missingness</em> (régressions conditionnées au masque). C'est la
+  formalisation rigoureuse des exemples 9.2-9.3.
+</div>
+
+<div class="note">
+  <span class="tag">Article 2 — NeuMiss (NeurIPS 2020)</span>
+  M. Le Morvan, J. Josse, E. Scornet, G. Varoquaux,
+  <a href="https://proceedings.neurips.cc/paper/2020/hash/42ae1544956fbe6e09242e6cd752444c-Abstract.html">«&nbsp;NeuMiss
+  networks: differentiable programming for supervised learning with missing values&nbsp;»</a>,
+  NeurIPS 2020. L'optimal Bayes prédicteur avec données manquantes gaussiennes fait
+  intervenir une série de Neumann \(\sum_k (\bar W M \bar W)^k\)... que les auteurs
+  <em>implémentent comme architecture</em> : le réseau NeuMiss apprend une couche qui
+  traite conjointement valeurs et masque, approximant la structure du prédicteur optimal
+  plutôt que d'imputer puis prédire. Premier pas vers «&nbsp;l'imputation différentiable&nbsp;»,
+  code disponible (github.com/dirty-cat/NeuMiss).
+</div>
+
+<div class="note">
+  <span class="tag">Article 3 — Quelle imputation pour prédire ? (NeurIPS 2021)</span>
+  M. Le Morvan, J. Josse, E. Scornet, G. Varoquaux,
+  <a href="https://proceedings.neurips.cc/paper/2021/hash/5fe8fdc79ce292c39c5f209d734b7206-Abstract.html">«&nbsp;What's
+  a good imputation to predict with missing values?&nbsp;»</a>, NeurIPS 2021. Résultat
+  surprenant et fondateur : pour <em>presque toute</em> fonction d'imputation (au sens de la
+  mesure), la procédure «&nbsp;impute-then-regress&nbsp;» avec un régresseur
+  <em>suffisamment puissant</em> (non paramétrique, type forêt ou réseau profond) est
+  <strong>Bayes optimale</strong> — y compris pour des missingness MCAR, MAR et
+  auto-masqués MNAR. Autrement dit : le choix d'imputation est bien moins critique que la
+  richesse du régresseur aval ; imputer par zéro peut suffire si le modèle sait lire le
+  masque. Conséquence pratique : investir dans la capacité du modèle plutôt que dans
+  l'orfèvrerie d'imputation.
+</div>
+
+<div class="note">
+  <span class="tag">Article 4 — Imputation : rendements décroissants (2024)</span>
+  M. Le Morvan et al.,
+  <a href="https://arxiv.org/abs/2407.19804">«&nbsp;Imputation for prediction: beware of
+  diminishing returns&nbsp;»</a> (2024). Grandes expériences comparant imputations sophistiquées
+  vs simples sur de nombreux jeux de données tabulaires : les gains des méthodes avancées
+  sont souvent marginaux pour la prédiction — en écho direct au résultat théorique de
+  NeurIPS 2021. Message pour l'ingénieur : baseline simple + modèle riche d'abord,
+  imputation complexe ensuite, si le problème l'exige.
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi le master s'y intéresse</span>
+  Les données industrielles sont incomplètes par construction : maintenance prédictive
+  (capteurs en panne), santé (examens non prescrits à tous les patients), finance (champs
+  non renseignés), NLP (mots rares = valeurs manquantes lexicales), graphes (arêtes non
+  observées — cf. modules Graph ML et Advanced GNN M2, où l'on apprend avec des graphes
+  partiellement observés). Savoir (i) diagnostiquer le mécanisme, (ii) choisir une stratégie
+  impute-then-regress justifiée par la théorie, (iii) connaître les limites MNAR, est une
+  compétence différenciante en entreprise comme en recherche. La page de l'enseignante
+  (<a href="https://marinelm.github.io/">marinelm.github.io</a>) liste ses publications,
+  y compris ses travaux sur l'inférence causale avec données manquantes.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 9</p>
+  <ul>
+    <li>MCAR/MAR/MNAR : le mécanisme de missingness est une donnée du problème, pas un
+    détail.</li>
+    <li>Suppression de lignes : correct seulement sous MCAR ; imputation moyenne : écrase
+    variances et covariances, biaise les régressions.</li>
+    <li>Imputer pour <em>estimer</em> (cible : loi conditionnelle) ≠ imputer pour
+    <em>prédire</em> (impute-then-regress Bayes optimal — Le Morvan et al., 2021).</li>
+    <li>Quatre références à citer : AISTATS 2020, NeuMiss 2020, NeurIPS 2021, 2024.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 10 ============================ -->
+<section class="chapter" id="ch10">
+<h2>10. De la statistique au machine learning</h2>
+
+<p>Ce dernier chapitre tisse le lien explicite entre ce refresher et les modules suivants :
+chaque pilier statistique devient un pilier d'apprentissage.</p>
+
+<h3>10.1 Minimisation du risque empirique (ERM)</h3>
+
+<div class="def">
+  <span class="tag">Définition 10.1 — Risque et risque empirique</span>
+  Pour une famille de prédicteurs \(f_\theta\) et une perte \(\ell\), le <strong>risque</strong>
+  est \(\mathcal{R}(\theta) = \mathbb{E}[\ell_\theta(X)]\) (perte attendue sur la vraie loi) et
+  le <strong>risque empirique</strong> est \(\hat{\mathcal{R}}_n(\theta) = \frac1n \sum_i
+  \ell_\theta(X_i)\) (perte moyenne observée). L'apprentissage statistique minimise
+  \(\hat{\mathcal{R}}_n\) et espère minimiser \(\mathcal{R}\).
+</div>
+
+<div class="proof">
+  <strong>Pourquoi ça marche (esquisse).</strong> Pour \(\theta\) <em>fixé</em> :
+  \(\hat{\mathcal{R}}_n(\theta)\) est une moyenne d'iid (les \(\ell_\theta(X_i)\)) à qui la LLN
+  (4.3) donne la consistance vers \(\mathcal{R}(\theta)\), et le TCL (4.4) les fluctuations :
+  \(\hat{\mathcal{R}}_n(\theta) \approx \mathcal{R}(\theta) \pm
+  \mathrm{sd}(\ell_\theta)/\sqrt n\). La subtilité du ML est que l'on minimise sur
+  \(\theta\) <em>après</em> avoir vu les données : il faut contrôler la déviation
+  \(\sup_\theta |\hat{\mathcal{R}}_n(\theta) - \mathcal{R}(\theta)|\) — convergence
+  <em>uniforme</em>, objet de la théorie Vapnik-Chervonenkis et des bornes de généralisation
+  (module Machine Learning, chapitre théorie). Sans contrôle de complexité, le minimiseur
+  empirique apprend le bruit : c'est le surapprentissage, quantifié ci-dessous.
+  <span class="qed">∎</span>
+</div>
+
+<h3>10.2 Biais-variance en prédiction, par le calcul</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 10.2 — Décomposition de l'erreur de généralisation</span>
+  Au point \(x\), pour un modèle \(Y = f(x) + \varepsilon\) (\(\mathbb{E}\varepsilon = 0\),
+  \(\mathrm{Var}(\varepsilon) = \sigma^2\)) entraîné sur données aléatoires, notant
+  \(\bar f(x) = \mathbb{E}[\hat f(x)]\) (moyenne sur les échantillons d'entraînement) :
+  $$\mathbb{E}\big[(Y - \hat f(x))^2\big] = \underbrace{\sigma^2}_{\text{bruit}}
+  + \underbrace{\big(f(x) - \bar f(x)\big)^2}_{\text{biais}^2}
+  + \underbrace{\mathrm{Var}\big(\hat f(x)\big)}_{\text{variance}}.$$
+</div>
+
+<div class="proof">
+  Conditionnons à \(x\) et à l'indépendance entre l'observation future \(Y\) et l'échantillon
+  d'entraînement (qui pilote \(\hat f\)). Posons \(g = \hat f(x) - \bar f(x)\) (centré) et
+  \(b = \bar f(x) - f(x)\). Alors \(Y - \hat f(x) = \varepsilon - b - g\), somme de trois
+  termes <em>de moyenne nulle deux à deux non corrélés</em> (\(\varepsilon\) est indépendant
+  de \(g\) ; \(g\) est centré ; \(b\) constant). Le carré moyen se réduit donc à la somme des
+  variances plus le carré du biais : \(\sigma^2 + b^2 + \mathrm{Var}(\hat f(x))\). La
+  structure est identique au théorème 5.2, avec un troisième terme irréductible : le bruit.
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 10.3 — Voir le compromis en simulation (code commenté)</span>
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(0)
+
+def f(x):                       # vraie fonction : sinusoide modulée
+    return np.sin(2 * x) + 0.3 * x
+
+n_train, n_rep = 40, 300        # petits échantillons, beaucoup de répétitions
+x_test = np.linspace(-3, 3, 200)
+
+sq_bias, var_, noise = np.zeros_like(x_test), np.zeros_like(x_test), 0.15**2
+for deg in range(1, 13):
+    preds = np.zeros((n_rep, x_test.size))
+    for r in range(n_rep):
+        x = rng.uniform(-3, 3, n_train)
+        y = f(x) + rng.normal(0, 0.15, n_train)
+        # régression polynomiale de degré deg : biais décroissant, variance croissante
+        c = np.polyfit(x, y, deg)
+        preds[r] = np.polyval(c, x_test)
+    mean = preds.mean(axis=0)                    # bar f(x)
+    sq_b = ((f(x_test) - mean)**2).mean()        # biais^2 moyen
+    v = preds.var(axis=0).mean()                 # variance moyenne
+    err = sq_b + v + noise                       # = erreur test moyenne (th. 10.2)
+    print(f"deg={deg:2d}  biais^2={sq_b:.4f}  var={v:.4f}  err={err:.4f}")
+# Lecture attendue : deg petit -&gt; biais^2 domine ; deg grand -&gt; var explose ;
+# optimum intermediaire (ici deg ~ 3-5). C'est exactement la courbe
+# "complexite vs erreur" du module Machine Learning, et la raison d'etre
+# de la validation croisee et de la regularisation.</code></pre>
+</div>
+
+<h3>10.3 MLE vers la cross-entropy : le pont exact</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 10.4 — Maximiser la vraisemblance = minimiser la cross-entropy</span>
+  Pour une loi conditionnelle paramétrée \(p_\theta(y \mid x)\), la log-vraisemblance moyenne
+  sur un échantillon se réécrit :
+  $$\frac1n \sum_i \log p_\theta(y_i \mid x_i) \;=\; -\,\widehat{\mathrm{CE}}(p_{\text{data}},
+  \,p_\theta) \;+\; \text{cte},$$
+  où \(\widehat{\mathrm{CE}}\) est la <strong>cross-entropy empirique</strong>. Cas
+  Bernoulli (définition 5.11) : \(-\frac1n\ell = \frac1n\sum_i \big[-y_i \log \hat p(x_i) -
+  (1 - y_i)\log(1 - \hat p(x_i))\big]\) : la <strong>binary cross-entropy</strong>, exactement.
+  Cas multiclasses avec softmax : \(-\log p_\theta(y_i \mid x_i) = -\log
+  \frac{e^{z_{y_i}}}{\sum_k e^{z_k}}\) : la perte d'entraînement de <em>tous</em> les
+  classifieurs du master. Cas Gaussien (5.9) : l'erreur quadratique. <em>Le choix de la
+  fonction de coût n'est jamais arbitraire : c'est un choix de loi conditionnelle.</em>
+</div>
+
+<div class="proof">
+  La cross-empirique entre la loi empirique des données \(p_{\text{data}} = \frac1n\sum_i
+  \delta_{(x_i,y_i)}\) et le modèle \(p_\theta\) vaut \(\mathrm{CE} =
+  -\frac1n\sum_i \log p_\theta(y_i \mid x_i)\) ; la constante mentionnée est l'entropie
+  empirique des données (minimisée en \(p_\theta = p_{\text{data}}\), dont le maximum de
+  vraisemblance est un cas particulier). Maximiser \(\ell\) revient à minimiser CE : deux
+  notations, un seul objet. On retrouve au passage la divergence de KL :
+  \(\mathrm{CE}(p_{\text{data}}, p_\theta) = H(p_{\text{data}}) +
+  \mathrm{KL}(p_{\text{data}} \| p_\theta)\) — maximiser la vraisemblance, c'est approcher la
+  loi des données au sens du KL (lien direct avec les modèles génératifs et la
+  distillation — modules Deep Learning et LLMs M2).
+  <span class="qed">∎</span>
+</div>
+
+<h3>10.4 Quatre correspondances à emporter</h3>
 
 <ul>
-  <li><strong>Risque empirique</strong> : le ML remplace la vraie perte attendue
-  \(\mathcal{R}(\theta) = \mathbb{E}[\ell_\theta(X)]\) par sa version empirique
-  \(\hat{\mathcal{R}}_n(\theta) = \frac1n \sum_i \ell_\theta(X_i)\) — la loi des grands nombres
-  garantit la convergence de l'un vers l'autre ; le TCL en donne la vitesse \(\mathcal{O}(1/\sqrt n)\).</li>
+  <li><strong>Risque empirique</strong> : LLN garantit la convergence, TCL la vitesse
+  \(\mathcal{O}(1/\sqrt n)\), convergence uniforme à bornes de complexité — la théorie de la
+  généralisation (module Machine Learning).</li>
   <li><strong>Biais-variance</strong> : la décomposition du chapitre 5 devient, en apprentissage,
   l'arbitrage entre un modèle trop simple (biais) et un modèle trop riche qui apprend le bruit
-  (variance) — visualisée dans le module Machine Learning.</li>
+  (variance) — illustrée par la simulation 10.3.</li>
   <li><strong>Vraisemblance → perte</strong> : chaque modèle génératif du master (régression,
   classification, auto-encodeurs, diffusion, LLMs) s'entraîne en maximisant une
   log-vraisemblance, c'est-à-dire en minimisant une <em>cross-entropy</em> sur les données.</li>
   <li><strong>Conditionnement → prédiction</strong> : \(\mathbb{E}[Y \mid X]\) est la cible
   théorique de toute régression ; \(\mathbb{P}(y \mid x)\) celle de tout modèle génératif
-  conditionnel (dont les LLMs, qui estiment \(\mathbb{P}(\text{token suivant} \mid \text{contexte})\)).</li>
+  conditionnel (dont les LLMs, qui estiment \(\mathbb{P}(\text{token suivant} \mid
+  \text{contexte})\) — module LLMs M2).</li>
 </ul>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 10 (et pour tout le master)</p>
+  <ul>
+    <li>ERM : moyenne empirique d'une perte ; LLN + TCL + contrôle uniforme = généralisation.</li>
+    <li>Erreur de généralisation = bruit + biais² + variance (le théorème à redémontrer de
+    mémoire).</li>
+    <li>Coût d'entraînement = log-vraisemblance négative = cross-entropy = KL + entropie.</li>
+    <li>Vous avez maintenant le socle : les modules Machine Learning et Deep Learning
+    n'introduiront plus aucune notion probabiliste nouvelle — seulement des architectures.</li>
+  </ul>
+</div>
 </section>
 
 <!-- ============================ EXERCICES ============================ -->
@@ -437,13 +1999,39 @@ print(LinearRegression().fit(X[:, 1:], y).coef_.round(3))</code></pre>
 <ol>
   <li><strong>Bayes pratique.</strong> Un test de détection d'un virus affectant 1&nbsp;% de la
   population a une sensibilité de 99&nbsp;% et une spécificité de 95&nbsp;%. Un patient est
-  positif. Quelle est la probabilité qu'il soit effectivement infecté&nbsp;?
-  <div class="sol">Solution : \(\mathbb{P}(M \mid +) = \frac{0{,}99 \times 0{,}01}{0{,}99\times 0{,}01 + 0{,}05 \times 0{,}99} \approx 0{,}167\). Même un très bon test donne peu de certitude sur une maladie rare — d'où l'importance des <em>priors</em>.</div></li>
+  positif. Quelle est la probabilité qu'il soit effectivement infecté&nbsp;? Et s'il est
+  positif à <em>deux</em> tests indépendants (mêmes caractéristiques)&nbsp;?
+  <div class="sol">Solution : \(\mathbb{P}(M \mid +) = \frac{0{,}99 \times 0{,}01}{0{,}99\times 0{,}01 + 0{,}05 \times 0{,}99} \approx 0{,}167\). Même un très bon test donne peu de certitude sur une maladie rare — d'où l'importance des <em>priors</em>.
+  Deux tests positifs : on applique Bayes avec \(\mathbb{P}(++\mid M) = 0{,}99^2\) et
+  \(\mathbb{P}(++\mid M^c) = 0{,}05^2\) :
+  \(\frac{0{,}9801 \times 0{,}01}{0{,}9801\times 0{,}01 + 0{,}0025 \times 0{,}99}
+  = \frac{0{,}009801}{0{,}011276} \approx 0{,}869\). La certitude saute de 17&nbsp;% à
+  87&nbsp;% : répéter un test indépendant vaut mieux qu'un seul test excellent.</div></li>
+
+  <li><strong>Simpson inverse.</strong> Construire un tableau de contingence (2 groupes, 2
+  traitements) dans lequel le traitement A est <em>meilleur globalement</em> mais
+  <em>pire dans chaque groupe</em>. Expliquer le mécanisme en termes de facteur de confusion.
+  <div class="sol">Il suffit d'inverser l'exemple 1.11 : groupes léger/sévère, avec A meilleur
+  dans les deux sous-groupes mais affecté majoritairement aux cas sévères. Mécanisme : la
+  variable «&nbsp;gravité&nbsp;» influence à la fois l'assignation du traitement et la
+  guérison ; l'analyse agrégée mélange alors deux populations. Moralité : randomiser
+  (l'assignation devient indépendante de la gravité) ou stratifier.</div></li>
 
   <li><strong>MLE de la loi exponentielle.</strong> Pour \(X_i \sim \mathcal{E}(\lambda)\), montrer
   que \(\hat\lambda_{\mathrm{MLE}} = 1/\bar X_n\) et calculer son biais.
-  <div class="sol">Indication : \(\ell(\lambda) = n\log\lambda - \lambda\sum_i X_i\). On trouve
-  \(\hat\lambda = n/\sum_i X_i\), biaisé : \(\mathbb{E}[1/\bar X_n] \neq \lambda\) (\(\bar X_n \sim \Gamma(n, n\lambda)\)).</div></li>
+  <div class="sol">Solution : \(\ell(\lambda) = n\log\lambda - \lambda\sum_i X_i\) (exemple 5.10).
+  On trouve \(\hat\lambda = n/\sum_i X_i\), biaisé : \(\mathbb{E}[1/\bar X_n] \neq \lambda\) (\(\bar X_n \sim \Gamma(n, n\lambda)\) par stabilité gamma, et \(\mathbb{E}[1/\bar X_n] = \frac{n\lambda}{n-1}\) pour \(n&gt;1\), biais \(\frac{\lambda}{n-1}\)).</div></li>
+
+  <li><strong>MLE Poisson et Fisher.</strong> Pour \(X_i \sim \mathcal{P}(\lambda)\) :
+  (a) dériver \(\hat\lambda_{\mathrm{MLE}}\) ; (b) calculer l'information de Fisher
+  \(I(\lambda)\) par les deux identités du théorème 5.6 ; (c) vérifier que
+  \(\mathrm{Var}(\bar X_n) = 1/(nI)\) : l'estimateur atteint la borne de Cramér-Rao.
+  <div class="sol">(a) \(\hat\lambda = \bar X_n\) (exemple 5.12). (b)
+  \(\ell'(\lambda)\) (une observation) \(= \frac X\lambda - 1\), donc
+  \(I = \mathrm{Var}(X/\lambda) = \frac{1}{\lambda^2}\mathrm{Var}(X) = \frac1\lambda\) ;
+  par la courbure : \(-\mathbb{E}[-X/\lambda^2] = \mathbb{E}[X]/\lambda^2 = 1/\lambda\).
+  (c) \(\mathrm{Var}(\bar X_n) = \lambda/n = 1/(nI)\) : efficace même en fini
+  d'échantillon.</div></li>
 
   <li><strong>Approximation normale.</strong> Une usine produit des pièces dont 8&nbsp;% sont
   défectueuses. Sur un lot de 500, quelle est la probabilité d'observer plus de 55 pièces
@@ -451,16 +2039,116 @@ print(LinearRegression().fit(X[:, 1:], y).coef_.round(3))</code></pre>
   <div class="sol">Modéliser par \(\mathcal{B}(500, 0{,}08)\), approcher par
   \(\mathcal{N}(40, 36{,}8)\) : \(\mathbb{P}(\text{>}55) \approx 1 - \Phi\!\big(\frac{55 - 40}{\sqrt{36{,}8}}\big) \approx 0{,}007\).</div></li>
 
+  <li><strong>Changement de variable.</strong> \(X \sim \mathcal{N}(0,1)\). Déterminer la densité
+  de \(Y = X^2\) (on reconnaîtra une loi du tableau du chapitre 3) puis celle de
+  \(Z = |X|\) (loi «&nbsp;demi-normale&nbsp;»).
+  <div class="sol">Indication : \(g : x \mapsto x^2\) n'est pas injective — découper en
+  \(x&gt;0\) / \(x \lt 0\) et sommer les deux branches : \(f_Y(y) =
+  \frac{1}{\sqrt{2\pi y}}e^{-y/2}\), \(y&gt;0\) : loi \(\chi^2_1\) (i.e. \(\Gamma(1/2,2)\)).
+  Pour \(Z = |X|\) : \(f_Z(z) = 2\varphi(z)\), \(z \geq 0\).</div></li>
+
+  <li><strong>Tchebychev numérique.</strong> Un serveur traite des requêtes de temps moyen
+  200&nbsp;ms et d'écart-type 40&nbsp;ms (loi inconnue). (a) Borner la probabilité qu'une
+  requête dépasse 320&nbsp;ms. (b) Même question en supposant la loi gaussienne — comparer.
+  <div class="sol">(a) Tchebychev : \(\mathbb{P}(|X - 200| \geq 120) \leq 40^2/120^2 = 1/9
+  \approx 0{,}111\). (b) Gaussienne : \(\mathbb{P}(X &gt; 320) = 1 - \Phi(3) \approx 0{,}0013\).
+  Écart d'un facteur ~40 : Tchebychev est <em>universelle</em> mais très conservatrice ;
+  dès qu'on connaît la loi, on fait bien mieux.</div></li>
+
+  <li><strong>Sommes stables.</strong> Sans intégrale, uniquement par MGF : montrer que la somme
+  de deux Poisson indépendantes est une Poisson, et que la somme de deux gamma de même échelle
+  est une gamma. En déduire la loi de \(\sum_i X_i\) pour \(n\) iid \(\mathcal{E}(\lambda)\).
+  <div class="sol">Poisson : \(e^{\lambda_1(e^t-1)}e^{\lambda_2(e^t-1)}
+  = e^{(\lambda_1+\lambda_2)(e^t-1)}\). Gamma : \((1-bt)^{-a_1}(1-bt)^{-a_2}
+  = (1-bt)^{-(a_1+a_2)}\). Somme de \(n\) exponentielles : \(\Gamma(n, 1/\lambda)\) (Erlang),
+  d'où \(\bar X_n \sim \Gamma(n, n\lambda)\) utilisé à l'exercice 3.</div></li>
+
+  <li><strong>Neyman-Pearson appliqué.</strong> \(X_1, \dots, X_n\) iid \(\mathcal{E}(\lambda)\).
+  Écrire le test du rapport de vraisemblance de \(H_0 : \lambda = \lambda_0\) contre
+  \(H_1 : \lambda = \lambda_1 &gt; \lambda_0\), et montrer que la région de rejet s'écrit
+  \(\{\sum_i X_i \leq c\}\).
+  <div class="sol">Indication : \(\frac{L_1}{L_0} = \big(\frac{\lambda_1}{\lambda_0}\big)^n
+  \exp\big(-(\lambda_1 - \lambda_0)\sum X_i\big)\), croissante quand \(\sum X_i\) décroît :
+  rejeter pour petites sommes. \(c\) se calibre par \(\mathbb{P}_{\lambda_0}\big(\Gamma(n,
+  \lambda_0) \leq c\big) = \alpha\) (exercice 8).</div></li>
+
+  <li><strong>t-test complet en code.</strong> Écrire une fonction
+  <code>ic_moyenne(x, alpha=0.05)</code> qui renvoie l'intervalle de confiance t de la moyenne
+  (théorème 6.2 / proposition 6.3), puis la vérifier : pour 10&nbsp;000 échantillons gaussiens
+  simulés de taille 20, la proportion d'intervalles contenant le vrai \(\mu\) doit être proche
+  de 95&nbsp;%.
+  <div class="sol">
+<pre class="code"><code>import numpy as np
+from scipy import stats
+
+def ic_moyenne(x, alpha=0.05):
+    n = len(x); m, s = x.mean(), x.std(ddof=1)
+    tq = stats.t.ppf(1 - alpha/2, df=n - 1)
+    return m - tq*s/np.sqrt(n), m + tq*s/np.sqrt(n)
+
+rng = np.random.default_rng(0)
+cov = sum(ic_moyenne(rng.normal(3.0, 1.0, 20))[0] &lt;= 3.0 &lt;= ic_moyenne(rng.normal(3.0, 1.0, 20))[1]
+          for _ in range(10_000))
+print(cov / 10_000)   # ~0.95 : propriété de couverture fréquentiste</code></pre>
+  Notez que chaque échantillon recalcule l'intervalle : c'est <em>la procédure</em> qui a
+  95&nbsp;% de chances, pas chaque intervalle (cf. 8.6).</div></li>
+
   <li><strong>Régression à la main.</strong> Montrer que le minimiseur de
   \(\|y - X\beta\|^2\) vérifie l'équation normale \(X^\top X \beta = X^\top y\), puis que la
   solution est unique si les colonnes de \(X\) sont linéairement indépendantes.
   <div class="sol">Poser le gradient \(2X^\top(X\beta - y) = 0\). Unicité : \(X^\top X\)
-  définie positive \(\iff\) colonnes de \(X\) indépendantes.</div></li>
+  définie positive \(\iff\) colonnes de \(X\) indépendantes (si \(a^\top X^\top X a =
+  \|Xa\|^2 = 0\) alors \(Xa = 0\)). Retrouver géométriquement le résultat avec le
+  théorème 7.1.</div></li>
+
+  <li><strong>Gauss-Markov en dimension 1.</strong> Pour le modèle \(y_i = \mu + \varepsilon_i\),
+  parmi les estimateurs linéaires \(\sum w_i y_i\) sans biais, montrer que \(\bar Y\) est de
+  variance minimale.
+  <div class="sol">Sans biais \(\Rightarrow \sum w_i = 1\).
+  \(\mathrm{Var}(\sum w_i y_i) = \sigma^2\sum w_i^2 \geq \sigma^2 (\sum w_i)^2/n =
+  \sigma^2/n = \mathrm{Var}(\bar Y)\) par Cauchy-Schwarz (théorème 2.12), égalité ssi tous les
+  \(w_i\) égaux. Cas particulier du théorème 7.2, démontrable en cinq lignes.</div></li>
+
+  <li><strong>Bayésien séquentiel.</strong> Prior \(\mathrm{Beta}(2,2)\) sur la probabilité de
+  clic \(p\). On observe, dans l'ordre : 3 clics, puis 1 échec, puis 6 clics. Donner le
+  posterior après chaque lot (théorème 8.2), puis l'IC crédible à 90&nbsp;% final et la
+  prédiction MAP.
+  <div class="sol">Lot 1 : \(\mathrm{Beta}(5,2)\) ; lot 2 : \(\mathrm{Beta}(5,3)\) ; lot 3 :
+  \(\mathrm{Beta}(11,3)\). MAP \(= \frac{10}{13} \approx 0{,}769\) (mode d'une Beta :
+  \(\frac{a-1}{a+b-2}\)) ; crédible 90&nbsp;% = quantiles \([0{,}05, 0{,}95]\) de
+  \(\mathrm{Beta}(11,3)\), environ \([0{,}54, 0{,}94]\) (à vérifier avec
+  <code>scipy.stats.beta(11,3).ppf</code>). C'est le mécanisme exact du Thompson sampling
+  (module RL).</div></li>
+
+  <li><strong>Données manquantes.</strong> Dans l'exemple 9.3 ( MAR : \(X_2\) manque avec
+  proba plus forte quand \(X_1\) est grand), expliquer pourquoi l'imputation par la moyenne
+  de \(X_2\) <em>conditionnelle au quantile de \(X_1\)</em> (imputation par régression,
+  proposition 9.4) restaure une estimation consistante de \(\mathbb{E}[X_2]\), mais pas de
+  \(\mathrm{Var}(X_2)\). Quel ajout simple corrige partiellement la variance&nbsp;?
+  <div class="sol">Sous MAR, \(\mathbb{E}[X_2 \mid X_1]\) est identifiable sur les lignes
+  complètes ; l'imputer préserve la moyenne (loi des grands nombres conditionnelle). Mais on
+  impute une <em>espérance</em> : la variance des valeurs imputées est nulle autour de leur
+  cible, donc \(\mathrm{Var}(X_2)\) est sous-estimée. Ajouter un bruit calibré
+  (imputation stochastique : prédiction + tirage du résidu estimé) restaure la variance — au
+  prix d'une variance d'estimation accrue (encore le compromis du théorème 5.2).</div></li>
 
   <li><strong>Code.</strong> Simuler 10&nbsp;000 échantillons gaussiens de taille \(n = 50\),
   tracer l'histogramme des \(\bar X_n\), superposer la densité théorique du TCL et vérifier que
   la proportion d'intervalles \(\bar X_n \pm 1{,}96\,s/\sqrt n\) contenant \(\mu\) est proche de 95&nbsp;%.
-  </li>
+  <div class="sol">
+<pre class="code"><code>import numpy as np, matplotlib.pyplot as plt
+from scipy import stats
+rng = np.random.default_rng(0)
+samples = rng.normal(5.0, 2.0, size=(10_000, 50))
+means = samples.mean(axis=1)
+plt.hist(means, bins=60, density=True, alpha=.6)
+grid = np.linspace(4, 6, 300)
+plt.plot(grid, stats.norm(5.0, 2.0/np.sqrt(50)).pdf(grid), 'r')
+plt.show(); plt.close()
+lo, hi = means - 1.96*samples.std(axis=1, ddof=1)/np.sqrt(50), means + 1.96*samples.std(axis=1, ddof=1)/np.sqrt(50)
+print(((lo &lt;= 5.0) &amp; (5.0 &lt;= hi)).mean())   # ~0.95</code></pre>
+  Attention au <code>ddof=1</code> : avec l'écart-type biaisé, la couverture chute
+  légèrement (exemple 5.3) ; le quantile exact serait \(t_{49}\), très proche de 1,96.</div></li>
 </ol>
 </section>
 
@@ -473,6 +2161,14 @@ print(LinearRegression().fit(X[:, 1:], y).coef_.round(3))</code></pre>
   <li>J. Rice, <em>Mathematical Statistics and Data Analysis</em>, 3e éd., Duxbury, 2007 — approche par les données, très lisible.</li>
   <li>A. Blanchet, V. Monbet, <em>Probabilités pour les sciences de l'ingénieur</em> — pour la transition L3 en français.</li>
   <li>C. Robert, <em>The Bayesian Choice</em>, Springer, 2007 — pour aller plus loin sur l'inférence bayésienne utilisée en IA générative.</li>
+  <li>A. Gelman, J. Carlin, H. Stern, D. Dunson, A. Vehtari, D. Rubin, <em>Bayesian Data Analysis</em>, 3e éd., CRC Press, 2013 — la référence du chapitre 8.</li>
+  <li>R. Little, D. Rubin, <em>Statistical Analysis with Missing Data</em>, 3e éd., Wiley, 2019 — le canon du chapitre 9 (MCAR/MAR/MNAR, imputation multiple).</li>
+  <li>Travaux de l'enseignante (chapitre 9) :
+    <a href="https://arxiv.org/abs/2002.00658">Linear predictor on linearly-generated data with missing values: non consistency and solutions</a> (AISTATS 2020) ·
+    <a href="https://proceedings.neurips.cc/paper/2020/hash/42ae1544956fbe6e09242e6cd752444c-Abstract.html">NeuMiss networks: differentiable programming for supervised learning with missing values</a> (NeurIPS 2020) ·
+    <a href="https://proceedings.neurips.cc/paper/2021/hash/5fe8fdc79ce292c39c5f209d734b7206-Abstract.html">What's a good imputation to predict with missing values?</a> (NeurIPS 2021) ·
+    <a href="https://arxiv.org/abs/2407.19804">Imputation for prediction: beware of diminishing returns</a> (2024) ·
+    page de l'enseignante : <a href="https://marinelm.github.io/">marinelm.github.io</a>.</li>
 </ul>
 </section>
 

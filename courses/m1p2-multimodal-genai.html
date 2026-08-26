@@ -40,14 +40,16 @@
 <nav class="toc">
   <strong>Plan du module</strong>
   <ol>
-    <li><a href="#ch0">Rappels&nbsp;: le paysage génératif</a></li>
+    <li><a href="#ch0">Rappels&nbsp;: probabilités, réseaux, ELBO</a></li>
     <li><a href="#ch1">VAE et espaces latents</a></li>
-    <li><a href="#ch2">GAN et adversarial</a></li>
-    <li><a href="#ch3">Diffusion&nbsp;: DDPM</a></li>
-    <li><a href="#ch4">Échantillonnage guidé et latent</a></li>
+    <li><a href="#ch2">GAN&nbsp;: adversaire, équilibre, Wasserstein</a></li>
+    <li><a href="#ch3">Diffusion&nbsp;: DDPM et score matching</a></li>
+    <li><a href="#ch4">Guidage, DDIM et diffusion latente</a></li>
     <li><a href="#ch5">CLIP et l'alignement vision-langage</a></li>
-    <li><a href="#ch6">Multimodalité&nbsp;: au-delà de l'image</a></li>
-    <li><a href="#ch7">Évaluation, coûts, éthique</a></li>
+    <li><a href="#ch6">Text-to-image&nbsp;: le pipeline complet</a></li>
+    <li><a href="#ch7">Au-delà de l'image&nbsp;: vidéo, 3D, LLMs</a></li>
+    <li><a href="#ch8">Évaluation, coûts, éthique</a></li>
+    <li><a href="#ch9">Travaux de l'équipe pédagogique</a></li>
     <li><a href="#ex">Exercices</a></li>
     <li><a href="#refs">Références</a></li>
   </ol>
@@ -55,7 +57,14 @@
 
 <!-- ============================ CH 0 ============================ -->
 <section class="chapter" id="ch0">
-<h2>0. Rappels&nbsp;: le paysage génératif</h2>
+<h2>0. Rappels&nbsp;: probabilités, réseaux, ELBO</h2>
+
+<p>Ce module construit tout l'édifice des modèles génératifs multimodaux sur quatre briques&nbsp;:
+les <strong>gaussiennes</strong> (le seul objet probabiliste dont la diffusion aura besoin), la
+<strong>borne inférieure de log-vraisemblance</strong> (ELBO), le <strong>trick de
+reparamétrage</strong> (rendre l'échantillonnage différentiable) et les <strong>architectures
+encodeur-décodeur</strong> (CNN, U-Net, attention). Nous les démontrons ici une fois pour toutes&nbsp;:
+elles seront réutilisées dans les cinq chapitres suivants.</p>
 
 <div class="recap">
   <div class="recap-title">Rappels des modules précédents</div>
@@ -67,9 +76,87 @@
     <li><strong>Transformers &amp; cross-attention</strong>&nbsp;: requêtes image, clés/valeurs
     texte — le mécanisme qui «&nbsp;injecte&nbsp;» le prompt dans un générateur&nbsp;;</li>
     <li><strong>Gaussiennes</strong>&nbsp;: bruit additif, \(\mathcal{N}(0,1)\), reparamétrage —
-    la diffusion n'est qu'une chaîne de bruits gaussiens (Refresher Statistics, chaînes).</li>
+    la diffusion n'est qu'une chaîne de bruits gaussiens (Refresher Statistics, chaînes)&nbsp;;</li>
+    <li><strong>EM / ACP</strong> (module Machine Learning)&nbsp;: le VAE est un cousin
+    probabiliste de l'ACP — maximisation alternée d'une borne inférieure, axes principaux
+    = directions du latent.</li>
   </ul>
 </div>
+
+<div class="prop">
+  <span class="tag">Propriété 0.1 — Somme de gaussiennes indépendantes</span>
+  Si \(X \sim \mathcal{N}(\mu_1, \sigma_1^2)\) et \(Y \sim \mathcal{N}(\mu_2, \sigma_2^2)\)
+  sont indépendantes, alors \(X + Y \sim \mathcal{N}(\mu_1 + \mu_2,\ \sigma_1^2 + \sigma_2^2)\).
+  Les moyennes s'additionnent, <em>les variances s'additionnent</em> — c'est cette règle qui
+  rend la diffusion «&nbsp;calculable en un seul pas&nbsp;» (chapitre 3).
+</div>
+
+<div class="proof">
+Preuve (fonction caractéristique). Pour \(Z \sim \mathcal{N}(\mu, \sigma^2)\), on calcule
+\(\varphi_Z(t) = \mathbb{E}[e^{itZ}] = e^{i\mu t - \frac{1}{2}\sigma^2 t^2}\) (intégrale
+gaussienne après complétion du carré). Par indépendance,
+\(\varphi_{X+Y}(t) = \varphi_X(t)\,\varphi_Y(t)
+= e^{i(\mu_1+\mu_2)t - \frac{1}{2}(\sigma_1^2+\sigma_2^2)t^2}\), qui est la fonction
+caractéristique d'une \(\mathcal{N}(\mu_1+\mu_2,\ \sigma_1^2+\sigma_2^2)\)&nbsp;; le théorème
+d'unicité de Lévy conclut. <span class="qed">∎</span>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 0.2 — ELBO (Jensen)</span>
+  Pour tout \(x\), toute distribution de proposition \(q_\phi(z)\) à support contenant celui
+  de \(p_\theta(z \mid x)\)&nbsp;:
+  $$\log p_\theta(x) \;=\; \mathrm{ELBO}_\phi(x) + \mathrm{KL}\big(q_\phi(z) \,\|\, p_\theta(z\mid x)\big)
+  \;\ge\; \mathrm{ELBO}_\phi(x),$$
+  $$\mathrm{ELBO}_\phi(x) = \mathbb{E}_{q_\phi}\big[\log p_\theta(x \mid z)\big] - \mathrm{KL}\big(q_\phi(z\mid x)\,\|\,p(z)\big).$$
+  L'écart entre \(\log p_\theta(x)\) et la borne est exactement la KL&nbsp;: maximiser l'ELBO
+  rapproche \(q_\phi\) du vrai posterior <em>et</em> maximise la vraisemblance.
+</div>
+
+<div class="proof">
+On écrit l'intégrale comme une espérance sous \(q_\phi\), puis on applique la concavité
+du logarithme (inégalité de Jensen&nbsp;: \(\log \mathbb{E}[U] \ge \mathbb{E}[\log U]\))&nbsp;:
+$$\log p_\theta(x) = \log \int p_\theta(x\mid z)\, p(z)\, dz
+= \log \mathbb{E}_{q_\phi}\!\left[\frac{p_\theta(x\mid z)\,p(z)}{q_\phi(z\mid x)}\right]
+\ge \mathbb{E}_{q_\phi}\!\left[\log \frac{p_\theta(x\mid z)\,p(z)}{q_\phi(z\mid x)}\right]
+= \mathrm{ELBO}_\phi(x).$$
+De plus \(\log \frac{p_\theta(x\mid z)p(z)}{q_\phi(z)} = \log p_\theta(x) + \log\frac{p_\theta(z\mid x)}{q_\phi(z)}\)&nbsp;;
+en prenant l'espérance sous \(q_\phi\), le second terme devient \(-\mathrm{KL}(q_\phi \| p_\theta(z\mid x))\),
+d'où la décomposition exacte. <span class="qed">∎</span>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 0.3 — Reparametrization trick</span>
+  Échantillonner \(z \sim q_\phi(z\mid x) = \mathcal{N}(\mu_\phi(x), \mathrm{diag}\,\sigma_\phi^2(x))\)
+  bloque le gradient (\(\nabla_\phi\) d'un tirage aléatoire). On écrit plutôt
+  $$z = \mu_\phi(x) + \sigma_\phi(x) \odot \epsilon, \qquad \epsilon \sim \mathcal{N}(0, I),$$
+  de sorte que \(\nabla_\phi\, \mathbb{E}_{q_\phi}[f_\phi(z)]
+  = \mathbb{E}_{\epsilon}\big[\nabla_\phi f_\phi(\mu_\phi(x) + \sigma_\phi(x)\odot\epsilon)\big]\)&nbsp;:
+  la loi du bruit ne dépend plus de \(\phi\), le gradient passe <em>sous</em> l'espérance.
+  Le même trick rendra la diffusion différentiable de bout en bout.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 0.4 — KL entre gaussiennes diagonales (formule fermée)</span>
+  Pour \(q = \mathcal{N}(\mu_1, \mathrm{diag}\,\sigma_1^2)\) et
+  \(p = \mathcal{N}(\mu_2, \mathrm{diag}\,\sigma_2^2)\)&nbsp;:
+  $$\mathrm{KL}(q \| p) = \tfrac{1}{2}\sum_i \left[\frac{\sigma_{1,i}^2 + (\mu_{1,i}-\mu_{2,i})^2}{\sigma_{2,i}^2}
+  + \log\frac{\sigma_{2,i}^2}{\sigma_{1,i}^2} - 1\right].$$
+  Tout l'entraînement des VAE (et de la diffusion, ch. 3) repose sur le fait que cette
+  quantité s'évalue <em>en forme fermée</em>. La démonstration (calcul direct d'espérance)
+  est l'objet de l'exercice 3, corrigé.
+</div>
+
+<p><strong>Réseaux.</strong> Le <em>CNN</em> applique localement le même filtre&nbsp;; son champ
+réceptif croît avec la profondeur, ce qui échange de la résolution contre du contexte. Le
+<strong>U-Net</strong> couple un encodeur (sous-échantillonnage, sémantique globale) et un
+décodeur (sur-échantillonnage, précision locale) par des <em>skip connections</em> qui
+court-circuitent le goulot d'étranglement&nbsp;: c'est l'architecture de débruitage de
+référence pour la diffusion. L'<strong>attention croisée</strong> injecte le texte&nbsp;:
+$$\mathrm{Attn}(Q, K, V) = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d}}\right)V,
+\qquad Q = W_Q\,h_{\text{image}}, \quad K = W_K\, e_{\text{texte}}, \quad V = W_V\, e_{\text{texte}},$$
+où \(h_{\text{image}}\) sont les activations spatiales du débruiteur et \(e_{\text{texte}}\)
+les tokens du prompt&nbsp;: chaque position de l'image «&nbsp;interroge&nbsp;» le texte
+(cf. module Deep Learning, ch. 6).</p>
 
 <table class="tbl">
 <thead><tr><th>Famille</th><th>Apprentissage</th><th>Forces</th><th>Faiblesses</th></tr></thead>
@@ -89,10 +176,10 @@
 <div class="def">
   <span class="tag">Définition 1.1 — VAE conditionnel &amp; hiérarchique</span>
   Conditionner la génération&nbsp;: \(p_\theta(x \mid c)\) avec \(c\) une classe, un texte
-  (encodé), une autre modalité. Les <strong>VAE hiérarchiques</strong> empilent des latents&nbsp;;
-  les <strong>VQ-VAE</strong> quantifient le latent en un dictionnaire appris (codes discrets —
-  l'ancêtre des tokens d'images&nbsp;; <em>vector quantization</em> = K-means_dur dans la
-  boucle)&nbsp;; VQ-VAE-2 atteint la fidélité d'image avant la diffusion.
+  (encodé), une autre modalité. Les <strong>VAE hiérarchiques</strong> (HiVAE) empilent des
+  latents \(p(z_1 \mid z_2)\, p(z_2 \mid z_3)\dots\)&nbsp;; les <strong>VQ-VAE</strong>
+  quantifient le latent en un dictionnaire appris (codes discrets — l'ancêtre des tokens
+  d'images)&nbsp;; VQ-VAE-2 atteint la fidélité d'image avant la diffusion.
 </div>
 
 <div class="prop">
@@ -103,60 +190,379 @@
   Le même principe s'applique aux <em>graphes</em>&nbsp;: graphe latent, codes discrets
   (module Graph ML, ch. 7).
 </div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.2 — Décomposition de l'ELBO&nbsp;: reconstruction + régularisation</span>
+  $$\mathrm{ELBO}_\phi(x) = \underbrace{\mathbb{E}_{q_\phi(z\mid x)}\big[\log p_\theta(x \mid z)\big]}_{\text{reconstruction}}
+  \;-\; \underbrace{\mathrm{KL}\big(q_\phi(z\mid x)\,\|\,p(z)\big)}_{\text{régularisation du latent}}.$$
+  <em>Interprétation des deux forces</em>&nbsp;: le premier terme demande un \(z\) qui
+  <em>explique</em> \(x\) (auto-encodage), le second demande un \(z\) <em>typique</em> sous
+  le prior. La tension entre les deux structure l'espace latent&nbsp;: sans KL, \(q\) peut
+  mémoriser (régions «&nbsp;trous&nbsp;» non couvertes par le prior)&nbsp;; sans reconstruction,
+  \(z\) ne code rien.
+</div>
+
+<div class="proof">
+La décomposition est déjà la forme obtenue au thm. 0.2&nbsp;; ce qu'il faut voir, c'est
+d'où vient chaque terme. Développons \(\mathbb{E}_{q}\big[\log \frac{p_\theta(x\mid z)\,p(z)}{q_\phi(z\mid x)}\big]\)&nbsp;:
+$$\mathbb{E}_q[\log p_\theta(x\mid z)] + \mathbb{E}_q[\log p(z)] - \mathbb{E}_q[\log q_\phi(z\mid x)]
+= \mathbb{E}_q[\log p_\theta(x\mid z)] - \mathrm{KL}(q_\phi \| p),$$
+où l'on reconnaît la définition \(\mathrm{KL}(q\|p) = \mathbb{E}_q[\log q - \log p]\).
+Quand \(p_\theta(x\mid z)\) est une gaussienne diagonale de moyenne \(D_\theta(z)\) et de
+variance fixe \(\sigma^2\), le terme de reconstruction vaut
+\(-\frac{1}{2\sigma^2}\|x - D_\theta(z)\|^2 + \mathrm{cste}\)&nbsp;: la «&nbsp;MSE de
+reconstruction&nbsp;» des TP n'est que le négatif d'une log-vraisemblance gaussienne.
+Quand \(q_\phi\) et \(p\) sont gaussiens, le second terme se ferme par la prop. 0.4.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Posterior collapse&nbsp;: diagnostic et remèdes</span>
+  Le décodeur (souvent un transformer autorégressif) devient si puissant qu'il ignore
+  \(z\)&nbsp;: \(q_\phi(z\mid x) \to p(z)\), la KL tombe vers 0 et le VAE dégénère en
+  modèle non conditionnel (le latent «&nbsp;s'effondre&nbsp;»). Causes&nbsp;: décodeur
+  autorégressif fort, KL dominante en début d'entraînement, prior trop simple.
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><strong>KL annealing</strong>&nbsp;: pondérer la KL par un coefficient qui monte
+  lentement de 0 à 1 — laisser la reconstruction s'installer d'abord&nbsp;;</li>
+  <li><strong>\(\beta\)-VAE</strong> (Higgins et al., 2017)&nbsp;: maximiser
+  \(\mathbb{E}[\log p(x\mid z)] - \beta\,\mathrm{KL}\) avec \(\beta &gt; 1\) force un latent
+  <em>démêlé</em> (une direction = un facteur de variation)&nbsp;; en pratique contre le
+  collapse, on utilise plutôt \(\beta &lt; 1\)&nbsp;;</li>
+  <li><strong>Free bits</strong>&nbsp;: ne pénaliser la KL <em>par dimension</em> qu'au-delà
+  d'un budget \(\lambda\)&nbsp;: \(\max(\mathrm{KL}_j, \lambda)\) — chaque dimension reçoit
+  un «&nbsp;droit d'information&nbsp;» gratuit, ce qui l'empêche de mourir.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Construction 1.3 — VQ-VAE&nbsp;: quantifier le latent</span>
+  L'encodeur produit \(z_e(x) \in \mathbb{R}^{H \times W \times D}\)&nbsp;; un
+  <em>codebook</em> \(\{e_1, \dots, e_K\} \subset \mathbb{R}^D\) est appris&nbsp;; on quantifie
+  chaque position par le plus proche code&nbsp;:
+  $$z_q(x) = e_k, \qquad k = \arg\min_j \|z_e(x) - e_j\|_2.$$
+  L'argmin n'est pas différentiable. On utilise l'estimateur <strong>straight-through</strong>
+  (copie du gradient) et la loss totale&nbsp;:
+  $$\mathcal{L} = \log p_\theta\big(x \mid z_q\big)
+  + \big\|\mathrm{sg}[z_e] - e\big\|_2^2
+  + \beta\,\big\|z_e - \mathrm{sg}[e]\big\|_2^2,$$
+  où \(\mathrm{sg}\) est l'opérateur <em>stop-gradient</em>.
+</div>
+
+<div class="proof">
+Pourquoi cette loss à trois termes&nbsp;? <strong>(i)</strong> La reconstruction doit être
+fonction des codes quantifiés \(z_q\) — mais \(\nabla_{z_e} z_q = 0\) (argmin)&nbsp;: on
+définit \(\frac{\partial \mathcal{L}}{\partial z_e} \mathrel{:=}
+\frac{\partial \mathcal{L}}{\partial z_q}\) (straight-through)&nbsp;; l'estimateur est
+biaisé mais empiriquement efficace. <strong>(ii)</strong> Le terme
+\(\|\mathrm{sg}[z_e] - e\|^2\) est quadratique en \(e\) (les codes migrent vers les
+encodages produits)&nbsp;; le stop-gradient empêche, symétriquement, l'encodeur de bouger.
+<strong>(iii)</strong> Le terme \(\beta\|z_e - \mathrm{sg}[e]\|^2\) fait l'inverse&nbsp;:
+tire l'encodeur vers les codes. Les deux termes «&nbsp;pignons&nbsp;» (commitment)
+synchronisent encodeur et dictionnaire, le premier terme entraîne le décodeur&nbsp;; ensemble
+ils réalisent un K-means continu dans la boucle d'apprentissage.
+<span class="qed">∎</span>
+</div>
+
+<p><strong>Hiérarchie et échantillonnage.</strong> Dans un HiVAE, l'ELBO devient
+$$\mathbb{E}_{q(z_1, z_2\mid x)}\big[\log p_\theta(x \mid z_1) + \log p(z_1 \mid z_2) + \log p(z_2)
+- \log q_\phi(z_1 \mid x, z_2) - \log q_\phi(z_2 \mid x)\big],$$
+chaque étage comprimant le précédent (les échelles «&nbsp;basses&nbsp;» gouvernent la
+composition, les «&nbsp;hautes&nbsp;» les détails — exactement les niveaux d'un U-Net).
+Pour <em>générer</em>&nbsp;: échantillonner \(z \sim \mathcal{N}(0, I)\) (ou les niveaux du
+prior appris, comme dans VQ-VAE-2), puis décodage en un seul passage réseau&nbsp;; les
+<em>traversées latentes</em> (interpoler \(z\) entre deux images) sont le test visuel de la
+continuité de l'espace appris.</p>
+
+<pre class="code"><code>import torch
+
+class MiniVAE(torch.nn.Module):
+    """VAE convolutif minimal pour MNIST-like (28x28)."""
+    def __init__(self, d=8):
+        super().__init__()
+        self.enc = torch.nn.Sequential(            # x: (B,1,28,28)
+            torch.nn.Conv2d(1, 32, 4, 2, 1), torch.nn.ReLU(),   # 14x14
+            torch.nn.Conv2d(32, 64, 4, 2, 1), torch.nn.ReLU(),  # 7x7
+            torch.nn.Flatten(), torch.nn.Linear(64*7*7, 2*d))
+        self.dec = torch.nn.Sequential(
+            torch.nn.Linear(d, 64*7*7), torch.nn.Unflatten(1, (64, 7, 7)),
+            torch.nn.ConvTranspose2d(64, 32, 4, 2, 1), torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(32, 1, 4, 2, 1), torch.nn.Sigmoid())
+    def forward(self, x):
+        h = self.enc(x); mu, logvar = h.chunk(2, dim=1)
+        z = mu + torch.exp(0.5*logvar) * torch.randn_like(mu)   # reparametrization
+        return self.dec(z), mu, logvar
+
+def vae_loss(x, xh, mu, logvar, beta=1.0):
+    rec = torch.nn.functional.binary_cross_entropy(
+        xh, x, reduction="sum") / x.size(0)                      # reconstruction
+    kl  = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / x.size(0)
+    return rec + beta * kl                                      # ELBO (prop. 0.4)</code></pre>
+
+<div class="note">
+  <span class="tag">Analogies LLGA</span> Le VQ-VAE fabrique des <em>tokens d'image</em>&nbsp;:
+  DALL·E&nbsp;1 génère ces tokens de façon autorégressive (module LLMs), la diffusion latente
+  les remplace par un débruitage continu (ch. 4). Sur graphes, la même dichotomie
+  discret/continu oppose VAE discrets et diffusion sur arêtes (Graph ML, ch. 7)&nbsp;;
+  en NLP, le «&nbsp;latent&nbsp;» de CLIP (ch. 5) est l'espace partagé texte-image.
+</div>
 </section>
 
 <!-- ============================ CH 2 ============================ -->
 <section class="chapter" id="ch2">
-<h2>2. GAN et adversarial</h2>
+<h2>2. GAN&nbsp;: adversaire, équilibre, Wasserstein</h2>
 
 <div class="def">
-  <span class="tag">Définition 2.1 — Rappel du minimax et ses raffinements</span>
-  $$\min_G \max_D\ \mathbb{E}_x[\log D(x)] + \mathbb{E}_{z}[\log(1 - D(G(z)))]$$
-  Pertes alternatives&nbsp;: <em>least-squares GAN</em>, <em>hinge</em>&nbsp;;
-  <strong>conditionnel</strong>&nbsp;: \(G(z, c)\), \(D(x, c)\) — Pix2Pix (image à image avec
-  contrainte de reconstruction L1)&nbsp;; CycleGAN (sans paires, cycle de consistence&nbsp;:
-  \(G_{XY}(G_{YX}(y)) \approx y\)).
+  <span class="tag">Définition 2.1 — Jeu minimax et ses raffinements</span>
+  $$\min_G \max_D\ V(D, G) = \mathbb{E}_{x \sim p_{\mathrm{data}}}[\log D(x)]
+  + \mathbb{E}_{z \sim p(z)}[\log(1 - D(G(z)))]$$
+  \(D\) classifie «&nbsp;vrai/faux&nbsp;», \(G\) forge des contrefaçons. En pratique on utilise
+  la forme <em>non-saturée</em> \(\max_G \mathbb{E}_z[\log D(G(z))]\) (mêmes équilibres,
+  gradients plus forts en début d'entraînement), ou des pertes alternatives&nbsp;:
+  <em>least-squares GAN</em>, <em>hinge</em>. Version <strong>conditionnelle</strong>&nbsp;:
+  \(G(z, c)\), \(D(x, c)\) — Pix2Pix (image à image avec contrainte de reconstruction L1).
 </div>
 
-<ul>
-  <li><strong>StyleGAN</strong>&nbsp;: injection de style par couche (AdaIN), mapping network —
-  contrôle fin du style (coarse→fine)&nbsp;; the «&nbsp;style&nbsp;» latent découple contenu/style&nbsp;;</li>
-  <li><strong>Diagnostic industriel</strong>&nbsp;: mode collapse (le générateur produit
-  \(\sqrt{\;}\) toujours la même chose), oscillations&nbsp;; monitoring par diversité
-  (LPIPS) et FID&nbsp;;</li>
-  <li><strong>Pourquoi la diffusion a gagné</strong>&nbsp;: perte stable (simple MSE de
-  débruitage), pas d'équilibre à maintenir, diversité naturelle — mais les GAN restent
-  rapides (1 pas) et vivent dans la super-résolution et l'éditing.</li>
-</ul>
+<div class="thm">
+  <span class="tag">Théorème 2.2 — Équilibre du jeu</span>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+  <li>Pour \(G\) fixé, le discriminateur optimal est
+  $$D^*(x) = \frac{p_{\mathrm{data}}(x)}{p_{\mathrm{data}}(x) + p_g(x)}.$$</li>
+  <li>En ce \(D^*\), \(V(G^*) = -\log 4 + 2\,\mathrm{JS}(p_{\mathrm{data}} \| p_g)\)&nbsp;;
+  le minimum global est atteint uniquement pour \(p_g = p_{\mathrm{data}}\)&nbsp;:
+  <em>à l'équilibre, le générateur reproduit exactement la loi des données</em>.</li>
+  </ol>
+</div>
+
+<div class="proof">
+<span class="tag" style="display:none"></span><strong>(i)</strong> Le problème est séparable
+point par point&nbsp;: pour chaque \(x\), maximiser
+\(u(D) = p_{\mathrm{data}}(x)\log D + p_g(x)\log(1-D)\) sur \(D \in (0,1)\). La dérivée
+\(u'(D) = \frac{p_{\mathrm{data}}}{D} - \frac{p_g}{1-D}\) s'annule en
+\(D^* = \frac{p_{\mathrm{data}}}{p_{\mathrm{data}} + p_g}\) (maximum, car \(u \to -\infty\)
+aux bords). <strong>(ii)</strong> On substitue&nbsp;:
+\(V(D^*) = p\log\frac{p}{p+q} + q\log\frac{q}{p+q}\). En soustrayant et ajoutant
+\((p+q)\log\frac{1}{2}\), on obtient
+$$V(D^*) = -\log 4 + \Big[p\log\frac{2p}{p+q} + q\log\frac{2q}{p+q}\Big]
+= -\log 4 + 2\,\mathrm{JS}(p\|q),$$
+où \(\mathrm{JS}(p\|q) = \tfrac12\mathrm{KL}(p\|\tfrac{p+q}{2}) +
+\tfrac12\mathrm{KL}(q\|\tfrac{p+q}{2})\) (définition&nbsp;; c'est une KL vers une loi de
+probabilité, donc toujours finie). Comme \(\mathrm{JS} \ge 0\) avec égalité ssi \(p = q\),
+le minimax vaut \(-\log 4\), atteint seulement quand le générateur égalise la loi cible.
+<span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.3 — Cas gaussien</span>
+  Si \(p_{\mathrm{data}} = \mathcal{N}(\mu, \sigma^2)\) et
+  \(p_g = \mathcal{N}(\mu_g, \sigma_g^2)\), la formule (i) donne un \(D^*\) explicite (via
+  les densités)&nbsp;: le classifieur optimal est une fonction sigmoïde d'un score
+  quadratique — deux gaussiennes se séparent par une frontière quadratique. La
+  rétropropagation de \(\log D^*(G(z))\) pousse \(\mu_g \to \mu\) et
+  \(\sigma_g^2 \to \sigma^2\)&nbsp;: c'est la version jouet (exercice 4) du théorème.
+</div>
+
+<div class="note">
+  <span class="tag">Mode collapse&nbsp;: analyse et mitigations</span>
+  Le théorème décrit l'équilibre <em>global</em>, mais le jeu est non coopératif&nbsp;:
+  \(G\) peut trouver rentable de produire en boucle <em>une</em> image très trompeuse
+  (une mode de la distribution), puis basculer vers une autre — oscillations et perte de
+  diversité. Le gradient de \(G\) ne «&nbsp;voit&nbsp;» que les points générés&nbsp;: les
+  modes jamais échantillonnés ne sont jamais corrigés. Mitigations&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><strong>Minibatch discrimination</strong>&nbsp;: pour chaque \(x_i\) du batch, ajouter
+  à \(D\) des features de similarité intra-batch
+  \(o(x_i) = \sum_{j \ne i} \exp\!\big(-\|f(x_i) - f(x_j)\|\big)\,T_{ij}\) — le
+  discriminateur détecte les batchs «&nbsp;tous identiques&nbsp;»&nbsp;;</li>
+  <li><strong>Unrolled GAN</strong>&nbsp;: \(G\) est entraîné contre le \(D\) qu'<em>il
+  va affronter</em> (k pas d'anticipation du discriminateur), ce qui supprime les cycles
+  purs de poursuite&nbsp;;</li>
+  <li><strong>Monitoring LLGA</strong>&nbsp;: diversité intra-batch (LPIPS moyen), FID sur
+  grandes cohortes — le diagnostic industriel du ch. 8.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Construction 2.4 — WGAN&nbsp;: Wasserstein au secours de la JS</span>
+  Quand les supports de \(p\) et \(q\) sont disjoints ou «&nbsp;presque&nbsp;», JS est
+  constante (valeur \(\log 2\)) et son gradient est nul&nbsp;: plus de signal d'apprentissage.
+  La distance de Wasserstein \(W_1\), elle, reste informative. Par la dualité de
+  Kantorovich–Rubinstein (module OT)&nbsp;:
+  $$W_1(p, q) = \sup_{\|f\|_L \le 1}\ \mathbb{E}_{p}[f(x)] - \mathbb{E}_{q}[f(x)],$$
+  d'où l'apprentissage adversarial
+  \(\min_G \max_{\|D\|_L \le 1} \mathbb{E}_{p}[D] - \mathbb{E}_{q}[D]\)&nbsp;: \(D\) devient
+  un <em>critique</em> 1-Lipschitz, la loss est continue en les paramètres de \(G\) même à
+  supports disjoints.
+</div>
+
+<div class="proof">
+Esquisse de la dualité&nbsp;: pour toute \(f\) 1-Lipschitz,
+\(\mathbb{E}_p[f] - \mathbb{E}_q[f] \le \mathbb{E}_{\gamma}[|x - y|] \le W_1\) (couplage
+\(\gamma\)), d'où \(\sup \le W_1\)&nbsp;; la partie difficile (l'égalité, atteinte par un
+potentiel de Kantorovich optimal) relève de la dualité lagrangienne du transport — hors
+programme, voir le module OT. <strong>Contrainte Lipschitz en pratique&nbsp;: gradient penalty.</strong>
+Le clipping des poids (WGAN original) force une Lipschitzité trop brutale. On pénalise
+l'écart de la norme du gradient à 1 <em>sur les interpolations</em>
+\(\tilde x = \epsilon x + (1-\epsilon)\hat x\) entre donnée \(x\) et génération
+\(\hat x\)&nbsp;:
+$$\mathcal{L}_{\mathrm{GP}} = \lambda\,\big(\|\nabla_{\tilde x} D(\tilde x)\|_2 - 1\big)^2.$$
+Pourquoi \((\|\nabla D\| - 1)^2\) et non \(\max(0, \|\nabla D\| - 1)\)&nbsp;: pénaliser aussi
+les gradients <em>trop petits</em> évite que \(D\) ne s'aplatisse (perte de signal)&nbsp;;
+pourquoi les interpolations&nbsp;: le supremum du dual «&nbsp;vit&nbsp;» le long des segments
+de transport entre les deux distributions — c'est là que la contrainte compte.
+<span class="qed">∎</span>
+</div>
+
+<div class="thm">
+  <span class="tag">Architecture 2.5 — StyleGAN&nbsp;: du bruit au style</span>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+  <li><strong>Mapping network</strong>&nbsp;: \(w = m(z)\), MLP 8 couches — \(w\) vit dans
+  un espace «&nbsp;désentrelacé&nbsp;» où les directions correspondent à des attributs&nbsp;;</li>
+  <li><strong>AdaIN (adaptive instance norm)</strong>&nbsp;: à chaque couche du générateur,
+  le style module la normalisation d'instance&nbsp;:
+  $$\mathrm{AdaIN}(x, w) = \sigma(w_s)\,\frac{x - \mu(x)}{\sigma(x)} + w_b,$$
+  où \((w_s, w_b)\) sont des transformations affines de \(w\) propres à la couche —
+  chaque résolution reçoit son style&nbsp;;</li>
+  <li><strong>Style mixing</strong>&nbsp;: lors de l'entraînement, injecter deux \(w\)
+  différents selon les couches (l'un pour les résolutions grossières, l'autre pour les
+  fines) — régularise le mapping et découvre la hiérarchie structure/texture&nbsp;;</li>
+  <li><strong>Truncation trick</strong>&nbsp;: à la génération,
+  \(w' = \bar w + \psi\,(w - \bar w)\) avec \(\psi &lt; 1\), \(\bar w\) la moyenne du
+  mapping — on reste dans les hautes densités&nbsp;: fidélité accrue, diversité réduite
+  (exercice 10).</li>
+  </ol>
+</div>
+
+<div class="prop">
+  <span class="tag">CycleGAN&nbsp;: la consistance de cycle, démontrée utile</span>
+  Sans paires d'entraînement, traduire \(X \to Y\) par \(G\) et \(Y \to X\) par \(F\) avec
+  $$\mathcal{L}_{\mathrm{cyc}} = \mathbb{E}_x\big[\|F(G(x)) - x\|_1\big]
+  + \mathbb{E}_y\big[\|G(F(y)) - y\|_1\big].$$
+  <em>Pourquoi c'est la bonne contrainte.</em> La loss adverse seule autorise
+  \(G(x) = y_0\) pour tout \(x\) (une seule image très «&nbsp;réaliste&nbsp;» trompe \(D\)&nbsp;:
+  collapse trans-domaine, et le contenu de \(x\) est perdu). Si
+  \(F(G(x)) = x\) pour tout \(x\) du support, alors \(G\) est injective&nbsp;: elle ne peut
+  ni effondrer les modes, ni détruire l'information de contenu — elle ne peut changer que
+  ce que \(F\) sait restaurer. La consistance de cycle est une contrainte
+  d'<em>information-preserving</em> rendue différentiable&nbsp;; combinée à la perte
+  adverse (qui impose le style du domaine cible), elle réalise la traduction. Le terme L1
+  (plutôt que L2) privilégie la netteté (moins de moyennage flou).
+</div>
+
+<div class="note">
+  <span class="tag">Évaluation&nbsp;: IS et FID</span>
+  <strong>Inception Score</strong>&nbsp;:
+  \(\mathrm{IS} = \exp\big(\mathbb{E}_x\,\mathrm{KL}(\,p(y\mid x)\,\|\,p(y)\,)\big)\) —
+  chaque image doit être nettement classifiable (\(p(y|x)\) piquée) et l'ensemble divers
+  (\(p(y)\) étalé). <strong>FID</strong>&nbsp;: on ajuste une gaussienne sur les features
+  Inception des vraies \((\mu_r, \Sigma_r)\) et des générées \((\mu_g, \Sigma_g)\), puis
+  $$\mathrm{FID} = \|\mu_r - \mu_g\|^2 + \mathrm{tr}\big(\Sigma_r + \Sigma_g
+  - 2(\Sigma_r\Sigma_g)^{1/2}\big) \;=\; W_2^2\ \text{(Bures) entre les deux gaussiennes}$$
+  — une application directe de la distance de Wasserstein-Bures du module OT&nbsp;;
+  analyse des biais d'échantillonnage au ch. 8. <strong>Pourquoi la diffusion a fini par
+  dominer</strong>&nbsp;: perte stable (simple MSE de débruitage), pas d'équilibre à
+  maintenir, diversité naturelle — mais les GAN restent imbattables en vitesse (1 pas) et
+  vivent dans la super-résolution et l'éditing.
+</div>
 </section>
 
 <!-- ============================ CH 3 ============================ -->
 <section class="chapter" id="ch3">
-<h2>3. Diffusion&nbsp;: DDPM</h2>
+<h2>3. Diffusion&nbsp;: DDPM et score matching</h2>
 
 <div class="thm">
   <span class="tag">Modèle 3.1 — Processus avant (bruitage)</span>
   Chaîne de Markov qui ajoute du bruit gaussien&nbsp;:
   $$q(x_t \mid x_{t-1}) = \mathcal{N}\big(\sqrt{1 - \beta_t}\, x_{t-1},\ \beta_t I\big),
   \qquad t = 1, \dots, T,$$
-  avec variance calendar \(\beta_t\) croissante&nbsp;; propriété clé (composition de
-  gaussiennes)&nbsp;:
+  avec \(\beta_t\) croissant. Propriété clé (composition des gaussiennes)&nbsp;:
   $$q(x_t \mid x_0) = \mathcal{N}\big(\sqrt{\bar\alpha_t}\, x_0,\ (1 - \bar\alpha_t) I\big),
-  \qquad \bar\alpha_t = \prod_{s \leq t}(1 - \beta_s).$$
-  Pour \(T = 1000\), \(\bar\alpha_T \approx 0\) : l'image est devenue du bruit pur.
+  \qquad \alpha_t = 1 - \beta_t,\quad \bar\alpha_t = \prod_{s = 1}^{t}\alpha_s.$$
+  Pour \(T = 1000\), \(\bar\alpha_T \approx 0\)&nbsp;: l'image est devenue du bruit pur.
+</div>
+
+<div class="proof">
+Par récurrence sur \(t\). <strong>Initialisation</strong>&nbsp;: \(t = 1\)&nbsp;:
+\(x_1 = \sqrt{\alpha_1}\,x_0 + \sqrt{1 - \alpha_1}\,\epsilon\), donc
+\(q(x_1 \mid x_0) = \mathcal{N}(\sqrt{\bar\alpha_1}x_0,\ (1-\bar\alpha_1)I)\) par définition.
+<strong>Hérédité</strong>&nbsp;: supposons
+\(x_{t-1} \mid x_0 \sim \mathcal{N}(\sqrt{\bar\alpha_{t-1}}\,x_0,\ (1-\bar\alpha_{t-1})I)\).
+Alors
+$$x_t = \sqrt{\alpha_t}\,x_{t-1} + \sqrt{1-\alpha_t}\,\epsilon,
+\qquad \epsilon \perp x_{t-1} \mid x_0.$$
+Par la propriété 0.1 (somme de gaussiennes <em>indépendantes</em>)&nbsp;:
+moyenne \(\sqrt{\alpha_t}\cdot\sqrt{\bar\alpha_{t-1}}\,x_0 = \sqrt{\bar\alpha_t}\,x_0\)
+(car \(\alpha_t \bar\alpha_{t-1} = \bar\alpha_t\))&nbsp;; variance
+\(\alpha_t(1-\bar\alpha_{t-1}) + (1-\alpha_t) = 1 - \bar\alpha_{t-1} + \alpha_t\bar\alpha_{t-1}
+= 1 - \bar\alpha_t\). <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Variance schedule&nbsp;: linéaire ou cosinus</span>
+  Le choix des \(\beta_t\) fixe la vitesse de destruction. Linéaire
+  (\(\beta_t: 10^{-4} \to 0{,}02\), DDPM original)&nbsp;: les hautes fréquences meurent trop
+  vite, la fin de chaîne est inutilement bruitée. <strong>Cosine</strong> (Nichol &amp;
+  Dhariwal, 2021)&nbsp;:
+  $$\bar\alpha_t = \frac{f(t)}{f(0)}, \qquad
+  f(t) = \cos^2\!\left(\frac{t/T + 0{,}008}{1{,}008}\cdot\frac{\pi}{2}\right),$$
+  qui donne une décroissance en pente douce de \(\bar\alpha_t\), efficace aussi en
+  basse résolution. Règle pratique&nbsp;: le schedule doit détruire l'information
+  <em>uniformément</em> sur les échelles de l'image.
 </div>
 
 <div class="thm">
-  <span class="tag">Modèle 3.2 — Processus inverse appris (débruitage, Ho et al., 2020)</span>
-  $$p_\theta(x_{t-1} \mid x_t) = \mathcal{N}\big(\mu_\theta(x_t, t),\ \sigma_t^2 I\big),$$
+  <span class="tag">Modèle 3.2 — Processus inverse appris et ELBO par pas</span>
+  $$p_\theta(x_{t-1} \mid x_t) = \mathcal{N}\big(\mu_\theta(x_t, t),\ \sigma_t^2 I\big),
+  \qquad p(x_T) = \mathcal{N}(0, I),$$
   et l'entraînement se réduit à <strong>une simple MSE</strong>&nbsp;:
   $$\mathcal{L} = \mathbb{E}_{x_0, \epsilon, t}\big[\|\epsilon - \epsilon_\theta(x_t, t)\|^2\big],
   \qquad x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1 - \bar\alpha_t}\,\epsilon.$$
-  Le réseau \(\epsilon_\theta\) (U-Net ou Transformer — DiT) apprend à <em>prédire le
-  bruit</em>. Échantillonnage&nbsp;: partir de \(x_T \sim \mathcal{N}(0, I)\) et débruiter
-  \(T\) fois&nbsp;; <strong>DDIM</strong>&nbsp;: sous-échantillonner les pas (déterministe,
-  20-50 pas)&nbsp;; les <em>score-based / SDE</em> (Song et al.) unifient le point de vue
-  (prédire \(\nabla_x \log p_t(x)\), le «&nbsp;score&nbsp;»).
+</div>
+
+<div class="proof">
+<strong>Étape 1 — télescopage.</strong> En appliquant le thm. 0.2 à la chaîne
+\(p_\theta(x_{0:T})\) avec \(q(x_{1:T}\mid x_0)\), l'ELBO se réécrit (chaîne de Markov,
+produits télescopés)&nbsp;:
+$$-\mathrm{ELBO} = \mathrm{KL}\big(q(x_T\mid x_0)\,\|\,\mathcal{N}(0,I)\big)
++ \sum_{t=1}^{T}\mathbb{E}_q\!\left[\mathrm{KL}\big(q(x_{t-1}\mid x_t, x_0)\,\|\,p_\theta(x_{t-1}\mid x_t)\big)\right]
+= L_T + \sum_t L_{t-1}.$$
+<strong>Étape 2 — posterior forward fermé.</strong> Par la règle de Bayes
+\(q(x_{t-1}\mid x_t, x_0) \propto q(x_t \mid x_{t-1})\,q(x_{t-1}\mid x_0)\)&nbsp;: produit de
+deux gaussiennes en \(x_{t-1}\), donc gaussien&nbsp;; en complétant le carré&nbsp;:
+$$q(x_{t-1}\mid x_t, x_0) = \mathcal{N}\big(\tilde\mu_t(x_t, x_0),\ \tilde\beta_t I\big),
+\quad \tilde\beta_t = \frac{1-\bar\alpha_{t-1}}{1-\bar\alpha_t}\,\beta_t,\quad
+\tilde\mu_t = \frac{\sqrt{\bar\alpha_{t-1}}\,\beta_t}{1-\bar\alpha_t}\,x_0
++ \frac{\sqrt{\alpha_t}(1-\bar\alpha_{t-1})}{1-\bar\alpha_t}\,x_t.$$
+<strong>Étape 3 — chaque \(L_{t-1}\) est une KL de gaussiennes</strong>&nbsp;: fermée par la
+prop. 0.4. Si l'on fixe \(\sigma_t^2 = \tilde\beta_t\), il reste à aligner les moyennes&nbsp;:
+\(L_{t-1} = C + \frac{1}{2\sigma_t^2}\|\tilde\mu_t - \mu_\theta\|^2\).
+<strong>Étape 4 — paramétrisation en bruit.</strong> On choisit
+$$\mu_\theta(x_t, t) = \frac{1}{\sqrt{\alpha_t}}\Big(x_t - \frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\,\epsilon_\theta(x_t, t)\Big),$$
+ce qui revient (en substituant \(x_0 = (x_t - \sqrt{1-\bar\alpha_t}\,\epsilon)/\sqrt{\bar\alpha_t}\)
+dans \(\tilde\mu_t\)) à demander \(\epsilon_\theta \approx \epsilon\)&nbsp;; tous les
+facteurs restants sont des constantes connues absorbées dans la pondération. D'où la MSE
+unique du modèle 3.2 — un résultat remarquable&nbsp;: <em>cinq lignes de théorie pour une
+loss d'une ligne</em>. <span class="qed">∎</span>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — Prédire le bruit = prédire le score</span>
+  $$\epsilon = -\sqrt{1-\bar\alpha_t}\;\nabla_{x_t}\log p(x_t \mid x_0).$$
+  La MSE de débruitage est donc un <em>score matching</em> conditionnel&nbsp;: le réseau
+  apprend \(\nabla_x \log p\) — exactement l'objet de la famille «&nbsp;score-based&nbsp;»
+  de Song et al. (2021), qui unifie diffusion et SDE (ch. 4).
+</div>
+
+<div class="proof">
+Pour une densité gaussienne
+\(p(x_t \mid x_0) = \mathcal{N}(x_t;\ m, s^2 I)\) avec
+\(m = \sqrt{\bar\alpha_t}\,x_0\), \(s^2 = 1 - \bar\alpha_t\), on calcule
+$$\nabla_{x_t}\log p(x_t\mid x_0) = \nabla_{x_t}\left[-\frac{\|x_t - m\|^2}{2s^2}\right] + 0
+= -\frac{x_t - \sqrt{\bar\alpha_t}\,x_0}{1-\bar\alpha_t}.$$
+Or \(x_t - \sqrt{\bar\alpha_t}\,x_0 = \sqrt{1-\bar\alpha_t}\,\epsilon\), donc
+\(\nabla_{x_t}\log p = -\epsilon/\sqrt{1-\bar\alpha_t}\), c'est-à-dire
+\(\epsilon = -\sqrt{1-\bar\alpha_t}\,\nabla_{x_t}\log p(x_t \mid x_0)\).
+<span class="qed">∎</span>
 </div>
 
 <pre class="code"><code>import torch
@@ -171,40 +577,171 @@ def forward_diffusion(x0, t, alphas_bar, eps=None):
 # x0 = batch d'images ; t ~ U{1..T}
 xt, eps = forward_diffusion(x0, t, alphas_bar)
 loss = torch.nn.functional.mse_loss(unet(xt, t), eps)   # predire le bruit
-loss.backward()</code></pre>
+loss.backward()
+
+# Echantillonnage (T pas, formule du modele 3.2) :
+x = torch.randn(n, c, h, w)                    # x_T ~ N(0, I)
+for t in reversed(range(T)):
+    eps = unet(x, t)
+    mu = (x - beta[t].sqrt()/(1 - alphas_bar[t]).sqrt() * eps) / alpha[t].sqrt()
+    x = mu + beta[t].sqrt() * torch.randn_like(x) if t > 0 else mu</code></pre>
 
 <div class="note">
   <span class="tag">Analogies LLGA</span> Le U-Net de diffusion utilise la <em>self-attention</em>
   (transformer sur grille)&nbsp;; les DiT remplacent tout par des transformers sur patches&nbsp;;
   et la <em>diffusion sur graphes</em> (DiGress) bruite/débruite types de nœuds et arêtes —
-  le même algorithme, un autre espace (module Graph ML, ch. 7).
+  le même algorithme, un autre espace (module Graph ML, ch. 7). La dérivation
+  «&nbsp;chaîne de Markov → ELBO → KL par pas → MSE&nbsp;» que nous venons de faire est
+  <em>littéralement la même</em> que celle du module Deep Learning ch. 7 pour le VAE — la
+  diffusion est un VAE de profondeur \(T\) aux paramètres partagés.
 </div>
 </section>
 
 <!-- ============================ CH 4 ============================ -->
 <section class="chapter" id="ch4">
-<h2>4. Échantillonnage guidé et latent</h2>
+<h2>4. Guidage, DDIM et diffusion latente</h2>
 
 <div class="thm">
-  <span class="tag">Classifier-free guidance (CFG)</span>
+  <span class="tag">Guidage par classifieur (Dhariwal &amp; Nichol, 2021)</span>
+  Par Bayes, \(\log p(x_t \mid y) = \log p(y \mid x_t) + \log p(x_t) - \log p(y)\)&nbsp;;
+  en prenant le gradient en \(x_t\), le dernier terme disparaît&nbsp;:
+  $$\nabla_{x_t}\log p(x_t \mid y) = \nabla_{x_t}\log p(x_t) + \nabla_{x_t}\log p(y\mid x_t).$$
+  Via le thm. 3.3 (\(\epsilon \leftrightarrow -\sqrt{1-\bar\alpha_t}\,\nabla\log p\)), le
+  débruiteur guidé est
+  $$\tilde\epsilon = \epsilon_\theta(x_t, t) - \sqrt{1-\bar\alpha_t}\,\nabla_{x_t}\log p_\psi(y \mid x_t),$$
+  où \(p_\psi\) est un classifieur entraîné sur les \(x_t\) bruités. Puissant mais
+  coûteux&nbsp;: il faut entraîner et évaluer un classifieur à chaque pas.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.1 — Classifier-free guidance (CFG) comme direction combinée</span>
   Entraîner \(\epsilon_\theta(x_t, t, c)\) avec \(c\) parfois remplacé par \(\varnothing\)
-  (dropout de condition, ~10&nbsp;%)&nbsp;; à la génération, <em>exagérer</em> la direction
+  (dropout de condition, ~10&nbsp;%)&nbsp;; à la génération, <em>extrapoler</em> la direction
   conditionnelle&nbsp;:
   $$\tilde\epsilon = \epsilon_\theta(x_t, t, \varnothing) + w\big(\epsilon_\theta(x_t, t, c)
   - \epsilon_\theta(x_t, t, \varnothing)\big), \qquad w &gt; 1.$$
-  \(w\) règle le compromis fidélité/diversité — le curseur «&nbsp;créativité&nbsp;» de tous
-  les outils text-to-image.
+  <em>Interprétation exacte</em>&nbsp;: \(\tilde\epsilon\) est (à la constante
+  \(\sqrt{1-\bar\alpha_t}\) près) le score de la distribution non normalisée
+  $$p_w(x_t \mid c) \;\propto\; p(x_t \mid c)^{w}\, p(x_t)^{1-w}.$$
+</div>
+
+<div class="proof">
+Toujours par Bayes, \(\nabla\log p(x_t\mid c) = \nabla\log p(c \mid x_t) + \nabla\log p(x_t)\)
+(le terme \(\log p(c)\) est constant en \(x_t\)). Le score de \(p_w\) vaut donc
+$$\nabla\log p_w = w\,\nabla\log p(x_t\mid c) + (1-w)\,\nabla\log p(x_t)
+= \nabla\log p(x_t) + w\big(\nabla\log p(x_t\mid c) - \nabla\log p(x_t)\big).$$
+En remplaçant chaque score par le débruiteur correspondant (thm. 3.3), on obtient
+exactement la règle CFG&nbsp;: elle combine <em>score inconditionnel + \(w\) fois la
+différence des scores</em>. Pour \(w = 1\) on retrouve le score conditionnel&nbsp;; pour
+\(w = 0\) l'inconditionnel&nbsp;; pour \(w &gt; 1\), la distribution effective
+\(p(x_t\mid c)^w p(x_t)^{1-w}\) sur-pondère le conditionnement&nbsp;: elle est plus
+«&nbsp;piquée&nbsp;» (fidélité, prompt-following accrus) et moins diverse. C'est le curseur
+«&nbsp;créativité&nbsp;» de tous les outils text-to-image — et un objet de recherche à part
+entière (cf. ch. 9, ordonnances \(w(t)\)). <span class="qed">∎</span>
+</div>
+
+<div class="thm">
+  <span class="tag">Construction 4.2 — DDIM&nbsp;: dériver une famille d'échantillonneurs</span>
+  DDPM fixe \(p_\theta(x_{t-1}\mid x_t)\) gaussien <em>markovien</em>. L'astuce DDIM&nbsp;:
+  n'importe quel processus dont les <em>marginales</em> \(q(x_t \mid x_0)\) sont celles du
+  modèle 3.1 et dont l'espérance s'écrit en fonction de \(\hat x_0\) conduit à la même loss.
+  On pose la famille non-markovienne (paramétrée par \(\sigma_t\))&nbsp;:
+  $$q_\sigma(x_{t-1}\mid x_t, x_0) = \mathcal{N}\big(\sqrt{\bar\alpha_{t-1}}\,x_0
+  + \sqrt{1-\bar\alpha_{t-1}-\sigma_t^2}\;\tfrac{x_t - \sqrt{\bar\alpha_t}\,x_0}{\sqrt{1-\bar\alpha_t}},\ \sigma_t^2 I\big).$$
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li>\(\sigma_t = \sqrt{\tilde\beta_t}\) redonne <strong>DDPM</strong> (processus
+  markovien d'origine)&nbsp;;</li>
+  <li>\(\sigma_t = 0\) donne <strong>DDIM déterministe</strong>&nbsp;: même bruit initial
+  \(x_T\) ⇒ même image (édition par trajectoire partagée, seed reproductible)&nbsp;;</li>
+  <li>les marginales \(q(x_t\mid x_0)\) sont inchangées ⇒ la loss d'entraînement
+  (\(\epsilon\)-MSE) est <em>identique</em>&nbsp;; seul l'échantillonneur change&nbsp;;</li>
+  <li><strong>Sauts de pas</strong>&nbsp;: comme la trajectoire est déterministe, on peut
+  sous-échantillonner \(\tau_1 &lt; \tau_2 &lt; \dots\) — 20 à 50 pas au lieu de 1000.</li>
+  </ul>
+</div>
+
+<div class="proof">
+Vérifions la cohérence des marginales. D'après \(x_{t-1}\mid x_0 \sim
+\mathcal{N}(\sqrt{\bar\alpha_{t-1}}x_0,\ (1-\bar\alpha_{t-1})I)\) et la définition
+ci-dessus, la moyenne proposée s'écrit \(a\,x_0 + b\,(x_t - \sqrt{\bar\alpha_t}x_0)\) où
+\(b = \sqrt{1-\bar\alpha_{t-1}-\sigma_t^2}/\sqrt{1-\bar\alpha_t}\)&nbsp;; conditionnellement
+à \(x_0\), \(x_t\) est gaussien centré en \(\sqrt{\bar\alpha_t}\,x_0\), donc la moyenne de
+\(x_{t-1}\) est bien \(\sqrt{\bar\alpha_{t-1}}\,x_0\) et sa variance
+\(b^2(1-\bar\alpha_t) + \sigma_t^2 = 1-\bar\alpha_{t-1}\) — la marginal voulue. On obtient
+ainsi une infinité d'échantillonneurs compatibles avec le même \(\epsilon_\theta\) entraîné.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Point de vue SDE (Song et al., 2021)</span>
+  Quand \(T \to \infty\), le processus avant converge vers l'EDS
+  \(dx = f(x, t)\,dt + g(t)\,dw\). Alors <em>toute</em> EDS a un compagnon déterministe de
+  même lois marginales, la <strong>probability flow ODE</strong>&nbsp;:
+  $$\frac{dx}{dt} = f(x, t) - \tfrac{1}{2}g(t)^2\,\nabla_x \log p_t(x).$$
+  Générer = intégrer cette ODE en sens inverse&nbsp;: c'est le pont théorique entre DDIM
+  (déterministe) et les solveurs rapides ci-dessous.
 </div>
 
 <ul>
-  <li><strong>Latent diffusion (Rombach et al., 2022)</strong>&nbsp;: autoencodeur + diffusion
-  <em>dans le latent</em>&nbsp;; cross-attention sur les tokens du prompt (text encoder
-  CLIP)&nbsp;; c'est l'architecture de Stable Diffusion&nbsp;;</li>
-  <li><strong>Contrôle</strong>&nbsp;: ControlNet (conditionner par contours/profondeur/pose)&nbsp;;
-  inpainting, img2img (départ partiellement bruité)&nbsp;;</li>
-  <li><strong>Accélération</strong>&nbsp;: distillation (1-few pas&nbsp;; LCM), solveurs
-  rapides (DPM-Solver)&nbsp;; quantification — panorama engineering repris en M2 ML Ops.</li>
+  <li><strong>Solveurs rapides</strong>&nbsp;: DPM-Solver traite la prob-flow ODE en
+  séparant la partie <em>linéaire</em> (exactement intégrable&nbsp;: c'est un mouvement
+  brownien bruité) de la partie <em>non linéaire</em> (le score)&nbsp;: schémas
+  «&nbsp;exponentielle intégratrice&nbsp;» à 10–15 pas&nbsp;; la distillation
+  (consistent models, LCM, adversarial distillation — cf. ch. 9, Di[M]o) vise 1 à 4 pas&nbsp;;
+  la quantification (fp16, fp8) comprime le calcul — panorama repris en M2 ML Ops&nbsp;;</li>
+  <li><strong>Latent diffusion (Rombach et al., 2022)</strong>&nbsp;: autoencodeur
+  (VQ ou KL, ch. 1) comprimant l'image d'un facteur 4–8 par côté, puis diffusion
+  <em>dans le latent</em>&nbsp;; le débruiteur (U-Net ou DiT) reçoit le prompt par
+  cross-attention (déf. 0.3) aux niveaux où la résolution est maximale&nbsp;; text encoder
+  CLIP&nbsp;: c'est l'architecture de Stable Diffusion&nbsp;;</li>
+  <li><strong>ControlNet (Zhang et al., 2023)</strong>&nbsp;: conditionner par
+  contours/profondeur/pose. On copie les blocs de l'encodeur du U-Net gelé (poids
+  «&nbsp;verrouillés&nbsp;» \(\theta_{\mathrm{lock}}\)), on entraîne un clone
+  \(\theta_c\) alimenté par la carte de condition \(c\), et l'on réinjecte
+  $$y_c = \mathrm{ZeroConv}_c\big(\mathcal{F}(\cdot;\theta_c)\ +\ \mathcal{F}(x;\theta_{\mathrm{lock}})\big),
+  \qquad y = y_{\mathrm{base}} + y_c,$$
+  où les <em>zero-convolutions</em> (convolutions 1×1 initialisées à zéro) garantissent
+  qu'au pas 0, \(y_c = 0\)&nbsp;: ControlNet démarre comme le modèle inchangé et apprend
+  <em>uniquement</em> la correction — même astuce «&nbsp;départ identité&nbsp;» que les
+  résiduels nuls&nbsp;;</li>
+  <li><strong>Inpainting / img2img</strong>&nbsp;: bruiter l'image de départ jusqu'à un pas
+  \(t_0\) (img2img&nbsp;: \(t_0\) règle la fidélité au départ&nbsp;; fort = liberté), puis
+  débruiter en imposant à chaque pas \(x_t = m\odot x_t^{\mathrm{généré}} +
+  (1-m)\odot x_t^{\mathrm{bruité}}\) où \(m\) est le masque (règle de mélange de
+  RePaint&nbsp;; les variantes la relaxent en fin de chaîne).</li>
 </ul>
+
+<div class="prop">
+  <span class="tag">DiT&nbsp;: quand le transformer remplace le U-Net</span>
+  L'image latente est découpée en patches \(2\times2\) «&nbsp;tokenisés&nbsp;» (comme un
+  ViT)&nbsp;; chaque bloc = self-attention sur les patches + MLP, <em>modulé par le
+  temps et la condition</em> via adaLN-Zero&nbsp;:
+  $$h \leftarrow h + \alpha_1\,\mathrm{Attn}\big(\gamma_1 h + \beta_1\big), \qquad
+  h \leftarrow h + \alpha_2\,\mathrm{MLP}\big(\gamma_2 h + \beta_2\big),$$
+  où \((\gamma, \beta, \alpha)\) sont des fonctions affines de
+  \(t_{\mathrm{emb}} + c_{\mathrm{emb}}\) et où les \(\alpha\) sont initialisés à zéro
+  (chaque bloc démarre identité). La qualité croît régulièrement avec la profondeur, la
+  largeur et le nombre de tokens — comportement «&nbsp;scaling law&nbsp;» propre aux
+  transformers, et la base des générateurs vidéo modernes (ch. 7).
+</div>
+
+<pre class="code"><code># DiT minimal : un bloc modulate par le temps (adaLN-Zero)
+class DiTBlock(torch.nn.Module):
+    def __init__(self, d, n_heads):
+        super().__init__()
+        self.norm1 = torch.nn.LayerNorm(d, elementwise_affine=False)
+        self.attn  = torch.nn.MultiheadAttention(d, n_heads, batch_first=True)
+        self.norm2 = torch.nn.LayerNorm(d, elementwise_affine=False)
+        self.mlp   = torch.nn.Sequential(torch.nn.Linear(d, 4*d), torch.nn.GELU(),
+                                         torch.nn.Linear(4*d, d))
+        self.mod = torch.nn.Sequential(torch.nn.SiLU(), torch.nn.Linear(d, 6*d))
+        for m in [self.mod[-1]]:        # zero-init des alpha
+            torch.nn.init.zeros_(m.weight); torch.nn.init.zeros_(m.bias)
+    def forward(self, h, cond):                     # h: (B, N, d) patches
+        g1, b1, a1, g2, b2, a2 = self.mod(cond).unsqueeze(1).chunk(6, dim=-1)
+        h = h + a1 * self.attn(self.norm1(h)*g1 + b1, self.norm1(h)*g1 + b1,
+                               self.norm1(h)*g1 + b1)[0]
+        return h + a2 * self.mlp(self.norm2(h)*g2 + b2)</code></pre>
 </section>
 
 <!-- ============================ CH 5 ============================ -->
@@ -214,24 +751,79 @@ loss.backward()</code></pre>
 <div class="thm">
   <span class="tag">CLIP (Radford et al., 2021)</span>
   Encoder <em>conjointement</em> images et textes dans un espace partagé&nbsp;:
-  <ul style="margin:.3rem 0; padding-left:1.2rem;">
-    <li>encodeur image (ViT) et encodeur texte (transformer)&nbsp;; 400M paires
-    (image, légende) collectées sur le web&nbsp;;</li>
-    <li>apprentissage <strong>contrastif</strong>&nbsp;: dans un batch de \(N\) paires,
-    maximiser les diagonales de la matrice de similarité
-    \(S_{ij} = \langle v_i, t_j\rangle / \tau\) (softmax croisé = classification
-    «&nbsp;la bonne légende parmi N&nbsp;»)&nbsp;;</li>
-    <li>résultat&nbsp;: <em>zero-shot</em>&nbsp;: classifier en comparant l'image aux
-    embeddings des libellés textuels — plus de classes fixes.</li>
-  </ul>
+  encodeur image (ViT) et encodeur texte (transformer)&nbsp;; 400M paires
+  (image, légende) collectées sur le web&nbsp;; apprentissage <strong>contrastif</strong>
+  (InfoNCE) sur des batchs massifs (jusqu'à 32k paires).
+</div>
+
+<div class="thm">
+  <span class="tag">Loss contrastive&nbsp;: dérivation</span>
+  Dans un batch de \(N\) paires \((v_i, t_i)\) (images et textes encodés et normalisés),
+  on calcule la matrice de similarité
+  \(S_{ij} = \langle v_i, t_j\rangle / \tau\) (\(\tau\) la température). La loss
+  InfoNCE symétrique&nbsp;:
+  $$\mathcal{L} = -\frac{1}{2N}\sum_{i=1}^{N}\Big[\log\frac{e^{S_{ii}}}{\sum_j e^{S_{ij}}}
+  + \log\frac{e^{S_{ii}}}{\sum_j e^{S_{ji}}}\Big].$$
+  Chaque terme est une entropie croisée&nbsp;: <em>sens image→texte</em>, classifier la
+  bonne légende parmi \(N\) candidates&nbsp;; <em>sens texte→image</em>, la bonne image parmi
+  \(N\) — deux softmax croisés sur la même matrice.
+</div>
+
+<div class="proof">
+D'où vient cette forme&nbsp;? Notons \(p_i(j) = \mathrm{softmax}(S_{i\cdot})_j\) la
+distribution «&nbsp;quelle légende pour l'image \(i\)&nbsp;». Le premier terme est
+\(-\log p_i(i)\)&nbsp;: maximiser la probabilité d'appariement correct. En développant,
+$$-\log p_i(i) = -S_{ii} + \log\sum_j e^{S_{ij}} \;\ge\; -S_{ii} + \log e^{S_{ii}} = 0,$$
+avec égalité ssi la diagonale domine toute la ligne&nbsp;: la loss pousse les paires
+positives vers le haut <em>et</em> les \(N-1\) négatives vers le bas (softmax = compétition
+softmax des similarités). Lien avec l'information mutuelle (Oord et al., 2018)&nbsp;:
+pour des négatifs tirés de la loi produit, on peut montrer l'encadrement
+$$I(v; t) \;\ge\; \log N - \mathcal{L}_N,$$
+où \(I\) est l'information mutuelle entre modalités&nbsp;: InfoNCE maximise une borne
+inférieure de \(I\), de plus en plus serrée quand \(N\) grandit — d'où l'intérêt des
+batchs géants (démonstration complète&nbsp;: module NLP, ch. sur les representations
+contrastives). <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Température</span>
+  \(\tau\) (appris, initialisé à 0,07) recale les logits avant le softmax&nbsp;:
+  \(\tau\) petit = distribution piquée = gradient concentré sur les négatifs les plus
+  durs&nbsp;; \(\tau\) grand = gradients uniformes (exercice 11). Le même paramètre
+  apparaît dans les LLMs (module M2) — même rôle&nbsp;: doser la «&nbsp;sévérité&nbsp;»
+  de la compétition.
+</div>
+
+<div class="prop">
+  <span class="tag">Classification zero-shot&nbsp;: démonstration sur exemple</span>
+  Plus de têtes de classification fixes&nbsp;: les classes <em>deviennent des textes</em>.
+  Pour classer une image parmi \(K\) libellés \(\ell_1, \dots, \ell_K\)&nbsp;:
+  $$\hat k = \arg\max_k\ \big\langle v,\ t(\text{«&nbsp;a photo of a }\ell_k\text{&nbsp;»})\big\rangle.$$
+  <em>Exemple chiffré.</em> Supposons un espace de dimension 3, trois classes
+  {chien, chat, graphe} et les embeddings textes normalisés
+  \(t_{\mathrm{chien}} = (0{,}8;\ 0{,}6;\ 0)\), \(t_{\mathrm{chat}} = (0{,}6;\ 0{,}8;\ 0)\),
+  \(t_{\mathrm{graphe}} = (0;\ 0;\ 1)\). Pour une image
+  \(v = (0{,}7;\ 0{,}5;\ 0{,}5)\)&nbsp;: produits scalaires
+  \(0{,}56 + 0{,}30 = 0{,}86\)&nbsp;; \(0{,}42 + 0{,}40 = 0{,}82\)&nbsp;; \(0{,}5\).
+  Le chien gagne (argmax) — sans qu'aucun classifieur n'ait jamais été entraîné sur ces
+  classes&nbsp;: le transfert passe par le langage. Les prompts enrichis («&nbsp;a photo of
+  a \(\ell\), a type of pet&nbsp;») agissent comme un prior textuel qui affine la position
+  des prototypes.
 </div>
 
 <div class="note">
   <span class="tag">CLIP, le couteau suisse multimodal</span> CLIP sert partout&nbsp;:
   text encoder des diffusion models&nbsp;; juge de similarité (R-Precision)&nbsp;; retrieval
-  image-texte&nbsp;; modération. Le pont avec le master&nbsp;: on peut aussi aligner
-  <em>graphes</em> et texte dans un espace commun (embeddings GNN ↔ LLM, Graph ML ch. 8) —
-  la «&nbsp;modalité&nbsp;» graphe entre dans la même machinerie d'alignement contrastif.
+  image-texte&nbsp;; modération. <strong>CLIPScore</strong> pour l'alignement
+  texte-image&nbsp;: \(w\cdot\max(\cos(v, t), 0)\) avec \(w = 2{,}5\) (calibré sur
+  jugements humains&nbsp;; au-dessus de ~0,3, la légende «&nbsp;colle&nbsp;» à l'image).
+  <strong>ImageBind</strong> (esquisse)&nbsp;: aligner six modalités (image, texte, audio,
+  profondeur, thermique, IMU) <em>en prenant l'image comme pivot</em>&nbsp;: chaque
+  modalité est contrastée avec l'image seulement, et par transitivité de l'espace
+  partagé, audio ↔ texte émergent sans jamais avoir été appariés. Le pont avec le
+  master&nbsp;: on peut aussi aligner <em>graphes</em> et texte dans un espace commun
+  (embeddings GNN ↔ LLM, Graph ML ch. 8) — la «&nbsp;modalité&nbsp;» graphe entre dans la
+  même machinerie d'alignement contrastif.
 </div>
 
 <pre class="code"><code>from PIL import Image
@@ -247,53 +839,236 @@ inputs = proc(text=texts, images=img, return_tensors="pt", padding=True)
 with torch.no_grad():
     out = model(**inputs)
 probs = out.logits_per_image.softmax(dim=1)   # zero-shot classification
-print(dict(zip(texts, probs[0].tolist())))</code></pre>
+print(dict(zip(texts, probs[0].tolist())))
+
+# Loss InfoNCE "a la main" (batch de paires alignees) :
+# logits = v_norm @ t_norm.T / tau ; cibles = arange(N)
+# loss = 0.5 * (CE(logits, tgt) + CE(logits.T, tgt))</code></pre>
 </section>
 
 <!-- ============================ CH 6 ============================ -->
 <section class="chapter" id="ch6">
-<h2>6. Multimodalité&nbsp;: au-delà de l'image</h2>
+<h2>6. Text-to-image&nbsp;: le pipeline complet</h2>
+
+<div class="thm">
+  <span class="tag">Architecture 6.1 — De la phrase au pixel</span>
+  Le pipeline industriel d'un générateur text-to-image latent&nbsp;:
+  <table class="tbl">
+  <thead><tr><th>Étape</th><th>Composant</th><th>Rôle / détails</th></tr></thead>
+  <tbody>
+  <tr><td>1. Tokenisation</td><td>BPE / SentencePiece</td><td>prompt → séquence de tokens (module NLP)&nbsp;; tronqué à 77–225 selon les modèles</td></tr>
+  <tr><td>2. Text encoding</td><td>CLIP text encoder + T5/ByT5</td><td>tokens → tenseur \((L \times d)\)&nbsp;; le pooled embedding de CLIP conditionne aussi adaLN (DiT)</td></tr>
+  <tr><td>3. Diffusion latente</td><td>U-Net ou DiT + cross-attention</td><td>bruit → latent débruité (20–50 pas, solveur du ch. 4, CFG \(\tilde\epsilon\))</td></tr>
+  <tr><td>4. Décodage</td><td>Décodeur VAE</td><td>latent \((64\times64)\) → image \((512\times512)\) en un passage</td></tr>
+  <tr><td>5. Raffinement</td><td>refiner / super-résolution</td><td>upsampling ×2–4 (par diffusion à plus haute résolution ou GAN de super-résolution — ch. 2)</td></tr>
+  </tbody>
+  </table>
+  L'entraînement des grands modèles <em>fige</em> souvent l'encodeur de texte et le VAE,
+  et n'apprend que le débruiteur&nbsp;; le <strong>LoRA</strong> (Low-Rank Adaptation)
+  fige même le débruiteur et n'apprend que des corrections de faible rang dans les poids
+  de l'attention croisée — le fine-tuning thématique «&nbsp;domestique&nbsp;» (quelques
+  dizaines d'images, quelques minutes GPU).
+</div>
 
 <ul>
-  <li><strong>Captioning / VQA</strong>&nbsp;: encodeur image (ViT) + décodeur texte
-  (transformer)&nbsp;; entraînés sur des paires&nbsp;; les VQA graphiques («&nbsp;quel est le
-  plus court chemin&nbsp;?&nbsp;») — raisonnement visuel&nbsp;;</li>
-  <li><strong>LLMs multimodaux</strong>&nbsp;: tokens d'images (VQ) ou projecteurs de patches
-  injectés dans le contexte du LLM (vision-language models)&nbsp;; même patron pour
-  l'audio&nbsp;; module M2 pour la suite&nbsp;;</li>
-  <li><strong>Vidéo</strong>&nbsp;: latents spatio-temporels, attention 3D&nbsp;;
-  <strong>3D/objets</strong>&nbsp;: diffusion sur points/meshes (lien M2 Geometric DL)&nbsp;;</li>
-  <li><strong>Données structurées génératives</strong>&nbsp;: text-to-graph
-  (générer le schéma d'un réseau), graph-to-text (rapport depuis un graphe de connaissances) —
-  l'intersection exacte des modules Graph ML et NLP&nbsp;;</li>
-  <li><strong>Agents multimodaux</strong>&nbsp;: percevoir (screenshot) et agir (clic, code) —
-  les agents GUI combinent vision + LLM + outils (module RL, ch. 7).</li>
+  <li><strong>Prompt engineering, quantitativement</strong>&nbsp;: le prompt est un
+  <em>gradient</em> sur le conditionnement&nbsp;: ajouter «&nbsp;photorealistic,
+  85&nbsp;mm&nbsp;» déplace les embeddings et donc chaque pas de CFG. Effets mesurables&nbsp;:
+  position (les premiers tokens pèsent plus), saturation (au-delà de ~50 tokens
+  effectifs, rendement décroissant), <em>pondération syntaxique</em>
+  «&nbsp;(mot:1.3)&nbsp;» = rescaling du logit d'attention pendant l'entraînement de
+  l'inférence&nbsp;;</li>
+  <li><strong>Propmt négatif</strong>&nbsp;: la version générale du CFG à deux
+  conditions — on remplace \(\varnothing\) par \(c_-\)&nbsp;:
+  $$\tilde\epsilon = \epsilon_\theta(x_t,t,c_-) + w\big(\epsilon_\theta(x_t,t,c_+)
+  - \epsilon_\theta(x_t,t,c_-)\big),$$
+  la direction négative est <em>repoussée</em> (thm. 4.1)&nbsp;: «&nbsp;flou, watermark,
+  extra fingers&nbsp;»&nbsp;;</li>
+  <li><strong>Seeds</strong>&nbsp;: la graine fixe \(x_T\) (et les aléas du solveur)&nbsp;;
+  même seed + même prompt = même image en DDIM déterministe&nbsp;; on balaye les seeds
+  pour choisir la meilleure réalisation avant d'affiner le prompt — le flux de travail
+  réel des praticiens&nbsp;;</li>
+  <li><strong>Coût d'inférence</strong>&nbsp;: (nombre de pas) × (coût du débruiteur)
+  + décodage&nbsp;; la latence gouverne le choix industriel (solveurs rapides,
+  distillation 1-pas quand la diversité importe moins).</li>
 </ul>
 </section>
 
 <!-- ============================ CH 7 ============================ -->
 <section class="chapter" id="ch7">
-<h2>7. Évaluation, coûts, éthique</h2>
+<h2>7. Au-delà de l'image&nbsp;: vidéo, 3D, LLMs multimodaux</h2>
 
 <ul>
-  <li><strong>Métriques</strong>&nbsp;: FID (Fréchet distance entre gaussiennes fitted sur
-  features Inception — une application directe de la distance de Wasserstein-Bures du module
-  OT&nbsp;!), LPIPS (diversité), CLIPScore (alignement), études humaines&nbsp;;</li>
+  <li><strong>Vidéo</strong>&nbsp;: latents <em>spatio-temporels</em> (le VAE comprime
+  aussi le temps&nbsp;: 2–4 frames par token latent), le débruiteur entrelace
+  <em>attention spatiale</em> (intra-frame) et <em>attention temporelle</em>
+  (inter-frames)&nbsp;; le coût croît comme (frames × résolution²), d'où les cascades
+  (basse résolution → upsampling temporel)&nbsp;; contrôle caméra et cohérence
+  longue&nbsp;: sujets ouverts (cf. ch. 9, AKiRa)&nbsp;;</li>
+  <li><strong>Captioning / VQA</strong>&nbsp;: encodeur image (ViT) + décodeur texte
+  (transformer)&nbsp;; entraînés sur des paires&nbsp;; les VQA graphiques («&nbsp;quel
+  est le plus court chemin&nbsp;?&nbsp;») — raisonnement visuel&nbsp;;</li>
+  <li><strong>LLMs multimodaux</strong>&nbsp;: comment faire «&nbsp;voir&nbsp;» un LLM&nbsp;?
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><strong>Projecteur linéaire</strong> (LLaVA)&nbsp;: \(h_v = W\,p_i + b\) sur chaque
+  patch ViT — les «&nbsp;mots&nbsp;» de l'image sont projetés dans l'espace d'embedding
+  du LLM&nbsp;: simple, efficace, beaucoup de tokens&nbsp;;</li>
+  <li><strong>Q-Former</strong> (BLIP-2)&nbsp;: 32 vecteurs-requêtes <em>appris</em> qui
+  cross-attendent les features image et produisent 32 embeddings — un «&nbsp;résumé
+  visuel&nbsp;» compact&nbsp;; gèle le LLM pendant le pré-entraînement du pont&nbsp;;</li>
+  <li><strong>Protocole d'entraînement en deux temps</strong>&nbsp;: (1) <em>alignment
+  pretraining</em> sur d'immenses corpus (image, légende) — apprendre la
+  correspondance&nbsp;; (2) <em>instruction tuning</em> multimodal — conversations,
+  raisonner, répondre&nbsp;;</li>
+  <li><strong>Audio</strong>&nbsp;: tokens discrets de spectrogrammes ou de signaux
+  (codec neural) injectés pareillement — même patron, autre modalité (module M2 pour la
+  suite)&nbsp;;</li>
+  </ul></li>
+  <li><strong>3D</strong>&nbsp;: NeRF (esquisse)&nbsp;: un MLP
+  \((x, d) \mapsto (\sigma, c)\) (densité, couleur) est optimisé par
+  <em>volume rendering</em> différentiable&nbsp;:
+  $$C(r) = \int_{t_n}^{t_f} T(t)\,\sigma\big(r(t)\big)\,c\big(r(t), d\big)\,dt,
+  \qquad T(t) = \exp\!\Big(-\!\int_{t_n}^{t}\sigma\big(r(s)\big)ds\Big),$$
+  c'est-à-dire «&nbsp;l'opacité accumulée le long du rayon pondère les couleurs&nbsp;»&nbsp;;
+  les modèles génératifs 3D récents préfèrent la <strong>diffusion sur point clouds et
+  meshes</strong> — discrétisation, opérateurs, correspondance&nbsp;: c'est exactement le
+  programme du module M2 Geometric Deep Learning (lien direct)&nbsp;;</li>
+  <li><strong>World models</strong>&nbsp;: génération <em>action-conditionnée</em> de
+  vidéos interactives (simulateurs appris&nbsp;; lien module RL, monde latent&nbsp;;
+  mention Genie/Sora-like)&nbsp;;</li>
+  <li><strong>Données structurées génératives</strong>&nbsp;: text-to-graph
+  (générer le schéma d'un réseau), graph-to-text (rapport depuis un graphe de
+  connaissances) — l'intersection exacte des modules Graph ML et NLP&nbsp;;</li>
+  <li><strong>Agents multimodaux</strong>&nbsp;: percevoir (screenshot) et agir (clic,
+  code) — les agents GUI combinent vision + LLM + outils (module RL, ch. 7).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Évaluation, coûts, éthique</h2>
+
+<div class="thm">
+  <span class="tag">Panneau des métriques</span>
+  <table class="tbl">
+  <thead><tr><th>Métrique</th><th>Mesure</th><th>Limites connues</th></tr></thead>
+  <tbody>
+  <tr><td>FID</td><td>distance distributions (W2/Bures sur features Inception)</td><td>biais d'échantillon (sous-estimée à petit N — toujours comparer à N égal), sensible au backbone de features, aveugle au texte</td></tr>
+  <tr><td>CLIPScore</td><td>alignement prompt-image (cosinus)</td><td>jeu de features CLIP&nbsp;; récompense les clichés faciles à décrire</td></tr>
+  <tr><td>LPIPS</td><td>diversité / similarité perceptuelle entre paires générées</td><td>réseau juge entraîné sur du jugement humain limité</td></tr>
+  <tr><td>IS</td><td>qualité × diversité (KL classifieur)</td><td>sensible à la classe dominante du classifieur</td></tr>
+  <tr><td>Études humaines</td><td>préférences par paires (Elo)</td><td>coûteuses, biais d'annotateurs — l'étalon final</td></tr>
+  </tbody>
+  </table>
+  Le FID hérite de la géométrie de \(W_2\) (module OT)&nbsp;: la partie
+  \(\mathrm{tr}\big(\Sigma_r + \Sigma_g - 2(\Sigma_r\Sigma_g)^{1/2}\big)\) est la
+  <em>distance de Bures</em> entre covariances. Deux pièges pratiques&nbsp;:
+  (i) le nombre d'échantillons — le FID décroît mécaniquement avec la taille de
+  cohorte&nbsp;; (ii) les features — InceptionV3 vs CLIP réordonnent parfois les
+  classements. Toujours annoncer (backbone, N, protocole).
+</div>
+
+<ul>
   <li><strong>Coûts</strong>&nbsp;: entraînement diffusion = milliers de GPU-heures&nbsp;;
-  inférence = N pas de U-Net&nbsp;; le compromis qualité/latence gouverne le choix
-  industriel&nbsp;;</li>
-  <li><strong>Éthique</strong>&nbsp;: deepfakes, watermarks (C2PA), biais des données
-  web&nbsp;; droits d'auteur et entraînement&nbsp;; le cadre légal européen (AI Act) —
-  croisé avec le séminaire d'éthique du M2.</li>
+  inférence = N pas de débruiteur + décodage&nbsp;; le compromis qualité/latence gouverne
+  le choix industriel (solveurs rapides, distillation, quantification)&nbsp;;</li>
+  <li><strong>Éthique — une note équilibrée</strong>&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><em>Deepfakes</em>&nbsp;: détecteurs (dont des détecteurs <em>utilisant la
+  diffusion elle-même</em>), provenance&nbsp;;</li>
+  <li><em>Watermarking et provenance</em>&nbsp;: métadonnées signées C2PA (coalition
+  industrielle&nbsp;: appareil → éditeur → publication), tatouages invisibles robustes à
+  la re-compression — aucun n'est infaillible seul, la défense est en profondeur&nbsp;;</li>
+  <li><em>Copyright</em>&nbsp;: entraînement sur données web — débats légaux en cours
+  (opt-out, licences de datasets, filtrage)&nbsp;; côté génération&nbsp;: similarité avec
+  les œuvres d'entraînement à surveiller&nbsp;;</li>
+  <li><em>Biais</em>&nbsp;: les biais des corpus (représentation, stéréotypes) se
+  retrouvent amplifiés à la génération — audit des sorties, documentation des données&nbsp;;</li>
+  <li><em>AI Act européen</em>&nbsp;: approche par niveaux de risque&nbsp;; les
+  générateurs synthétiques y sont visés via transparence (marquage du contenu généré,
+  documentation des modèles) — croisé avec le séminaire d'éthique du M2.</li>
+  </ul></li>
 </ul>
 
 <div class="ex">
   <span class="tag">Projet</span> Pipeline complet&nbsp;: fine-tuner léger d'un modèle latent
   diffusion sur un petit jeu thématique (LoRA sur l'attention croisée), avec CFG
   paramétrable&nbsp;; évaluer FID/CLIPScore avant/après et analyser l'effet du poids de
-  guidance \(w\).
+  guidance \(w\) (et d'ordonnances \(w(t)\) — cf. ch. 9).
 </div>
 </section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Travaux de l'équipe pédagogique</h2>
+
+<p>Vicky Kalogeiton (CVLab — École Polytechnique / ÉCL&nbsp;; ex-Inria Grenoble, équipe
+LEAR) travaille depuis sa thèse sur un programme cohérent&nbsp;: <em>localiser et
+comprendre les objets et les actions dans les vidéos</em>, puis, plus récemment,
+<em>les générer</em>. Les trois publications ci-dessous jalonnent exactement le
+programme de ce cours — et la vidéo en est le fil rouge.</p>
+
+<div class="thm">
+  <span class="tag">ACT-detector — Action Tubelet Detector (ICCV 2017)</span>
+  <a href="https://arxiv.org/abs/1705.01861">arXiv:1705.01861</a> —
+  V. Kalogeiton, P. Weinzaepfel, V. Ferrari, C. Schmid.
+  <strong>Problème.</strong> La détection d'action spatio-temporelle&nbsp;: pour chaque
+  acteur, trouver <em>où</em> (boîtes par frame) et <em>quand</em> (segment temporel)
+  il accomplit chaque action. <strong>Méthode.</strong> Étendre la détection par ancres
+  (SSD) au domaine spatio-temporel&nbsp;: l'entrée est un <em>tubelet</em> — k frames
+  consécutives — et le réseau régresse et score des <em>ancres-cuboïdes</em> 3D
+  (position, échelle spatiale, durée), avec sur-échantillonnage des features
+  frame-level pour les petits acteurs. <strong>Résultats.</strong> État de l'art de
+  l'époque sur UCF-Sports, J-HMDB et UCF101&nbsp;; le formalisme tubelet a nourri le
+  benchmark AVA. <strong>Positionnement dans le cours.</strong> C'est le «&nbsp; avant
+ &nbsp;» des transformers&nbsp;: convolution 3D + ancres, quand les chapitres 3–4 de ce
+  module décrivent le «&nbsp;après&nbsp;» (DiT)&nbsp;; la notion d'<em>échelle
+  temporelle</em> (pyramide de durées) annonce la pyramide temporelle des modèles
+  vidéo-to-texte modernes.
+</div>
+
+<div class="thm">
+  <span class="tag">Analysis of Classifier-Free Guidance Weight Schedulers (TMLR 2024)</span>
+  <a href="https://arxiv.org/abs/2404.13040">arXiv:2404.13040</a> — équipe CVLab.
+  <strong>Problème.</strong> Le poids de guidance \(w\) du thm. 4.1 est
+  <em>constant</em> dans la plupart des outils — pourquoi ne pas le faire varier au
+  cours de l'échantillonnage&nbsp;? <strong>Méthode.</strong> Analyse systématique
+  d'ordonnances \(w(t)\) (croissantes, décroissantes, en cloche) sur diffusion
+  text-to-image, avec mesures de fidélité (CLIPScore) et diversité.&nbsp;
+  <strong>Résultats.</strong> Des profils \(w(t)\) variables améliorent le compromis
+  fidélité/diversité par rapport au \(w\) constant&nbsp;; le behavior dépend du pas
+  (début vs fin de chaîne). <strong>Positionnement.</strong> Le théorème 4.1 donne la
+  théorie de la CFG à \(w\) fixe&nbsp;; ce travail montre que le <em>degré de
+  liberté temporel</em> est sous-exploité — exemple type de «&nbsp;ingénierie fine
+  d'un hyperparamètre génératif&nbsp;», et sujet direct pour le projet du ch. 8.
+</div>
+
+<div class="thm">
+  <span class="tag">Générer la vidéo&nbsp;: AKiRa et la distillation Di[M]o (2024–2025)</span>
+  AKiRa — <a href="https://arxiv.org/abs/2412.14158">arXiv:2412.14158</a> (CVPR 2025)
+  et Di[M]o — <a href="https://arxiv.org/abs/2503.15457">arXiv:2503.15457</a>
+  (ICCV 2025).
+  <strong>AKiRa</strong> (Augmentation Kit on Rays)&nbsp;: un <em>kit</em> d'augmentation
+  pour la génération vidéo optique — caméra sur des rayons, cohérence multi-vues&nbsp;;
+  la question du contrôle caméra (ch. 7) traitée côté entraînement.
+  <strong>Di[M]o</strong>&nbsp;: distiller un modèle de diffusion <em>masqué</em> en un
+  générateur <em>un-pas</em> — l'accélération du ch. 4 poussée à l'extrême (MDM →
+  one-step generator). <strong>Positionnement.</strong> Les deux bouts de la chaîne
+  valeur&nbsp;: qualité/cohérence (AKiRa) et latence (Di[M]o) — exactement les deux axes
+  du compromis industriel du ch. 8. Mentionnons aussi
+  <a href="https://arxiv.org/abs/2405.20324">Don't drop your samples!</a> (CVPR 2024)&nbsp;:
+  une perte de <em>cohérence</em> qui améliore l'entraînement des diffusion
+  conditionnelles — le diagnostic de terrain des pathologies du ch. 3.
+</div>
+
+<div class="note">
+  <span class="tag">Le fil rouge</span> Percevoir la vidéo (détection, 2017) → la
+  générer (diffusion vidéo, 2024–2025) → l'accélérer (distillation)&nbsp;: la trajectoire
+  de recherche du CVLab reflète celle du domaine — et celle de ce cours, des GAN
+  (ch. 2) à la diffusion latente guidée (ch. 4) jusqu'aux systèmes complets (ch. 6).
+</div>
+</section>
+
 
 <!-- ============================ EXERCICES ============================ -->
 <section class="exercises" id="ex">
@@ -304,8 +1079,12 @@ print(dict(zip(texts, probs[0].tolist())))</code></pre>
   pourquoi cette forme fermée rend l'entraînement efficace&nbsp;?</li>
 
   <li><strong>ELBO DDPM.</strong> Décomposer la log-vraisemblance
-  \(\log p_\theta(x_0) = \mathrm{ELBO}\) en termes par pas et montrer que la MSE de bruit
+  \(\log p_\theta(x_0)\) en termes par pas et montrer que la MSE de bruit
   domine (les KL entre gaussiennes sont fermées).</li>
+
+  <li><strong>KL gaussiennes.</strong> Démontrer la proposition 0.4 dans le cas
+  scalaire en calculant \(\mathbb{E}_q[\log q - \log p]\)&nbsp;; vérifier que la KL
+  est nulle ssi \(\mu_1 = \mu_2, \sigma_1 = \sigma_2\) et strictement positive sinon.</li>
 
   <li><strong>Mode collapse.</strong> Simuler un GAN 2D gaussien→anneau&nbsp;; observer le
   collapse&nbsp;; comparer à une diffusion entraînée sur le même jeu (diversité par LPIPS).</li>
@@ -320,6 +1099,28 @@ print(dict(zip(texts, probs[0].tolist())))</code></pre>
 
   <li><strong>FID et Wasserstein.</strong> Rappeler la formule de \(W_2^2\) entre gaussiennes
   (module OT) et montrer que le FID en est une estimation (features&nbsp;; biais d'échantillon).</li>
+
+  <li><strong>Epsilon ou score&nbsp;?</strong> En utilisant
+  \(x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon\), montrer que
+  \(\epsilon = -\sqrt{1-\bar\alpha_t}\,\nabla_{x_t}\log p(x_t \mid x_0)\).</li>
+
+  <li><strong>Bruit vs moyenne.</strong> Paramétrer le débruiteur en prédiction de
+  \(x_0\) (\(\hat x_0 = x_\theta(x_t, t)\))&nbsp;; exprimer la loss correspondante et
+  expliquer quand cette paramétrisation est préférable (petits \(t\), couleurs vives).</li>
+
+  <li><strong>Truncation.</strong> Pour un StyleGAN dont \(w\) suit approximativement une
+  gaussienne centrée, montrer que la règle \(w' = \bar w + \psi(w - \bar w)\),
+  \(\psi \in [0,1]\), réduit la variance du style généré et commenter le compromis
+  qualité/diversité quand \(\psi \to 0\).</li>
+
+  <li><strong>Température InfoNCE.</strong> Dans la loss contrastive du ch. 5, montrer
+  l'effet de \(\tau \to 0\) (distribution piquée, gradients concentrés sur les négatifs
+  les plus durs) et de \(\tau \to \infty\) (gradients uniformes, apprentissage ralenti).</li>
+
+  <li><strong>Projet.</strong> Pipeline complet&nbsp;: fine-tuner léger d'un modèle latent
+  diffusion sur un petit jeu thématique (LoRA sur l'attention croisée), avec CFG
+  paramétrable&nbsp;; évaluer FID/CLIPScore avant/après et analyser l'effet du poids de
+  guidance \(w\) — en testant aussi des ordonnances \(w(t)\) variables (cf. ch. 9).</li>
 </ol>
 </section>
 
@@ -327,14 +1128,43 @@ print(dict(zip(texts, probs[0].tolist())))</code></pre>
 <section class="chapter refs" id="refs">
 <h2>Références</h2>
 <ul>
-  <li>J. Ho, A. Jain, P. Abbeel, <a href="https://arxiv.org/abs/2006.11239">Denoising Diffusion Probabilistic Models</a>, NeurIPS 2020.</li>
-  <li>R. Rombach et al., <a href="https://arxiv.org/abs/2112.10752">High-Resolution Image Synthesis with Latent Diffusion Models</a>, CVPR 2022 — Stable Diffusion.</li>
-  <li>A. Radford et al., <a href="https://arxiv.org/abs/2103.00020">Learning Transferable Visual Models From Natural Language Supervision</a> (CLIP), ICML 2021.</li>
-  <li>I. Goodfellow et al., GAN, NIPS 2014&nbsp;; T. Karras et al., <a href="https://arxiv.org/abs/1812.04948">A Style-Based Generator Architecture</a> (StyleGAN), CVPR 2019.</li>
-  <li>A. van den Oord et al., VQ-VAE, NeurIPS 2017&nbsp;; D. Kingma &amp; M. Welling, VAE, ICLR 2014.</li>
-  <li>Y. Song et al., <a href="https://arxiv.org/abs/2011.13456">Score-Based Generative Modeling through SDEs</a>, ICLR 2021&nbsp;; J. Song et al., DDIM, ICLR 2021.</li>
-  <li>L. Zhang, V. Kalogeiton et al. — travaux du CVLab (vidéo, action recognition)&nbsp;; W. Peebles &amp; S. Xie, <a href="https://arxiv.org/abs/2212.09748">DiT</a>, ICCV 2023.</li>
+  <li>D. Kingma &amp; M. Welling, <a href="https://arxiv.org/abs/1312.6114">Auto-Encoding Variational Bayes</a>, ICLR 2014 — le VAE.&nbsp;;
+  I. Higgins et al., <a href="https://arxiv.org/abs/1804.03542">β-VAE</a>, ICLR 2017.</li>
+  <li>A. van den Oord et al., <a href="https://arxiv.org/abs/1711.00937">Neural Discrete Representation Learning</a> (VQ-VAE), NeurIPS 2017&nbsp;;
+  A. Razavi et al., <a href="https://arxiv.org/abs/1906.00446">Generating Diverse High-Fidelity Images with VQ-VAE-2</a>, NeurIPS 2019.</li>
+  <li>I. Goodfellow et al., GAN, NIPS 2014&nbsp;;
+  M. Arjovsky et al., <a href="https://arxiv.org/abs/1701.07875">Wasserstein GAN</a>, ICML 2017&nbsp;;
+  I. Gulrajani et al., <a href="https://arxiv.org/abs/1704.00028">Improved Training of Wasserstein GANs</a> (gradient penalty), NeurIPS 2017.</li>
+  <li>T. Karras et al., <a href="https://arxiv.org/abs/1812.04948">A Style-Based Generator Architecture</a> (StyleGAN), CVPR 2019&nbsp;;
+  StyleGAN2, <a href="https://arxiv.org/abs/1912.04958">CVPR 2020</a>&nbsp;;
+  StyleGAN3, <a href="https://arxiv.org/abs/2106.12423">NeurIPS 2021</a>.</li>
+  <li>P. Isola et al., <a href="https://arxiv.org/abs/1611.07004">Image-to-Image Translation with Conditional Adversarial Networks</a> (Pix2Pix), CVPR 2017&nbsp;;
+  J.-Y. Zhu et al., <a href="https://arxiv.org/abs/1703.10593">CycleGAN</a>, ICCV 2017.</li>
+  <li>J. Ho, A. Jain, P. Abbeel, <a href="https://arxiv.org/abs/2006.11239">Denoising Diffusion Probabilistic Models</a>, NeurIPS 2020&nbsp;;
+  A. Nichol &amp; P. Dhariwal, <a href="https://arxiv.org/abs/2102.09672">Improved DDPM</a> (cosine schedule), ICML 2021.</li>
+  <li>J. Song et al., <a href="https://arxiv.org/abs/2010.02502">DDIM</a>, ICLR 2021&nbsp;;
+  Y. Song et al., <a href="https://arxiv.org/abs/2011.13456">Score-Based Generative Modeling through SDEs</a>, ICLR 2021&nbsp;;
+  C. Lu et al., <a href="https://arxiv.org/abs/2206.00927">DPM-Solver</a>, NeurIPS 2022.</li>
+  <li>R. Rombach et al., <a href="https://arxiv.org/abs/2112.10752">High-Resolution Image Synthesis with Latent Diffusion Models</a>, CVPR 2022 — Stable Diffusion&nbsp;;
+  W. Peebles &amp; S. Xie, <a href="https://arxiv.org/abs/2212.09748">DiT</a>, ICCV 2023&nbsp;;
+  L. Zhang et al., <a href="https://arxiv.org/abs/2302.05543">ControlNet</a>, ICCV 2023.</li>
+  <li>A. Radford et al., <a href="https://arxiv.org/abs/2103.00020">Learning Transferable Visual Models From Natural Language Supervision</a> (CLIP), ICML 2021&nbsp;;
+  A. van den Oord et al., <a href="https://arxiv.org/abs/1807.03748">Representation Learning with Contrastive Predictive Coding</a> (InfoNCE), 2018&nbsp;;
+  R. Girdhar et al., <a href="https://arxiv.org/abs/2305.05665">ImageBind</a>, CVPR 2023.</li>
+  <li>J. Ho &amp; T. Salimans, <a href="https://arxiv.org/abs/2207.12598">Classifier-Free Diffusion Guidance</a>, 2022&nbsp;;
+  B. Mildenhall et al., <a href="https://arxiv.org/abs/2003.08934">NeRF</a>, ECCV 2020&nbsp;;
+  J. Li et al., <a href="https://arxiv.org/abs/2301.12597">BLIP-2</a> (Q-Former), ICML 2023&nbsp;;
+  H. Liu et al., <a href="https://arxiv.org/abs/2304.08485">LLaVA</a> (projecteur linéaire), NeurIPS 2023.</li>
+  <li>Publications de V. Kalogeiton utilisées au ch. 9&nbsp;:
+  <a href="https://arxiv.org/abs/1705.01861">ACT-detector</a> (ICCV 2017)&nbsp;;
+  <a href="https://openaccess.thecvf.com/content_ICCV_2017/papers/Kalogeiton_Joint_Learning_of_ICCV_2017_paper.pdf">Joint Learning of Object and Action Detectors</a> (ICCV 2017)&nbsp;;
+  <a href="https://arxiv.org/abs/2404.13040">Analysis of Classifier-Free Guidance Weight Schedulers</a> (TMLR 2024)&nbsp;;
+  <a href="https://arxiv.org/abs/2405.20324">Don't drop your samples!</a> (CVPR 2024)&nbsp;;
+  <a href="https://arxiv.org/abs/2412.14158">AKiRa</a> (CVPR 2025)&nbsp;;
+  <a href="https://arxiv.org/abs/2503.15457">Di[M]o</a> (ICCV 2025).</li>
   <li>S. Luo et al., <a href="https://github.com/rotot0/tab-ddpm">TabDDPM</a> / Vignac et al., <a href="https://arxiv.org/abs/2302.01542">DiGress</a> — diffusion sur données tabulaires/graphes (pont LLGA).</li>
+  <li>R. Zhang et al., <a href="https://arxiv.org/abs/1801.03924">LPIPS</a>, CVPR 2018&nbsp;;
+  J. Hessel et al., <a href="https://arxiv.org/abs/2104.08718">CLIPScore</a>, EMNLP 2021.</li>
   <li><a href="https://huggingface.co/docs/diffusers">HuggingFace Diffusers</a> — l'outil des TP.</li>
 </ul>
 </section>
