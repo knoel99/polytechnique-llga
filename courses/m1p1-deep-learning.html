@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M1 · Période 1 › Option recommandée</div>
+    <div class="code-line">CSC_51054_EP</div>
+    <h1>Deep Learning</h1>
+    <div class="tags"><span class="badge recommended">Recommandé — track LLGA</span></div>
+    <div class="facts">Enseignants&nbsp;: Michalis Vazirgiannis, Johannes Lutzeyer &amp; Ye Zhu (École Polytechnique) · 36&nbsp;h · 4,5 ECTS · des perceptrons aux transformers, avec la lecture «&nbsp;graphe&nbsp;» qui prépare le module Graph ML.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: dérivation en chaîne et gradients</a></li>
+    <li><a href="#ch1">Du neurone au réseau profond</a></li>
+    <li><a href="#ch2">Rétropropagation</a></li>
+    <li><a href="#ch3">Optimisation en pratique</a></li>
+    <li><a href="#ch4">Réseaux convolutifs (CNN)</a></li>
+    <li><a href="#ch5">Séquences&nbsp;: RNN, LSTM</a></li>
+    <li><a href="#ch6">Attention et transformers</a></li>
+    <li><a href="#ch7">Modèles génératifs&nbsp;: AE, VAE, GAN</a></li>
+    <li><a href="#ex">Exercices</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: dérivation en chaîne et gradients</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 — la seule mécanique dont on a besoin</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Règle de la chaîne</strong>&nbsp;: \((g \circ f)'(x) = g'(f(x))\, f'(x)\)&nbsp;; en
+    dimension&nbsp;: \(\nabla (g \circ f)(x) = J_f(x)^\top \nabla g(f(x))\).</li>
+    <li><strong>Produit matriciel</strong>&nbsp;: pour \(z = Wx\), \(\nabla_x \|z\|^2 = 2W^\top W x\)&nbsp;;
+    les gradients «&nbsp;remontent&nbsp;» les opérations par transposées.</li>
+    <li><strong>Dérivées usuelles</strong>&nbsp;: \(\sigma' = \sigma(1-\sigma)\),
+    \(\tanh' = 1 - \tanh^2\), \(\mathrm{ReLU}' = \mathbf{1}_{x&gt;0}\), et
+    \(\nabla \log \hat y_k / \nabla z_j = \hat y_k(\delta_{kj} - \hat y_j)\) (softmax).</li>
+    <li><strong>TCL et SGD</strong>&nbsp;: un mini-batch de taille \(m\) estime un gradient avec
+    une erreur en \(\mathcal{O}(1/\sqrt m)\) — justification statistique de la SGD.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Du neurone au réseau profond</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Neurone artificiel et MLP</span>
+  Un neurone calcule \(h = \sigma(\langle w, x\rangle + b)\) avec \(\sigma\) une
+  <strong>fonction d'activation</strong> non linéaire. Un <strong>perceptron multicouche</strong>
+  de profondeur \(L\) empile&nbsp;:
+  $$h^{(0)} = x, \qquad h^{(\ell)} = \sigma\big(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\big), \qquad f_\theta(x) = W^{(L)} h^{(L-1)} + b^{(L)}.$$
+  Sans \(\sigma\), le réseau se réduirait à une unique application affine&nbsp;: la
+  non-linéarité est le prix de l'expressivité.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.2 — Approximation universelle (Cybenko, 1989)</span>
+  Toute fonction continue sur un compact peut être approchée uniformément, à \(\varepsilon\)
+  près, par un réseau à <em>une seule couche cachée</em> suffisamment large. Le théorème garantit
+  l'<em>existence</em>, pas le fait qu'on puisse <em>trouver</em> les poids par optimisation&nbsp;:
+  c'est la profondeur (et les données) qui rend l'apprentissage efficace en pratique.
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi la profondeur&nbsp;?</span>
+  Certains fonctions exigent un nombre <em>exponentiel</em> de neurones sur une couche mais
+  un nombre <em>polynomial</em> sur plusieurs (ex.&nbsp;parité, produits). La profondeur
+  factorise les représentations&nbsp;: bords → textures → objets (vision), caractères →
+  mots → syntaxe (NLP), voisins → communautés → graphes (Graph ML).
+</div>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. Rétropropagation</h2>
+
+<div class="thm">
+  <span class="tag">Algorithme 2.1 — Backpropagation</span>
+  Soit \(\mathcal{L}(\theta)\) une perte composée. On définit les
+  <strong> dérivées intermédiaires</strong> \(\delta^{(\ell)} = \partial \mathcal{L} / \partial a^{(\ell)}\)
+  (où \(a^{(\ell)} = W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\)). Alors&nbsp;:
+  $$\delta^{(L)} = \nabla_{a^{(L)}} \mathcal{L}, \qquad
+  \delta^{(\ell)} = \big(W^{(\ell+1)\top} \delta^{(\ell+1)}\big) \odot \sigma'(a^{(\ell)}),$$
+  $$\frac{\partial \mathcal{L}}{\partial W^{(\ell)}} = \delta^{(\ell)} \, h^{(\ell-1)\top}, \qquad
+  \frac{\partial \mathcal{L}}{\partial b^{(\ell)}} = \delta^{(\ell)}.$$
+  Un unique passage avant + un passage arrière coûtent \(\mathcal{O}(|\theta|)\)&nbsp;: le
+  gradient de <em>tous</em> les poids pour le prix d'environ deux évaluations.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.2 — Backprop à la main sur deux couches</span>
+  Avec \(\mathcal{L} = \frac12\|y - W_2 \sigma(W_1 x)\|^2\), en posant \(h = \sigma(W_1 x)\) et
+  \(e = W_2 h - y\) :
+  $$\frac{\partial \mathcal{L}}{\partial W_2} = e\, h^\top, \qquad
+  \frac{\partial \mathcal{L}}{\partial W_1} = \big(W_2^\top e\big) \odot \sigma'(W_1 x)\, x^\top.$$
+  Le terme \(W_2^\top e\) est littéralement le gradient qui «&nbsp;passe le message vers
+  l'arrière&nbsp;» — même structure que le message passing des GNN, mais sur le graphe de
+  calcul.
+</div>
+
+<pre class="code"><code>import torch
+
+x, y = torch.randn(8), torch.randn(2)
+W1 = torch.randn(64, 8, requires_grad=True)   # autograd suit les opérations
+W2 = torch.randn(2, 64, requires_grad=True)
+
+loss = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+loss.backward()          # backprop automatique
+print(W1.grad.shape, W2.grad.shape)           # mêmes formes que W1, W2</code></pre>
+
+<div class="note">
+  <span class="tag">Graphe de calcul</span>
+  <code>autograd</code> construit dynamiquement le graphe des opérations (sommets = tenseurs,
+  arêtes = opérations) et applique la règle de la chaîne par differentiation en mode inverse.
+  Le deep learning <em>est</em> du calcul sur graphe&nbsp;— la même idée sera appliquée aux
+  données elles-mêmes au module Graph ML.
+</div>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Optimisation en pratique</h3>
+
+<table class="tbl">
+<thead><tr><th>Optimiseur</th><th>Mise à jour</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>SGD</td><td>\(\theta \leftarrow \theta - \eta\, \hat g\)</td><td>bruit utile (échappe aux points selles)</td></tr>
+<tr><td>Momentum</td><td>\(v \leftarrow \beta v + \hat g\); \(\theta \leftarrow \theta - \eta v\)</td><td>inertie, amortit les zigzags</td></tr>
+<tr><td>RMSProp</td><td>normalisation adaptative par \(v/v\)</td><td>pas par coordonnée</td></tr>
+<tr><td>Adam</td><td>moments d'ordre 1 et 2 corrigés du biais</td><td>défaut universel&nbsp;; régler <code>lr</code> avant tout</td></tr>
+</tbody>
+</table>
+
+<ul>
+  <li><strong>Initialisation</strong>&nbsp;: Xavier/He pour conserver la variance des activations
+  et gradients à travers les couches&nbsp;; l'initialisation nulle casse la symétrie à jamais.</li>
+  <li><strong>Normalisation</strong>&nbsp;: BatchNorm/LayerNorm stabilisent la distribution des
+  activations — LayerNorm est la norme des transformers&nbsp;; <strong>dropout</strong>&nbsp;:
+  masque de Bernoulli à l'entraînement, moyenné à l'inférence (régularisation).</li>
+  <li><strong>Planification du pas</strong>&nbsp;: warmup + décroissance (cosine)&nbsp;;
+  <strong>weight decay</strong> = ridge sur les poids&nbsp;; <strong>early stopping</strong> sur
+  la perte de validation — la régularisation la moins chère.</li>
+  <li><strong>Sur-apprentissage</strong>&nbsp;: apprendre par cœur le train (gap train/test).
+  Remèdes&nbsp;: données, augmentation, dropout, decay, early stopping — dans cet ordre de
+  rentabilité.</li>
+</ul>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Réseaux convolutifs (CNN)</h2>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Convolution discrète</span>
+  $$(x * k)(u) = \sum_{v} x(u - v)\, k(v)$$
+  La même filtre \(k\) (petit, ex.&nbsp;3×3) est appliqué en tout point&nbsp;:
+  <strong>poids partagés</strong> ⇒ invariance par translation et \(\#\)paramètres indépendant
+  de la taille d'image. En pratique&nbsp;: Conv → non-linéarité → pooling, empilés&nbsp;;
+  backprop = convolution par le noyau retourné.
+</div>
+
+<ul>
+  <li><strong>Réceptive field</strong>&nbsp;: chaque couche agrandit le champ de vision&nbsp;;
+  en profondeur, les couches basses codent des bords, les hautes des concepts (visualisation
+  des features).</li>
+  <li><strong>Architecture historique</strong>&nbsp;: LeNet-5 → AlexNet (2012, ImageNet) →
+  VGG → ResNet&nbsp;: les connexions résiduelles \(h^{(\ell+1)} = h^{(\ell)} + F(h^{(\ell)})\)
+  rendent l'identité facile à apprendre et permettent des centaines de couches. On retrouvera
+  <em>exactement</em> ces residuals dans les transformers et les GNN (skip connections du
+  message passing).</li>
+</ul>
+
+<pre class="code"><code>import torch.nn as nn
+
+conv = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+# parametres : 3*3*3*32 + 32 = 896, independants de la taille H x W
+x = torch.randn(16, 3, 64, 64)        # batch de 16 images RGB 64x64
+print(conv(x).shape)                   # [16, 32, 64, 64]</code></pre>
+
+<div class="note">
+  <span class="tag">CNN et graphes</span>
+  Une convolution est un filtre appliqué à un voisinage régulier (grille). Les GNN du module
+  Graph ML généralisent cette idée aux voisinages <em>irréguliers</em>&nbsp;: le filtre devient
+  une fonction des voisins agrégés. Même ADN&nbsp;: partage de poids + agrégation locale.
+</div>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Séquences&nbsp;: RNN, LSTM</h2>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — RNN</span>
+  $$h_t = \tanh(W_h h_{t-1} + W_x x_t + b), \qquad y_t = W_y h_t$$
+  État caché qui résume le passé&nbsp;; poids partagés dans le temps (comme le noyau CNN dans
+  l'espace).
+</div>
+
+<div class="prop">
+  <span class="tag">Le problème des gradients qui s'évanouissent</span>
+  Le gradient en \(t\) dépend d'un produit de \(T\) jacobiennes&nbsp;:
+  \(\prod_t W_h^\top \mathrm{diag}(\tanh')\) — si les valeurs propres de \(W_h\) sont
+  \(&lt;1\) (resp. \(&gt;1\)) le gradient décroît (resp. explose) exponentiellement avec \(T\).
+  Les portes LSTM/GRU (additions de chemins de mémoire) atténuent le problème sans le résoudre&nbsp;:
+  c'est la motivation directe de l'attention.
+</div>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Attention et transformers</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Scaled dot-product attention (Vaswani et al., 2017)</span>
+  Pour des tokens \(i = 1..n\) d'embeddings \(x_i\), on calcule
+  $$q_i = W_q x_i,\quad k_i = W_k x_i,\quad v_i = W_v x_i,$$
+  $$\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\!\Big(\frac{Q K^\top}{\sqrt{d_k}}\Big) V, \qquad
+  \alpha_{ij} = \frac{\exp(q_i^\top k_j / \sqrt{d_k})}{\sum_{j'} \exp(q_i^\top k_{j'} / \sqrt{d_k})}.$$
+  <strong>Multi-head</strong>&nbsp;: \(h\) têtes d'attention en parallèle (projets \(W^q_k, W^k_k, W^v_k\)),
+  concaténées puis projetées — plusieurs «&nbsp;canaux de communication&nbsp;» indépendants.
+</div>
+
+<div class="note">
+  <span class="tag">Lecture «&nbsp;graphe&nbsp;» (Karpathy, 2025-2026) — le pont vers le module Graph ML</span>
+  Un transformer est un <strong>réseau de neurones sur graphe dynamique</strong>&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>chaque <strong>token = un nœud</strong> qui porte un vecteur&nbsp;;</li>
+    <li>l'attention calcule des <strong>arêtes pondérées</strong> \(\alpha_{ij}\) <em>à partir des
+    données</em> (graphe dynamique, contrairement aux GNN)&nbsp;;</li>
+    <li>\(\sum_j \alpha_{ij} v_j\) est un <strong>message passing</strong>&nbsp;: les nœuds
+    s'échangent leurs «&nbsp;values&nbsp;»&nbsp;;</li>
+    <li>le bloc <strong>MLP = la computation locale</strong> de chaque nœud&nbsp;;
+    residual + LayerNorm = plomberie pour que le «&nbsp;graphe&nbsp;» reste entraînable&nbsp;;</li>
+    <li>une couche transformer = <em>communication</em> (attention) puis <em>computation</em> (MLP),
+    exactement l'alternance d'un GNN.</li>
+  </ul>
+  Le master LLGA exploite cette double lecture&nbsp;: le même objet mathématique vu «&nbsp;de
+  l'intérieur du LLM&nbsp;» (module M2) et «&nbsp;sur les données structurées&nbsp;» (module Graph ML).
+</div>
+
+<pre class="code"><code>import torch, torch.nn as nn, torch.nn.functional as F
+
+class SelfAttention(nn.Module):
+    def __init__(self, d, n_heads=4):
+        super().__init__()
+        self.qkv = nn.Linear(d, 3 * d)
+        self.n_heads, self.d_head = n_heads, d // n_heads
+    def forward(self, x):                      # x : (B, n, d)
+        B, n, d = x.shape
+        q, k, v = self.qkv(x).chunk(3, -1)
+        q = q.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
+        k = k.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
+        v = v.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
+        att = F.scaled_dot_product_attention(q, k, v)   # softmax(QK^T/sqrt(d))V
+        return att.transpose(1, 2).reshape(B, n, d)
+
+# Position : le transformer est permutation-invariant -> encodage positionnel ajoute a x
+max_n, d = 512, 128
+pos = torch.randn(1, max_n, d)               # (appris ; sinusoidal possible)</code></pre>
+
+<ul>
+  <li><strong>Position</strong>&nbsp;: l'attention ne connaît pas l'ordre → <em>positional
+  encodings</em> (sinusoïdaux, appris, ou RoPE) — et sur graphes&nbsp;: <em>positional/structural
+  encodings</em> (module Advanced GNN)&nbsp;;</li>
+  <li><strong>Coût</strong>&nbsp;:\(\mathcal{O}(n^2 d)\) en temps/mémoire pour la matrice
+  \(QK^\top\) — le goulot des LLMs, d'où les attentions efficaces (FlashAttention, sparse,
+  linéaires)&nbsp;;</li>
+  <li><strong>MLP</strong>&nbsp;: deux couches avec GELU, ratio d'expansion ~4 — c'est là que
+  vivent la plupart des paramètres.</li>
+</ul>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Modèles génératifs&nbsp;: AE, VAE, GAN</h2>
+
+<div class="def">
+  <span class="tag">Autoencodeur et VAE (Kingma &amp; Welling, 2013)</span>
+  Encodeur \(q_\phi(z\mid x)\), décodeur \(p_\theta(x \mid z)\), prior \(z \sim \mathcal{N}(0, I)\).
+  On maximise la ELBO&nbsp;:
+  $$\mathcal{L}(\theta, \phi; x) = \mathbb{E}_{q_\phi}\big[\log p_\theta(x \mid z)\big] - \mathrm{KL}\big(q_\phi(z \mid x)\,\|\,\mathcal{N}(0, I)\big),$$
+  avec le <em>reparametrization trick</em> \(z = \mu_\phi(x) + \sigma_\phi(x) \odot \varepsilon\),
+  \(\varepsilon \sim \mathcal{N}(0,I)\) pour laisser passer le gradient. La KL entre gaussiennes
+  a une forme fermée — rappel utilisé aussi en M2.
+</div>
+
+<div class="def">
+  <span class="tag">GAN (Goodfellow et al., 2014)</span>
+  Jeu minimax entre générateur \(G\) et discriminateur \(D\)&nbsp;:
+  $$\min_G \max_D \ \mathbb{E}_{x}\big[\log D(x)\big] + \mathbb{E}_{z \sim p(z)}\big[\log(1 - D(G(z)))\big].$$
+  À l'équilibre, \(p_G = p_{\text{data}}\). Instable (modes effondrés)&nbsp;; supplanté en
+  image par la <strong>diffusion</strong> (module Multimodal Generative AI), dont les LLMs
+  diffèrent par l'architecture (autorégression) et la perte (cross-entropy sur tokens).
+</div>
+
+<table class="tbl">
+<thead><tr><th>Famille</th><th>Principe</th><th>Échantillonnage</th><th>Au master</th></tr></thead>
+<tbody>
+<tr><td>VAE</td><td>ELBO, latent gaussien</td><td>décodeur depuis \(z \sim \mathcal{N}\)</td><td>Multimodal GenAI</td></tr>
+<tr><td>GAN</td><td>adversaire min-max</td><td>implicite</td><td>Multimodal GenAI</td></tr>
+<tr><td>Diffusion</td><td>bruitage/débruitage itératif</td><td>processus (reverse)</td><td>Multimodal GenAI</td></tr>
+<tr><td>Autorégressif</td><td>modéliser \(\mathbb{P}(x_t \mid x_{&lt;t})\)</td><td>token par token</td><td>LLMs (M2), Graph GenAI</td></tr>
+</tbody>
+</table>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Backprop papier.</strong> Retrouver les formules de l'exemple 2.2 (deux couches,
+  ReLU), puis vérifier numériquement par différence finie
+  \(\frac{\mathcal{L}(\theta + \epsilon e_j) - \mathcal{L}(\theta - \epsilon e_j)}{2\epsilon}\)
+  sur un petit réseau.</li>
+
+  <li><strong>Activation.</strong> Montrer que si \(\sigma\) est linéaire, un MLP de profondeur
+  quelconque représente exactement les applications affines. En déduire pourquoi les
+  <em>cascades linéaires</em> sont inutiles.</li>
+
+  <li><strong>Attention 1D à la main.</strong> Pour \(n = 3\) tokens, \(d_k = 2\), calculer à la
+  main \(QK^\top/\sqrt{d_k}\), le softmax par ligne, et le résultat \(\mathrm{softmax}(\cdot)V\).
+  Implémenter, comparer, et vérifier que les lignes de la matrice d'attention somment à 1.</li>
+
+  <li><strong>Permutation-invariance.</strong> Vérifier expérimentalement qu'un bloc
+  transformer <em>sans</em> encodage positionnel est invariant par permutation des tokens, et
+  que l'ajout d'un encodage positionnel brise cette invariance.</li>
+
+  <li><strong>Projet.</strong> En PyTorch&nbsp;: classer MNIST avec (a) un MLP, (b) un petit
+  CNN, (c) un mini-transformeur flatten (patches). Tracer les courbes train/val, comparer
+  nombre de paramètres et accuracy, commenter avec la décomposition biais-variance.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>I. Goodfellow, Y. Bengio, A. Courville, <em>Deep Learning</em>, MIT Press, 2016 — <a href="https://www.deeplearningbook.org/">gratuit en ligne</a>&nbsp;; chapitres 6-8 pour ce module.</li>
+  <li>A. Zhang, Z. Lipton, M. Li, A. Smola, <em>Dive into Deep Learning</em>, 2023 — <a href="https://d2l.ai">d2l.ai</a>&nbsp;: cours interactif code-first (PyTorch), très proche des TP.</li>
+  <li>A. Vaswani et al., <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a>, NeurIPS 2017 — l'article à lire ligne par ligne.</li>
+  <li>A. Karpathy, <a href="https://karpathy.ai/zero-to-hero.html">Neural Networks: Zero to Hero</a> — construction d'un GPT depuis zéro&nbsp;; et sa lecture «&nbsp;transformer = graphe&nbsp;» (<em>Software 3.0</em>, Stanford, 2025-2026) qui fonde le pont LLGA.</li>
+  <li>K. He et al., <em>Deep Residual Learning</em> (ResNet), CVPR 2016&nbsp;; K. Kingma &amp; M. Welling, <em>Auto-Encoding Variational Bayes</em>, ICLR 2014&nbsp;; I. Goodfellow et al., <em>Generative Adversarial Nets</em>, NIPS 2014.</li>
+  <li>S. Raschka, <em>Machine Learning with PyTorch and Scikit-Learn</em>, Packt, 2022 — pour la pratique.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p1-machine-learning.html"><span class="dir">← Précédent</span> Machine Learning</a>
+  <a class="next" href="m1p1-signal-processing.html"><span class="dir">Suivant</span> Signal Processing</a>
+</nav>
+
+</div>
+</body>
+</html>
