@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reinforcement Learning and Autonomous Agents — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M1 · Période 2 › Cours obligatoire</div>
+    <div class="code-line">CSC_52081_EP</div>
+    <h1>Reinforcement Learning and Autonomous Agents</h1>
+    <div class="tags"><span class="badge mandatory">Obligatoire</span></div>
+    <div class="facts">Enseignant&nbsp;: Jesse Read (École Polytechnique) · 36&nbsp;h · 4,5 ECTS · MDP, programmation dynamique, TD-learning, Q-learning, policy gradients, deep RL — et les agents autonomes modernes (tool use, LLM agents, multi-agents).</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: chaînes de Markov</a></li>
+    <li><a href="#ch1">Processus de décision markovien</a></li>
+    <li><a href="#ch2">Programmation dynamique</a></li>
+    <li><a href="#ch3">Learning&nbsp;: TD, SARSA, Q-learning</a></li>
+    <li><a href="#ch4">Policy gradients et actor-critic</a></li>
+    <li><a href="#ch5">Deep RL&nbsp;: DQN et PPO</a></li>
+    <li><a href="#ch6">Bandits et exploration</a></li>
+    <li><a href="#ch7">Agents autonomes à l'ère des LLMs</a></li>
+    <li><a href="#ex">Exercices</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: chaînes de Markov</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 — chaînes de Markov</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Chaîne de Markov</strong>&nbsp;: \(X_{t+1} \sim P(\cdot \mid X_t)\) — le futur ne
+    dépend que du présent. Matrice de transition stochastique (lignes sommant à 1).</li>
+    <li><strong>Distribution stationnaire</strong>&nbsp;: \(\pi = \pi P\)&nbsp;; existe et est
+    unique pour une chaîne irréductible apériodique (théorème de Perron-Frobenius).</li>
+    <li><strong>Marches aléatoires sur graphes</strong>&nbsp;: \(P = D^{-1}A\) — le promeneur
+    aléatoire&nbsp;; \(\pi(v) \propto \deg(v)\)&nbsp;; à relier à PageRank et aux node embeddings
+    (module Graph ML).</li>
+    <li><strong>Espérance conditionnelle</strong>&nbsp;: \(\mathbb{E}[X \mid Y]\) (Refresher
+    Statistics) — la fonction de valeur en est une.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Processus de décision markovien</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — MDP</span>
+  Un <strong>MDP</strong> est un tuple \((\mathcal{S}, \mathcal{A}, P, r, \gamma)\)&nbsp;:
+  états \(\mathcal{S}\), actions \(\mathcal{A}\), noyau de transition
+  \(P(s' \mid s, a)\), récompense \(r(s, a, s')\), facteur d'actualisation
+  \(\gamma \in [0, 1)\). Une <strong>politique</strong> \(\pi(a \mid s)\) règle le choix des
+  actions&nbsp;; l'objectif est le retour espéré actualisé
+  $$J(\pi) = \mathbb{E}_\pi\Big[\sum_{t=0}^{\infty} \gamma^t R_t\Big].$$
+</div>
+
+<div class="def">
+  <span class="tag">Définition 1.2 — Fonctions de valeur</span>
+  $$V^\pi(s) = \mathbb{E}_\pi\Big[\sum_t \gamma^t R_t \,\Big|\, S_0 = s\Big], \qquad
+  Q^\pi(s, a) = \mathbb{E}_\pi\Big[\sum_t \gamma^t R_t \,\Big|\, S_0 = s, A_0 = a\Big].$$
+  \(V^\pi\) = «&nbsp;combien vaut l'état&nbsp;»&nbsp;; \(Q^\pi\) = «&nbsp;combien vaut le couple
+  état-action&nbsp;». On a \(V^\pi(s) = \sum_a \pi(a\mid s)\, Q^\pi(s,a)\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.3 — Équations de Bellman (évaluation)</span>
+  $$Q^\pi(s, a) = r(s,a) + \gamma \sum_{s'} P(s' \mid s, a)\, V^\pi(s'), \qquad
+  V^\pi(s) = \sum_a \pi(a \mid s)\Big[r(s,a) + \gamma \sum_{s'} P(s'\mid s,a) V^\pi(s')\Big].$$
+  <em>C'est la programmation dynamique appliquée au temps&nbsp;: la valeur d'aujourd'hui = gain
+  immédiat + valeur actualisée de demain.</em>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.4 — Optimalité</span>
+  Il existe une politique optimale déterministe \(\pi^\star\) telle que
+  $$Q^\star(s, a) = r(s, a) + \gamma \sum_{s'} P(s' \mid s, a)\, \max_{a'} Q^\star(s', a'),$$
+  et \(\pi^\star(s) \in \arg\max_a Q^\star(s, a)\). L'opérateur de Bellman
+  \((\mathcal{T}Q)(s,a) = r + \gamma\, \mathbb{E}[\max_{a'} Q(s', a')]\) est une contraction de
+  module \(\gamma\) ⇒ existence et unicité de \(Q^\star\) (point fixe de Banach — rappel L3).
+</div>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. Programmation dynamique (modèle connu)</h2>
+
+<div class="thm">
+  <span class="tag">Algorithme 2.1 — Value iteration</span>
+  Répéter jusqu'à convergence&nbsp;:
+  $$V_{k+1}(s) = \max_a \Big\{ r(s, a) + \gamma \sum_{s'} P(s' \mid s, a)\, V_k(s')\Big\}.$$
+  Convergence géométrique (\(\|V_{k+1} - V^\star\| \leq \gamma \|V_k - V^\star\|\)).
+  <strong>Policy iteration</strong>&nbsp;: alterner évaluation exacte de \(\pi\)
+  (résolution linéaire) et amélioration gloutonne \(\pi' = \arg\max_a Q^\pi\)&nbsp;;
+  converge en un nombre fini de politiques.
+</div>
+
+<pre class="code"><code>import numpy as np
+
+# Gridworld 4x4 : etats 0..15, actions 0..3 (haut, bas, gauche, droite)
+S, A, gamma = 16, 4, 0.95
+goal = 15
+P = np.zeros((S, A, S)); r = -np.ones((S, A))
+def step(s, a):
+    i, j = divmod(s, 4)
+    di, dj = [(-1,0),(1,0),(0,-1),(0,1)][a]
+    return 4*min(max(i+di,0),3) + min(max(j+dj,0),3)
+for s in range(S):
+    for a in range(A):
+        s2 = step(s, a)
+        P[s, a, s2] = 1.0
+        if s2 == goal or s == goal: r[s, a] = 0.0
+r[goal] = 0.0
+
+V = np.zeros(S)
+for _ in range(200):                       # value iteration
+    Q = r + gamma * (P @ V)                # (S, A)
+    V = Q.max(axis=1)
+pi = Q.argmax(axis=1)
+print(V.reshape(4, 4).round(2))</code></pre>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Learning&nbsp;: TD, SARSA, Q-learning (modèle inconnu)</h2>
+
+<p>En pratique on ne connaît ni \(P\) ni \(r\)&nbsp;: on <em>interagit</em>. Le
+<strong>temporal-difference learning</strong> apprend en corrigeant chaque prédiction vers
+l'observation&nbsp;:</p>
+
+<div class="thm">
+  <span class="tag">Algorithme 3.1 — TD(0), SARSA, Q-learning</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>TD(0)</strong> (évaluation)&nbsp;:
+    \(V(S_t) \leftarrow V(S_t) + \alpha\big[R_{t+1} + \gamma V(S_{t+1}) - V(S_t)\big]\)&nbsp;;
+    le bracket est l'<strong>erreur TD</strong>.</li>
+    <li><strong>SARSA</strong> (on-policy)&nbsp;:
+    \(Q(S_t, A_t) \leftarrow Q(S_t,A_t) + \alpha\big[R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t,A_t)\big]\).</li>
+    <li><strong>Q-learning</strong> (off-policy)&nbsp;:
+    $$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha\Big[R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a') - Q(S_t, A_t)\Big].$$
+    Convergence vers \(Q^\star\) si toutes les paires sont visitées infiniment souvent et
+    \(\alpha\) décroît (conditions de Robbins-Monro — rappel&nbsp;: SGD stochastique sur
+    l'équation de Bellman).</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Exploration&nbsp;: politique \(\varepsilon\)-gloutonne</span>
+  Avec probabilité \(\varepsilon\)&nbsp;: action aléatoire&nbsp;; sinon
+  \(\arg\max_a Q(s, a)\). Sans exploration, le signal d'apprentissage s'éteint&nbsp;;
+  \(\varepsilon\) décroissant est le réglage standard.
+</div>
+
+<div class="note">
+  <span class="tag">Q-learning ≠ SARSA en une phrase</span> Q-learning apprend la politique
+  optimale <em>quelle que soit</em> la politique d'exploration (off-policy)&nbsp;; SARSA évalue
+  la politique <em>effectivement</em> suivie (y compris l'exploration) — plus prudent près des
+  falaises&nbsp;! (TP classique&nbsp;: Cliff Walking.)
+</div>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Policy gradients et actor-critic</h4>
+<h3>4.1 REINFORCE</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 4.1 — Gradient de politique</span>
+  Pour \(\pi_\theta\) différentiable&nbsp;:
+  $$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\Big[\Big(\sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(A_t \mid S_t)\Big) \, G(\tau)\Big],$$
+  où \(G(\tau)\) est le retour de la trajectoire. <em>Preuve (esquisse)</em>&nbsp;: dériver la
+  vraisemblance \(\pi_\theta(\tau) = \mu(S_0)\prod_t \pi_\theta(A_t \mid S_t) P(S_{t+1}\mid S_t, A_t)\)
+  — le log annule la dynamique, qui ne dépend pas de \(\theta\).
+</div>
+
+<ul>
+  <li><strong>Variance</strong>&nbsp;: le retour brut est très bruité ⇒ <em>baseline</em>
+  \(b(s)\)&nbsp;: \(\nabla J = \mathbb{E}[\nabla \log \pi \,(G - b(S))]\) — sans biais,
+  variance réduite&nbsp;; le meilleur choix de baseline mène à l'<strong>avantage</strong>
+  \(A^\pi(s, a) = Q^\pi(s,a) - V^\pi(s)\)&nbsp;;</li>
+  <li><strong>Actor-critic (A2C)</strong>&nbsp;: un acteur \(\pi_\theta\) + un critique
+  \(V_w\) appris par TD&nbsp;; l'avantage estimé
+  \(\hat A_t = R_{t+1} + \gamma V_w(S_{t+1}) - V_w(S_t)\)&nbsp;;</li>
+  <li><strong>PPO</strong> (Schulman et al., 2017)&nbsp;: tronquer le ratio d'importance
+  $$r_t(\theta) = \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_\text{old}}(a_t \mid s_t)}, \qquad
+  L^{\mathrm{CLIP}} = \mathbb{E}\big[\min\big(r_t \hat A_t,\ \mathrm{clip}(r_t, 1{-}\epsilon, 1{+}\epsilon)\hat A_t\big)\big]$$
+  — pas de confiance implicite&nbsp;; c'est <em>la</em> méthode derrière l'alignement des LLMs
+  (RLHF/PPO, module M2).</li>
+</ul>
+
+<pre class="code"><code># Squelette REINFORCE avec baseline (PyTorch, probleme CartPole)
+logits = policy_net(states)                 # (B, n_actions)
+dist = torch.distributions.Categorical(logits=logits)
+actions = dist.sample()
+logp = dist.log_prob(actions)
+returns = compute_returns(rewards, gamma)   # G_t
+advantage = returns - value_net(states).squeeze(-1)   # baseline apprise
+loss = -(logp * advantage.detach()).mean() + 0.5 * advantage.pow(2).mean()
+loss.backward(); optimizer.step()</code></pre>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Deep RL&nbsp;: DQN et au-delà</h2>
+
+<div class="thm">
+  <span class="tag">Algorithme 5.1 — DQN (Mnih et al., 2015)</span>
+  Q-learning où \(Q(s, a; \theta)\) est un réseau&nbsp;; stabilisé par&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>experience replay</strong>&nbsp;: rééchantillonner des transitions passées
+    (casse la corrélation temporelle)&nbsp;;</li>
+    <li><strong>réseau cible</strong> \(\theta^-\) gelé et synchronisé périodiquement&nbsp;:
+    cible \(y = r + \gamma \max_{a'} Q(s', a'; \theta^-)\) (évite la poursuite d'une cible mouvante)&nbsp;;</li>
+    <li>perte \(\big(y - Q(s, a; \theta)\big)^2\).</li>
+  </ul>
+  Variantes&nbsp;: Double DQN (sur-estimation), Dueling, distributional (C51), Rainbow.
+</div>
+
+<ul>
+  <li><strong>Enjeux deep RL</strong>&nbsp;: instabilité, sample efficiency, hyperparamètres&nbsp;;
+  benchmarks&nbsp;: Gymnasium (CartPole, LunarLander), Atari&nbsp;;</li>
+  <li><strong>Off-policy vs on-policy</strong>&nbsp;: DQN réutilise tout le passé (économe en
+  interactions, instable)&nbsp;; PPO jette les données après chaque lot (stable, gourmand)&nbsp;;
+  le choix se retrouve dans le post-training des LLMs&nbsp;;</li>
+  <li><strong>Model-based RL</strong>&nbsp;: apprendre la dynamique et planifier
+  (MPC, world models) — lien avec les «&nbsp;agents qui raisonnent&nbsp;».</li>
+</ul>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Bandits et exploration</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Bandit à K bras</span>
+  MDP à un seul état&nbsp;: à chaque pas choisir un bras \(a\) et recevoir
+  \(r \sim \nu_a\). Objectif&nbsp;: minimiser le <strong>regret</strong> cumulé
+  $$R_T = T\,\mu^\star - \mathbb{E}\Big[\sum_{t=1}^T \mu_{A_t}\Big].$$
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithmes classiques</span>
+  \(\varepsilon\)-greedy (baseline simple)&nbsp;;
+  <strong>UCB</strong>&nbsp;: jouer \(A_t = \arg\max_a \big[\hat\mu_a + \sqrt{2\log t / N_a}\big]\)
+  («&nbsp;optimisme face à l'incertitude&nbsp;»)&nbsp;;
+  <strong>Thompson sampling</strong>&nbsp;: échantillonner \(\tilde\mu_a\) du posterior et jouer
+  le meilleur — regret \(\mathcal{O}(\log T)\) optimal en bandits gaussiens/beta.
+  <strong>Contextuel</strong>&nbsp;: \(\hat \mu(a \mid x)\) — le cœur des systèmes de
+  recommandation&nbsp;; linéaire (LinUCB) ou par réseau.
+</div>
+
+<div class="note">
+  <span class="tag">Exploration chez les LLMs</span> Le RLHF et l'évaluation des LLMs
+  (best-of-n, vote) sont des problèmes de bandit&nbsp;; RLVR (RL from verifiable rewards)
+  utilise l'exploration pour la recherche de chaînes de raisonnement — chapitre repris au
+  module M2.
+</div>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Agents autonomes à l'ère des LLMs</h2>
+
+<ul>
+  <li><strong>Définir un agent</strong>&nbsp;: percevoir → décider → agir → observer, en boucle
+  (l'agent = politique \(\pi\) sur un MDT — «&nbsp;processus de décision <em>avec outils</em>&nbsp;»)&nbsp;;
+  perception = contexte (texte, mémoire), action = <em>tool calls</em>, API, code&nbsp;;</li>
+  <li><strong>LLM + outils</strong>&nbsp;: le LLM est le moteur de décision&nbsp;; le
+  «&nbsp;prompt&nbsp;» = état&nbsp;; function calling = espace d'actions&nbsp;; boucle
+  ReAct (Reason + Act)&nbsp;; la recherche web et l'exécution de code étendent l'espace
+  d'états&nbsp;;</li>
+  <li><strong>Mémoire et RAG</strong>&nbsp;: l'état dépasse la fenêtre de contexte ⇒ mémoire
+  externe (vector stores, <em>GraphRAG</em> sur graphes de connaissances — intersection exacte
+  du master&nbsp;: NLP × Graph ML × LLM)&nbsp;;</li>
+  <li><strong>Multi-agents</strong>&nbsp;: systèmes d'agents = <strong>graphes</strong> —
+  nœuds&nbsp;: agents spécialisés (contexte et prompt propres), arêtes&nbsp;: flux d'information,
+  topologie DAG ou cyclique (orchestrateur-travailleurs, débats, vérificateurs). Les workflows
+  «&nbsp;deep research&nbsp;» actuels orchestrent &gt;100 agents en phases parallèles&nbsp;;
+  ce «&nbsp;graph engineering&nbsp;» est l'un des débouchés du master (cf. LangGraph, AutoGen)&nbsp;;</li>
+  <li><strong>Évaluation des agents</strong>&nbsp;: environnements (benchmarks tool-use),
+  récompenses vérifiables, coûts (tokens, appels)&nbsp;; sûreté&nbsp;: permissions,
+  sandboxing, supervision humaine.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">TP fil rouge</span> Coder un mini-agent «&nbsp;deep research&nbsp;»&nbsp;:
+  un orchestrateur (LLM) qui décompose une question en sous-tâches, des travailleurs qui
+  cherchent et résument, un vérificateur qui exige des sources, un rédacteur qui compile —
+  le tout représenté et exécuté comme un <strong>DAG d'agents</strong> (cf. Refresher CS,
+  tri topologique).
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Bellman papier.</strong> Résoudre analytiquement un MDP à 2 états (continuer à
+  coût \(c\), s'arrêter à récompense 0)&nbsp;: écrire les équations de Bellman et calculer
+  \(V^\star\) en fonction de \(\gamma\) et \(c\)&nbsp;; interpréter le seuil \(c = \gamma\).</li>
+
+  <li><strong>Value vs policy iteration.</strong> Sur le gridworld du chapitre 2, comparer le
+  nombre d'itérations et le coût par itération&nbsp;; vérifier que les politiques coïncident.</li>
+
+  <li><strong>Q-learning tabulaire.</strong> Implémenter Q-learning avec \(\varepsilon\)-greedy
+  sur Cliff Walking (Sutton &amp; Barto, ex. 6.6)&nbsp;: comparer les trajectoires apprises par
+  Q-learning (optimal, bord de falaise) et SARSA (prudent)&nbsp;; tracer le retour par épisode.</li>
+
+  <li><strong>REINFORCE, variance.</strong> Sur CartPole, comparer REINFORCE avec et sans
+  baseline&nbsp;; tracer la variance des gradients empiriques et la courbe d'apprentissage.</li>
+
+  <li><strong>Bandits.</strong> Simuler un bandit à 3 bras bernoulli (0.2, 0.5, 0.7)&nbsp;;
+  comparer \(\varepsilon\)-greedy, UCB, Thompson&nbsp;; tracer le regret cumulé sur 5000 pas
+  et vérifier le comportement en \(\log T\) des deux derniers.</li>
+
+  <li><strong>Projet agent.</strong> Étendre le TP fil rouge&nbsp;: ajouter une boucle de
+  vérification (agent critique) et mesurer l'impact sur la qualité des rapports (notation
+  humaine ou LLM-judge) et sur le coût total en tokens.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>R. Sutton, A. Barto, <em>Reinforcement Learning: An Introduction</em>, 2e éd., MIT Press, 2018 — <a href="http://incompleteideas.net/book/the-book-2nd.html">gratuit en ligne</a>&nbsp;; <em>le</em> manuel du cours.</li>
+  <li>C. Szepesvári, <em>Algorithms for Reinforcement Learning</em>, Morgan &amp; Claypool, 2010 — synthèse compacte théorique.</li>
+  <li>V. Mnih et al., <a href="https://www.nature.com/articles/nature14236">Human-level control through deep reinforcement learning</a> (DQN), Nature, 2015.</li>
+  <li>J. Schulman et al., <a href="https://arxiv.org/abs/1707.06347">Proximal Policy Optimization Algorithms</a>, 2017 — le cœur du RLHF.</li>
+  <li>S. Bubeck, N. Cesa-Bianchi, <em>Regret Analysis of Stochastic and Nonstochastic Bandit Problems</em>, FnT-ML, 2012 — pour les bandits.</li>
+  <li>S. Yao et al., <a href="https://arxiv.org/abs/2210.03629">ReAct</a>, ICLR 2023&nbsp;; et les rapports multi-agents d'Anthropic/LangChain sur le graph engineering — pour le chapitre 7.</li>
+  <li><a href="https://gymnasium.farama.org">Gymnasium</a> — les environnements des TP.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p1-emerging-ml.html"><span class="dir">← Précédent</span> Emerging Subjects in ML</a>
+  <a class="next" href="m1p2-graph-ml.html"><span class="dir">Suivant</span> Graph Machine and Deep Learning for Generative AI</a>
+</nav>
+
+</div>
+</body>
+</html>
