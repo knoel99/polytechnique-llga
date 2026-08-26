@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computational Optimal Transport for ML and Fairness — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M1 · Période 2 › Option recommandée</div>
+    <div class="code-line">Option P2 (APM)</div>
+    <h1>Computational Optimal Transport for ML and Fairness</h1>
+    <div class="tags"><span class="badge recommended">Recommandé — track LLGA</span></div>
+    <div class="facts">Enseignant&nbsp;: Rémi Flamary (École Polytechnique, CMAP&nbsp;; co-créateur de la bibliothèque <a href="https://pythonot.github.io" style="color:#fff">POT</a>) · 36&nbsp;h · 4,5 ECTS · de Monge et Kantorovich à Sinkhorn, avec les applications ML&nbsp;: domain adaptation, graphes (Gromov-Wasserstein) et fairness.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: convexité et dualité LP</a></li>
+    <li><a href="#ch1">Le problème de transport</a></li>
+    <li><a href="#ch2">Dualité et distance de Wasserstein</a></li>
+    <li><a href="#ch3">Régularisation entropique&nbsp;: Sinkhorn</a></li>
+    <li><a href="#ch4">OT et machine learning</a></li>
+    <li><a href="#ch5">Gromov-Wasserstein et graphes</a></li>
+    <li><a href="#ch6">Fairness par le transport</a></li>
+    <li><a href="#ex">Exercices</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: convexité et dualité LP</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 mobilisés</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Ensembles/fonctions convexes</strong>&nbsp;: pour \(f\) convexe, tout
+    point stationnaire est un minimum global&nbsp;; l'OT continu est un problème d'optimisation convexe en la
+    mesure&nbsp;;</li>
+    <li><strong>Programmation linéaire</strong>&nbsp;: minimiser \(c^\top x\) sous \(Ax = b\),
+    \(x \geq 0\)&nbsp;; dualité forte (si réalisable borné, optimaux primal et dual égaux)&nbsp;;
+    conditions de complémentarité&nbsp;;</li>
+    <li><strong>Théorie des mesures</strong>&nbsp;: mesure de probabilité, espérance
+    \(\mathbb{E}_\mu[f] = \int f\,d\mu\)&nbsp;; loi d'une variable, loi image (pushforward)&nbsp;:
+    \(T_\#\mu(A) = \mu(T^{-1}(A))\)&nbsp;;</li>
+    <li><strong>Entropie et KL</strong>&nbsp;:
+    \(\mathrm{KL}(p \| q) = \sum p_i \log(p_i / q_i) \geq 0\) (Gibbs)&nbsp;; la régularisation
+    entropique du ch. 3 en est le moteur.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Le problème de transport</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Problème de Monge (1781)</span>
+  Étant donné deux mesures de probabilité \(\mu, \nu\) sur \(\mathbb{R}^d\) et un coût
+  \(c(x, y)\) (typiquement \(\|x - y\|^2\)), trouver une application de transport
+  \(T : \mathbb{R}^d \to \mathbb{R}^d\) qui déplace \(\mu\) sur \(\nu\) (\(T_\#\mu = \nu\)) en
+  minimisant le coût total&nbsp;:
+  $$\min_T \ \int c\big(x, T(x)\big)\, d\mu(x).$$
+  Historique&nbsp;: déblai/remblai (Monge, 1781)&nbsp;; non convexe en \(T\), pas toujours de
+  solution (p.ex. \(\mu = \delta_0 \to \nu = \tfrac12\delta_{-1} + \tfrac12\delta_{1}\) exige de
+  «&nbsp;casser la masse&nbsp;»).
+</div>
+
+<div class="thm">
+  <span class="tag">Formulation de Kantorovich (1942) — le pivot du cours</span>
+  Relâcher «&nbsp;chaque source va vers une unique destination&nbsp;» en un plan de transport
+  \(\gamma\) (couple aléatoire \((X, Y) \sim \gamma\) avec marginales \(\mu, \nu\))&nbsp;:
+  $$W_c(\mu, \nu) \;=\; \min_{\gamma \in \Pi(\mu, \nu)} \ \int c(x, y)\, d\gamma(x, y),$$
+  $$\Pi(\mu,\nu) = \big\{\gamma \geq 0 \ :\ \gamma(\cdot \times \mathbb{R}^d) = \mu,\ \gamma(\mathbb{R}^d \times \cdot) = \nu\big\}.$$
+  <strong>Cas discret</strong> (\(\mu = \sum_i a_i \delta_{x_i}\), \(\nu = \sum_j b_j \delta_{y_j}\))&nbsp;:
+  une <strong>programmation linéaire</strong> sur la matrice de transport \(\Gamma\)&nbsp;:
+  $$\min_{\Gamma \in \mathbb{R}_+^{n \times m}} \ \langle C, \Gamma\rangle
+  \quad \text{s.c.} \quad \Gamma \mathbf{1} = a,\ \Gamma^\top \mathbf{1} = b,$$
+  où \(C_{ij} = c(x_i, y_j)\). Compact convexe non vide ⇒ minimum atteint&nbsp;; les solutions
+  extrémales sont «&nbsp;presque&nbsp;» déterministes (\(\leq n + m - 1\) cases non nulles).
+</div>
+
+<div class="note">
+  <span class="tag">Intuition</span>
+  \(\gamma(x, y)\) = «&nbsp;quelle masse de \(x\) va vers \(y\)&nbsp;»&nbsp;; les contraintes
+  disent «&nbsp;toute la masse part, toute la masse arrive&nbsp;». C'est exactement le problème
+  logistique&nbsp;: carriers, mines et fours à coke (Hitchcock, Kantorovich)… et aujourd'hui
+  comparer deux distributions de données.
+</div>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. Dualité et distance de Wasserstein</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 2.1 — Dualité de Kantorovich</span>
+  $$W_c(\mu, \nu) \;=\; \max_{(f, g) \in \Phi_c} \ \int f\, d\mu + \int g\, d\nu, \qquad
+  \Phi_c = \big\{(f, g) \ :\ f(x) + g(y) \leq c(x, y)\ \forall (x,y)\big\}.$$
+  En discret&nbsp;: dual LP \(\max_{f, g} \langle a, f\rangle + \langle b, g\rangle\)
+  s.c. \(f_i + g_j \leq C_{ij}\). Les optimaux \(f^\star, g^\star\) (potentiels de Kantorovich)
+  donnent des <strong>gradients</strong>&nbsp;: \((T_\#\mu\text{-p.s.})\), le transport optimal
+  envoie \(x\) vers les \(y\) où \(f^\star(x) + g^\star(y) = c(x, y)\)
+  (complémentarité)&nbsp;; pour \(c = \tfrac12\|x-y\|^2\), \(T(x) = x - \nabla f^\star(x)\)
+  (Brenier&nbsp;; le transport est le gradient d'une fonction convexe&nbsp;!).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.2 — Distance de Wasserstein \(p\)</span>
+  Avec \(c = d^p\)&nbsp;:
+  $$W_p(\mu, \nu) = \Big( \min_{\gamma \in \Pi(\mu,\nu)} \int d(x,y)^p\, d\gamma \Big)^{1/p}.$$
+  \(W_p\) est une <strong>distance</strong> sur les mesures de moment \(p\) fini&nbsp;;
+  elle métrise la convergence étroite (+ moments) — alors que la KL «&nbsp;explose&nbsp;»
+  dès que les supports diffèrent.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.3 — Pourquoi \(W\) et pas KL&nbsp;?</span>
+  1D&nbsp;: \(W_p(\mu, \nu) = \big(\int_0^1 |F_\mu^{-1}(u) - F_\nu^{-1}(u)|^p du\big)^{1/p}\)
+  (quantiles&nbsp;; tri en \(\mathcal{O}(n\log n)\))&nbsp;;
+  gaussiennes&nbsp;: \(W_2^2(\mathcal{N}(m_1,\Sigma_1), \mathcal{N}(m_2,\Sigma_2)) =
+  \|m_1 - m_2\|^2 + \mathrm{tr}\big(\Sigma_1 + \Sigma_2 - 2(\Sigma_1^{1/2}\Sigma_2\Sigma_1^{1/2})^{1/2}\big)\)
+  (Bures)&nbsp;; géométrie «&nbsp;plate&nbsp;»&nbsp;: les interpolations
+  \(\mu_t = ((1-t)\,\mathrm{id} + t\,T)_\#\mu\) ont un sens physique (déplacement), à la
+  différence des mélanges. Gradients exploitables en apprentissage.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.4 — En 1D, c'est le matching des quantiles</span>
+  Pour amener \(\mathcal{N}(0, 1)\) sur \(\mathcal{N}(2, 4)\)&nbsp;: \(T(x) = 2x + 2\)&nbsp;;
+  \(W_2^2 = 4 + 4 = 8\)… à décomposer en «&nbsp;décaler&nbsp;» (\(\|m_1 - m_2\|^2 = 4\)) et
+  «&nbsp;étirer&nbsp;» (termes de covariance = 4). Le plan optimal apparie les quantiles&nbsp;:
+  le \(q\)-quantile de \(\mu\) va sur le \(q\)-quantile de \(\nu\).
+</div>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Régularisation entropique&nbsp;: Sinkhorn</h2>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — OT entropique (Cuturi, 2013)</span>
+  $$W_\varepsilon(a, b) \;=\; \min_{\Gamma \in U(a, b)}\ \langle C, \Gamma \rangle
+  + \varepsilon \sum_{ij} \Gamma_{ij}\big(\log \Gamma_{ij} - 1\big),$$
+  strictement convexe ⇒ <strong>solution unique</strong> de la forme
+  $$\Gamma^\varepsilon = \mathrm{diag}(u)\, K\, \mathrm{diag}(v), \qquad K = e^{-C/\varepsilon}.$$
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithme 3.2 — Sinkhorn (projections alternées)</span>
+  $$u \leftarrow a\,/\,(K v), \qquad v \leftarrow b\,/\,(K^\top u)$$
+  — chaque étape est une <em>projection de KL</em> sur la contrainte de ligne puis de colonne&nbsp;;
+  convergence géométrique (taux explicites)&nbsp;; en pratique 20-200 itérations.
+  Propriétés&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>GPU</strong>&nbsp;: que des produits matriciels — des millions de points en
+    parallèle (vs LP exact \(\mathcal{O}(n^3 \log n)\))&nbsp;;</li>
+    <li><strong>Différentiable</strong>&nbsp;: \(\nabla W_\varepsilon\) via le théorème de
+    l'enveloppe — d'où une <em>perte</em> OT utilisable en deep learning&nbsp;;</li>
+    <li><strong>Biais \(\varepsilon\)</strong>&nbsp;: \(W_\varepsilon \to W\) quand
+    \(\varepsilon \to 0\), mais conditioning numérique se dégrade — compromis&nbsp;;
+    débias (partial Sinkhorn, dual SGM).</li>
+  </ul>
+</div>
+
+<pre class="code"><code>import numpy as np
+import ot                              # POT : Python Optimal Transport
+
+n = 200
+xs, xt = np.random.RandomState(0).normal(0, 1, (n, 2)), np.random.RandomState(1).normal([2, 0], [0.5, 2], (n, 2))
+a, b = np.ones(n) / n, np.ones(n) / n
+C = ot.dist(xs, xt)                    # couts carres ||x-y||^2
+
+G = ot.emd(a, b, C)                    # OT exact (LP, transport simplex)
+Gs = ot.sinkhorn(a, b, C / C.max(), reg=0.05)
+print("exact  :", (G * C).sum())
+print("sinkhorn:", (Gs * C).sum())     # leger surcout d'entropie
+
+W2 = ot.dist(np.array([[0., 0.]]), np.array([[2., 0.]]), metric='sqeuclidean')
+print("W2 gaussiennes (Bures) vs empirique :",
+      ot.wasserstein1d(xs[:,0], xt[:,0])**0.5)</code></pre>
+
+<div class="note">
+  <span class="tag">L'«&nbsp;horizon Sinkhorn&nbsp;»</span> Quand \(\varepsilon \to \infty\),
+  \(\Gamma^\varepsilon \to a b^\top\) (indépendance)&nbsp;; quand \(\varepsilon \to 0\), on
+  retrouve le LP. La figure classique du cours&nbsp;: une galerie de plans de transport qui
+  «&nbsp;concentrent&nbsp;» avec \(\varepsilon\) décroissant — à savoir refaire en TP.
+</div>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. OT et machine learning</h2>
+
+<ul>
+  <li><strong>Domain adaptation</strong> (spécialité de l'enseignant)&nbsp;: transporter la
+  distribution source \(\mu_S\) vers la cible \(\mu_T\), puis classifier — le plan
+  \(\Gamma\) définit un apprentissage «&nbsp;transporté&nbsp;» (Coupling de labels)&nbsp;;
+  <em>OT pour données non-plates</em>&nbsp;: nuages, images&nbsp;;</li>
+  <li><strong>Perte OT en deep learning</strong>&nbsp;: comparer distributions de features&nbsp;;
+  WGAN (le critique apprend une distance Lipschitz — dualité de Kantorovich&nbsp;:
+  \(W_1 = \sup_{\|f\|_L \leq 1} \mathbb{E}_\mu f - \mathbb{E}_\nu f\))&nbsp;;
+  <em>spectral loss</em> (module Signal Processing)&nbsp;: \(W_2\) entre spectrogrammes&nbsp;;</li>
+  <li><strong>Barycentres de Wasserstein</strong>&nbsp;:
+  \(\min_\nu \sum_k w_k W_2^2(\nu, \mu_k)\) — «&nbsp;moyennes&nbsp;» de distributions&nbsp;;
+  applications&nbsp;: agrégation de mesures, interpolation de styles, fairness (ch. 6)&nbsp;;</li>
+  <li><strong>Embeddings de mots</strong>&nbsp;: \(W_1\) entre distributions de mots (WMD —
+  Word Mover's Distance)&nbsp;; distance entre documents &gt; cosine&nbsp;;</li>
+  <li><strong>Génération de graphes</strong>&nbsp;: la distance MMD entre distributions de
+  graphes se calcule par GW-barycentres (ch. 5).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Gromov-Wasserstein et graphes</h2>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — GW (Mémoli, 2011)</span>
+  Comparer deux <em>espaces métriques</em> \((X, d_X)\), \((Y, d_Y)\) sans correspondance
+  commune (ex.&nbsp;: deux graphes de nœuds <em>différents</em>)&nbsp;: transporter en
+  préservant les distances <em>intrinsèques</em>&nbsp;:
+  $$\mathrm{GW}(X, Y) = \min_{\Gamma \in U(a,b)} \sum_{i,k,j,l}
+  \big| d_X(x_i, x_k) - d_Y(y_j, y_l) \big|^2\ \Gamma_{ij}\, \Gamma_{kl}.$$
+  Quadratique en \(\Gamma\) (non convexe, optimum local)&nbsp;; algorithmes&nbsp;:
+  PGW (projected gradient), entropique (Sinkhorn-GW).
+</div>
+
+<div class="thm">
+  <span class="tag">Fused Gromov-Wasserstein (Vayer, Flamary et al., 2019)</span>
+  Quand les nœuds portent <em>aussi</em> des features&nbsp;: combiner le transport des
+  features (terme OT classique, matrice \(C_F\)) et le transport de structure (GW)&nbsp;:
+  $$\mathrm{FGW}_\alpha = \min_{\Gamma} \ (1-\alpha)\langle C_F, \Gamma\rangle +
+  \alpha \sum \big|D_X - D_Y\big|^2 \otimes \Gamma \otimes \Gamma.$$
+  Applications&nbsp;: classification de graphes, alignement de graphes, domaine adaptation
+  <em>structuré</em>, réduction de dimension préservant la structure — travaux de l'enseignant,
+  au programme du master.
+</div>
+
+<div class="note">
+  <span class="tag">GW au cœur du LLGA</span>
+  Les graphes d'entreprise n'ont pas de coordonnées partagées (leurs nœuds = entités propres)&nbsp;:
+  GW est <em>la</em> distance structurelle pour comparer&nbsp;: graphes de connaissances,
+  molécules, réseaux de transactions&nbsp;; aligner un KG d'entreprise sur un ontologie&nbsp;=
+  un problème GW. Lien direct avec le module Graph ML (génération, évaluation MMD).
+</div>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Fairness par le transport</h2>
+
+<div class="def">
+  <span class="tag">Cadre&nbsp;: décisions équitables</span>
+  Un modèle \(h(X)\) décide d'un outcome \(Y\) à partir de features incluant un attribut
+  sensible \(S\) (genre, origine). Notions&nbsp;: <em>demographic parity</em>
+  (\(h \perp S\)), <em>equalized odds</em> (\(h \perp S \mid Y\)). L'OT quantifie ces exigences
+  comme des <strong>couplages</strong> entre distributions conditionnelles.
+</div>
+
+<ul>
+  <li><strong>Repair par transport</strong>&nbsp;: transformer les features \(X_{s}\) de chaque
+  groupe vers une distribution commune \(\tilde X = T_\# X\) (barycentre de Wasserstein des
+  groupes)&nbsp;— «&nbsp;réparer&nbsp;» les données en préservant l'information utile
+  (repair partiel&nbsp;; trade-off biais/utility)&nbsp;;</li>
+  <li><strong>Bicausal OT et equalized odds</strong>&nbsp;: le mapping optimal entre les
+  distributions de décisions conditionnelles implémente exactement le post-traitement
+  optimal (théorie&nbsp;: couplage = randomisation optimale)&nbsp;;</li>
+  <li><strong>Limites et débats</strong>&nbsp;: métriques impossibles à satisfaire simultanément&nbsp;;
+  l'OT donne des <em>outils</em>, le choix normatif reste humain — lien avec le séminaire
+  d'éthique du M2.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">TP fairness</span> Sur un jeu de salaires&nbsp;: 1)&nbsp;mesurer
+  \(W_1\) entre distributions de salaires par groupe&nbsp;; 2)&nbsp;appliquer un repair
+  partiel \(\alpha\) sur la feature sensible&nbsp;; 3)&nbsp;tracer accuracy vs demographic
+  parity en fonction de \(\alpha\) et discuter le compromis.
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Monge 1D.</strong> Montrer qu'en dimension 1, pour \(c(x,y) = |x - y|^p\), le
+  transport optimal apparie les quantiles, puis retrouver \(W_2^2\big(\mathcal{N}(m_1, \sigma_1^2),
+  \mathcal{N}(m_2, \sigma_2^2)\big) = (m_1 - m_2)^2 + (\sigma_1 - \sigma_2)^2\).</li>
+
+  <li><strong>Dualité en discret.</strong> Écrire le dual LP de Kantorovich discret, vérifier la
+  dualité faible (\(\leq\)) par sommation des contraintes, et la complémentarité
+  \(\Gamma_{ij} &gt; 0 \Rightarrow f_i + g_j = C_{ij}\) sur la solution de <code>ot.emd</code>.</li>
+
+  <li><strong>Sinkhorn à la main.</strong> Pour \(a = b = (0{,}5, 0{,}5)\),
+  \(C = \begin{pmatrix} 0 &amp; 1 \\ 1 &amp; 0 \end{pmatrix}\)&nbsp;: calculer les itérations
+  de Sinkhorn pour \(\varepsilon = 0{,}1\), vérifier la convergence vers
+  \(\Gamma \approx \mathrm{diag}(0{,}5)\) et la majoration \(\langle C, \Gamma_\varepsilon\rangle
+  \leq W + \varepsilon(\log n + \dots)\).</li>
+
+  <li><strong>Barycentre 1D.</strong> Montrer que le barycentre de Wasserstein de deux
+  gaussiennes 1D est gaussien (moyenne des moyennes, moyenne quadratique des variances pour
+  \(W_2\))&nbsp;; illustrer avec <code>ot.gaussian.barycenter</code>.</li>
+
+  <li><strong>WMD.</strong> Implémenter la Word Mover's Distance entre deux phrases
+  (embeddings GloVe, \(W_1\) sur les mots pondérés par TF)&nbsp;; comparer les similarités
+  de phrases obtenues vs cosine des moyennes.</li>
+
+  <li><strong>GW alignement.</strong> Avec <code>ot.gromov.gromov_wasserstein</code>, aligner
+  deux graphes «&nbsp;hérison&nbsp;» (cycles + un hub déplacé)&nbsp;; visualiser la matrice
+  \(\Gamma\) comme une soft-permutation et le coût GW en fonction de la perturbation.</li>
+
+  <li><strong>Projet.</strong> Domain adaptation sur MNIST → USPS (ou visages)&nbsp;:
+  transporter les nuages de features par Sinkhorn, mesurer l'accuracy d'un classifieur
+  entraîné sur la source transportée vs sans transport&nbsp;; rapport avec figures du cours.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>G. Peyré, M. Cuturi, <em>Computational Optimal Transport</em>, FnT-ML, 2019 — <a href="https://arxiv.org/abs/1803.00567">gratuit sur arXiv</a>&nbsp;: <em>le</em> manuel du cours (avec figures et code).</li>
+  <li>R. Flamary et al., <a href="https://jmlr.org/papers/v22/20-451.html">POT: Python Optimal Transport</a>, JMLR 2021 — <a href="https://pythonot.github.io">pythonot.github.io</a>&nbsp;: l'outil des TP, avec notebooks.</li>
+  <li>C. Villani, <em>Optimal Transport: Old and New</em>, Springer, 2009 — pour la théorie (Brenier, dualité).</li>
+  <li>F. Santambrogio, <em>Optimal Transport for Applied Mathematicians</em>, Birkhäuser, 2015 — le meilleur compromis rigueur/applications.</li>
+  <li>M. Cuturi, <a href="https://arxiv.org/abs/1306.0895">Sinkhorn Distances: Lightspeed Computation of Optimal Transport</a>, NeurIPS 2013.</li>
+  <li>R. Flamary, N. Courty et al., <a href="https://arxiv.org/abs/1509.05535">Optimal Transport for Domain Adaptation</a>, IEEE TPAMI 2016.</li>
+  <li>T. Vayer, R. Flamary et al., <a href="https://arxiv.org/abs/1811.02812">Optimal Transport for structured data with application on graphs</a> (FGW), ICML 2019.</li>
+  <li>F. Mémoli, <em>Gromov-Wasserstein distances and the metric approach to object matching</em>, FnD-Math, 2011.</li>
+  <li>R. Chzhen et al., <a href="https://arxiv.org/abs/1711.05195">Fairness through awareness</a>-lignes OT&nbsp;; et la littérature «&nbsp;fairness repair&nbsp;» (Feldman et al., 2015).</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p2-nlp-text-mining.html"><span class="dir">← Précédent</span> Text Mining and NLP</a>
+  <a class="next" href="m1p2-multimodal-genai.html"><span class="dir">Suivant</span> Multimodal Generative AI</a>
+</nav>
+
+</div>
+</body>
+</html>
