@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Introduction to Text Mining and NLP — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M1 · Période 2 › Cours obligatoire</div>
+    <div class="code-line">CSC_52082_EP</div>
+    <h1>Introduction to Text Mining and NLP</h1>
+    <div class="tags"><span class="badge mandatory">Obligatoire</span></div>
+    <div class="facts">Enseignants&nbsp;: Michalis Vazirgiannis (École Polytechnique) &amp; Davide Buscaldi (Université Sorbonne Paris Nord) · 36&nbsp;h · 4,5 ECTS · du texte brut aux transformers&nbsp;: représentations, embeddings, topic models, séquences et l'écosystème HuggingFace.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: espace vectoriel et probabilités</a></li>
+    <li><a href="#ch1">La chaîne de traitement texte</a></li>
+    <li><a href="#ch2">Sac de mots et TF-IDF</a></li>
+    <li><a href="#ch3">Word embeddings</a></li>
+    <li><a href="#ch4">Topic models</a></li>
+    <li><a href="#ch5">Classification de textes</a></li>
+    <li><a href="#ch6">Séquences&nbsp;: NER, HMM, CRF</a></li>
+    <li><a href="#ch7">Transformers pour le NLP</a></li>
+    <li><a href="#ch8">Text mining en entreprise</a></li>
+    <li><a href="#ex">Exercices</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: espace vectoriel et probabilités</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 mobilisés</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Espaces vectoriels</strong>&nbsp;: base, dimension, projection&nbsp;;
+    similarité cosinus \(\cos(u, v) = \frac{u^\top v}{\|u\|\|v\|}\)&nbsp;; l'ACP (module ML) pour
+    réduire des dimensions de vocabulaire&nbsp;;</li>
+    <li><strong>Probabilités conditionnelles et Bayes</strong>&nbsp;: \(\mathbb{P}(c \mid d)
+    \propto \mathbb{P}(d \mid c)\,\mathbb{P}(c)\) — le classifieur Naive Bayes en découle
+    directement&nbsp;;</li>
+    <li><strong>Chaînes de Markov et programmation dynamique</strong> (Refresher CS)&nbsp;:
+    l'algorithme de Viterbi (ch. 6) est un Bellman sur une chaîne&nbsp;;</li>
+    <li><strong>Vraisemblance et MLE</strong>&nbsp;: word2vec et LDA sont des maximisations de
+    vraisemblance (par SGD pour l'un, par EM/variational pour l'autre).</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. La chaîne de traitement texte</h2>
+
+<div class="def">
+  <span class="tag">Pipeline standard</span>
+  <strong>Texte brut</strong> → nettoyage (HTML, casse, accents) → <strong>tokenisation</strong>
+  (découpe en unités&nbsp;: mots, sous-mots, caractères) → normalisation
+  (<em>stemming</em> racine brut / <em>lemmatisation</em> forme canonique&nbsp;; mots vides) →
+  représentation (ch. 2-4) → modèle (ch. 5-7) → évaluation.
+</div>
+
+<ul>
+  <li><strong>Tokenisation</strong>&nbsp;: espaces + ponctuation en Europe&nbsp;; mais le chinois
+  n'a pas d'espaces, l'allemand compose — d'où les <strong>tokeniseurs sous-mots</strong>
+  (BPE, WordPiece, Unigram&nbsp;; SentencePiece) des LLMs&nbsp;: vocabulaire fixe (~32k-128k),
+  toute chaîne décomposable&nbsp;;</li>
+  <li><strong>Mots vides (stopwords)</strong>&nbsp;: à retirer pour le text mining classique,
+  à <em>garder</em> pour les transformers (la syntaxe compte)&nbsp;;</li>
+  <li><strong>N-grammes</strong>&nbsp;: séquences de \(n\) tokens&nbsp;; «&nbsp;New York&nbsp;»
+  (bigramme) ≠ «&nbsp;New&nbsp;» + «&nbsp;York&nbsp;»&nbsp;; la capture des collocations est
+  cruciale en entreprise (référentiels produits, entités).</li>
+</ul>
+
+<pre class="code"><code>import re
+from collections import Counter
+
+doc = "Le graphe de connaissances relie les entités; le graphe, il les relie bien."
+tokens = re.findall(r"\w+", doc.lower())          # tokenisation naive
+print(Counter(tokens).most_common(5))
+
+# n-grammes
+bigrams = zip(tokens, tokens[1:])
+print(Counter(bigrams).most_common(3))</code></pre>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. Sac de mots et TF-IDF</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Sac de mots (BoW)</span>
+  Un document = un vecteur de comptages sur le vocabulaire \(V\) (ordre perdu)&nbsp;:
+  \(d \in \mathbb{N}^{|V|}\). Matrice documents × termes \(\mathbf{X} \in \mathbb{N}^{n \times |V|}\)
+  — <em>extrêmement creuse</em> (représentation sparse, cf. Refresher CS).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.2 — TF-IDF</span>
+  $$\mathrm{tfidf}(t, d) = \mathrm{tf}(t, d) \times \log\frac{n}{\mathrm{df}(t)},$$
+  \(\mathrm{tf}\) = fréquence du terme dans le document, \(\mathrm{df}\) = nombre de documents
+  contenant le terme. Pénalise les termes omniprésents, valorise les termes discriminants.
+</div>
+
+<div class="note">
+  <span class="tag">Géométrie des documents</span>
+  Chaque document devient un point de \(\mathbb{R}^{|V|}\)&nbsp;; on mesure des similarités
+  (cosinus), on classe (Naive Bayes, SVM), on regroupe (k-means). La limite du BoW&nbsp;:
+  <em>sac</em> = aucun ordre ni sémantique&nbsp;; «&nbsp;le chat mange la souris&nbsp;» ≈
+  «&nbsp;la souris mange le chat&nbsp;». Les embeddings (ch. 3) et les transformers (ch. 7)
+  y répondent.
+</div>
+
+<pre class="code"><code>from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+corpus = ["graphe de connaissances entreprise",
+          "réseau de neurones profond",
+          "graphe neuronal et réseau d'entreprise"]
+X = TfidfVectorizer().fit_transform(corpus)      # matrice sparse (3, |V|)
+print(cosine_similarity(X).round(2))             # docs 0 et 2 les plus proches</code></pre>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Word embeddings</h2>
+
+<div class="thm">
+  <span class="tag">word2vec (Mikolov et al., 2013)&nbsp;: distributionnel, 2013</span>
+  Hypothèse distributionnelle&nbsp;: «&nbsp;un mot est caractérisé par la compagnie qu'il
+  fréquente&nbsp;». <strong>Skip-gram</strong>&nbsp;: maximiser
+  $$\sum_{t} \sum_{c \in \text{fenêtre}(t)} \log p(w_c \mid w_t), \qquad
+  p(w_c \mid w_t) = \frac{\exp(z_{w_c}^\top z_{w_t})}{\sum_{v \in V}\exp(z_v^\top z_{w_t})}$$
+  — softmax sur tout le vocabulaire trop coûteux ⇒ <em>negative sampling</em>&nbsp;: binaryer
+  «&nbsp;\(w_c\) est-il un vrai contexte&nbsp;?&nbsp;» contre \(k\) négatifs tirés de la loi
+  unigramme \(p^{3/4}\). <strong>CBOW</strong>&nbsp;: l'inverse (prédire le mot par le contexte).
+</div>
+
+<ul>
+  <li><strong>GloVe</strong>&nbsp;: factoriser la matrice de co-occurrence (log)&nbsp;;
+  <strong>fastText</strong>&nbsp;: sous-mots (n-grammes de caractères) — gère les fautes et les
+  mots rares&nbsp;;</li>
+  <li><strong>Propriétés émergentes</strong>&nbsp;: relations linéaires
+  \(\vec{\text{roi}} - \vec{\text{homme}} + \vec{\text{femme}} \approx \vec{\text{reine}}\)&nbsp;;
+  biais sociétaux hérités des corpus (interroger et corriger — lien M2 fairness)&nbsp;;</li>
+  <li><strong>Document embeddings</strong>&nbsp;: moyenne pondérée des mots (SIF), doc2vec,
+  ou encodeurs transformer (ch. 7)&nbsp;; c'est le cœur du <strong>RAG vectoriel</strong>
+  (indexer = embedder&nbsp;; retrouver = plus proches voisins cosinus).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Texte ↔ graphe, l'autre pont LLGA</span>
+  word2vec sur des <em>marches aléatoires</em> donne DeepWalk/node2vec (module Graph ML,
+  ch. 3)&nbsp;; réciproquement, un <strong>Graph of Words</strong> (nœuds = mots, arêtes =
+  co-occurrence) permet du text mining par outils de graphes (travaux du professeur du cours)&nbsp;:
+  la boucle mots ↔ graphes est un signature du master.
+</div>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Topic models</h2>
+
+<div class="thm">
+  <span class="tag">Modèle 4.1 — LDA (Blei et al., 2003)</span>
+  Processus génératif&nbsp;: pour chaque document \(d\), tirer un mélange de thèmes
+  \(\theta_d \sim \mathrm{Dir}(\alpha)\)&nbsp;; pour chaque position, tirer un thème
+  \(z \sim \theta_d\) puis un mot \(w \sim \varphi_z\), \(\varphi_z \sim \mathrm{Dir}(\beta)\).
+  Inférence&nbsp;: variational Bayes ou Gibbs sampling — la vraisemblance est intractable
+  (thèmes latents). Deux rappels s'y connectent&nbsp;: EM du module ML (variantes)&nbsp;;
+  chaînes de Markov (échantillonneur).
+</div>
+
+<ul>
+  <li><strong>LSA</strong>&nbsp;: SVD tronquée de la matrice TF-IDF (l'ACP du texte)&nbsp;;
+  topics = directions latentes&nbsp;;</li>
+  <li><strong>Usage entreprise</strong>&nbsp;: cartographier des corpus (tickets support,
+  revues, contrats), détecter des thématiques émergentes&nbsp;; les <em>topic models sur
+  graphes</em> (TopicSBM, travaux du cours) étendent l'idée aux réseaux&nbsp;;</li>
+  <li><strong>Évaluation</strong>&nbsp;: perplexité (mais mal corrélée à l'humain&nbsp;: rappel
+  important du text mining&nbsp;!), cohérence de topics (NPMI, \(C_v\)).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Classification de textes</h2>
+
+<div class="thm">
+  <span class="tag">Naive Bayes (baseline obligatoire)</span>
+  $$\hat c = \arg\max_c \log \mathbb{P}(c) + \sum_{t \in d} \log \mathbb{P}(t \mid c)$$
+  avec l'estimation «&nbsp;à la Laplace&nbsp;» \(\mathbb{P}(t \mid c) =
+  \frac{n_{t,c} + 1}{n_c + |V|}\). L'hypothèse d'indépendance (fausse&nbsp;!) marche
+  étonnamment bien en grande dimension creuse — toujours la <em>première</em> baseline d'un
+  projet texte.
+</div>
+
+<ul>
+  <li><strong>Régression logistique / SVM linéaire sur TF-IDF</strong>&nbsp;: l'état de l'art
+  «&nbsp;classique&nbsp;» avant 2018, encore redoutable sur petits corpus&nbsp;;</li>
+  <li><strong>Réseaux</strong>&nbsp;: CNN de phrases (Kim, 2014), BiLSTM&nbsp;; puis
+  fine-tuning de transformers (ch. 7)&nbsp;; le choix dépend de la taille du corpus
+  (courbes d'apprentissage&nbsp;: transformers &gt; tout à partir de ~1k exemples étiquetés)&nbsp;;</li>
+  <li><strong>Métriques spécifiques</strong>&nbsp;: macro-F1 en classes déséquilibrées,
+  matrice de confusion par intention (chatbots).</li>
+</ul>
+
+<pre class="code"><code>from sklearn.pipeline import make_pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.metrics import f1_score
+
+train = fetch_20newsgroups(subset="train", remove=("headers","footers","quotes"))
+test  = fetch_20newsgroups(subset="test",  remove=("headers","footers","quotes"))
+pipe = make_pipeline(TfidfVectorizer(min_df=3, ngram_range=(1,2), sublinear_tf=True),
+                     LogisticRegression(C=10, max_iter=2000))
+pipe.fit(train.data, train.target)
+print("macro-F1 :", f1_score(test.target, pipe.predict(test.data), average="macro"))</code></pre>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Séquences&nbsp;: NER, HMM, CRF</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Étiquetage de séquences</span>
+  Attribuer à chaque token une étiquette&nbsp;: <strong>POS</strong> (catégorie grammaticale) ou
+  <strong>NER</strong> (entités nommées&nbsp;: PER, ORG, LOC…) en BIO
+  («&nbsp;<strong>B</strong>egin/<strong>I</strong>nside/<strong>O</strong>utside&nbsp;»)&nbsp;:
+  «&nbsp;<em>Kim</em>&nbsp;» = B-PER, «&nbsp;<em>Noel</em>&nbsp;» = I-PER. Le NER est la porte
+  d'entrée de la construction de graphes de connaissances (extraction d'entités + relations).
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithme 6.2 — HMM et Viterbi</span>
+  HMM&nbsp;: états cachés (étiquettes), émissions \(\mathbb{P}(w_t \mid z_t)\), transitions
+  \(\mathbb{P}(z_t \mid z_{t-1})\). Le meilleur chemin d'étiquettes se calcule par
+  programmation dynamique&nbsp;:
+  $$\delta_t(z) = \max_{z'} \big[\delta_{t-1}(z')\, \mathbb{P}(z \mid z')\big]\ \mathbb{P}(w_t \mid z)$$
+  — \(\mathcal{O}(T K^2)\) au lieu de \(\mathcal{O}(K^T)\)&nbsp;; exactement Bellman (module RL,
+  ch. 2) sur une chaîne de Markov (rappel L3). Les <strong>CRF</strong> conditionnent sur toute
+  la séquence (features arbitraires&nbsp;; transitions apprises) — longtemps l'état de l'art NER.</div>
+
+<div class="note">
+  <span class="tag">Aujourd'hui</span> Les transformers étiquettent token par token
+  (per-token softmax + décodage BIO)&nbsp;; les librairies <code>spaCy</code> et
+  <code>transformers</code>(ner pipeline) donnent l'état de l'art en quelques lignes&nbsp;;
+  le TP construit un extracteur entités-relations qui alimente le mini-GraphRAG du module
+  Graph ML.
+</div>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Transformers pour le NLP</h2>
+
+<ul>
+  <li><strong>Architecture</strong>&nbsp;: reprise du module Deep Learning (attention
+  multi-tête, encodeur/décodeur)&nbsp;; ici on l'applique&nbsp;;</li>
+  <li><strong>BERT</strong> (encodeur bidirectionnel)&nbsp;: pré-entraînement <em>masked
+  language modeling</em> (15&nbsp;% des tokens masqués)&nbsp;; fine-tuning par tâche&nbsp;;
+  <strong>GPT</strong> (décodeur causal)&nbsp;: <em>causal LM</em>, génération&nbsp;;
+  <strong>T5</strong>&nbsp;: tout en text-to-text&nbsp;;</li>
+  <li><strong>HuggingFace</strong>&nbsp;: <code>pipeline</code>, <code>AutoTokenizer</code>,
+  <code>AutoModel</code>, Datasets&nbsp;; fine-tuning avec <code>Trainer</code>&nbsp;;
+  embeddings de phrases (<code>sentence-transformers</code>) pour le RAG vectoriel&nbsp;;</li>
+  <li><strong>Coût</strong>&nbsp;: distillation (DistilBERT), quantification — un modèle
+  66M params vs GPT-4&nbsp;: le compromis performance/coût est un critère d'ingénieur&nbsp;;
+  approfondi en M2 (LLMs, ML Ops).</li>
+</ul>
+
+<pre class="code"><code>from transformers import pipeline
+
+classifier = pipeline("text-classification",
+                      model="distilbert-base-uncased-finetuned-sst-2-english")
+print(classifier("Graph RAG is a game changer for enterprise search."))
+
+ner = pipeline("ner", aggregation_strategy="simple")
+print(ner("Michalis Vazirgiannis teaches at Ecole Polytechnique."))</code></pre>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Text mining en entreprise</h2>
+
+<ul>
+  <li><strong>Veille et classification</strong>&nbsp;: classification de tickets, e-mails, contrats&nbsp;;
+  déduplication, similarité de documents&nbsp;;</li>
+  <li><strong>Extraction</strong>&nbsp;: entités, relations, dates, montants — vers des
+  <strong>graphes de connaissances</strong> (le pipeline NER + relation extraction alimente
+  GraphRAG)&nbsp;;</li>
+  <li><strong>Résumé</strong>&nbsp;: extractif (sélection de phrases&nbsp;: TextRank = PageRank
+  sur graphe de phrases&nbsp;!) vs abstractif (génération)&nbsp;;</li>
+  <li><strong>Question-réponse et RAG</strong>&nbsp;: retriever (BM25 — le descendant direct
+  du TF-IDF — et/ou dense&nbsp;;<em>hybrid search</em>) + générateur&nbsp;; le module de
+  référence reste le M2 LLMs&nbsp;;</li>
+  <li><strong>Le français et le multilingue</strong>&nbsp;: corpus, modèles multilingues
+  (mBERT, XLM-R)&nbsp;; juridique/français = difficultés spécifiques (travaux du cours).</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Projet fil rouge</span> Pipeline complet de veille&nbsp;:
+  corpus de 500 articles → nettoyage/tokenisation → TF-IDF + LDA (thématiques) →
+  classification supervisée fine-tunée → NER + relations → export vers le mini-GraphRAG
+  (module Graph ML)&nbsp;; évaluation à chaque étage (perplexité, cohérence, macro-F1, F1 NER).
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>TF-IDF papier.</strong> Sur 3 documents donnés, calculer à la main la matrice
+  TF-IDF (log naturel) du vocabulaire réduit, puis la similarité cosinus de chaque paire&nbsp;;
+  vérifier avec <code>TfidfVectorizer</code> (attention à la normalisation L2).</li>
+
+  <li><strong>Naive Bayes.</strong> Dériver l'estimateur de \(\mathbb{P}(t \mid c)\) par MLE,
+  montrer le problème des probabilités nulles et justifier le lissage de Laplace&nbsp;;
+  implémenter et comparer à <code>MultinomialNB</code> sur 20 Newsgroups.</li>
+
+  <li><strong>Skip-gram.</strong> Écrire la perte du negative sampling&nbsp;:
+  \(\log \sigma(z_c^\top z_t) + \sum_{k}\mathbb{E}_{w_k \sim p_n}\log \sigma(-z_{w_k}^\top z_t)\)&nbsp;;
+  implémenter sur un petit corpus et vérifier que les mots de contexte proche ont des
+  embeddings proches.</li>
+
+  <li><strong>Viterbi.</strong> Implémenter Viterbi pour un POS tagger jouet (2 étiquettes,
+  vocabulaire de 5 mots)&nbsp;; vérifier l'optimalité contre l'énumération exhaustive&nbsp;;
+  complexité \(\mathcal{O}(TK^2)\).</li>
+
+  <li><strong>Analogies.</strong> Avec des embeddings pré-entraînés (GloVe fr), tester
+  10 analogies et mesurer le taux de réussite&nbsp;; discuter les biais
+  (métiers/genre) et une mitigation simple (projection neutre).</li>
+
+  <li><strong>Comparatif.</strong> Sur une tâche de classification de votre corpus&nbsp;:
+  Naive Bayes / TF-IDF+SVM / CamemBERT fine-tuné — tracer accuracy vs taille d'entraînement
+  (50, 200, 1000, tout) et commenter le crossover.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>D. Jurafsky, J. Martin, <em>Speech and Language Processing</em>, 3e éd. (draft) — <a href="https://web.stanford.edu/~jurafsky/slp3/">gratuit en ligne</a>&nbsp;: le manuel du module (ch. 1-7 pour ce cours).</li>
+  <li>C. Manning, H. Schütze, <em>Foundations of Statistical Natural Language Processing</em>, MIT Press, 1999 — la rigueur statistique (HMM, CRF).</li>
+  <li>T. Mikolov et al., <a href="https://arxiv.org/abs/1301.3781">Efficient Estimation of Word Representations in Vector Space</a>, 2013&nbsp;; J. Pennington et al., <a href="https://nlp.stanford.edu/projects/glove/">GloVe</a>, EMNLP 2014.</li>
+  <li>D. Blei, A. Ng, M. Jordan, <a href="https://jmlr.org/papers/v3/blei03a.html">Latent Dirichlet Allocation</a>, JMLR 2003.</li>
+  <li>Y. Kim, <a href="https://arxiv.org/abs/1408.5882">Convolutional Neural Networks for Sentence Classification</a>, EMNLP 2014.</li>
+  <li>J. Devlin et al., <a href="https://arxiv.org/abs/1810.04805">BERT</a>, NAACL 2019&nbsp;; A. Radford et al., GPT-2/GPT-3.</li>
+  <li><a href="https://huggingface.co/learn">HuggingFace Course</a> — les TP suivent ce parcours.</li>
+  <li>F. Rousseau, M. Vazirgiannis — travaux «&nbsp;Graph of Words&nbsp;»&nbsp;; E. Cambria et al., survey NLP+graphs — pour les ponts texte↔graphes.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p2-graph-ml.html"><span class="dir">← Précédent</span> Graph Machine and Deep Learning</a>
+  <a class="next" href="m1p2-optimal-transport.html"><span class="dir">Suivant</span> Computational Optimal Transport</a>
+</nav>
+
+</div>
+</body>
+</html>
