@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M1 · Période 2 › Cours obligatoire central</div>
+    <div class="code-line">CSC_52072_EP</div>
+    <h1>Graph Machine and Deep Learning for Generative AI</h1>
+    <div class="tags"><span class="badge mandatory">Obligatoire</span><span class="badge recommended">Cœur du master</span></div>
+    <div class="facts">Enseignants&nbsp;: Johannes Lutzeyer &amp; Michalis Vazirgiannis (École Polytechnique) · 36&nbsp;h · 4,5 ECTS · des fondements de théorie des graphes aux GNN et à la génération de graphes — le module qui donne son nom au master.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: théorie des graphes</a></li>
+    <li><a href="#ch1">Pourquoi les graphes&nbsp;?</a></li>
+    <li><a href="#ch2">Tâches d'apprentissage sur graphes</a></li>
+    <li><a href="#ch3">Node embeddings</a></li>
+    <li><a href="#ch4">Filtres spectraux</a></li>
+    <li><a href="#ch5">GNN et message passing</a></li>
+    <li><a href="#ch6">Applications et mise en œuvre</a></li>
+    <li><a href="#ch7">Génération de graphes</a></li>
+    <li><a href="#ch8">Graphes × LLMs&nbsp;: GraphRAG</a></li>
+    <li><a href="#ex">Exercices</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: théorie des graphes</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 — l'objet «&nbsp;graphe&nbsp;» (cf. Refresher CS, ch. 5)</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Définitions</strong>&nbsp;: \(G = (V, E)\)&nbsp;; orienté/non orienté, pondéré&nbsp;;
+    degré \(d_v\), voisins \(\mathcal{N}(v)\), matrice d'adjacence \(A\), matrice de degrés
+    \(D = \mathrm{diag}(d_v)\). Chemins, connexité, composantes, cycles, DAG.</li>
+    <li><strong>Euler et Königsberg (1736)</strong>&nbsp;: la traversée des 7 ponts est
+    impossible car plus de deux sommets sont de degré impair — premier théorème de la théorie
+    des graphes&nbsp;; l'abstraction (nœuds + arêtes) a fondé la discipline.</li>
+    <li><strong>Algèbre linéaire</strong>&nbsp;: \((A^k)_{ij}\) compte les chemins de longueur
+    \(k\)&nbsp;; valeurs propres de \(A\) = spectre du graphe&nbsp;; matrices symétriques
+    diagonalisables en base orthonormée (rappel d'algèbre).</li>
+    <li><strong>Matrices stochastiques</strong>&nbsp;: \(P = D^{-1}A\) = marche aléatoire&nbsp;;
+    distribution stationnaire, PageRank \(\pi \propto (I - \alpha P)^{-1}\mathbf{1}\).</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 0.1 — Le laplacien d'un graphe</span>
+  $$L = D - A, \qquad \text{ou normalisé : } L_{\mathrm{sym}} = I - D^{-1/2} A\, D^{-1/2}.$$
+  Pour tout vecteur \(x \in \mathbb{R}^n\) (\(n = |V|\))&nbsp;:
+  $$x^\top L x = \sum_{(u,v) \in E} (x_u - x_v)^2 \ \geq\ 0$$
+  — \(L\) est positive semi-définie&nbsp;; ses valeurs propres
+  \(0 = \lambda_1 \leq \lambda_2 \leq \dots \leq \lambda_n\) encodent la connectivité&nbsp;;
+  \(\lambda_2\) (<em>trou spectral</em> de Fiedler) mesure la difficulté à couper le graphe,
+  et le nombre de valeurs propres nulles = nombre de composantes connexes.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 0.2 — Le spectre raconte l'histoire</span>
+  Chemin de \(n\) sommets&nbsp;: \(\lambda_k = 2(1 - \cos\frac{k\pi}{n})\)&nbsp;;
+  graphe complet&nbsp;: \(0\) puis \(n\) (multiplicité \(n-1\))&nbsp;;
+  cycle&nbsp;: valeurs propres de \(2\cos\). Un graphe «&nbsp;deux communautés&nbsp;»
+  a un petit \(\lambda_2\)&nbsp;; le vecteur propre de Fiedler sépare les communautés —
+  c'est le <strong>spectral clustering</strong>&nbsp;: k-means sur les \(k\) premiers vecteurs
+  propres de \(L\) (pont direct avec l'ACP du module Machine Learning).
+</div>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Pourquoi les graphes&nbsp;?</h2>
+
+<p>Les données du monde réel sont <em>relationnelles</em>&nbsp;: la structure porte une
+information que les méthodes iid ignorent. Les réseaux sociaux (amitiés), les molécules
+(liaisons), les réseaux de transactions (fraude&nbsp;!), les graphes de connaissances
+d'entreprise (clients, produits, processus), les réseaux informatiques, les grappes de citations,
+les ontologies juridiques… Tous sont naturellement des graphes, souvent <strong>hétérogènes</strong>
+(nœuds/arrêtes typés) et <strong>dynamiques</strong>.</p>
+
+<div class="note">
+  <span class="tag">Le positionnement LLGA</span>
+  Les LLMs excellent sur le texte mais peinent sur&nbsp;: les <em>relations structurées</em>,
+  la <em>fidélité factuelle</em> (hallucinations), et les données non textuelles. Les graphes
+  comblent exactement ces manques&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>GraphRAG</strong>&nbsp;: connecter le LLM à des données propriétaires structurées —
+    l'approche la plus efficace aujourd'hui pour fiabiliser un LLM en entreprise&nbsp;;</li>
+    <li><strong>GNN + LLM</strong>&nbsp;: IA générative sur données structurées (générer des
+    molécules, des plans, des recommandations)&nbsp;;</li>
+    <li><strong>Applications industrielles</strong>&nbsp;: pharma/biotech (molécules = graphes),
+    finance (réseaux de transactions, risque systémique), recommandation, supply chain,
+    systèmes multi-agents (les workflows d'agents sont des DAG — module RL, ch. 7).</li>
+  </ul>
+</div>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. Tâches d'apprentissage sur graphes</h2>
+
+<table class="tbl">
+<thead><tr><th>Niveau</th><th>Tâche</th><th>Exemples</th></tr></thead>
+<tbody>
+<tr><td>nœud</td><td>classification / régression de nœuds</td><td>étiqueter un article (sujet), détecter un utilisateur frauduleux</td></tr>
+<tr><td>lien</td><td>link prediction</td><td>recommandation, complétion de graphe de connaissances</td></tr>
+<tr><td>graphe</td><td>classification / régression de graphes</td><td>propriété d'une molécule (toxique&nbsp;?), prédiction de performance</td></tr>
+<tr><td>graphe</td><td><strong>génération</strong> de graphes</td><td>conception de molécules, réseaux, graphes synthétiques</td></tr>
+<tr><td>structure</td><td>clustering de communautés</td><td>segmentation, détection d'anomalies</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <span class="tag">La difficulté fondamentale</span>
+  Un graphe n'a <em>ni taille fixe, ni ordre canonique des nœuds</em>. Toute architecture doit être
+  <strong>permutation-invariante</strong> (prédiction de graphe) ou <strong>permutation-équivariante</strong>
+  (prédiction par nœud)&nbsp;: \(f(P X, P A P^\top) = P f(X, A)\) pour toute permutation \(P\).
+  Les CNN/RNN ne satisfont pas cela — d'où des architectures dédiées.
+</div>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Node embeddings</h2>
+
+<div class="def">
+  <span class="tag">Objectif</span>
+  Apprendre \(z_v \in \mathbb{R}^d\) tel que <em>la similarité des embeddings reflète la
+  proximité dans le graphe</em>&nbsp;:
+  \(\mathrm{sim}(z_u, z_v) \approx P(\text{\(u\) voisin de \(v\)})\).
+</div>
+
+<div class="thm">
+  <span class="tag">DeepWalk (Perozzi et al., 2014) et node2vec (Grover &amp; Leskovec, 2016)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>générer des <strong>marches aléatoires</strong> depuis chaque nœud (node2vec&nbsp;:
+    paramètres \(p\) (retour) et \(q\) (exploration BFS vs DFS) qui biaisent la marche)&nbsp;;</li>
+    <li>appliquer <strong>word2vec skip-gram</strong> aux marches&nbsp;: les «&nbsp;phrases&nbsp;»
+    sont des suites de nœuds&nbsp;; maximiser \(\sum \log P(v \mid u)\) avec
+    \(P(v\mid u) \propto \exp(z_u^\top z_v)\)&nbsp;;</li>
+    <li>ensuite&nbsp;: n'importe quelle méthode vectorielle (k-means, classification…).</li>
+  </ol>
+  La marche aléatoire définit la <em>proximité</em>&nbsp;: deux nœuds co-visités souvent obtiennent
+  des embeddings proches — la <strong>k-alors que factorisation de \(P = D^{-1}A\)</strong>
+  (NetMF) explique rétroactivement pourquoi ça marche.
+</div>
+
+<div class="note">
+  <span class="tag">L'intuition «&nbsp;word2vec sur le graphe&nbsp;»</span>
+  C'est le pont historique NLP ↔ graphes&nbsp;: un corpus de marches ≈ un corpus de phrases.
+  Le même Vazirgiannis a poussé l'idée inverse — <em>Graph of Words</em>&nbsp;: représenter un
+  <em>document</em> par un graphe de termes co-occurrents, et classifier le document avec des
+  outils de graphes. Les deux directions convergent aujourd'hui dans les LLMs sur graphes (ch. 8).
+</div>
+
+<pre class="code"><code>from gensim.models import Word2Vec
+import networkx as nx
+
+G = nx.karate_club_graph()
+walks = []
+for _ in range(80):
+    for v in G.nodes():
+        walk, cur = [v], v
+        for _ in range(30):
+            cur = np.random.choice(list(G.neighbors(cur)))
+            walk.append(cur)
+        walks.append([str(n) for n in walk])
+
+model = Word2Vec(walks, vector_size=64, window=5, min_count=0, sg=1, epochs=5)
+Z = np.array([model.wv[str(v)] for v in G.nodes()])   # embeddings (34, 64)</code></pre>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Filtres spectraux</h2>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Transformée de Fourier sur graphe</span>
+  Soit \(L = U \Lambda U^\top\) (décomposition spectrale, \(U\) orthogonale). Pour un signal
+  \(x \in \mathbb{R}^n\) porté par les nœuds&nbsp;:
+  $$\hat x = U^\top x \quad (\text{analyse}), \qquad x = U \hat x \quad (\text{synthèse}).$$
+  Les «&nbsp;fréquences&nbsp;» sont les valeurs propres \(\lambda_k\) — petites = variations lentes
+  sur le graphe (basses fréquences), grandes = alternances locales (hautes fréquences). C'est la
+  convolution du module Signal Processing, avec le laplacien pour opérateur&nbsp;!
+</div>
+
+<div class="thm">
+  <span class="tag">Convolution spectrale et ChebNet (Defferrard et al., 2016)</span>
+  Filtrer&nbsp;: \(y = U\, g_\theta(\Lambda)\, U^\top x\) — coûteux (décomposition complète,
+  dépend du graphe). Astuce&nbsp;: prendre \(g_\theta\) <strong>polynomial de degré \(K\)</strong>,
+  \(g_\theta(\Lambda) = \sum_{k=0}^{K} \theta_k T_k(\tilde\Lambda)\) (polynômes de Tchebychev
+  de \(\tilde\Lambda\) renormalisé)&nbsp;; alors
+  $$y = \sum_{k=0}^K \theta_k\, T_k(\tilde L)\, x,$$
+  <em>sans vecteurs propres</em>&nbsp;: un filtre \(K\)-localisé (chaque nœud ne voit que ses
+  \(K\)-voisins) et des poids \(\theta\) <em>partagés par tous les graphes</em>.
+</div>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. GNN et message passing</h2>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — La couche de message passing (MPNN, Gilmer et al., 2017)</span>
+  $$h_v^{(\ell+1)} = \phi\Big(h_v^{(\ell)},\ \underset{u \in \mathcal{N}(v)}{\mathrm{AGG}}\ \big\{\psi\big(h_v^{(\ell)}, h_u^{(\ell)}\big)\big\}\Big)$$
+  <strong>message</strong> \(\psi\) (calculé par le voisin), <strong>agrégation</strong>
+  \(\mathrm{AGG}\) (permutation-invariante&nbsp;: somme, moyenne, max, attention),
+  <strong>update</strong> \(\phi\). Une couche = un tour de message passing = une convolution
+  = un pas de diffusion sur le graphe.
+</div>
+
+<div class="thm">
+  <span class="tag">Les trois architectures canoniques</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>GCN</strong> (Kipf &amp; Welling, 2017)&nbsp;: simplification du ChebNet à \(K=1\)&nbsp;;
+    $$H^{(\ell+1)} = \sigma\Big(\tilde D^{-1/2} \tilde A \tilde D^{-1/2}\, H^{(\ell)} W^{(\ell)}\Big), \qquad \tilde A = A + I$$
+    (auto-boucles&nbsp;; renormalisation spectrale). Moyenne pondérée des voisins transformés&nbsp;;
+    \(L\) couches = réceptive field de \(L\) sauts.</li>
+    <li><strong>GraphSAGE</strong> (Hamilton et al., 2017)&nbsp;: agrégateurs au choix
+    (mean/lstm/pool) + <em>concaténation</em> avec \(h_v\)&nbsp;; s'entraîne par
+    <em>échantillonnage de minibatchs de voisinage</em> ⇒ induction à des nœuds/graphes non vus
+    (indispensable en production&nbsp;: prédire pour un <em>nouvel</em> client).</li>
+    <li><strong>GAT</strong> (Veličković et al., 2018)&nbsp;: poids d'arête <em>appris par
+    attention</strong>&nbsp;;
+    $$\alpha_{uv} = \frac{\exp\big(\mathrm{LeakyReLU}(a^\top[W h_u \| W h_v])\big)}{\sum_{u' \in \mathcal{N}(v)} \exp\big(\dots\big)}, \qquad
+    h_v^{(\ell+1)} = \sigma\Big(\sum_{u \in \mathcal{N}(v)} \alpha_{uv}\, W h_u^{(\ell)}\Big)$$
+    — structurellement identique à l'attention des transformers (module Deep Learning, ch. 6)&nbsp;:
+    ici le graphe est <em>donné</em>, là il est <em>calculé</em>.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Over-smoothing</span>
+  Empiler beaucoup de couches GCN fait converger tous les embeddings vers le même vecteur
+  (la moyenne répétée lisse)&nbsp;; en pratique 2-4 couches suffisent, et les deep GNN
+  (ResGCN, APPNP, GCNII) contournent par résidus/propagation initiale. Autres limites
+  structurelles&nbsp;: <em>over-squashing</em> (goulots d'étranglement — «&nbsp;bottlenecks&nbsp;»)
+  et l'expressivité limitée au test de Weisfeiler-Lehman (module M2 Advanced GNN).
+</div>
+
+<pre class="code"><code>import torch
+from torch_geometric.nn import GCNConv, GATConv
+from torch_geometric.datasets import Planetoid
+
+dataset = Planetoid(root="/tmp/Cora", name="Cora")   # 2708 noeuds, 5429 aretes, 7 classes
+data = dataset[0]
+
+class GCN(torch.nn.Module):
+    def __init__(self, d_in, d_hid, n_classes):
+        super().__init__()
+        self.c1, self.c2 = GCNConv(d_in, d_hid), GCNConv(d_hid, n_classes)
+    def forward(self, x, edge_index):
+        return self.c2(torch.relu(self.c1(x, edge_index)), edge_index)
+
+model = GCN(dataset.num_features, 64, dataset.num_classes)
+opt = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+for epoch in range(200):
+    opt.zero_grad()
+    out = model(data.x, data.edge_index)
+    loss = torch.nn.functional.cross_entropy(out[data.train_mask], data.y[data.train_mask])
+    loss.backward(); opt.step()
+acc = (model(data.x, data.edge_index).argmax(1)[data.test_mask]
+       == data.y[data.test_mask]).float().mean()
+print(f"Cora test accuracy : {acc:.3f}")   # ~0.81 avec ce reglage simple</code></pre>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Applications et mise en œuvre</h2>
+
+<ul>
+  <li><strong>Recommandation</strong>&nbsp;: graphe utilisateur-item, link prediction&nbsp;;
+  PinSage (Pinterest, milliards d'arêtes) = GraphSAGE à l'échelle industrielle&nbsp;;</li>
+  <li><strong>Détection de fraude</strong>&nbsp;: classification de nœuds sur le graphe de
+  transactions&nbsp;; les flux financiers sont des graphes — l'un des débouchés LLGA&nbsp;;</li>
+  <li><strong>Chimie / biotech</strong>&nbsp;: molécule = graphe (atomes = nœuds, liaisons =
+  arêtes)&nbsp;; classification de graphes pour prédire des propriétés (toxicité, solubilité)&nbsp;;
+  benchmarks&nbsp;: ZINC, QM9, ogbg-mol*</li>
+  <li><strong>Complétion de graphes de connaissances</strong>&nbsp;: link prediction sur KG
+  hétérogènes (R-GCN, TransE)&nbsp;; base du RAG «&nbsp;entreprise&nbsp;»&nbsp;;</li>
+  <li><strong>Passage à l'échelle</strong>&nbsp;: mini-batching par sous-graphes
+  (NeighborLoader), échantillonnage de voisinage, GPU multi-nœuds —
+  benchmarks ouverts&nbsp;: Open Graph Benchmark (OGB).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Génération de graphes</h2>
+
+<div class="def">
+  <span class="tag">Problème</span>
+  Échantillonner \(G \sim p_\theta(G)\) où \(p\) est appris sur une famille de graphes
+  (molécules actives, réseaux routiers…) — éventuellement <em>conditionné</em> par une
+  propriété cible («&nbsp;génère une molécule avec cette activité&nbsp;») ou par du texte
+  (text-to-graph). C'est le versant «&nbsp;Generative AI&nbsp;» du titre du master.
+</div>
+
+<ul>
+  <li><strong>Autorégressifs par nœuds/arêtes</strong>&nbsp;: DeepGMG, GraphRNN — générer
+  séquentiellement (ajouter un nœud&nbsp;? une arête&nbsp;?)&nbsp;;</li>
+  <li><strong>VAE de graphes</strong>&nbsp;: GraphVAE (adjacence générée d'un bloc),
+  <strong>NeVAE</strong> (Vazirgiannis et al., 2019)&nbsp;: VAE pour molécules avec
+  contraintes de valence&nbsp;;</li>
+  <li><strong>Normalizing flows</strong>&nbsp;: GraphAF (autorégressif par flow)&nbsp;;</li>
+  <li><strong>Diffusion</strong>&nbsp;: EDT / DiGress (diffusion discrète sur types de nœuds
+  et d'arêtes) — l'état de l'art 2024-2026, cousin direct des modèles de diffusion du module
+  Multimodal GenAI&nbsp;;</li>
+  <li><strong>Évaluation</strong>&nbsp;: validité chimique, unicité, Fréchet ChemNet,
+  MMD de degrés/motifs — mesurer la «&nbsp;fidélité distributionnelle&nbsp;» des graphes générés
+  (les distances entre distributions de graphes utilisent… le transport optimal, module
+  suivant&nbsp;; Gromov-Wasserstein compare des graphes <em>sans correspondance de nœuds</em>).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Graphes × LLMs&nbsp;: GraphRAG et l'hybride</h2>
+
+<ul>
+  <li><strong>Knowledge graphs d'entreprise</strong>&nbsp;: extraire automatiquement un graphe
+  (entités, relations) de documents non structurés — extraction par LLM (NER + relation
+  extraction, cf. module NLP) ou par modèles dédiés&nbsp;;</li>
+  <li><strong>GraphRAG</strong>&nbsp;: au lieu d'indexer des <em>morceaux de texte</em>
+  (RAG vectoriel classique), requêter le graphe de connaissances — parcours multi-sauts,
+  raisonnement relationnel, réponses sourcées et traçables&nbsp;; hybride&nbsp;:
+  graphe <em>+</em> recherche vectorielle (GraphRAG par communautés, resp. Microsoft)&nbsp;;</li>
+  <li><strong>Faire raisonner le LLM sur le graphe</strong>&nbsp;: sérialiser le graphe en
+  texte (prompting)&nbsp;; pseudo-code prompting pour le raisonnement graphique&nbsp;;
+  GNN comme encodeur structurel + LLM comme reasoner&nbsp;; projeter des embeddings de GNN
+  dans l'espace du LLM&nbsp;;</li>
+  <li><strong>Agents sur graphes</strong>&nbsp;: le plan d'un système multi-agents <em>est</em>
+  un graphe (DAG d'orchestration)&nbsp;; le «&nbsp;graph engineering&nbsp;» (2026) =
+  programmer la topologie des agents — la boucle master&nbsp;: <em>le graphe dans le modèle
+  (attention), le graphe pour le modèle (RAG), le graphe entre les modèles (agents)</em>.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">TP final</span> Construire un mini-GraphRAG&nbsp;: 1)&nbsp;extraire d'un
+  corpus d'entreprise (rapports, e-mails simulés) un graphe d'entités avec un LLM&nbsp;;
+  2)&nbsp;répondre à des questions relationnelles («&nbsp;qui travaille avec qui sur X&nbsp;?&nbsp;»)
+  par parcours de graphe vs. par RAG vectoriel&nbsp;; 3)&nbsp;comparer fidélité et coût.
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Laplacien.</strong> Montrer \(x^\top L x = \sum_{(u,v) \in E}(x_u - x_v)^2\),
+  puis que \(\lambda_2 &gt; 0 \iff\) connexe. Calculer le spectre du chemin et du cycle.</li>
+
+  <li><strong>Permutation-équivariance.</strong> Vérifier que la couche GCN satisfait
+  \(f(PX, PAP^\top) = P f(X, A)\) et interpréter&nbsp;; montrer qu'une couche dense classique
+  (MLP sur features concaténées) ne la satisfait pas.</li>
+
+  <li><strong>node2vec.</strong> Simuler des marches avec \((p, q) = (1, 1)\), \((0{,}25, 0{,}25)\),
+  \((4, 1)\) sur le graphe du club de karaté&nbsp;; projeter les embeddings en 2D (t-SNE) et
+  relier \(p, q\) aux stratégies BFS/DFS.</li>
+
+  <li><strong>GCN à la main.</strong> Implémenter une couche GCN <em>sans</em> PyG (calculer
+  \(\tilde A\), \(\tilde D\)), vérifier l'égalité des sorties avec <code>GCNConv</code> à poids
+  fixés, puis mesurer l'over-smoothing&nbsp;: similarité cosinus moyenne des embeddings en
+  fonction du nombre de couches (1 à 10).</li>
+
+  <li><strong>Link prediction.</strong> Sur Cora&nbsp;: masquer 10&nbsp;% des arêtes, encoder
+  avec un GCN, scorer les paires par \(\sigma(z_u^\top z_v)\)&nbsp;; évaluer AUC contre des
+  négatifs échantillonnés&nbsp;; discuter l'usage pour la recommandation.</li>
+
+  <li><strong>Génération.</strong> Entraîner un petit modèle autorégressif (ajout séquentiel de
+  nœuds/arêtes, MLP + softmax) sur des molécules de ZINC&nbsp;; mesurer validité (valence
+  chimique) et unicité des graphes générés&nbsp;; comparer à un échantillonneur
+  Erdős–Rényi de même densité.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>W. Hamilton, <em>Graph Representation Learning</em>, Morgan &amp; Claypool, 2020 — <a href="https://www.cs.mcgill.ca/~wlh/grl_book/">gratuit en ligne</a>&nbsp;: <em>le</em> manuel du module.</li>
+  <li>T. Kipf, M. Welling, <a href="https://arxiv.org/abs/1609.02907">Semi-Supervised Classification with Graph Convolutional Networks</a>, ICLR 2017.</li>
+  <li>P. Veličković et al., <a href="https://arxiv.org/abs/1710.10903">Graph Attention Networks</a>, ICLR 2018.</li>
+  <li>W. Hamilton et al., <a href="https://arxiv.org/abs/1706.02216">Inductive Representation Learning on Large Graphs</a> (GraphSAGE), NeurIPS 2017.</li>
+  <li>M. Defferrard et al., <a href="https://arxiv.org/abs/1606.09375">Neural Networks on Graphs with Fast Localized Spectral Filtering</a> (ChebNet), NeurIPS 2016.</li>
+  <li>J. Gilmer et al., <a href="https://arxiv.org/abs/1704.01212">Neural Message Passing for Quantum Chemistry</a> (MPNN), ICML 2017.</li>
+  <li>M. Bronstein et al., <a href="https://arxiv.org/abs/2104.13478">Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, Gauges</a>, 2021 — la «&nbsp;charte unifiée&nbsp;» (E(n)-equivariance).</li>
+  <li>M. Vazirgiannis et al., <a href="https://arxiv.org/abs/1904.08987">NeVAE: A Deep Generative Model for Molecular Graphs</a>, AAAI 2019&nbsp;; et l'école «&nbsp;Graph of Words&nbsp;» pour le NLP par graphes.</li>
+  <li>Z. Wu et al., <a href="https://arxiv.org/abs/1901.00596">A Comprehensive Survey on Graph Neural Networks</a>, IEEE TNNLS, 2021.</li>
+  <li><a href="https://www.pyg.org">PyTorch Geometric</a> — le framework des TP&nbsp;; <a href="https://ogb.stanford.edu">OGB</a> — les benchmarks.</li>
+  <li>E. Hüsler et al. — travaux récents du groupe Vazirgiannis (Path Neural Networks, graph generation, LLM×graph) à consulter pour les projets.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p2-reinforcement-learning.html"><span class="dir">← Précédent</span> Reinforcement Learning</a>
+  <a class="next" href="m1p2-nlp-text-mining.html"><span class="dir">Suivant</span> Introduction to Text Mining and NLP</a>
+</nav>
+
+</div>
+</body>
+</html>
