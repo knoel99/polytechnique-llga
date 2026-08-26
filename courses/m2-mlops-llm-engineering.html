@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M2 · Période 2 › Cours proposé (brochure)</div>
+    <div class="code-line">M2 · P2 (brochure)</div>
+    <h1>ML Ops and LLM Engineering Principles</h1>
+    <div class="tags"><span class="badge m2">M2</span><span class="badge position">Hors track recommandé</span></div>
+    <div class="facts">Enseignant&nbsp;: équipe du master · ~24&nbsp;h · du notebook au système&nbsp;: versionner, tester, servir, surveiller et rentabiliser des applications à base de LLMs — RAG, fine-tuning, agents — avec leurs latences, leurs coûts au token et leurs garde-fous opérationnels.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: du notebook au système</a></li>
+    <li><a href="#ch1">Cycle de vie&nbsp;: versionner données, features, modèles</a></li>
+    <li><a href="#ch2">CI/CD pour le ML&nbsp;: tester données et modèles</a></li>
+    <li><a href="#ch3">Serving des LLMs&nbsp;: batching continu, latence P99</a></li>
+    <li><a href="#ch4">Coûts&nbsp;: euros par million de tokens</a></li>
+    <li><a href="#ch5">Évaluation en production&nbsp;: drift et monitoring</a></li>
+    <li><a href="#ch6">RAG Ops&nbsp;: fraîcheur et évaluation continue</a></li>
+    <li><a href="#ch7">Fine-tuning Ops&nbsp;: LoRA versionnés</a></li>
+    <li><a href="#ch8">Agents en production&nbsp;: tracing et garde-fous</a></li>
+    <li><a href="#ch9">Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a></li>
+    <li><a href="#ch10">Étude de cas et green ops</a></li>
+    <li><a href="#ex">Exercices / Labs</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: du notebook au système</h2>
+
+<div class="recap">
+  <div class="recap-title">Prérequis (modules M1/M2)</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>LLMs</strong> (module LLMs M2)&nbsp;: architecture et entraînement (ch. 2-3),
+    post-training SFT/RLHF/DPO (ch. 4-5), <em>inférence et serving avec vLLM</em>
+    (ch. 6), RAG (ch. 7), agents (ch. 8), évaluation et sûreté (ch. 9) — ce module
+    prolonge le ch. 6 en ingénierie&nbsp;;</li>
+    <li><strong>Deep Learning</strong> (M1)&nbsp;: boucles d'entraînement PyTorch, GPU,
+    checkpoints — le socle de ce qu'il faut industrialiser&nbsp;;</li>
+    <li><strong>ML</strong> (M1)&nbsp;: théorie de la généralisation, concentration
+    (Hoeffding) — utilisée au ch. 2 pour borner les tests de non-régression&nbsp;;</li>
+    <li><strong>RL</strong> (M1)&nbsp;: bandits (ch. 6) pour les tests A/B et le routing
+    de modèles&nbsp;;</li>
+    <li><strong>Refresher CS</strong> (M1)&nbsp;: conteneurs, files, complexité — le
+    vocabulaire système du serving (ch. 3).</li>
+  </ul>
+</div>
+
+<p><strong>Le constat fondateur.</strong> Un modèle qui atteint 92&nbsp;% de F1 dans un
+notebook ne «&nbsp;marche&nbsp;» pas&nbsp;: il marche <em>dans un environnement</em>. Le
+papier fondateur du domaine (Sculley et al., NeurIPS 2015) montre que la dette
+technique du ML ne loge pas dans le modèle mais autour&nbsp;: pipelines de données,
+glue code, chaînes de dépendances, configurations, et <em>feedback loops</em> — le
+modèle en production influence les données qui serviront à le réentraîner. Le LLM
+n'abolit pas cette dette, il y ajoute trois spécificités&nbsp;: le modèle est
+<em>non déterministe</em>, son <em>espace d'entrées</em> est le langage naturel tout
+entier (donc non bornable par un schéma), et son <em>coût unitaire</em> (le token) se
+facture à chaque requête.</p>
+
+<div class="def">
+  <span class="tag">Définition 0.1 — ML Ops</span>
+  Ensemble des pratiques d'ingénierie logicielle, de données et de systèmes appliquées
+  au cycle de vie complet d'un système d'apprentissage automatique&nbsp;:
+  développement, test, intégration, déploiement, surveillance, réentraînement. Le
+  <em>LLM engineering</em> en est le cas particulier où le composant central est un
+  modèle de langage (API ou poids ouverts), typiquement au sein d'un RAG, d'un
+  fine-tuning ou d'un agent.
+</div>
+
+<table class="tbl">
+  <tr><th></th><th>Logiciel classique</th><th>ML traditionnel</th><th>Application LLM</th></tr>
+  <tr><td>Unité de test</td><td>Fonction, contrat d'API</td><td>Jeu de validation, métrique</td><td>Jeu d'éval + juge + contrats de prompt</td></tr>
+  <tr><td>Régression visible</td><td>Exception, crash</td><td>Chute de métrique</td><td>Dégradation <em>floue</em>&nbsp;: style, hallucinations</td></tr>
+  <tr><td>Entrées</td><td>Typées, validables</td><td>Tabulaires, schéma</td><td>Langage naturel + documents non fiables</td></tr>
+  <tr><td>Coût d'exécution</td><td>CPU, quasi nul</td><td>Inférence CPU/GPU</td><td>Tokens facturés ou GPU dédiés, latence P99</td></tr>
+  <tr><td>Dépendance externe</td><td>Peu</td><td>Données batch</td><td>API tierce, index vectoriel, outils d'agent</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Fil rouge du module</span> Chaque chapitre contribue une brique
+  d'une même application&nbsp;: un assistant d'entreprise sur documents internes
+  (Confluence/SharePoint), avec RAG, garde-fous et budget. Le lab 12 l'assemble.
+  Les renvois «&nbsp;module LLMs ch. N&nbsp;» pointent vers le module M2
+  <em>Large Language Models</em>&nbsp;; «&nbsp;Graph ML ch. 11&nbsp;» vers le
+  GraphRAG du module M1 <em>Graph Machine and Deep Learning</em>.
+</div>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Cycle de vie&nbsp;: versionner données, features, modèles</h2>
+
+<p>Le cycle de vie ML s'étend bien au-delà de l'entraînement&nbsp;:
+<strong>collecte → labellisation → features → entraînement → évaluation → registre →
+déploiement → monitoring → (ré)entraînement</strong>. Chaque flèche de ce cycle est un
+artefact qu'il faut <em>identifier de façon immuable</em>, faute de quoi aucune
+métrique n'est reproductible — ni en debug, ni en audit, ni devant un client.</p>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Artefact et lineage</span>
+  Un <strong>artefact</strong> est tout objet produit ou consommé par le cycle&nbsp;:
+  jeu de données, schéma de features, poids, tokenizer, template de prompt, index
+  vectoriel, configuration, image conteneur. Le <strong>lineage</strong> est le graphe
+  des dépendances artefact → artefact. Un entraînement est <em>reproductible</em>
+  lorsque code + données + configuration + environnement sont tous identifiés par
+  des empreintes (hashes) et rejouables.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — La triple empreinte</span>
+  Un run d'entraînement n'est reproductible que si l'on sait rejouer le triplet
+  \((\text{code}, \text{données}, \text{config})\). En pratique&nbsp;:
+  <code>git</code> versionne le code (commit hash), <strong>DVC</strong> versionne
+  les données et les poids (empreinte du contenu, le fichier vivant hors du dépôt),
+  et <code>params.yaml</code> lie les deux. Toute métrique publiée référence les
+  trois empreintes — sinon elle n'est pas une mesure, c'est une rumeur.
+</div>
+
+<pre class="code"><code># Donnees volumineuses versionnees par contenu (DVC) -- seul le pointeur entre dans git
+$ dvc add data/faq_2026.parquet          # crée data/faq_2026.parquet.dvc (hash + taille)
+$ git add data/faq_2026.parquet.dvc &amp;&amp; git commit -m "faq v3 (dedup + PII scrub)"
+
+# Pipeline déclaratif : stages re-joués si et seulement si leurs entrées changent
+# dvc.yaml
+stages:
+  prepare:
+    cmd: python src/prepare.py data/raw/ data/train.parquet
+    deps: [data/raw/, src/prepare.py]
+    outs: [data/train.parquet]
+  finetune:
+    cmd: python src/train_lora.py --config params.yaml
+    deps: [data/train.parquet, src/train_lora.py, params.yaml]
+    outs: [artifacts/lora_faq_v3/]
+  evaluate:
+    cmd: python src/evaluate.py --run artifacts/lora_faq_v3/
+    deps: [artifacts/lora_faq_v3/, data/eval_v3.parquet]
+    metrics: [artifacts/lora_faq_v3/metrics.json:
+              {cache: false}]
+
+$ dvc exp run            # rejoue la chaîne, enregistre l'expérience
+$ dvc metrics diff       # compare v2 -> v3</code></pre>
+
+<h3>Feature stores et registres</h3>
+
+<p>Pour le ML tabulaire, un <strong>feature store</strong> (p.&nbsp;ex. Feast) sert
+la même définition de feature en <em>offline</em> (entraînement, batch) et en
+<em>online</em> (serving, low-latency), éliminant le skew entraînement/inférence —
+la classe de bug la plus sournoise du ML industriel. Pour les LLMs, l'équivalent
+fonctionnel est double&nbsp;: la <strong>cache de prompts</strong> (préfixes partagés&nbsp;;
+cf. ch. 4) et la <strong>banque d'embeddings</strong> du RAG (ch. 6), dont le schéma
+(type de chunk, modèle d'embedding, version de l'index) doit être géré comme une
+feature&nbsp;: identifiée, versionnée, rejouable.</p>
+
+<p>Le <strong>registre de modèles</strong> (MLflow, ou répertoire
+<code>hf_hub</code> privatisé) enregistre pour chaque version&nbsp;: les empreintes
+du triplet, les métriques de qualification, la signature (entrées/sorties), et le
+statut (<em>staging / production / archived</em>). Un déploiement ne référence
+jamais «&nbsp;le dernier entraînement&nbsp;» mais une version figée du registre.</p>
+
+<div class="note">
+  <span class="tag">Spécificité LLM&nbsp;: les prompts et les évals sont des artefacts</span>
+  Dans une application LLM, trois familles d'artefacts s'ajoutent au triplet
+  classique&nbsp;: (i)&nbsp;les <strong>templates de prompts</strong> (versionnés comme
+  du code, avec tests — ch. 2)&nbsp;; (ii)&nbsp;les <strong>jeux d'évaluation</strong>
+  (golden sets question → réponse attendue / documents pertinents)&nbsp;; (iii)&nbsp;les
+  <strong>modèles d'embedding et index</strong> du RAG, couplés&nbsp;: changer de
+  modèle d'embedding invalide tout l'index (ch. 6). Oublier de versionner un prompt
+  revient à ne pas versionner les poids.
+</div>
+
+<table class="tbl">
+  <tr><th>Étape</th><th>Artefact</th><th>Outil typique</th><th>Empreinte</th></tr>
+  <tr><td>Données</td><td>jeux train/eval</td><td>DVC, lakeFS</td><td>hash de contenu</td></tr>
+  <tr><td>Features / embeddings</td><td>définitions, index</td><td>Feast, base vectorielle</td><td>version de schéma</td></tr>
+  <tr><td>Entraînement</td><td>run + poids + LoRA</td><td>MLflow, HF Hub</td><td>run id + commit</td></tr>
+  <tr><td>Évaluation</td><td>rapports, métriques</td><td>MLflow, RAGAS</td><td>hash du jeu d'éval</td></tr>
+  <tr><td>Déploiement</td><td>image conteneur</td><td>registre OCI</td><td>digest sha256</td></tr>
+  <tr><td>Serving</td><td>logs, traces</td><td>OTel, Langfuse</td><td>modèle + prompt + index</td></tr>
+</table>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. CI/CD pour le ML&nbsp;: tester données et modèles</h2>
+
+<p>L'intégration continue d'un système ML teste <em>quatre</em> couches, par ordre de
+coût croissant&nbsp;: le code, les données, le modèle, l'infrastructure. La règle
+d'or&nbsp;: faire échouer le pipeline <strong>le plus tôt possible</strong>, au niveau
+le moins cher.</p>
+
+<h3>2.1 Tests de données</h3>
+
+<p>Les données sont une interface comme une autre&nbsp;: on leur écrit des contrats.
+Un <strong>contrat de données</strong> vérifie&nbsp;: le schéma (types, colonnes,
+bornes), les invariants métier (valeurs nulles admises, plages), et des propriétés
+statistiques (taux de duplication, distribution d'une colonne clé). Outils&nbsp;:
+Pandera (contrats en Python, exécutés dans le pipeline), Great Expectations
+(suites de validations déclaratives), serveurs de qualité intégrés aux
+plateformes.</p>
+
+<pre class="code"><code>import pandera as pa
+import pandas as pd
+
+schema = pa.DataFrameSchema({
+    "question": pa.Column(str, pa.Check.str_length(3, 2000)),
+    "answer":   pa.Column(str, pa.Check.str_length(1, 8000), nullable=True),
+    "lang":     pa.Column(str, pa.Check.isin(["fr", "en"])),
+    "doc_ids":  pa.Column(pa.List(str), pa.Check.list_length(1, 10)),
+    "n_tokens": pa.Column(int, pa.Check.ge(0), pa.Check.le(4096)),
+})
+
+def validate(df: pd.DataFrame) -&gt; pd.DataFrame:
+    return schema.validate(df, lazy=True)   # collecte TOUTES les erreurs</code></pre>
+
+<h3>2.2 Tests de modèles — et de prompts</h3>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Test de non-régression d'un modèle</span>
+  Soit un jeu de qualification \(D_{\text{qual}}\) fixé et une métrique
+  \(m\) (F1, taux d'exactitude, taux de refus, coût moyen). Le candidat
+  \(f_{\text{new}}\) remplace \(f_{\text{prod}}\) si
+  \(m(f_{\text{new}}) \geq m(f_{\text{prod}}) - \tau\), où \(\tau\) est la marge de
+  tolérance. Le point subtil&nbsp;: \(m\) est mesurée sur un <em>échantillon</em> —
+  décider avec un écart mesuré nécessite de savoir quand il est <em>significatif</em>.
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 2.2 — Seuil de décision par concentration (Hoeffding)</span>
+  Soit \(\ell\) une perte bornée dans \([0,1]\), mesurée sur \(n\) exemples i.i.d.
+  Avec probabilité \(\geq 1-\delta\) (des deux côtés)&nbsp;:
+  $$\bigl|\;\mathbb{E}[\ell] - \widehat{\ell}_n\;\bigr| \;\leq\;
+  \sqrt{\frac{\log(2/\delta)}{2n}}.$$
+  Pour décider d'un rollback à \(\delta = 0{,}05\) sur \(n = 1000\) exemples, deux
+  modèles dont les pertes diffèrent de moins de
+  \(\sqrt{\log 40 / 2000} \approx 0{,}027\) ne sont pas <em>distinguables</em>&nbsp;:
+  l'écart observé peut être du bruit d'échantillonnage.
+</div>
+
+<div class="proof">
+La borne de Hoeffding (démontrée au module ML) s'applique aux \(n\) variables
+i.i.d. \(\ell_i \in [0,1]\)&nbsp;:
+\(\mathbb{P}\bigl(|\overline{\ell} - \mathbb{E}\ell| \geq t\bigr) \leq
+2e^{-2nt^2}\). En égalant le membre droit à \(\delta\) on obtient
+\(t = \sqrt{\log(2/\delta)/(2n)}\). Pour la comparaison de deux modèles on l'applique
+à la variable \(\ell_{\text{new}} - \ell_{\text{prod}}\) (bornée dans \([-1,1]\),
+facteur 2 sur la plage — d'où un facteur 2 sous la racine). Avec \(n=1000\),
+\(\delta = 0{,}05\) et la version signée&nbsp;: \(t \approx 2{,}8\,&permil;\). <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Conséquence pratique</span>
+  Un «&nbsp;+0,4&nbsp;% de F1&nbsp;» mesuré sur 500 exemples ne prouve rien&nbsp;:
+  l'intervalle de confiance à 95&nbsp;% est de l'ordre de ±4&nbsp;points pour une
+  métrique à 50&nbsp;%. Les gateways de CI doivent donc exiger un écart
+  <em>minimal</em> (marge \(\tau\) <em>et</em> significativité), sous peine de
+  «&nbsp;danser sur le bruit&nbsp;» — un rollback par-ci, un rollback par-là, et une
+  dérive lente de la qualité.
+</div>
+
+<p>Les tests de modèles se déclinent aussi en <strong>tranches</strong>
+(<em>slices</em>)&nbsp;: performance par langue, par longueur de contexte, par topic,
+par catégorie d'utilisateur — un agrégat global peut masquer une chute localisée
+(thématique de fairness, cf. module Emerging ML ch. 6). Pour un LLM, s'ajoutent des
+<strong>tests de prompts</strong>&nbsp;: format de sortie (JSON valide, schéma),
+garanties de refus (phrases interdites), enrobeurs de déterminisme (température 0,
+seed) et un <strong>juge LLM</strong> comme oracle (ch. 5) — le juge lui-même
+étant versionné et testé sur un golden set.</p>
+
+<pre class="code"><code># .github/workflows/eval-gate.yml (extrait) -- gate CPU d'abord, GPU en dernier
+jobs:
+  unit:                      # 1. code : tests rapides, pas de modèle
+    steps: [run: pytest tests/unit -x -q]
+  data:                      # 2. données : contrats pandera sur le delta du jour
+    steps: [run: python -m src.validate_delta --date $(date -d yesterday +%F)]
+  eval:                      # 3. modèle : golden set + juge + contrats de prompt
+    steps:
+      - run: python -m src.eval_llm --model staging --golden data/eval_v3.parquet
+      - run: python -m src.gate --min-faithfulness 0.85 --max-regression 0.01
+  deploy:                    # 4. déploiement progressif (canary 5% -> 50% -> 100%)
+    needs: [unit, data, eval]
+    steps: [run: ./deploy.sh --canary 5]</code></pre>
+
+<h3>2.3 Livraison continue&nbsp;: canary et shadow</h3>
+
+<p>Le déploiement d'un composant ML est <em>progressif</em>&nbsp;: <strong>shadow</strong>
+(le nouveau modèle reçoit le trafic en double, sa sortie est journalisée mais non
+servie — zéro risque, coût double), <strong>canary</strong> (5&nbsp;% du trafic,
+rollback automatique si les métriques de garde — latence, taux d'erreur, feedback
+négatif — se dégradent), puis généralisation. Le rollback doit être <em>un
+seul bouton</em>&nbsp;: la version précédente (poids + prompt + index) reste
+déployable en une commande, grâce au registre du ch. 1.</p>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Serving des LLMs&nbsp;: batching continu, latence P99</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappel — module LLMs ch. 6 (inférence)</div>
+  Le décodage autorégressif génère un token par passe avant&nbsp;; l'attention exige
+  de retenir les clés/valeurs de tous les tokens passés (KV cache)&nbsp;; la
+  quantification réduit les poids et le KV&nbsp;; la complexité par token croît avec
+  la longueur de contexte. Le présent chapitre passe du «&nbsp;comment ça
+  calcule&nbsp;» au «&nbsp;comment ça tient une charge&nbsp;».
+</div>
+
+<h3>3.1 Le batching&nbsp;: d'une requête à N</h3>
+
+<p>Un GPU exécute un pas de décodage en un temps quasi <em>indépendant</em> du nombre
+de séquences présentes dans le batch (tant que la mémoire et le débit le
+permettent)&nbsp;: les opérations sont parallèles et le GPU est
+<em>memory-bound</em> sur les poids. Servir \(B\) séquences simultanément divise
+donc presque par \(B\) le coût <em>par token</em> — c'est l'argument économique du
+serving mutualisé. Le batching naïf (<em>static batching</em>) attend d'avoir \(B\)
+requêtes, les traite en bloc, et laisse les GPU inactifs dès qu'une séquence courte
+termine&nbsp;: or une requête de 20 tokens finit vite, et le batch devient clairsemé.</p>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — Batching continu (Orca, OSDI 2022)</span>
+  Ordonnancer le serving <em>au niveau de l'itération</em> plutôt que de la
+  requête&nbsp;: à chaque pas de décodage, les séquences terminées sortent du batch
+  et des requêtes en attente y entrent. Le GPU ne chôme plus entre deux requêtes.
+  Combiné au <em>selective batching</em> (opérations batchées là où c'est possible,
+  boucles par requête ailleurs), Orca revendique jusqu'à 36,9× le débit de systèmes
+  antérieurs à parité de latence.
+</div>
+
+<pre class="code"><code># Boucle de batching continu (simplifiée) -- le coeur de tout serveur LLM moderne
+running, queue = [], deque()
+
+def step():
+    # 1) decodage : une iteration pour TOUTES les sequences actives (un seul appel GPU)
+    outputs = model.forward_batch([s.tokens for s in running])
+    # 2) on retire les sequences terminees (EOS ou longueur max)
+    for s in [s for s in running if s.finished(outputs)]:
+        running.remove(s); s.finalize()
+    # 3) on admet de nouvelles requetes tant que la memoire KV le permet
+    while queue and kv_pool.has_room(queue[0].prompt_len):
+        running.append(queue.popleft().prefill())
+    # 4) scheduling preemption : si le KV sature, on decharge (recompute/swap)</code></pre>
+
+<h3>3.2 Mémoire&nbsp;: le KV cache et PagedAttention</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 3.2 — Taille du KV cache</span>
+  Pour un transformer à \(L\) couches, \(h_{\text{kv}}\) têtes de clé/valeur
+  (GQA) de dimension \(d_h\), en précision \(b\) octets, la cache d'une séquence de
+  \(T\) tokens occupe&nbsp;:
+  $$M_{\text{KV}} \;=\; 2 \cdot L \cdot h_{\text{kv}} \cdot d_h \cdot b \cdot T
+  \;\text{octets}.$$
+  <em>Exemple</em> (Llama-3-8B&nbsp;: \(L=32\), \(h_{\text{kv}}=8\), \(d_h=128\),
+  fp16 \(b=2\))&nbsp;: \(2\times32\times8\times128\times2 = 131\,072\) octets
+  ≈ 128&nbsp;Kio <strong>par token</strong>, soit 1&nbsp;Gio pour 8&nbsp;192 tokens —
+  davantage que certains modèles ne pèsent par bits de poids.
+</div>
+
+<div class="proof">
+Comptage direct. Chaque couche \(l\) stocke, pour chaque token \(t\), une clé
+\(k_t^{(l)}\) et une valeur \(v_t^{(l)}\), chacune un vecteur de
+\(h_{\text{kv}} \cdot d_h\) coefficients (les têtes d'attention «&nbsp;requêtes&nbsp;»
+peuvent être plus nombreuses — GQA — mais seules les têtes K/V sont mises en
+cache). Chaque coefficient coûte \(b\) octets&nbsp;: par couche et par token,
+\(2\,h_{\text{kv}}d_h b\) octets&nbsp;; multiplier par \(L\) couches et \(T\)
+tokens donne la formule. <span class="qed">∎</span>
+</div>
+
+<p>Le batching continu fait donc osciller l'occupation mémoire à chaque itération
+(entrées/sorties de séquences). Allouer le KV en bloc contigu maximal (longueur
+maximale de sortie réservée d'avance) gaspille&nbsp;: vLLM (SOSP 2023) traite le KV
+cache comme la mémoire virtuelle d'un OS — <strong>pages</strong> de 16 tokens,
+allouées à la demande, non contiguës, partageables entre séquences issues d'un
+même préfixe (prompt système partagé par des milliers de requêtes)&nbsp;: gaspillage
+réduit à ~4&nbsp;% contre plus de 60&nbsp;% pour l'allocation statique, débit
+2-4× les systèmes antérieurs. Conséquence ops&nbsp;: la <em>capacité réelle</em>
+d'un serveur se mesure en «&nbsp;tokens de KV disponibles&nbsp;», pas en requêtes
+concurrentes.</p>
+
+<h3>3.3 Latence&nbsp;: TTFT, TPOT, P99</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.3 — SLO de serving LLM</span>
+  <strong>TTFT</strong> (time to first token)&nbsp;: délai requête → premier token —
+  dominé par le <em>pré-remplissage</em> (prompt) et la file d'attente.
+  <strong>TPOT</strong> (time per output token)&nbsp;: cadence de génération —
+  dominée par le décodage et la contention du batch.
+  <strong>P99</strong>: quantile à 99&nbsp;% d'une distribution de latence —
+  l'engagement contractuel pertinent&nbsp;; la moyenne masque les files.
+  Un SLO typique d'assistant interactif&nbsp;: TTFT P99 &lt; 1,5&nbsp;s,
+  TPOT P99 &lt; 80&nbsp;ms/token.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.4 — Loi de Little</span>
+  Dans un système stable en régime permanent, avec \(L\) clients moyens présents,
+  \(\lambda\) clients arrivant par seconde en moyenne et \(W\) temps de séjour
+  moyen&nbsp;:
+  $$L \;=\; \lambda\, W.$$
+  Corollaire serving&nbsp;: à cadence de génération imposée (\(W\) fixé par le
+  nombre de tokens et le TPOT), le nombre de requêtes <em>concurrentes</em>
+  supportées est \(L = \lambda W\) — la concurrence nécessaire croît
+  linéairement avec le débit visé.
+</div>
+
+<div class="proof">
+Preuve par argument de sortie (direct)&nbsp;. Sur un intervalle \([0, t]\), notons
+\(A(t)\) le nombre d'arrivées et \(D(t)\) le nombre de départs. La moyenne du
+nombre de clients présents s'écrit
+\(L_t = \frac{1}{t}\int_0^t N(u)\,du\), où \(N(u)\) = présents à l'instant \(u\).
+Chaque requête contribue à cette intégrale exactement son temps de séjour&nbsp;:
+\(\int_0^t N(u)\,du = \sum_{i \,\text{partie en } \leq t} W_i + \) (résidus des
+requêtes encore présentes). En divisant par \(t\) et en faisant \(t\to\infty\)
+(stabilité&nbsp;: \(A(t)/t \to \lambda\), les résidus bornés deviennent
+négligeables), on obtient \(L = \lambda\, W\) — l'argument ne requiert aucune
+hypothèse d'indépendance ni de distribution&nbsp;; il est purement comptable. <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Débit contre latence&nbsp;: l'arbitrage du batch</span>
+  Augmenter \(B\) (batch cible) améliore le débit (coût/token amorti) mais allonge
+  la file d'attente — donc le TTFT P99. Les serveurs modernes exposent ce
+  compromis&nbsp;: <em>max_num_seqs</em>, budgets de tokens par pas, et politiques
+  de préemption (recompute vs swap). Règle pratique&nbsp;: dimensionner le batch
+  cible pour que l'occupation KV reste sous ~90&nbsp;%, et laisser l'autoscaler
+  (ch. 3.4) absorber les pics plutôt que de grossir le batch au-delà du SLO.
+</div>
+
+<h3>3.4 Autoscaling</h3>
+
+<p>Le signal pertinent pour scaler un serveur LLM n'est pas le CPU mais&nbsp;:
+la <strong>longueur de file d'attente</strong> (requêtes en attente d'admission),
+le <strong>temps d'attente moyen</strong> (TTFT − temps de pré-remplissage) et le
+<strong>taux d'occupation KV</strong>. L'autoscaling horizontal (HPA sur métrique
+personnalisée Prometheus) ajoute des réplicas&nbsp;; attention aux
+<em>pics de pré-chauffe</em> (chargement des poids&nbsp;: dizaines de secondes à
+minutes — pré-tirer les images, ou payer le P99). Pour les modèles multi-GPU
+(tenseur parallèle&nbsp;; cf. module Emerging ML ch. 2 sur le distribué), chaque
+réplica est un <em>groupe</em> de GPU&nbsp;; scaler change la granularité du
+parallélisme, pas seulement le nombre de pods.</p>
+
+<pre class="code"><code># Lancer un serveur vLLM expose (API OpenAI-compatible) sur le port 8000
+$ docker run --gpus all -p 8000:8000 vllm/vllm-openai:v0.6 \
+    --model meta-llama/Meta-Llama-3-8B-Instruct \
+    --max-num-seqs 256 --gpu-memory-utilization 0.92 \
+    --enable-prefix-caching            # reuse du KV des prefixes partages
+
+# Benchmark async : TTFT / TPOT P50-P99 en fonction de la concurrence
+import asyncio, time, statistics, httpx
+
+async def one(client, prompt, n_out=256):
+    t0 = time.perf_counter(); first = None; n = 0
+    async with client.stream("POST", "/v1/chat/completions",
+            json={"model": "...", "messages": [{"role": "user", "content": prompt}],
+                  "max_tokens": n_out, "stream": True}) as r:
+        async for chunk in r.aiter_lines():
+            if chunk.startswith("data:") and '"content"' in chunk:
+                first = first or time.perf_counter() - t0   # TTFT
+                n += 1
+    return first, (time.perf_counter() - t0 - first) / n    # (TTFT, TPOT)
+
+async def main(conc=64):
+    async with httpx.AsyncClient(base_url="http://localhost:8000",
+                                 timeout=300) as c:
+        res = await asyncio.gather(*[one(c, "Resume ce rapport en 5 points.")
+                                     for _ in range(conc)])
+    p = lambda x, q: sorted(x)[int(q * len(x))]
+    ttft = [r[0] for r in res]; tpot = [r[1] for r in res]
+    print(f"conc={conc}  TTFT p50/p99 = {p(ttft,.5):.2f}/{p(ttft,.99):.2f}s"
+          f"  TPOT p99 = {p(tpot,.99)*1e3:.0f}ms")
+
+for conc in (1, 4, 16, 64, 256): asyncio.run(main(conc))</code></pre>
+
+<table class="tbl">
+  <tr><th>Métrique</th><th>Définition</th><th>Dominée par</th><th>Cible typique (chat)</th></tr>
+  <tr><td>TTFT P50 / P99</td><td>premier token</td><td>pré-remplissage, file</td><td>&lt; 0,4 / &lt; 1,5 s</td></tr>
+  <tr><td>TPOT P99</td><td>ms/token ensuite</td><td>décodage, contention</td><td>&lt; 80 ms</td></tr>
+  <tr><td>Débit (tokens/s/GPU)</td><td>sorties agrégées</td><td>taille de batch, KV dispo</td><td>maximiser sous SLO</td></tr>
+  <tr><td>Occupation KV</td><td>% pages utilisées</td><td>concurrence × longueur</td><td>&lt; 90&nbsp;%</td></tr>
+  <tr><td>Requêtes rejetées</td><td>timeouts / 429</td><td>saturation, autoscale lent</td><td>~0</td></tr>
+</table>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Coûts&nbsp;: euros par million de tokens</h2>
+
+<p>Toute décision d'architecture LLM se ramène tôt ou tard à un coût par million de
+tokens (Mt). Les API facturent séparément l'<em>entrée</em> (prompt&nbsp;: lecture
+amortissable par cache) et la <em>sortie</em> (génération&nbsp;: chère)&nbsp;; les
+ordres de grandeur 2025-2026 couvrent grossièrement, du petit modèle open-weight au
+modèle de front, <strong>de quelques centimes à quelques dizaines d'euros par
+Mt</strong> — des tarifs qui changent plusieurs fois par an&nbsp;: toute chiffre
+précis dans un support de cours serait périmé&nbsp;; la <em>méthode</em> de calcul,
+elle, demeure.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 4.1 — Coût unitaire d'un serving auto-hébergé</span>
+  Si un serveur délivre un débit soutenu de \(R\) tokens/s (sorties, batching
+  continu) sur des GPU coûtant \(c\) €/h (location tout compris), le coût
+  opérationnel par million de tokens de sortie vaut&nbsp;:
+  $$\text{coût/Mt} \;=\; \frac{c}{R} \cdot \frac{10^6}{3600}
+  \;\approx\; 278 \cdot \frac{c}{R} \;\; \text{€/Mt}.$$
+  <em>Exemple</em>&nbsp;: un 8B sur un GPU à ~2&nbsp;€/h débitant
+  \(R = 2\,000\) tokens/s en batch → ≈ 0,28&nbsp;€/Mt&nbsp;; le même GPU en
+  requêtes isolées (batch 1, \(R \approx 60\)) → ≈ 9&nbsp;€/Mt. <strong>Le batching
+  est un facteur 30 sur la facture.</strong>
+</div>
+
+<div class="proof">
+Le serveur produit \(R\) tokens par seconde, chaque heure facturée \(c\) € produit
+donc \(3600\,R\) tokens&nbsp;; le coût par token est \(c/(3600\,R)\) €, et par
+million de tokens \(10^6 c/(3600 R) = 277{,}8\, c/R\). La division par \(R\)
+directe&nbsp;: doubler le débit divise le coût par token par deux, à matériel
+constant — c'est la justification économique du ch. 3. <span class="qed">∎</span>
+</div>
+
+<h3>4.1 Les leviers d'économie</h3>
+
+<ul style="padding-left:1.2rem;">
+  <li><strong>Cache de préfixe</strong>&nbsp;: prompt système + historique partagés
+  → le pré-remplissage est facturé/consommé une fois&nbsp;; côté API, la
+  <em>prompt caching</em> réduit le coût d'entrée des préfixes répétés (souvent
+  facturés avec décote)&nbsp;; côté vLLM, le KV est réutilisé gratuitement.</li>
+  <li><strong>Routage de modèles (cascade)</strong>&nbsp;: petit modèle d'abord,
+  escalade vers le gros si le petit «&nbsp;n'est pas sûr&nbsp;» (score de confiance,
+  accord de deux candidats, ou classeur). Décision séquentielle formalisée comme un
+  bandit (cf. module RL ch. 6)&nbsp;: on arbitre coût vs qualité requête par requête.</li>
+  <li><strong>Limite de sortie</strong>&nbsp;: la sortie coûte ~5-10× l'entrée&nbsp;;
+  contraindre <code>max_tokens</code> et le format (réponse en k points, JSON court)
+  est le levier le plus sous-estimé.</li>
+  <li><strong>Quantification</strong> (cf. LLMs ch. 6&nbsp;; Advanced Topics
+  ch. 6)&nbsp;: 4 bits ≈ ×2-3 en débit sur les poids — et des GPU plus petits.</li>
+  <li><strong>Traitement par lots différé</strong>&nbsp;: les tâches non
+  interactives (classification d'archives) partent en batch nocturne&nbsp;;
+  certaines API facturent ces modes ~50&nbsp;% moins cher.</li>
+</ul>
+
+<table class="tbl">
+  <tr><th>Critère</th><th>API managée</th><th>Auto-hébergé (poids ouverts)</th></tr>
+  <tr><td>Coût faible usage</td><td>Pay-per-token, optimal</td><td>Amortissement GPU brutal</td></tr>
+  <tr><td>Coût fort usage</td><td>Linéaire, devient cher</td><td>~0,1-1 €/Mt selon batch (prop. 4.1)</td></tr>
+  <tr><td>Données sensibles</td><td>Contrat, juridiction, zero-retention à négocier</td><td>Contrôle total (réseau fermé)</td></tr>
+  <tr><td>Latence P99</td><td>Celle du fournisseur</td><td>Maîtrisable (ch. 3), à ses frais</td></tr>
+  <tr><td>Capacité à fine-tuner</td><td>Limitée (LoRA hébergés selon offre)</td><td>Totale (ch. 7)</td></tr>
+  <tr><td>Ops</td><td>Quasi nulle</td><td>Équipe + astreinte + GPU supply</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Multilingue et coûts réels</span>
+  La facture au token interagit avec la tokenisation (cf. module LLMs ch. 1)&nbsp;:
+  un corpus français coûte typiquement 15-25&nbsp;% de tokens de plus qu'un corpus
+  anglais équivalent avec les tokenizers dominants. Le «&nbsp;prix par mot&nbsp;»
+  dépend donc de la langue — argument pour mesurer (exercice 5) plutôt que pour
+  croire les tableaux de conversion ronds.
+</div>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Évaluation en production&nbsp;: drift et monitoring</h2>
+
+<h3>5.1 Drift de données, drift de concept</h3>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — Dérives (drift)</span>
+  <strong>Dérive de données</strong>&nbsp;: la distribution des entrées change
+  (\(P(X)\) bouge — nouveaux topics, nouvelle population d'utilisateurs, nouvelle
+  source documentaire). <strong>Dérive de concept</strong>&nbsp;: la relation
+  entrée → réponse juste change (\(P(Y\mid X)\) bouge — la «&nbsp;bonne&nbsp;» réponse
+  d'hier devient fausse&nbsp;: réglementation, fusion d'entreprises, vocabulaire).
+  Pour un RAG, une troisième dérive&nbsp;: le <strong>corpus</strong> change (ch. 6).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.2 — PSI = divergence de Jeffreys</span>
+  L'indice de stabilité de population (PSI), somme sur les bacs \(i\) d'un
+  histogramme&nbsp;:
+  $$\mathrm{PSI}(p, q) \;=\; \sum_i \bigl(p_i - q_i\bigr)\,
+  \ln\frac{p_i}{q_i}
+  \;=\; \mathrm{KL}(p \,\|\, q) + \mathrm{KL}(q \,\|\, p),$$
+  est exactement la divergence de Jeffreys&nbsp;: symétrique, nulle ssi \(p = q\).
+  Seuils usuels en risque de crédit&nbsp;: PSI &lt; 0,1 stable&nbsp;;
+  0,1-0,25 à surveiller&nbsp;; &gt; 0,25 alerte.
+</div>
+
+<div class="proof">
+Développons&nbsp;:
+\(\mathrm{KL}(p\|q) = \sum_i p_i \ln(p_i/q_i)\) et
+\(\mathrm{KL}(q\|p) = \sum_i q_i \ln(q_i/p_i)\). La somme vaut
+\(\sum_i (p_i - q_i)\ln(p_i/q_i)\) — précisément le PSI. Chaque terme est
+positif (les deux facteurs \(p_i - q_i\) et \(\ln(p_i/q_i)\) ont le même
+signe)&nbsp;; nul si et seulement si \(p_i = q_i\) pour tout \(i\). La symétrie est
+évidente par la forme somme. <span class="qed">∎</span>
+</div>
+
+<p>Les détecteurs classiques&nbsp;: PSI/KL par feature (interprétable, bac par
+bac), test de Kolmogorov-Smirnov (comparaison de distributions continues, cf.
+Refresher Statistics), distance MMD (module ML), et détecteurs de flux
+(ADWIN) pour les signes en ligne. Pour un LLM, les «&nbsp;features&nbsp;» à
+surveiller sont&nbsp;: longueur de prompt, langue, topics (classifieur léger),
+présence de documents injectés, taux de troncature — <em>et</em> des proxy de
+sortie&nbsp;: taux de refus, taux de «&nbsp;je ne sais pas&nbsp;», longueur médiane
+de réponse, taux d'échec de parse JSON. Sans labels en ligne, on surveille des
+<em>symptômes</em>&nbsp;; les vraies métriques viennent du
+feedback et de l'échantillonnage.</p>
+
+<h3>5.2 Monitoring&nbsp;: trois boucles temporelles</h3>
+
+<table class="tbl">
+  <tr><th>Boucle</th><th>Latence</th><th>Signaux</th><th>Action</th></tr>
+  <tr><td>Réactive</td><td>seconde-minute</td><td>latence, erreurs 5xx, 429, saturation KV, coût/req</td><td>autoscale, throttle, rollback</td></tr>
+  <tr><td>Quotidienne</td><td>jour</td><td>PSI par feature, taux de refus, feedback 👎, éval RAGAS échantillonnée</td><td>ticket, investigation, prompt fix</td></tr>
+  <tr><td>Stratégique</td><td>semaine-mois</td><td>drift de concept (éval golden set refraîchi), dérive des coûts, adoption</td><td>réentraînement/fine-tune, migration modèle</td></tr>
+</table>
+
+<p>Les métriques d'une application LLM s'empilent&nbsp;: infra (GPU, mémoire)&nbsp;;
+serving (ch. 3)&nbsp;; <strong>qualité</strong> (feedback explicite, évals
+échantillonnées)&nbsp;; <strong>sûreté</strong> (taux de déclenchement des
+garde-fous, tentées d'injection — cf. ch. 8 et module Explainability/Security).
+Le point de vigilance structurel&nbsp;: la <strong>boucle de rétroaction</strong>
+— les données collectées en production (questions réelles, feedback) deviennent
+demain les données d'entraînement&nbsp;: le modèle oriente la distribution qu'il
+verra ensuite (biais de sélection, rich-get-richer). Documenter cette boucle fait
+partie de l'audit (ch. 9&nbsp;; module Emerging ML ch. 6 sur l'équité).</p>
+
+<h3>5.3 Le LLM-judge en CI et en production</h3>
+
+<div class="note">
+  <span class="tag">Juge&nbsp;: comment, et avec quels biais</span>
+  Un modèle juge évalue des paires (question, réponse) selon une grille
+  (fidélité au contexte, complétude, ton)&nbsp;; Zheng et al. (MT-Bench, NeurIPS
+  2023) montrent un accord avec les humains &gt; 80&nbsp;% sur des tâches de
+  conversation — <em>mais</em> avec des biais documentés&nbsp;: préférence pour la
+  première position, pour les réponses longues, et <em>auto-préférence</em> (le
+  juge favorise son propre style). Bonnes pratiques&nbsp;: ordre alterné, rubrique
+  explicite, référence fournie, golden set humain pour étalonner le juge, version du
+  juge figée en CI (ch. 1). Le juge est un <em>capteur bruité</em> — on l'utilise
+  pour détecter les régressions, pas pour certifier.
+</div>
+
+<pre class="code"><code># Mini-judge de regression en CI : compare prod vs candidate sur le golden set
+def judge_pair(question, ref, ans_prod, ans_cand, judge):
+    rub = "Reponse attendue (reference) : {ref}\nA : {a}\nB : {b}\n" \
+          "Laquelle est la plus fidele a la reference ? Reponds A, B ou EGAL."
+    out = judge(f"Q: {question}\n" + rub.format(ref=ref, a=ans_prod, b=ans_cand))
+    out_sw = judge(f"Q: {question}\n" + rub.format(ref=ref, a=ans_cand, b=ans_prod))
+    pair = {out.strip()[:4], out_sw.strip()[:4]}      # ordre alterne anti-biais
+    return "cand" if pair == {"A", "B"} else ("prod" if pair == {"B", "A"} else "egal")
+
+# gate : pas de regression significative (cf. prop. 2.2 pour la marge minimale)
+wins = sum(judge_pair(**ex) == "cand" for ex in golden)
+assert wins &gt;= 0.45 * len(golden), f"regression juge : {wins}/{len(golden)}"</code></pre>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. RAG Ops&nbsp;: fraîcheur et évaluation continue</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappel — module LLMs ch. 7 (RAG)</div>
+  Pipeline&nbsp;: chunking → embeddings → index vectoriel → retrieval (hybride
+  BM25 + dense, cf. NLP ch. 2 et 7) → reranking → génération conditionnée.
+  Le présent chapitre traite ce pipeline comme un <em>système de données</em> avec
+  contrats de fraîcheur et d'évaluation — pas comme une démo.
+</div>
+
+<h3>6.1 Indexation incrémentale et fraîcheur</h3>
+
+<p>Le corpus d'entreprise bouge&nbsp;: pages Confluence éditées, contrats signés,
+FAQ enrichies. L'index doit suivre avec un <strong>SLA de fraîcheur</strong> explicite
+(«&nbsp;un document publié est interrogeable sous 15&nbsp;minutes&nbsp;»). Le
+pattern standard&nbsp;: <em>change data capture</em> (webhooks/API du dépôt
+documentaire) → file d'événements → <em>upsert</em> incrémental dans l'index,
+clé = (source, doc_id, version). Subtilités&nbsp;:</p>
+
+<ul style="padding-left:1.2rem;">
+  <li><strong>Idempotence</strong>&nbsp;: rejouer deux fois le même événement ne
+  doit créer qu'un lot de vecteurs&nbsp;; dédoublonner par clé, marquer les chunks
+  obsolètes (soft delete) pour ne pas casser les liens des évaluations&nbsp;;</li>
+  <li><strong>Atomicité par document</strong>&nbsp;: les chunks d'un document v2
+  remplacent <em>en bloc</em> ceux de v1 (sinon le retrieval mélange les
+  versions)&nbsp;;</li>
+  <li><strong>Couplage embeddings ↔ index</strong>&nbsp;: changer de modèle
+  d'embedding exige de <em>ré-embedder</em> tout le corpus (les espaces sont
+  incompatibles entre eux)&nbsp;; dual-boot de l'index le temps de la migration,
+  puis bascule — l'index est un artefact versionné au sens du ch. 1&nbsp;;</li>
+  <li><strong>Fraîcheur ≠ reindexation totale</strong>&nbsp;: mesurer le coût
+  (tokens de résumé, temps GPU) et viser l'incrémental partout où c'est possible.</li>
+</ul>
+
+<h3>6.2 Évaluer un RAG sans humain&nbsp;: RAGAS</h3>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Métriques RAGAS (Es et al., 2023)</span>
+  Quatre métriques <em>sans référence</em>, calculées par décomposition LLM&nbsp;:
+  <strong>faithfulness</strong> (chaque affirmation de la réponse est-elle
+  attestée par le contexte&nbsp;? — anti-hallucination), <strong>answer
+  relevancy</strong> (la réponse répond-elle à la question&nbsp;?), <strong>context
+  precision</strong> (les chunks pertinents sont-ils bien classés devant&nbsp;?) et
+  <strong>context recall</strong> (les chunks nécessaires sont-ils retrouvés&nbsp;? —
+  nécessite une réponse de référence). Les deux dernières isolent le
+  <em>retrieval</em>, les deux premières la <em>génération</em>&nbsp;: c'est la
+  grille de diagnostic qui manque au F1 global.
+</div>
+
+<pre class="code"><code>from ragas import evaluate
+from ragas.metrics import (faithfulness, answer_relevancy,
+                           context_precision, context_recall)
+from datasets import Dataset
+
+ds = Dataset.from_dict({
+    "question":     q_list,          # golden set (ch. 1 : versionne ce jeu !)
+    "answer":       answers,         # sorties du pipeline candidat
+    "contexts":     retrieved_chunks,
+    "ground_truth": ref_answers,     # pour context_recall
+})
+report = evaluate(ds, metrics=[faithfulness, answer_relevancy,
+                               context_precision, context_recall])
+# gate CI : faithfulness >= 0.85 ; panneau hebdo : les 4 series temporelles</code></pre>
+
+<div class="note">
+  <span class="tag">Lire un rapport RAGAS comme un ingénieur</span>
+  <em>Recall bas, faithfulness haut</em>&nbsp;: le retrieval rate — améliorer
+  chunking, hybride, reranker. <em>Recall haut, faithfulness bas</em>&nbsp;: le
+  modèle invente malgré le contexte — prompt, modèle plus fort, citation forcée.
+  <em>Relevancy basse</em>&nbsp;: réponse hors-sujet ou verbeuse. Le piège des
+  métriques <em>sans référence</em>&nbsp;: leur juge a les biais du ch. 5 — on les
+  étalonne sur un échantillon annoté à la main avant d'en faire des seuils de CI.
+</div>
+
+<h3>6.3 Le graphe au secours du RAG</h3>
+
+<p>Le RAG vectoriel échoue sur les questions <em>globales</em> («&nbsp;quels sont
+les thèmes récurrents des rapports 2025&nbsp;?&nbsp;») qui exigent d'agréger le
+corpus entier&nbsp;; GraphRAG (Edge et al., 2024&nbsp;; cf. module Graph ML ch. 11)
+construit un graphe d'entités (extraction LLM), le partitionne en communautés
+(Leiden) et résume chaque communauté — la réponse globale devient un
+  <em>map-reduce</em> sur les résumés. Le coût ops&nbsp;: l'indexation LLM est chère
+  (chaque document passe par des appels d'extraction), donc <em>incrémentale par
+  nécessité</em>&nbsp;; les communautés se recomputent périodiquement. Arbitrage
+(vectoriel vs graphique vs hybride) à inscrire dans la table d'ablation du
+système — et à re-mesurer à chaque migration de modèle (ch. 2).</p>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Fine-tuning Ops&nbsp;: LoRA versionnés</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappel — module LLMs ch. 4-5&nbsp;: SFT, LoRA, DPO</div>
+  Le fine-tuning par instructions (SFT) adapte le modèle&nbsp;; LoRA (Hu et al.,
+  ICLR 2022) gèle les poids \(W\) et n'apprend que \(\Delta W = BA\) de rang
+  \(r \ll d\)&nbsp;: quelques dizaines de Mo au lieu de Go, entraînables sur un
+  seul GPU. DPO/RLHF (ch. 5) alignent ensuite les préférences.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — Adaptateur versionné</span>
+  Un <em>adaptateur</em> (LoRA) n'est utilisable que couplé à&nbsp;: (i)&nbsp;sa
+  <strong>base exacte</strong> (nom + version des poids)&nbsp;; (ii)&nbsp;son
+  <strong>template de prompt</strong>&nbsp;; (iii)&nbsp;ses
+  <strong>données d'entraînement</strong> (hash)&nbsp;; (iv)&nbsp;ses
+  <strong>hyperparamètres</strong> (\(r\), \(\alpha\), modules cibles). L'unité de
+  versioning n'est pas le fichier <code>.safetensors</code> mais ce quintuplet —
+  un LoRA sur la «&nbsp;mauvaise&nbsp;» base (même architecture, autre checkpoint)
+  produit des sorties silencieusement dégradées.
+</div>
+
+<pre class="code"><code># Registre d'adaptateurs : la fiche fait foi (MLflow / HF Hub prive / simple CSV)
+adapter:        faq-v3-lora
+base:           meta-llama/Meta-Llama-3-8B-Instruct@9c6b4c1d   # hash exact
+template:       prompts/faq_chat_v2.jinja                      # version git
+data:           data/faq_2026.parquet @ sha256=4f2a...         # DVC
+lora_config:    {r: 16, alpha: 32, target: [q_proj, v_proj]}
+metrics:        {eval_v3_f1: 0.91, faithfulness: 0.88, judge_winrate: 0.56}
+trained_by:     pipeline#2026-03-11, run_id 7c3e...
+deployed:       canary 5% depuis 2026-03-13, SLO OK</code></pre>
+
+<h3>7.1 Le cycle fine-tuning en production</h3>
+
+<ol style="padding-left:1.2rem;">
+  <li><strong>Collecter</strong>&nbsp;: feedback 👍/👎, corrections d'experts,
+  questions sans bonne réponse (requêtes échouées du monitoring — ch. 5)&nbsp;;</li>
+  <li><strong>Nettoyer / dédoublonner / anonymiser</strong>&nbsp;: la déduplication
+  réduit la mémorisation (cf. module Explainability/Security ch. 7)&nbsp;;</li>
+  <li><strong>Construire les paires</strong> (SFT) puis préférences (DPO) —
+  équilibre des domaines, tranches évaluées séparément (ch. 2)&nbsp;;</li>
+  <li><strong>Entraîner</strong> LoRA sur la base <em>figée</em>&nbsp;; jaloner le
+  quintuplet&nbsp;;</li>
+  <li><strong>Qualifier</strong>&nbsp;: golden set + juge + tests de sûreté
+  (le fine-tuning peut <em>dégrader</em> les refus&nbsp;!) — gate du ch. 2&nbsp;;</li>
+  <li><strong>Déployer en canary</strong> avec rollback (ch. 2.3)&nbsp;;</li>
+  <li><strong>Mesurer l'impact</strong> (winrate, coût, latence) avant
+  généralisation — le fine-tuning doit gagner contre la simple amélioration du
+  prompt <em>et</em> contre le RAG, sinon il n'a pas lieu d'être.</li>
+</ol>
+
+<div class="note">
+  <span class="tag">Serving multi-LoRA</span>
+  Cas d'usage&nbsp;: un même moteur 8B sert dix clients, chacun son LoRA (ton,
+  métier, langue). Les serveurs modernes chargent plusieurs adaptateurs sur une
+  base partagée en mémoire — une seule copie des poids, les \(\Delta W\) (quelques
+  dizaines de Mo) étant per-request. L'ops consiste à garantir l'aiguillage
+  (header client → adaptateur) et l'isolation des évaluations par locataire
+  (tranches du ch. 2). La base bouge rarement&nbsp;; les adaptateurs souvent&nbsp;:
+  deux cadences de déploiement distinctes dans le même pipeline.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.2 — Taille d'un LoRA</span>
+  Un LoRA de rang \(r\) sur une couche \(W \in \mathbb{R}^{d_{\text{out}} \times
+  d_{\text{in}}}\) stocke \(B \in \mathbb{R}^{d_{\text{out}} \times r}\) et
+  \(A \in \mathbb{R}^{r \times d_{\text{in}}}\), soit \(r\,(d_{\text{out}} +
+  d_{\text{in}})\) paramètres au lieu de \(d_{\text{out}} d_{\text{in}}\). Sur les
+  projections d'attention d'un 8B (\(d = 4096\), \(\approx\) 7 couches ciblées
+  type q/v sur 32, \(r = 16\))&nbsp;: ~0,1&nbsp;% des paramètres — quelques
+  dizaines de Mo en fp16. L'économie de stockage est un bonus&nbsp;; l'économie
+  déterminante est le <em>coût d'entraînement</em> (pas d'optimiseur sur les poids
+  gelés) et la <em>cadence de déploiement</em> (adapter hot-swap).
+</div>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Agents en production&nbsp;: tracing et garde-fous</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappel — module LLMs ch. 8 (agents)</div>
+  Un agent = LLM dans une boucle (observation → raisonnement → action via outils),
+  avec mémoire et éventuellement planification multi-étapes. Ce chapitre
+  n'ajoute pas d'intelligence&nbsp;: il ajoute l'<em>observabilité</em>, les
+  <em>budgets</em> et les <em>permissions</em> sans lesquels un agent est
+  indébuggable et dangereux.
+</div>
+
+<h3>8.1 Tracing&nbsp;: l'arbre des appels</h3>
+
+<p>Une requête d'agent se déroule en dizaines d'appels LLM et d'outils imbriqués.
+La donnée centrale est la <strong>trace</strong>&nbsp;: un arbre de
+<em>spans</em> (un span par appel&nbsp;: entrée, sortie, coût en tokens, latence,
+modèle, tentative), conforme OpenTelemetry — les vendor Langfuse/W&amp;B Weave
+s'y raccordent. Sans trace&nbsp;: aucune capacité à répondre «&nbsp;pourquoi
+l'agent a-t-il envoyé ce mail&nbsp;?&nbsp;». Avec trace&nbsp;: replay
+déterministe (en journalisant les graines/temps), analyse des goulets (quel
+outil domine la latence&nbsp;?), des coûts par étape, et détection d'anomalies
+comportementales (boucles&nbsp;: même outil, mêmes arguments, N fois).</p>
+
+<pre class="code"><code>// Span OTel d'un appel d'agent (extrait) -- tout y est pour le replay et le cout
+{
+  "trace_id": "a1b2...", "span_id": "17", "parent_id": "03",
+  "name": "llm.call",
+  "attributes": {
+    "llm.model": "llama3-8b-instruct@v3-lora-faq",
+    "llm.prompt_hash": "9e21...",         // -> template versionne (ch. 1)
+    "llm.input_tokens": 1842, "llm.output_tokens": 96,
+    "llm.cost_eur": 0.00042, "llm.latency_ms": 741,
+    "agent.step": 4, "agent.tool": "search_confluence",
+    "rag.index_version": "2026-03-11.2"
+  }
+}</code></pre>
+
+<h3>8.2 Garde-fous&nbsp;: en couches, autour de la boucle</h3>
+
+<table class="tbl">
+  <tr><th>Couche</th><th>Mécanisme</th><th>Exemple</th></tr>
+  <tr><td>Entrée</td><td>validation, classifieurs d'injection, quota</td><td>bloquer prompts de 500&nbsp;ko, détecteur d'injection (module Sécurité ch. 5-6)</td></tr>
+  <tr><td>Boucle</td><td>budgets maximaux</td><td>max 15 étapes, max 0,10&nbsp;€/tâche, timeout global</td></tr>
+  <tr><td>Action</td><td>permissions par outil, scoping</td><td>lecture seule sur Confluence&nbsp;; envoi d'e-mails = confirmation humaine</td></tr>
+  <tr><td>Sortie</td><td>validateurs de format et de contenu</td><td>schéma JSON strict&nbsp;; pas de coordonnées bancaires dans les réponses</td></tr>
+  <tr><td>Exécution</td><td>sandbox (ch. 9)</td><td>code exécuté dans conteneur éphémère sans réseau sortant</td></tr>
+  <tr><td>Observation</td><td>alertes comportementales</td><td>taux de boucles, succès par tâche, dérive des coûts</td></tr>
+</table>
+
+<div class="ex">
+  <span class="tag">Exemple 8.1 — Le budget comme garde-fou premier</span>
+  Un agent de veille effectue en moyenne 6 appels LLM + 3 appels d'outil par
+  tâche. Un utilisateur malveillant (ou un document piégé — injection indirecte,
+  cf. module Sécurité ch. 5) peut le faire boucler&nbsp;: chaque itération
+  ré-injecte un peu de contexte. Plafonner <em>par tâche</em>&nbsp;: étapes ≤ 15,
+  tokens ≤ 50&nbsp;k, coût ≤ 0,10&nbsp;€ — et couper proprement (réponse
+  dégradée&nbsp;: «&nbsp;je n'ai pas pu terminer&nbsp;»)&nbsp;: la panne devient un
+  <em>coût borné</em> au lieu d'un incident de facturation.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 8.2 — Le succès par tâche s'effondre avec la longueur</span>
+  Si chaque étape réussit indépendamment avec probabilité \(p\), une tâche de
+  \(k\) étapes réussit avec \(p^k\)&nbsp;: \(p = 0{,}95\) et \(k = 20\) donnent
+  36&nbsp;%. D'où&nbsp;: (i)&nbsp;raccourcir les chaînes (outils plus fiables,
+  plans moins profonds)&nbsp;; (ii)&nbsp;retries locaux et réflexivité&nbsp;;
+  (iii)&nbsp;évaluer les agents <em>par tâche complète</em>, jamais par étape.
+</div>
+
+<h3>8.3 Évaluer un agent</h3>
+
+<p>Métriques agents&nbsp;: <strong>taux de succès par tâche</strong> (sur des
+tâches scénarisées avec état initial et critère de réussite — p.&nbsp;ex.
+  «&nbsp;le ticket est créé avec les bons champs&nbsp;»), <strong>coût moyen par
+tâche</strong> (tokens × tarif + outils), <strong>latence P95 de bout en
+bout</strong>, <strong>taux d'intervention humaine</strong>. Les environnements
+d'évaluation doivent être <em>rejouables</em>&nbsp;: outils simulés (mock du
+Confluence, du mail) pour la CI, environnement réel échantillonné pour la
+production — la simulation exécute des centaines de tâches pour quelques centimes.</p>
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</h2>
+
+<div class="note">
+  <span class="tag">Périmètre</span>
+  Les attaques <em>contre le modèle</em> (jailbreaks, injections, empoisonnement,
+  extraction) sont le sujet du module M2 <em>Explainability, Security, Privacy of
+  LLMs</em>. Ici&nbsp;: la sécurité du <em>système autour</em> du modèle — les
+  ops d'une application LLM&nbsp;; la checklist de référence du domaine est
+  l'<a href="https://genai.owasp.org/llm-top-10/">OWASP Top 10 for LLM
+  Applications</a>.
+</div>
+
+<h3>9.1 Secrets et identités</h3>
+
+<ul style="padding-left:1.2rem;">
+  <li>Clés d'API, mots de passe de base, tokens d'index&nbsp;: jamais dans le
+  code ni les images — coffre-fort (Vault, Secret Manager) injecté au
+  démarrage&nbsp;; rotation périodique&nbsp;; scanners de dépôt en CI (un secret
+  commité = compromis, même «&nbsp;juste sur une branche&nbsp;»)&nbsp;;</li>
+  <li>Chaque service a <strong>sa</strong> identité (service account) et le
+  <strong>moindre privilège</strong>&nbsp;: le moteur RAG n'a pas besoin du droit
+  d'écriture sur le corpus&nbsp;; l'agent n'a pas besoin des credentials de la base
+  administrative&nbsp;;</li>
+  <li>Les sorties du LLM sont des <em>données</em>, jamais des
+  <em>instructions</em>&nbsp;: la réponse d'un modèle ne doit jamais être
+  évaluée/exécutée (eval, shell, SQL) sans validation — la classe de failles
+  «&nbsp;le modèle a généré le code, on l'exécute&nbsp;» est un cas particulier
+  d'injection indirecte (module Sécurité ch. 5).</li>
+</ul>
+
+<h3>9.2 Sandbox et isolation</h3>
+
+<p>Quand l'agent exécute du code (notebooks, tools «&nbsp;calculator&nbsp;»,
+plugins), l'exécution doit être <strong>confinée</strong>&nbsp;: conteneur
+éphémère, système de fichiers temporaire, réseau sortant bloqué par défaut,
+limites CPU/RAM, runtime durci (p.&nbsp;ex. gVisor/Firecracker pour l'isolation
+à noyau), et filtrage des <em>exfiltrations</em> — y compris par canal lent
+(requêtes DNS, temporisation)&nbsp;: un agent compromis par injection tentera
+d'exfiltrer via le seul canal qu'on lui a laissé (les outils&nbsp;! le
+mail&nbsp;! la sortie affichée&nbsp;?). D'où le duo permissions (ch. 8) +
+sandbox&nbsp;: même principe qu'en sécurité système — compromission probable,
+<strong>rayon d'action minimal</strong>.</p>
+
+<h3>9.3 Supply chain</h3>
+
+<ul style="padding-left:1.2rem;">
+  <li><strong>Poids de modèles</strong>&nbsp;: téléchargés depuis des sources
+  vérifiées, empreinte sha256 enregistrée dans le registre (ch. 1) — un modèle
+  open-weight est une dépendance comme une librairie, avec CVE «&nbsp;logiques&nbsp;»
+  (backdoors&nbsp;; cf. module Sécurité ch. 5) sans scanner automatique&nbsp;;</li>
+  <li><strong>Dépendances</strong>&nbsp;: lockfiles, SBOM, scans de vulnérabilités
+  classiques en CI (pareil que toute app)&nbsp;;</li>
+  <li><strong>Prompts et adaptateurs</strong>&nbsp;: review obligatoire — un
+  prompt est du code déguisé&nbsp;; un LoRA appris sur données non validées est une
+  dépendance opaque&nbsp;;</li>
+  <li><strong>Journaux</strong>&nbsp;: les traces contiennent du texte utilisateur
+  (données personnelles&nbsp;?) — rétention limitée, anonymisation, accès
+  contrôlé&nbsp;; cf. module Sécurité ch. 8-10 et le AI Act (ch. 10).</li>
+</ul>
+
+<table class="tbl">
+  <tr><th>Menace ops</th><th>Vecteur</th><th>Contremesure</th></tr>
+  <tr><td>Vol de clé API</td><td>repo, image, logs</td><td>coffre-fort + rotation + quotas fournisseur</td></tr>
+  <tr><td>Exfiltration par l'agent</td><td>outil, mail, code</td><td>permissions scopées, egress deny, sandbox</td></tr>
+  <tr><td>Déni de paiement (bill shock)</td><td>boucle d'agent, spam</td><td>budgets (ch. 8), quotas par client</td></tr>
+  <tr><td>Modèle piégé</td><td>weights backdoorés</td><td>provenance + hash + évals de sûreté (ch. 2)</td></tr>
+  <tr><td>Fuite via logs</td><td>traces verbeuses</td><td>PII scrubbing, rétention courte, accès loggué</td></tr>
+</table>
+</section>
+
+<!-- ============================ CH 10 ============================ -->
+<section class="chapter" id="ch10">
+<h2>10. Étude de cas et green ops</h2>
+
+<h3>10.1 La stack d'un assistant d'entreprise</h3>
+
+<p>Assemblons les briques. Cahier des charges&nbsp;: 2&nbsp;000 employés, SSO,
+corpus Confluence + SharePoint (~500&nbsp;ko documents), questions en français,
+réponses sourcées, aucune donnée hors périmètre, budget annuel de
+l'ordre de quelques dizaines de k€ d'inférence.</p>
+
+<table class="tbl">
+  <tr><th>Composant</th><th>Choix type</th><th>Chapitre</th><th>Points d'attention</th></tr>
+  <tr><td>Auth &amp; gateway</td><td>SSO OIDC, quotas par utilisateur</td><td>ch. 9</td><td>identité = clef des permissions agent</td></tr>
+  <tr><td> ingestion</td><td>CDC Confluence → chunks → embeddings</td><td>ch. 6</td><td>idempotence, SLA fraîcheur 15 min</td></tr>
+  <tr><td>Index</td><td>vectoriel + BM25 (hybride)</td><td>ch. 6</td><td>versionné, dual-boot en migration</td></tr>
+  <tr><td>Reranker</td><td>cross-encoder léger</td><td>ch. 6</td><td>+30&nbsp;ms, −20&nbsp;% d'erreurs de contexte typiques</td></tr>
+  <tr><td>Génération</td><td>API modèle front <em>ou</em> 8B self-host</td><td>ch. 3-4</td><td>routing selon sensibilité du document</td></tr>
+  <tr><td>Adaptation</td><td>LoRA «&nbsp;ton interne&nbsp;»</td><td>ch. 7</td><td>retour arrière = swap d'adaptateur</td></tr>
+  <tr><td>Agents</td><td>recherche + rédaction, permissions lecture</td><td>ch. 8</td><td>budgets, tracing, sandbox</td></tr>
+  <tr><td>Évaluation</td><td>golden set 500 Q/R + RAGAS hebdo + juge CI</td><td>ch. 2, 5, 6</td><td>jeu versionné, tranches par métier</td></tr>
+  <tr><td>Surveillance</td><td>Prometheus + OTel + alerting</td><td>ch. 3, 5, 8</td><td>P99 TTFT, PSI, coût/req, taux de refus</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Pourquoi pas GraphRAG&nbsp;?</span> Si l'usage dominant devient
+  «&nbsp;quelles équipes travaillent sur le sujet X&nbsp;?&nbsp;» (questions
+  <em>relationnelles</em>), le graphe d'entités (module Graph ML ch. 11&nbsp;;
+  GraphRAG d'Edge et al.) devient rentable malgré son coût d'indexation&nbsp;: la
+  réponse à la question «&nbsp;faut-il un graphe&nbsp;?&nbsp;» est un
+  <em>arbitrage mesuré</em> (éval RAGAS + ablation), pas une mode.
+</div>
+
+<h3>10.2 Green ops&nbsp;: mesurer l'énergie</h3>
+
+<p>Le coût énergétique des LLMs se concentre (i)&nbsp;au
+<strong>pré-entraînement</strong> — Patterson et al. (2021) formalisent la
+comptabilité carbone des grands entraînements (consommation, mix électrique
+régional, PUE)&nbsp;; Luccioni et al. (2022) font de même pour BLOOM y compris
+l'amortissement de l'entraînement&nbsp;; (ii)&nbsp;à l'<strong>inférence</strong>
+agrégée — des milliards de requêtes de quelques Wh chacune. Pour un
+<em>développeur</em>, l'unité utile est la consommation par requête&nbsp;: mesurable
+avec CodeCarbon (compteur CPU/GPU/PUE) autour de chaque point de service.</p>
+
+<pre class="code"><code>from codecarbon import EmissionsTracker
+
+with EmissionsTracker(measure_power_secs=1, log_level="warning") as tracker:
+    answer = rag_pipeline.answer(question)      # requete complete
+
+print(f"{tracker.total_energy_kWh * 1000:.1f} Wh pour cette requete",
+      f"({tracker.total_emissions * 1e3:.1f} gCO2e au mix local)")</code></pre>
+
+<div class="prop">
+  <span class="tag">Proposition 10.1 — Les quatre leviers verts, par ordre d'efficacité</span>
+  (1)&nbsp;<strong>Sobriété fonctionnelle</strong>&nbsp;: routage vers de petits
+  modèles, sorties plus courtes, cache (ch. 4) — divise l'énergie sans toucher au
+  matériel&nbsp;; (2)&nbsp;<strong>Quantification</strong>&nbsp;: ~2-4× sur le
+  débit énergétique par token (cf. LLMs ch. 6)&nbsp;; (3)&nbsp;<strong>Batching</strong>&nbsp;:
+  le même GPU fait plus de tokens/Wh en batch (ch. 3 — les deux propositions
+  4.1 et 10.1 sont la même équation, en euros et en Wh)&nbsp;; (4)&nbsp;<strong>Scheduling
+  géographique et temporel</strong>&nbsp;: déporter les batchs nocturnes vers les
+  régions à mix bas-carbone au moment opportun. L'ordre compte&nbsp;: on
+  n'achète pas de GPU verts avant d'avoir raccourci les sorties.
+</div>
+
+<div class="note">
+  <span class="tag">Position LLGA</span>
+  Ce module est volontairement transversal au cœur du master&nbsp;: le serving
+  (ch. 3) prolonge le module LLMs, le RAG graphique (ch. 6) prolonge le module
+  Graph ML, les agents (ch. 8) prolongent le module RL, et l'évaluation en
+  production (ch. 5) prépare le volet sûreté du module Explainability, Security,
+  Privacy. Les enseignants de ce cours proposé ne sont pas encore confirmés&nbsp;:
+  les standards et outils cités font foi&nbsp;; le groupe LLGA (LLMs &amp; Graphs)
+  de l'X est mobilisé quand c'est pertinent.
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices / Labs</h3>
+<ol>
+  <li><strong>Reproductibilité (ch. 1).</strong> Construire un mini-pipeline DVC
+  (prepare → embed → eval) sur 100 documents&nbsp;; modifier un seul document et
+  prédire quels stages se ré-exécutent&nbsp;; vérifier. Montrer qu'une métrique
+  sans les trois empreintes n'est pas rejouable.</li>
+
+  <li><strong>Contrats de données (ch. 2).</strong> Écrire un schéma Pandera pour
+  un jeu FAQ (question/réponse/langue/tokens) et faire échouer la CI sur&nbsp;:
+  doublon exact, réponse vide, langue inconnue, longueur anormale. Ajouter le
+  rapport d'erreur en artefact.</li>
+
+  <li><strong>Significativité d'un gate (ch. 2).</strong> Simuler deux modèles de
+  pertes 0,30 et 0,31 sur n = 500&nbsp;; combien de fois le test «&nbsp;pas de
+  régression&nbsp;» échoue-t-il à tort sur 100 tirages&nbsp;? En déduire une marge
+  minimale réaliste pour votre CI.</li>
+
+  <li><strong>Serving (ch. 3).</strong> Déployer un 8B en vLLM&nbsp;; tracer les
+  courbes TTFT P50/P99 et TPOT P99 pour une concurrence 1 → 256&nbsp;; localiser
+  le point de rupture (occupation KV)&nbsp;; comparer batch statique (faire
+  varier) et batching continu.</li>
+
+  <li><strong>Loi de Little en pratique (ch. 3).</strong> À partir des traces du
+  lab 4, estimer \(\lambda\), \(W\) et \(L\) sur une fenêtre de 10&nbsp;minutes&nbsp;;
+  vérifier \(L = \lambda W\) à ±10&nbsp;%&nbsp;; expliquer l'écart (non-stationnarité,
+  préemption).</li>
+
+  <li><strong>Comptabilité (ch. 4).</strong> Pour un workload donné (questions
+  courtes, réponses 300 tokens, 10&nbsp;k req/jour), chiffrer&nbsp;: API (entrée ×
+  tarif in, sortie × tarif out, cache de préfixe), self-hosted (proposition 4.1
+  avec R mesuré au lab 4). Identifier le point de bascule en requêtes/jour et sa
+  sensibilité au taux d'utilisation.</li>
+
+  <li><strong>Drift (ch. 5).</strong> Générer deux semaines de «&nbsp;logs&nbsp;»
+  simulés avec une dérive de topic au jour 9&nbsp;; implémenter PSI (prop. 5.2) et
+  KS sur les longueurs et topics&nbsp;; régler le seuil pour ≤ 1 fausse alerte par
+  semaine&nbsp;; documenter le compromis délai de détection / fausses alertes.</li>
+
+  <li><strong>RAG Ops (ch. 6).</strong> Reprendre le RAG du module LLMs ch. 7&nbsp;:
+  passer à l'indexation incrémentale (ajout de 20 documents à J+1 sans
+  réindexation totale)&nbsp;; mesurer RAGAS avant/après&nbsp;; provoquer une
+  migration d'embeddings et dérouler le dual-boot d'index.</li>
+
+  <li><strong>LoRA versionnés (ch. 7).</strong> Entraîner deux LoRA (r = 8, 32)
+  sur le même jeu&nbsp;; enregistrer les quintuplets&nbsp;; servir les deux en
+  multi-LoRA&nbsp;; évaluer&nbsp;; «&nbsp;oublier&nbsp;» volontairement la version de
+  base et observer la dégradation silencieuse — puis ajouter le contrôle de
+  compatibilité au registre.</li>
+
+  <li><strong>Agent observable (ch. 8).</strong> Instrumenter un agent recherche +
+  rédaction avec spans OTel&nbsp;; injecter trois pannes (outil qui timeout, boucle
+  de relance, contexte trop long)&nbsp;; diagnostiquer chacune <em>uniquement</em>
+  via les traces&nbsp;; ajouter budgets et plafonds, rejouer.</li>
+
+  <li><strong>Audit ops (ch. 9).</strong> Passer une mini-application LLM au crible
+  de l'OWASP Top 10 LLM&nbsp;: lister les constats, sévérité, correctifs&nbsp;;
+  vérifier en particulier&nbsp;: secrets, permissions des outils, validation des
+  sorties, rétention des logs.</li>
+
+  <li><strong>Lab fil rouge (ch. 10).</strong> Assembler l'assistant&nbsp;: RAG
+  hybride + reranker + LoRA + garde-fous + dashboard (latence, PSI, RAGAS,
+  coût/req, Wh/req via CodeCarbon)&nbsp;; présenter un «&nbsp;post-mortem
+  simulé&nbsp;»&nbsp;: une régression de faithfulness est injectée, l'équipe doit la
+  détecter (dashboard&nbsp;?) et rouler arrière (registre) en moins de 15
+  minutes.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>D. Sculley, G. Holt, D. Golovin, et al., <a href="https://papers.nips.cc/paper/5656-hidden-technical-debt-in-machine-learning-systems">Hidden Technical Debt in Machine Learning Systems</a>, NeurIPS 2015 — l'acte fondateur&nbsp;; le reste du module en déroule la dette.</li>
+  <li>G.-I. Yu, J. S. Jeong, G.-W. Kim, S. Kim, B.-G. Chun, <a href="https://arxiv.org/abs/2205.05158">Orca: A Distributed Serving System for Transformer-Based Generative Models</a>, OSDI 2022 — batching continu (iteration-level scheduling)&nbsp;;
+  W. Kwon, Z. Li, S. Zhuang, et al., <a href="https://arxiv.org/abs/2309.06180">Efficient Memory Management for Large Language Model Serving with PagedAttention</a> (vLLM), SOSP 2023 — KV paginé, préfixes partagés.</li>
+  <li>S. Es, J. James, L. Espinosa-Anke, S. Schockaert, <a href="https://arxiv.org/abs/2309.15217">RAGAS: Automated Evaluation of Retrieval Augmented Generation</a>, EACL 2024 (demo)&nbsp;— faithfulness, answer relevancy, context precision/recall.</li>
+  <li>E. J. Hu, Y. Shen, P. Wallis, et al., <a href="https://arxiv.org/abs/2106.09685">LoRA: Low-Rank Adaptation of Large Language Models</a>, ICLR 2022 — le fondement du ch. 7 (rappel du module LLMs ch. 4).</li>
+  <li>D. Edge, H. Trinh, N. Cheng, et al., <a href="https://arxiv.org/abs/2404.16130">From Local to Global: A Graph RAG Approach to Query-Focused Summarization</a>, 2024 — l'option graphique du ch. 6 (cf. module Graph ML ch. 11).</li>
+  <li>L. Zheng, W.-T. Chiang, Y. Sheng, et al., <a href="https://arxiv.org/abs/2306.05685">Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</a>, NeurIPS 2023 — accord avec les humains, biais de position/longueur/soi.</li>
+  <li>J. Gama, I. Žliobaitė, A. Bifet, M. Pechenizkiy, A. Bouchachia, <a href="https://dl.acm.org/doi/10.1145/2523813">A Survey on Concept Drift Adaptation</a>, ACM Computing Surveys 2014 — le vocabulaire du ch. 5.</li>
+  <li>D. Patterson, J. Gonzalez, Q. Le, et al., <a href="https://arxiv.org/abs/2104.10350">Carbon Emissions and Large Neural Network Training</a>, 2021&nbsp;;
+  S. Luccioni, A. Hernandez-Garcia, A. Voznyuk, et al., <a href="https://arxiv.org/abs/2211.02001">Estimating the Carbon Footprint of BLOOM</a>, 2022 — comptabilité carbone du ch. 10.</li>
+  <li>B. Beyer, C. Jones, J. Petoff, N. Murphy, <em>Site Reliability Engineering</em>, O'Reilly 2016 — SLO, error budgets, post-mortems&nbsp;;
+  H. Huyen, <em>Designing Machine Learning Systems</em>, O'Reilly 2022 — la reference ML Ops en livre.</li>
+  <li>Outillage&nbsp;: <a href="https://dvc.org">DVC</a> (données versionnées), <a href="https://mlflow.org">MLflow</a> (registre), <a href="https://feast.dev">Feast</a> (feature store), <a href="https://pandera.readthedocs.io">Pandera</a> et <a href="https://greatexpectations.io">Great Expectations</a> (contrats de données), <a href="https://opentelemetry.io">OpenTelemetry</a> / <a href="https://langfuse.com">Langfuse</a> (tracing), <a href="https://github.com/mlco2/codecarbon">CodeCarbon</a> (énergie), <a href="https://docs.vllm.ai">vLLM</a> (serving).</li>
+  <li>Standards&nbsp;: <a href="https://genai.owasp.org/llm-top-10/">OWASP Top 10 for LLM Applications</a>&nbsp;;
+  <a href="https://www.nist.gov/itl/ai-risk-management-framework">NIST AI Risk Management Framework</a> (Govern/Map/Measure/Manage) — la colonne vertébrale des chapitres 8-9, prolongée par le module Explainability, Security, Privacy.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="../index.html"><span class="dir">← Précédent</span> Programme (accueil)</a>
+  <a class="next" href="m2-explainability-security-privacy-llms.html"><span class="dir">Suivant</span> Explainability, Security, Privacy of LLMs</a>
+</nav>
+
+</div>
+</body>
+</html>
