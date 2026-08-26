@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Language Models — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M2 · Période 1 › Cours confirmé</div>
+    <div class="code-line">CSC_53432_EP</div>
+    <h1>Large Language Models</h1>
+    <div class="tags"><span class="badge m2">M2</span></div>
+    <div class="facts">Enseignant&nbsp;: Guokan Shang (MBZUAI) · 24&nbsp;h · 2 ECTS · théorie + labs sur le développement et le déploiement des LLMs&nbsp;: transformers, pré-entraînement, post-training (SFT, RLHF, DPO, GRPO), RAG, agents et multimodalité.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: de word2vec aux transformers</a></li>
+    <li><a href="#ch1">Tokenisation</a></li>
+    <li><a href="#ch2">L'architecture en profondeur</a></li>
+    <li><a href="#ch3">Pré-entraînement</a></li>
+    <li><a href="#ch4">Post-training&nbsp;: SFT et alignement</a></li>
+    <li><a href="#ch5">RLHF, DPO, GRPO</a></li>
+    <li><a href="#ch6">Faire tourner un LLM&nbsp;: inférence</a></li>
+    <li><a href="#ch7">RAG et agents</a></li>
+    <li><a href="#ch8">Multimodalité et perspectives</a></li>
+    <li><a href="#ex">Exercices / Labs</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: de word2vec aux transformers</h2>
+
+<div class="recap">
+  <div class="recap-title">Prérequis (modules M1)</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Embeddings</strong> (NLP ch. 3)&nbsp;: word2vec/GloVe — un mot = un vecteur
+    <em>statique</em>&nbsp;;</li>
+    <li><strong>Attention &amp; transformers</strong> (Deep Learning ch. 6)&nbsp;:
+    \(\mathrm{softmax}(QK^\top/\sqrt{d_k})V\), multi-tête, résidus, LayerNorm&nbsp;; lecture
+    «&nbsp;graphe de tokens&nbsp;»&nbsp;;</li>
+    <li><strong>RL</strong> (module RL)&nbsp;: politiques, gradients de politique, PPO,
+    bandits — le moteur de l'alignement&nbsp;;</li>
+    <li><strong>Cross-entropy</strong> (ML ch. 3)&nbsp;: la perte de pré-entraînement est
+    exactement la maximisation de vraisemblance du token suivant.</li>
+  </ul>
+</div>
+
+<p><strong>La trajectoire</strong>&nbsp;: n-grammes → embeddings statiques → réseaux récurrents
+(LSTM) → attention (Bahdanau 2014) → transformer (Vaswani 2017) → BERT/GPT (2018-2019) →
+scaling (GPT-3, 2020) → alignement (InstructGPT 2022, RLHF) → LLMs généralistes multimodaux
+et agents (2023-2026). Ce module couvre chaque étage technique de cette pile.</p>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Tokenisation</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — BPE (Byte Pair Encoding)</span>
+  Vocabulaire initial&nbsp;: octets&nbsp;; itérer&nbsp;: fusionner la paire adjacente la plus
+  fréquente du corpus&nbsp;; jusqu'à \(|V|\) (32k-128k) tokens. <strong>WordPiece</strong>
+  (BERT&nbsp;: fusion maximisant la vraisemblance), <strong>Unigram</strong>
+  (Segment Anything… non — modèle unigramme + algorithme de Viterbi pour segmenter),
+  <strong>SentencePiece</strong> (indépendant de la langue, gère les espaces).
+  Tout texte est une séquence de tokens&nbsp;; les nombres, le code, les langues rares se
+  décomposent parfois en 1 token = 1 caractère (coût ×4-10&nbsp;!).</div>
+
+<div class="note">
+  <span class="tag">Pourquoi ça compte</span> La tokenisation gouverne le <em>coût</em>
+  (longueur en tokens), les <em>biais</em> (arithmétique floue car «&nbsp;123&nbsp;+&nbsp;456&nbsp;»
+  se tokenise mal), le <em>multilingue</em> (le français coûte plus cher que l'anglais), et
+  même des vulnérabilités de sécurité (tokens spéciaux). Diagnostic systématique en TP avec
+  <code>tiktoken</code> / <code>tokenizers</code>.
+</div>
+
+<pre class="code"><code>import tiktoken
+enc = tiktoken.encoding_for_model("gpt-4o")
+for s in ["Les graphes pour les LLMs", "1234 + 5678 = ?", "こんにちは世界"]:
+    print(len(enc.encode(s)), enc.encode(s)[:8])</code></pre>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. L'architecture en profondeur</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Le bloc décodeur</span>
+  Un LLM empile \(N\) blocs&nbsp;:
+  $$x \leftarrow x + \mathrm{MHA}(\mathrm{LN}(x)), \qquad
+  x \leftarrow x + \mathrm{MLP}(\mathrm{LN}(x)),$$
+  avec attention <strong>causale</strong> (masque triangulaire&nbsp;: le token \(i\) ne voit que
+  \(j \leq i\)), têtes groupées (<em>grouped-query attention</em> pour l'inférence), MLP en
+  grille (SwiGLU, expansion ~4×), et embeddings de position <strong>RoPE</strong>
+  (rotations&nbsp;; généralisation relative aux longues contextes).
+</div>
+
+<ul>
+  <li><strong>Paramètres&nbsp;: où sont-ils&nbsp;?</strong> embedding (\(|V| \times d\)),
+  attention (\(4d^2\)/bloc), MLP (\(8d^2\)/bloc) — la règle \(\#\text{params} \approx
+  12 N d^2\) et le coût mémoire d'entraînement (paramètres + Adam + activations + gradients&nbsp;:
+  ~20 octets/paramètre en fp16/mixed)&nbsp;;</li>
+  <li><strong>Loi de Chinchilla</strong>&nbsp;: à compute fixé, \(D \approx 20\,P\) tokens pour
+  \(P\) paramètres (GPT-3 était «&nbsp;sous-entraîné&nbsp;»)&nbsp;; aujourd'hui on
+  sur-entraîne volontairement (Llama&nbsp;3&nbsp;: 15T tokens) pour l'inférence&nbsp;;</li>
+  <li><strong>Mixture of Experts</strong>&nbsp;: activer \(k\) experts MLP sur \(E\) —
+  décorrige capacité et coût d'inférence&nbsp;;</li>
+  <li><strong>Variantes d'attention efficaces</strong>&nbsp;: FlashAttention (exact, IO-aware),
+  sparse/sliding window (Mistral), linéaires (Mamba/SSM = alternative aux transformers —
+  «&nbsp;architectures alternatives&nbsp;» du programme officiel).</li>
+</ul>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Pré-entraînement</h2>
+
+<div class="thm">
+  <span class="tag">Objectifs de pré-entraînement (programme officiel)</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Modélisation causale (CLM)</strong> — GPT&nbsp;:
+    $$\mathcal{L} = -\sum_t \log p_\theta(x_t \mid x_{&lt;t})$$
+    — prédire le token suivant&nbsp;; génératif par construction&nbsp;;</li>
+    <li><strong>Modélisation masquée / débruitage (MLM)</strong> — BERT&nbsp;: masquer ~15&nbsp;%
+    des tokens et les prédire (bidirectionnel)&nbsp;; excellent pour l'encodage (classification,
+    retrieval), ne génère pas&nbsp;;</li>
+    <li><strong>Span corruption / text-to-text</strong> — T5&nbsp;: masquer des fragments et
+    générer&nbsp;; tout se formule en séquence→séquence.</li>
+  </ul>
+  Données&nbsp;: web (filtrage qualité, déduplication MinHash), code, ouvrages, données
+  synthétiques&nbsp;; curriculum&nbsp;; multi-lingue. Compute&nbsp;: des semaines sur
+  des milliers de GPU — jamais fait en TP&nbsp;; on étudie des <em>checkpoints</em> et des
+  courbes d'entraînement publiées (loss, scaling).
+</div>
+
+<div class="ex">
+  <span class="tag">Lab&nbsp;: entraîner un mini-GPT</span>
+  Sur un corpus type Shakespeare (~1 Mo), entraîner un transformer ~10M params (nanoGPT)&nbsp;:
+  30 min de GPU suffisent pour générer du texte crédible. Observer&nbsp;: la courbe de loss,
+  l'effet du contexte, la température d'échantillonnage.
+</div>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Post-training&nbsp;: SFT et alignement</h2>
+
+<div class="def">
+  <span class="tag">Étape 1 — Supervised Fine-Tuning (instruction tuning)</span>
+  Fine-tuner le modèle de base sur des paires (instruction, réponse) de qualité — quelques
+  dizaines/centaines de milliers d'exemples suffisent à transformer un autocomplete en
+  assistant. Détails d'ingénierie&nbsp;: masque de perte (on ne calcule la loss que sur la
+  réponse), templates de chat, données «&nbsp;distillées&nbsp;» d'un gros modèle.
+</div>
+
+<div class="def">
+  <span class="tag">Étape 2 — Pourquoi l'alignement au-delà du SFT&nbsp;?</span>
+  Le SFT imite des démonstrations&nbsp;; il n'optimise pas directement «&nbsp;la meilleure
+  réponse&nbsp;» et n'apprend pas à éviter les réponses nocives. L'idée centrale de
+  InstructGPT/ChatGPT&nbsp;: <strong>apprendre une récompense humaine</strong>, puis optimiser
+  la politique contre cette récompense (RL)&nbsp;— c'est ici que le module M1 RL devient
+  l'outil central du M2.
+</div>
+
+<pre class="code"><code># SFT avec masque de perte (pseudo-code HF TRL)
+from trl import SFTTrainer
+# - prompt : "User: ... Assistant:", completion : la reponse attendue
+# - loss calculee UNIQUEMENT sur les tokens de completion
+trainer = SFTTrainer(model="meta-llama/Llama-3.1-8B", train_dataset=..., ...)
+trainer.train()</code></pre>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. RLHF, DPO, GRPO</h2>
+
+<div class="thm">
+  <span class="tag">RLHF — pipeline classique (Ouyang et al., 2022)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Modèle de récompense</strong>&nbsp;: entraîner \(r_\phi(x, y)\) sur des
+    <em>préférences humaines</em> (paires de réponses)&nbsp;; perte Bradley-Terry&nbsp;:
+    $$\mathcal{L} = -\log \sigma\big(r_\phi(x, y^+) - r_\phi(x, y^-)\big).$$</li>
+    <li><strong>Optimisation de la politique</strong> par PPO (module RL, ch. 4)&nbsp;:
+    $$\max_\theta\ \mathbb{E}\big[r_\phi(x, y)\big] - \beta\, \mathrm{KL}\big(\pi_\theta \| \pi_{\mathrm{SFT}}\big)$$
+    — le terme KL empêche le <em>reward hacking</em> et la dérive hors distribution.</li>
+  </ol>
+</div>
+
+<div class="thm">
+  <span class="tag">DPO (Rafailov et al., 2023) — le RL sans RL</span>
+  La solution optimale du problème RLHF a une forme fermée
+  \(\pi^\star(y\mid x) \propto \pi_{\mathrm{SFT}}(y \mid x)\,e^{r(x,y)/\beta}\)&nbsp;;
+  en réinjectant dans Bradley-Terry, on obtient une <em>perte directe sur la politique</em>&nbsp;:
+  $$\mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Big(\beta \log\tfrac{\pi_\theta(y^+ \mid x)}{\pi_{\mathrm{SFT}}(y^+\mid x)}
+  - \beta \log\tfrac{\pi_\theta(y^- \mid x)}{\pi_{\mathrm{SFT}}(y^-\mid x)}\Big).$$
+  Pas de modèle de récompense, pas de rollouts — c'est le cheval de bataille de
+  l'open-source.
+</div>
+
+<div class="thm">
+  <span class="tag">RLVR et GRPO (DeepSeek, 2024)</span>
+  Quand la qualité est <strong>vérifiable</strong> (test unitaire qui passe, réponse
+  mathématique exacte), la récompense n'a plus besoin d'être apprise. <strong>GRPO</strong>&nbsp;:
+  générer un <em>groupe</em> de \(G\) réponses par prompt, estimer l'avantage
+  <em>dans le groupe</em> \(A_i = \big(r_i - \mathrm{mean}(r)\big)/\mathrm{std}(r)\), et faire
+  un pas de gradient de politique&nbsp;: $$\nabla J = \mathbb{E}\big[\nabla\log\pi_\theta(y_i\mid x)\, A_i\big] - \beta\nabla\mathrm{KL}.$$
+  — c'est le moteur des modèles de raisonnement (chaînes de pensée longues, auto-vérification)&nbsp;;
+  explorer (bandits, module RL ch. 6) devient central.
+</div>
+
+<div class="note">
+  <span class="tag">Vue d'ensemble</span>
+  SFT (imiter) → RLHF (optimiser des préférences) → DPO (préférences sans RL) →
+  RLVR/GRPO (optimiser la vérité vérifiable). Un LLM «&nbsp;moderne&nbsp;» enchaîne&nbsp;:
+  base → SFT → rejection sampling → DPO/GRPO&nbsp;; c'est exactement le plan du cours officiel
+  («&nbsp;post-training methods&nbsp;»).
+</div>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Faire tourner un LLM&nbsp;: inférence</h2>
+
+<ul>
+  <li><strong>Décodage</strong>&nbsp;: greedy, température, top-k / top-p (nucleus),
+  pénalités de répétition — rappel&nbsp;: les bandits explorent/expliquent&nbsp;;</li>
+  <li><strong>KV-cache</strong>&nbsp;: attention = cache des clés/valeurs des tokens passés&nbsp;;
+  mémoire \(\mathcal{O}(n \cdot d)\) — pourquoi le contexte long coûte cher&nbsp;;
+  <strong>speculative decoding</strong> (petit modèle propose, gros modèle vérifie)&nbsp;;</li>
+  <li><strong>Quantification</strong>&nbsp;: fp16 → int8/int4 (GPTQ, AWQ)&nbsp;; <em>scaling
+  laws de quantification</em>&nbsp;;</li>
+  <li><strong>Serving</strong>&nbsp;: batching continu, vLLM&nbsp;; coût/token&nbsp;;
+  contraintes on-prem vs API — l'angle «&nbsp;ML Ops&nbsp;» est approfondi au module M2 dédié.</li>
+</ul>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. RAG et agents</h2>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — RAG (Retrieval-Augmented Generation)</span>
+  $$p(y \mid q) \approx p_\theta\big(y \mid q, \mathrm{top}_k\, \mathrm{sim}(e_q, e_d)\big)$$
+  indexer des documents par embeddings, récupérer les plus proches du prompt, les injecter
+  dans le contexte. Réduit les hallucinations, actualise les connaissances, gère des données
+  propriétaires <em>sans ré-entraînement</em>. Variantes avancées&nbsp;: chunking
+  sémantique, re-ranking (cross-encoder), requêtes HyDE, et surtout
+  <strong>GraphRAG</strong> (module Graph ML, ch. 8)&nbsp;: le retrieval traverse un
+  <em>graphe de connaissances</em> — le cœur LLGA.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.2 — Agents LLM</span>
+  Boucle perception-action (module RL, ch. 7)&nbsp;: le LLM décide d'appeler des
+  <strong>outils</strong> (function calling), observe les résultats, itère&nbsp;;
+  ReAct, réflexion, planification&nbsp;; <strong>multi-agents</strong>&nbsp;: orchestration
+  en <strong>graphes</strong> (DAG d'agents spécialisés — scoping, recherche, vérification,
+  synthèse), frameworks type LangGraph. L'évaluation des agents (tâches, coûts, sûreté)
+  est un sujet de recherche ouvert — et un débouché majeur du master.
+</div>
+
+<pre class="code"><code># RAG minimal (pseudocode avec sentence-transformers + FAISS)
+from sentence_transformers import SentenceTransformer
+import faiss, numpy as np
+
+enc = SentenceTransformer("all-MiniLM-L6-v2")
+idx = faiss.IndexFlatIP(384); idx.add(enc.encode(chunks, normalize_embeddings=True))
+
+def answer(question, k=4):
+    D, I = idx.search(enc.encode([question], normalize_embeddings=True), k)
+    context = "\n".join(chunks[i] for i in I[0])
+    prompt = f"Réponds selon le contexte suivant :\n{context}\n\nQuestion : {question}"
+    return llm.chat(prompt)   # + citations = sources retrouvées</code></pre>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Multimodalité et perspectives</h2>
+
+<ul>
+  <li><strong>LLMs multimodaux</strong>&nbsp;: vision (ViT-encodeur → projecteur →
+  tokens dans le contexte)&nbsp;; audio&nbsp;; vidéo&nbsp;; l'espace latent commun rappelle
+  CLIP (module Multimodal GenAI, ch. 5)&nbsp;;</li>
+  <li><strong>Architectures alternatives</strong>&nbsp;: SSM/Mamba (complexité linéaire),
+  hybrides attention+SSM, xLSTM — le transformer n'a pas le monopole&nbsp;;</li>
+  <li><strong>Small Language Models &amp; distillation</strong>&nbsp;: le compromis
+  qualité/coût/latence gouverne le déploiement entreprise&nbsp;;</li>
+  <li><strong>Sûreté</strong>&nbsp;: jailbreaks, injections de prompt, fuites de données
+  d'entraînement&nbsp;; watermarking&nbsp;; le module M2 «&nbsp;Explainability, Security,
+  Privacy of LLMs&nbsp;» y est consacré&nbsp;;</li>
+  <li><strong>Recherche ouverte</strong>&nbsp;: raisonnement (o1-style), mémoire longue
+  durée, LLMs <em>sur graphes</em> (représentation textuelle vs embeddings structurés —
+  travaux du master), évaluation (benchmarks, LLM-as-judge et ses biais).</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Lab final</span> Construire un assistant documentaliste&nbsp;:
+  corpus technique → pipeline RAG (chunks, embeddings, reranking)&nbsp;; mesure de la
+  fidélité (citations vérifiables) contre le RAG vectoriel vs une version
+  <em>GraphRAG</em>&nbsp;; rapport coûts (tokens, latence).
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices / Labs</h3>
+<ol>
+  <li><strong>Tokenisation.</strong> Comparer BPE vs Unigram vs SentencePiece sur un corpus
+  multilingue&nbsp;: compression (caractères/token), couverture des nombres&nbsp;; mesurer le
+  «&nbsp;surcoût&nbsp;» du français sur l'anglais pour un même texte.</li>
+
+  <li><strong>Scaling.</strong> À partir des données publiées (LLaMA 1/2/3, Chinchilla),
+  vérifier la loi \(\mathcal{L} \approx A N^{-\alpha} + B D^{-\beta} + E\) par régression&nbsp;;
+  situer chaque modèle par rapport à l'optimum compute.</li>
+
+  <li><strong>Attention causale.</strong> Implémenter le masque triangulaire, vérifier la
+  propriété de causalité (perturber le token \(t+1\) ne change pas les logits ≤ \(t\)), et
+  mesurer le coût mémoire du KV-cache en fonction de la longueur de contexte.</li>
+
+  <li><strong>DPO papier.</strong> Dériver la forme fermée \(\pi^\star\) du problème KL-pénalisé
+  (variation classique), puis la perte DPO en réinjectant dans Bradley-Terry&nbsp;;
+  vérifier le gradient&nbsp;: il augmente la marge log-ratio des réponses préférées.</li>
+
+  <li><strong>GRPO jouet.</strong> Sur une tâche vérifiable (arithmétique binaire), entraîner
+  un mini-modèle avec GRPO (groupe de 8 réponses)&nbsp;; tracer accuracy et longueur des
+  réponses — observer l'émergence de «&nbsp;raisonnement&nbsp;» plus long.</li>
+
+  <li><strong>RAG vs longueur de contexte.</strong> Questionner un LLM avec 4k/32k/128k de
+  contexte sur un corpus&nbsp;: le «&nbsp;lost in the middle&nbsp;» apparaît-il&nbsp;?
+  Comparer avec RAG&nbsp;; discuter les compromis.</li>
+
+  <li><strong>Projet agent.</strong> Étendre le lab final&nbsp;: un agent qui choisit
+  <em>entre</em> retrieval vectoriel et requête de graphe selon le type de question
+  (relationnelle ou factuelle) — mesure de l'amélioration et du surcoût.</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>A. Vaswani et al., <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a>, NeurIPS 2017 — à connaître par cœur.</li>
+  <li>A. Radford et al., GPT-2 (2019), GPT-3 (<a href="https://arxiv.org/abs/2005.14165">Language Models are Few-Shot Learners</a>, NeurIPS 2020).</li>
+  <li>J. Hoffmann et al., <a href="https://arxiv.org/abs/2203.15556">Chinchilla</a>, 2022&nbsp;; A. Kaplan et al., <a href="https://arxiv.org/abs/2001.08361">Scaling Laws</a>, 2020.</li>
+  <li>L. Ouyang et al., <a href="https://arxiv.org/abs/2203.02155">Training language models to follow instructions with human feedback</a> (InstructGPT/RLHF), NeurIPS 2022.</li>
+  <li>R. Rafailov et al., <a href="https://arxiv.org/abs/2305.18290">Direct Preference Optimization</a>, NeurIPS 2023.</li>
+  <li>DeepSeek-AI, <a href="https://arxiv.org/abs/2402.03300">DeepSeekMath (GRPO)</a>, 2024&nbsp;; et <a href="https://arxiv.org/abs/2412.19437">DeepSeek-V3</a> (2024) pour le MoE moderne.</li>
+  <li>J. Lewis et al., <a href="https://arxiv.org/abs/2005.11401">Retrieval-Augmented Generation</a>, NeurIPS 2020&nbsp;; et les travaux GraphRAG (Microsoft, 2024).</li>
+  <li>G. Shang et al. — travaux de l'enseignant sur les embeddings de phrases et les LLMs&nbsp;: voir sa page Google Scholar pour les articles de référence du cours.</li>
+  <li>S. Raschka, <em>Build a Large Language Model (From Scratch)</em>, Manning, 2024 — le meilleur compagnon de TP&nbsp;; et <a href="https://karpathy.ai/zero-to-hero.html">Karpathy, Zero to Hero</a> (nanoGPT).</li>
+  <li><a href="https://huggingface.co/learn">HuggingFace</a>&nbsp;; <a href="https://github.com/vllm-project/vllm">vLLM</a> — l'outillage des labs.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p2-multimodal-genai.html"><span class="dir">← Précédent</span> Multimodal Generative AI</a>
+  <a class="next" href="m2-advanced-gnn.html"><span class="dir">Suivant</span> Advanced Graph Neural Networks</a>
+</nav>
+
+</div>
+</body>
+</html>
