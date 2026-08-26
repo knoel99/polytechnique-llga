@@ -7,12 +7,13 @@ Supports de cours (tutoriels HTML) pour le master **MSc&T « Large Language Mode
 Reconstituer, module par module, un **cours complet et auto-contenu** correspondant au *track recommandé* du master LLGA, destiné à un étudiant ayant **un bon niveau L3 de mathématiques**. Chaque module contient :
 
 - les **rappels** de niveau L3 nécessaires (probabilités, algèbre linéaire, analyse, algorithmique…) ;
-- le **cours proprement dit** (définitions, théorèmes, démonstrations clés, schémas) ;
+- le **cours proprement dit** (définitions, théorèmes, démonstrations, schémas) ;
+- une section **« Travaux de l'équipe pédagogique »** intégrant les publications réelles des enseignants du master ;
 - des **extraits de code Python** exécutables (NumPy / PyTorch / networkx…) ;
-- des **exercices corrigés ou guidés** ;
+- des **exercices corrigés ou guidés** (≥ 8 par module) ;
 - les **références** (livres et articles) réellement utilisées par les enseignants du master.
 
-Les cours de gestion, de langues, de sport et d'humanités ne sont pas couverts (seuls les cours scientifiques — mathématiques et informatique — le sont).
+**L'index recense par ailleurs l'intégralité des cours de la brochure et du curriculum officiel** (options P1/P2, cours M2, management, transversal) ; les modules non rédigés dans ce dépôt y apparaissent en cartes grises « non couverts ». Les cours de gestion, de langues, de sport et d'humanités ne sont pas rédigés (seuls les cours scientifiques — mathématiques et informatique — le sont).
 
 ## Le track recommandé
 
