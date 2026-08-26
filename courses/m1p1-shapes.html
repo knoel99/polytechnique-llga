@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Representation and Analysis of Shapes — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M1 · Période 1 › Option — groupe de choix</div>
+    <div class="code-line">CSC_51074_EP</div>
+    <h1>Digital Representation and Analysis of Shapes</h1>
+    <div class="tags"><span class="badge option">Option P1</span><span class="badge position">Hors track recommandé</span></div>
+    <div class="facts">Enseignants&nbsp;: Mathieu Desbrun &amp; Pooran Memari (École Polytechnique — LIX / Inria) · 36&nbsp;h · 4,5 ECTS · représenter, échantillonner, reconstruire et analyser les formes 3D&nbsp;: maillages et demi-arêtes, Voronoï et Delaunay, reconstruction de surfaces, lissage, simplification, courbure discrète, spectre et topologie — les fondations géométriques du Geometric Deep Learning de M2.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: convexité, moindres carrés, valeurs propres</a></li>
+    <li><a href="#ch1">Représenter une forme&nbsp;: maillages et demi-arêtes</a></li>
+    <li><a href="#ch2">Diagrammes de Voronoï et dualité</a></li>
+    <li><a href="#ch3">Triangulations de Delaunay&nbsp;: le critère du cercle vide</a></li>
+    <li><a href="#ch4">Échantillonnage et reconstruction de surfaces</a></li>
+    <li><a href="#ch5">Lissage&nbsp;: du laplacien uniforme aux cotangentes</a></li>
+    <li><a href="#ch6">Simplification et remaillage</a></li>
+    <li><a href="#ch7">Courbure discrète et Gauss–Bonnet</a></li>
+    <li><a href="#ch8">Le spectre des formes</a></li>
+    <li><a href="#ch9">Topologie combinatoire&nbsp;: Euler, Betti, persistance</a></li>
+    <li><a href="#ch10">Travaux de l'équipe pédagogique</a></li>
+    <li><a href="#ex">Exercices</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: convexité, moindres carrés, valeurs propres</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 mobilisés</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Enveloppe convexe</strong>&nbsp;: enveloppe convexe de \(P\) = plus petit
+    convexe contenant \(P\), décrite comme l'ensemble des barycentres
+    \(\sum_i \lambda_i p_i\), \(\lambda_i \geq 0\), \(\sum \lambda_i = 1\)&nbsp;; ses
+    faces s'obtiennent par programmes linéaires — le chapitre 3 l'utilise via le
+    <em>lift</em> paraboloïde&nbsp;;</li>
+    <li><strong>Moindres carrés</strong>&nbsp;: minimiser \(\|Ax - b\|^2\) équivaut aux
+    équations normales \(A^\top\!A x = A^\top b\)&nbsp;; interprétation géométrique&nbsp;:
+    projection orthogonale sur l'image de \(A\) — utilisée au chapitre 6 (quadriques)
+    et en reconstruction (chapitre 4)&nbsp;;</li>
+    <li><strong>Valeurs et vecteurs propres</strong>&nbsp;: une matrice symétrique
+    réelle se diagonalise en base orthonormée&nbsp;; formes quadratiques
+    \(x^\top A x\) et leur minimisation sous contrainte — le cœur du chapitre 8
+    (spectre)&nbsp;;</li>
+    <li><strong>Séries de Fourier</strong> sur \([0, 2\pi]\)&nbsp;: orthogonale des
+    sinus/exponentielles — le lissage du chapitre 5 se comprend comme un filtrage
+    passe-bas mode par mode&nbsp;;</li>
+    <li><strong>Un peu de topologie</strong>&nbsp;: homéomorphisme, composantes
+    connexes, «&nbsp;nombre de trous&nbsp;» — formalisés au chapitre 9 par la
+    caractéristique d'Euler et l'homologie.</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 0.1 — Trois objets, une dualité</span>
+  Pour un nuage fini \(P \subset \mathbb{R}^2\) en position générale, les objets
+  suivants se définissent mutuellement&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>l'<strong>enveloppe convexe</strong> \(\mathrm{conv}(P)\) (faces = points
+    «&nbsp;extrêmes&nbsp;»)&nbsp;;</li>
+    <li>le <strong>diagramme de Voronoï</strong> (cellules des points les plus
+    proches, chapitre 2)&nbsp;;</li>
+    <li>la <strong>triangulation de Delaunay</strong> (triangles à cercles
+    circonscrits vides, chapitre 3).</li>
+  </ul>
+  Le théorème 3.4 montrera que la Delaunay est l'image de la <em>partie inférieure</em>
+  de l'enveloppe convexe des points relevés sur le paraboloïde — la dualité devient un
+  théorème d'algèbre linéaire élémentaire (un plan coupe une parabole).
+</div>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Représenter une forme&nbsp;: maillages et demi-arêtes</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Quatre familles de représentations</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Explicite — nuage de points</strong>&nbsp;: \(\{p_i\}_{i=1}^n \subset
+    \mathbb{R}^3\), sortie naturelle des capteurs (LiDAR, profondeur)&nbsp;; pas de
+    connexions, ni de normales fiables&nbsp;;</li>
+    <li><strong>Explicite — maillage</strong>&nbsp;: sommets \(V\), arêtes \(E\), faces
+    \(F\) (le plus souvent des triangles)&nbsp;; c'est la lingua franca du rendu&nbsp;;</li>
+    <li><strong>Implicite</strong>&nbsp;: la forme est \(\{x : f(x) = 0\}\) pour un
+    champ scalaire \(f\) (SDF, potentiel, indicatrice)&nbsp;; union/intersection
+    triviales, échantillonnage non trivial (chapitre 4)&nbsp;;</li>
+    <li><strong>Volumique / paramétrique</strong>&nbsp;: voxels (grilles) et surfaces
+    paramétrées \(u \mapsto x(u, v)\) — patches NURBS des modeleurs, atlas de
+    cartes (charts) du remaillage (chapitre 6).</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 1.2 — Maillages propres (manifold, watertight, orientable)</span>
+  Un maillage triangulé est une <strong>surface à variétés</strong> (manifold) si&nbsp;:
+  (i) chaque arête est partagée par au plus 2 faces&nbsp;; (ii) les faces autour de
+  chaque sommet forment un cycle unique (le «&nbsp;umbrella&nbsp;»). Il est
+  <strong>watertight</strong> (fermé) si chaque arête a exactement 2 faces — il
+  délimite alors un volume&nbsp;; <strong>orientable</strong> si les normales des faces
+  se choisissent de façon cohérente (tout maillage watertight plongé sans
+  auto-intersection l'est). Ces propriétés sont <em>prérequises</em> pour les
+  opérateurs des chapitres 5 à 9&nbsp;; les nuages réels les violent — d'où le
+  chapitre 4.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — La structure demi-arête (half-edge)</span>
+  La structure de données <strong>demi-arête</strong> oriente chaque arête en deux
+  demi-arêtes \((u \to v)\) et \((v \to u)\) et mémorise, pour chaque demi-arête
+  \(h\)&nbsp;: son opposé (\(\mathrm{opp}(h)\)), la face à sa gauche
+  (\(\mathrm{face}(h)\)), la demi-arête suivante de cette face
+  (\(\mathrm{next}(h)\)) et son sommet d'origine (\(\mathrm{org}(h)\)). Alors&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>le tour d'une face s'obtient en suivant \(\mathrm{next}\)&nbsp;; le tour d'un
+    sommet (son <em>umbrella</em>) en composant
+    \(\mathrm{opp} \circ \mathrm{next}\)&nbsp;;</li>
+    <li>le <strong>voisinage 1-anneau</strong> d'un sommet — la base du lissage
+    (ch. 5), de la courbure (ch. 7) et des convolutions du Geometric Deep
+    Learning — se parcourt en \(O(\deg)\)&nbsp;;</li>
+    <li>coût mémoire&nbsp;: 2 demi-arêtes par arête × 3 pointeurs ≈ 48 octets/arête
+    — contre ~4 octets/arête pour la table brute «&nbsp;faces&nbsp;»&nbsp;; c'est le
+    prix du parcours en temps constant par voisin.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 1.4 — Le tétraèdre en tables</span>
+  \(V = 4\), \(E = 6\), \(F = 4\). Tables faces&nbsp;:
+  \((0,1,2), (0,3,1), (1,3,2), (2,3,0)\) — en vérifiant l'orientation&nbsp;: la normale
+  \((p_1 - p_0) \times (p_2 - p_0)\) pointe vers l'extérieur pour chaque face.
+  Demi-arêtes&nbsp;: 12 au total, chaque paire \((i,j)/(j,i)\) appariée. Parité
+  d'Euler&nbsp;: \(V - E + F = 4 - 6 + 4 = 2 = 2 - 2g\) ⟹ genre \(g = 0\) — le
+  tétraèdre est topologiquement une sphère (chapitre 9). Réflexe de TP&nbsp;: après
+  tout chargement de maillage, vérifier \(V - E + F\), arêtes à 1 face (bords) et à
+  3+ faces (non-manifold) — deux lignes avec des tables de hachage.
+</div>
+
+<div class="note">
+  <span class="tag">Du bon côté de la frontière</span>
+  En pratique industrielle (CGAL, libigl, OpenMesh), on distingue le maillage
+  <em>combinatoire</em> (tables, demi-arêtes) du maillage <em>géométrique</em>
+  (positions 3D)&nbsp;; deux maillages isomorphes partagent toute la théorie des
+  chapitres 5–9, indépendamment des positions. Les algorithmes de ce module
+  s'écrivent d'abord sur le combinatoire (topologie), puis se <em>plongent</em> dans
+  les positions — la même discipline que pour les graphes du module Machine
+  Learning.
+</div>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. Diagrammes de Voronoï et dualité</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Cellule de Voronoï</span>
+  Pour un ensemble fini de <strong>sites</strong> \(P = \{p_1, \dots, p_n\} \subset
+  \mathbb{R}^d\), la cellule de Voronoï de \(p_i\) est
+  $$\mathcal{V}(p_i) = \big\{\, x \in \mathbb{R}^d \;:\; \|x - p_i\| \leq \|x - p_j\|
+  \ \ \forall j \,\big\} = \bigcap_{j \neq i} H_{ij},$$
+  où \(H_{ij}\) est le demi-espace des points plus proches de \(p_i\) que de \(p_j\)
+  (délimité par le <strong>plans médiateur</strong> de \([p_i, p_j]\)). Le diagramme
+  de Voronoï \(\mathrm{Vor}(P)\) est la partition \(\bigcup_i \mathcal{V}(p_i)\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — Trois propriétés immédiates</span>
+  (i) Chaque cellule est un polytope convexe (intersection finie de demi-espaces).
+  (ii) Les cellules d'intérieur non vide forment une partition de l'espace&nbsp;;
+  chaque point de la frontière est à distance égale d'au moins deux sites.
+  (iii) Un sommet de Voronoï (point où \(d+1\) cellules se rencontrent en position
+  générale) est le centre d'une sphère passant par ces \(d+1\) sites et ne
+  contenant aucun autre site dans son intérieur.
+  <div class="proof">
+    (i) Par définition même, comme intersection des \(H_{ij}\). (ii) Pour tout
+    \(x\), l'ensemble des sites les plus proches est non vide&nbsp;; \(x\) est
+    intérieur à sa cellule s'il est strictement plus proche d'un seul site.
+    (iii) Un sommet \(v\) appartient aux cellules de \(p_{i_0}, \dots, p_{i_d}\)
+    (exactement \(d+1\) en position générale)&nbsp;:
+    \(\|v - p_{i_k}\| = \rho\) pour
+    tous les \(k\) — donc \(v\) est le centre d'une sphère de rayon \(\rho\) passant
+    par ces sites. Si un site \(p_j\) était à distance \(&lt; \rho\), alors \(v\)
+    appartiendrait à la cellule de \(p_j\), contredisant la position générale.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.3 — Complexité</span>
+  En dimension 2, un diagramme de \(n\) sites a au plus \(2n - 5\) sommets et
+  \(3n - 6\) arêtes (planaire&nbsp;— formule d'Euler)&nbsp;; en dimension \(d\), la
+  complexité pire-cas est \(\Theta(n^{\lceil d/2 \rceil})\) — déjà quadratique en
+  dimension 4&nbsp;: les Voronoï de haute dimension sont des objets <em>explicites
+  chers</em>, on les manipule via leurs graphes duaux (chapitre 3) ou par
+  requêtes (kd-trees).
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.4 — Trois sites, calcul complet</span>
+  Sites \(p_1 = (0,0)\), \(p_2 = (4,0)\), \(p_3 = (0,3)\). Plans médiateurs&nbsp;:
+  pour \([p_1 p_2]\)&nbsp;: \(x = 2\)&nbsp;; pour \([p_1 p_3]\)&nbsp;: \(y = 1{,}5\)&nbsp;;
+  pour \([p_2 p_3]\)&nbsp;: \(\|x - p_2\|^2 = \|x - p_3\|^2\) donne
+  \(8x - 6y = 7\). Le sommet de Voronoï est le centre du cercle circonscrit au
+  triangle&nbsp;: intersection de \(x = 2\) et \(y = 1{,}5\), soit
+  \((2,\, 1{,}5)\), à distance \(r = \sqrt{2^2 + 1{,}5^2} = 2{,}5\) des trois
+  sites — vérifié&nbsp;: \(\|(2,1{,}5) - (4,0)\| = \|(2,1{,}5) - (0,3)\| = 2{,}5\) ✓.
+  L'arête de Voronoï entre \(\mathcal{V}(p_1)\) et \(\mathcal{V}(p_2)\) est le
+  rayon de \(x = 2\) partant de \((2, 1{,}5)\) vers le bas. Toute la géométrie
+  du chapitre est déjà là&nbsp;: médiatrices, cercle circonscrit, dualité
+  triangle/sommet.
+</div>
+
+<div class="note">
+  <span class="tag">Applications immédiates</span>
+  Le Voronoï répond à la <em>requête de plus proche voisin</em> par localisation de
+  cellule&nbsp;; en robotique, le chemin «&nbsp;le plus loin des obstacles&nbsp;» suit
+  l'axe médian (arêtes de Voronoï)&nbsp;; en imagerie, la segmentation par
+  Voronoï de marqueurs (ce sont les <em>watersheds</em> duaux)&nbsp;; les
+  <em>Voronoi tessellations</em> échantillonnent les textures&nbsp;; et la
+  généralisation \(\mathcal{V}_S(p) = \{x : d(x, p) \leq d(x, S)\}\) (diagrammes de
+  sites complexes — segments, disques) pilote la robotique de fabrication.
+</div>
+
+<pre class="code"><code>import numpy as np
+from scipy.spatial import Voronoi, Delaunay
+
+rng = np.random.default_rng(0)
+P = rng.uniform(0, 1, (60, 2))
+
+vor = Voronoi(P)          # diagramme de Voronoi
+dela = Delaunay(P)        # triangulation duale
+
+# --- verification numerique du critere du cercle vide (chapitre 3) ---
+def circumcenter(a, b, c):
+    d = 2 * (a[0]*(b[1]-c[1]) + b[0]*(c[1]-a[1]) + c[0]*(a[1]-b[1]))
+    ux = ((a[0]**2+a[1]**2)*(b[1]-c[1]) + (b[0]**2+b[1]**2)*(c[1]-a[1])
+          + (c[0]**2+c[1]**2)*(a[1]-b[1])) / d
+    uy = ((a[0]**2+a[1]**2)*(c[0]-b[0]) + (b[0]**2+b[1]**2)*(a[0]-c[0])
+          + (c[0]**2+c[1]**2)*(b[0]-a[0])) / d
+    return np.array([ux, uy])
+
+worst = np.inf
+for tri in dela.simplices:                 # pour chaque triangle Delaunay
+    a, b, c = P[tri]
+    o = circumcenter(a, b, c); r = np.linalg.norm(a - o)
+    dmin = min(np.linalg.norm(P[j] - o) for j in range(len(P))
+               if j not in tri)
+    worst = min(worst, dmin - r)           # doit rester &gt;= 0 (marge)
+print("marge minimale cercle vide :", round(worst, 6))   # ~1e-2 ou plus
+
+# --- relaxation de Lloyd : vers un diagramme centrodal ---
+for _ in range(20):
+    vor = Voronoi(P)
+    for i, r_idx in enumerate(vor.regions[vor.point_region]):
+        if r_idx and -1 not in r_idx:
+            poly = vor.vertices[r_idx]
+            c = poly.mean(axis=0)           # approx. du centroide de la cellule
+            P[i] = 0.8 * P[i] + 0.2 * c     # deplacement amorti
+# resultat : sites presque confondus avec les centroides de leurs cellules
+</code></pre>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Triangulations de Delaunay&nbsp;: le critère du cercle vide</h2>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — Triangulation de Delaunay</span>
+  Une triangulation \(T\) de \(P\) (maximale au sens de l'inclusion des arêtes) est
+  de <strong>Delaunay</strong> si pour chaque triangle \(abc \in T\), le disque
+  circonscrit ouvert ne contient aucun point de \(P\)&nbsp;:
+  $$\forall\, abc \in T,\quad \mathrm{disk}(a, b, c) \cap P = \varnothing
+  \qquad \text{(critère du cercle vide)}.$$
+  En dimension \(d\) on remplace «&nbsp;triangle&nbsp;» par simplexe de dimension
+  \(d\) et «&nbsp;disque&nbsp;» par boule. Si \(P\) est en <em>position générale</em>
+  (pas 4 points cocycliques), la Delaunay est unique — c'est le graphe dual du
+  diagramme de Voronoï&nbsp;: un sommet de Voronoï par triangle, une arête de
+  Voronoï par arête de Delaunay.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.2 — Critère local par les angles (lemme du flip)</span>
+  Soit \(a b c d\) un quadrilatère strictement convexe triangulé par la diagonale
+  \(ac\) (triangles \(abc\) et \(acd\)). Alors&nbsp;:
+  $$d \in \mathrm{disk}(a, b, c) \iff \angle abc + \angle adc &gt; \pi.$$
+  Dans ce cas, les cercles circonscrits de \(abc\) et \(acd\) contiennent
+  respectivement \(d\) et \(b\) (violations du critère), et le <strong>flip</strong>
+  (remplacer \(ac\) par \(bd\)) restaure localement le critère et augmente
+  strictement le plus petit des six angles du quadrilatère.
+  <div class="proof">
+    <em>(i) Critère cocyclique.</em> Pour une corde \([a c]\), l'ensemble des points
+    qui voient \([a c]\) sous un angle donné est un arc de cercle (théorème de
+    l'angle inscrit)&nbsp;: si \(b\) est sur le cercle \(\Gamma\) de diamètre...
+    plus précisément, notons \(\Gamma\) le cercle circonscrit de \(a, b, c\)&nbsp;;
+    le point \(d\), opposé à \(b\) par rapport à la droite \((ac)\), voit la corde
+    \([ac]\) sous l'angle \(\pi - \angle abc\) s'il est <em>sur</em> \(\Gamma\). Si
+    \(d\) entre strictement dans le disque (en restant du côté opposé à \(b\)),
+    l'angle sous lequel il voit \([ac]\) <em>augmente</em> — l'angle inscrit croît
+    quand le point s'approche de la corde le long du cercle, et le disque est
+    l'ensemble des points «&nbsp;plus proches de la corde&nbsp;» que l'arc&nbsp;:
+    \(\angle adc &gt; \pi - \angle abc\), soit \(\angle abc + \angle adc &gt; \pi\).
+    Réciproquement, si \(d\) sort du disque, \(\angle adc &lt; \pi - \angle abc\).
+    <em>(ii) Symétrie.</em> En échangeant les rôles (\(b\) vu du triangle
+    \(acd\)), la même inégalité montre que \(b\) est dans le disque circonscrit de
+    \(acd\) exactement dans le même cas&nbsp;: les deux violations vont ensemble.
+    <em>(iii) Angles.</em> Les quatre angles «&nbsp;de flanc&nbsp;» du
+    quadrilatère (aux sommets, hors diagonale) se retrouvent tous, inchangés,
+    dans l'une ou l'autre des triangulations. Avant le flip, les angles opposés
+    à la diagonale sont \(\angle abc\) et \(\angle adc\), de somme \(&gt; \pi\)
+    (donc l'un des deux \(&gt; \pi/2\))&nbsp;; après flip, ce sont \(\angle bad\)
+    et \(\angle bcd\), de somme \(&lt; \pi\). En appliquant le point (i) aux deux
+    nouvelles paires de triangles, chacun des six angles de la nouvelle
+    triangulation est strictement plus grand que le plus petit des angles
+    opposés à l'ancienne diagonale — d'où l'augmentation du minimum.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — La Delaunay maximise le plus petit angle</span>
+  Parmi toutes les triangulations de \(P\), la triangulation de Delaunay (unique en
+  position générale) est celle qui maximise le vecteur des angles trié par ordre
+  croissant, pour l'ordre lexicographique — en particulier son plus petit angle est
+  maximal. C'est ce qui la rend indispensable en calcul scientifique&nbsp;: éviter
+  les triangles «&nbsp;aplatis&nbsp;» (grands nombres de conditionnement pour les
+  éléments finis, chapitre 5).
+  <div class="proof">
+    (Esquisse complète.) Partons d'une triangulation quelconque et appliquons les
+    flips du lemme 3.2 tant qu'une violation du cercle vide existe. Chaque flip
+    augmente strictement le vecteur d'angles trié (lemme 3.2)&nbsp;; il n'existe
+    qu'un nombre fini de triangulations, donc le processus s'arrête sur une
+    triangulation sans violation&nbsp;: elle est de Delaunay (critère local ⟹
+    global&nbsp;: toute triangulation dont <em>tous</em> les triangles ont le cercle
+    vide est la Delaunay). L'argument d'échange standard entre triangulations
+    (toute paire de triangulations se relie par une suite de flips) montre que tout
+    maximum lexicographique est sans violation&nbsp;: l'optimum est la Delaunay.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.4 — Relever sur le paraboloïde&nbsp;: Delaunay = enveloppe convexe inférieure</span>
+  Via le <strong>lift</strong> \(\ell(x, y) = (x, y, x^2 + y^2)\), un triangle \(abc\)
+  de \(P\) a son cercle circonscrit vide <em>si et seulement si</em> la facette
+  \(\ell(a)\ell(b)\ell(c)\) appartient à l'enveloppe convexe <em>inférieure</em> des
+  points relevés. La Delaunay est donc calculable par n'importe quel algorithme
+  d'enveloppe convexe 3D — et sa construction est en fait un problème
+  d'optimisation linéaire.
+  <div class="proof">
+    Soit \(c\) le centre et \(r\) le rayon du cercle circonscrit de \(abc\). Pour
+    tout point \(p\) du plan, \(|p - c|^2 = r^2\) se réécrit
+    $$x_p^2 + y_p^2 = 2 c \cdot p + (r^2 - |c|^2),$$
+    c'est-à-dire&nbsp;: le point relevé \(\ell(p)\) est sur le plan
+  \(\Pi : z = 2c_x x + 2c_y y + (r^2 - |c|^2)\) exactement quand \(p\) est sur le
+    cercle, <em>au-dessus</em> (\(z &gt; \Pi(p)\)) exactement quand \(|p - c| &gt;
+    r\) (extérieur du disque), <em>en dessous</em> exactement quand \(p\) est dans
+    le disque ouvert. Les trois sommets relevés de \(abc\) sont sur \(\Pi\)&nbsp;;
+    le disque circonscrit est vide ⟺ aucun point relevé n'est sous \(\Pi\) ⟺ la
+    facette porte l'enveloppe inférieure. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 3.5 — L'algorithme de Bowyer–Watson</span>
+  Insertion incrémentale&nbsp;: partant de la Delaunay d'un grand triangle
+  englobant, insérer \(p\)&nbsp;: (1) trouver le triangle le contenant&nbsp;; (2)
+  collecter le «&nbsp;cavité&nbsp;» des triangles dont le cercle circonscrit contient
+  \(p\) (elle est connexe et étoilée en \(p\))&nbsp;; (3) la retirer et retrianguler
+  le polygone troué par les arêtes de \(p\) aux sommets du bord de la cavité.
+  Coût \(O(n \log n)\) en espérance pour un ordre aléatoire des insertions (chaque
+  insertion coûte \(O(\log n)\) en moyenne en localisant + cavité petite),
+  \(O(n^2)\) au pire. Le test «&nbsp;cercle circonscrit contient \(p\)&nbsp;» se fait
+  en arithmétique exacte par le <em>déterminant incircle</em>
+  \(\mathrm{det}\begin{pmatrix} a_x &amp; a_y &amp; a_x^2 + a_y^2 &amp; 1 \\
+  \vdots &amp; \vdots &amp; \vdots &amp; \vdots \\
+  p_x &amp; p_y &amp; p_x^2 + p_y^2 &amp; 1 \end{pmatrix}\)
+  — signe positif ⟺ \(p\) dans le disque (c'est le test de «&nbsp;sous le
+  plan&nbsp;» du théorème 3.4&nbsp;!).
+</div>
+
+<div class="note">
+  <span class="tag">Contraintes et dimensions supérieures</span>
+  Pour forcer des arêtes données (bords de pièce, failles), la <strong>Delaunay
+  contrainte</strong> (CDT) réintroduit les arêtes requises puis flippe sans violer
+  les contraintes&nbsp;; standard en maillage pour éléments finis (avec raffinement
+  de Ruppert pour borner les angles). En dimension \(d\), tout ce chapitre se
+  généralise (simplexes, boules, enveloppes en dimension \(d+1\))&nbsp;: la
+  tomographie géométrique du chapitre 10 exploite ces structures en 3D pour
+  reconstruire des solides à partir de coupes — les simplexes Delaunay «&nbsp;volent
+  au secours&nbsp;» des sections.
+</div>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Échantillonnage et reconstruction de surfaces</h2>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Échantillonner une surface&nbsp;: densité et espacement</span>
+  Pour une surface compacte \(S\), un ensemble \(P \subset S\) est un
+  <strong>\(\varepsilon\)-échantillon</strong> si tout point de \(S\) est à distance
+  \(&lt; \varepsilon\) de \(P\), avec \(\varepsilon\) petit devant la <em>distance
+  d'atteinte</em> (reach&nbsp;: distance au Médial Axis&nbsp;; elle code à la fois
+  la courbure et l'épaisseur). L'échantillonnage «&nbsp;de Poisson-disque&nbsp;»
+  (aucun couple de points plus près que \(\delta\), tout point couvert à
+  \(\delta'\)) est le modèle implicite des scanners&nbsp;; la <strong>relaxation de
+  Lloyd</strong> (code du chapitre 2) pousse un nuage vers cette structure
+  quasi-uniforme.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Erreur d'approximation linéaire</span>
+  Pour une surface de courbure bornée \(K \leq \kappa\), remplacer localement \(S\)
+  par le plan tangent — ou une corde de longueur \(\ell\) — crée une erreur
+  (flèche) au plus \(\dfrac{\ell^2 \kappa}{8}\). Une sphère de rayon 1 échantillonnée
+  en mailles de \(0{,}1\) est donc approchée à \(\frac{0{,}01}{8} = 1{,}25 \times
+  10^{-3}\) près — l'erreur décroît <em>quadratiquement</em> avec la maille&nbsp;:
+  diviser la maille par 2 divise l'erreur par 4.
+  <div class="proof">
+    Une corde de longueur \(\ell\) d'un cercle de rayon \(r = 1/\kappa\) est à
+    distance (flèche) \(f = r - \sqrt{r^2 - (\ell/2)^2}\) de l'arc. Développement
+    en \(\ell/r\) petit&nbsp;: \(f = \frac{\ell^2}{8r} + O(\ell^4/r^3)\).
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.3 — Alpha-shapes&nbsp;: filtrer la Delaunay par la distance</span>
+  Le <strong>alpha-complexe</strong> \(\mathcal{C}_\alpha\) de \(P\) est le
+  sous-complexe de la Delaunay formé des simplexes dont le cercle circonscrit
+  (portion vide) a un rayon \(\leq \alpha\)&nbsp;; la <strong>alpha-shape</strong>
+  est sa surface. Quand \(\alpha\) croît de 0 à l'infini, la famille
+  \((\mathcal{C}_\alpha)_\alpha\) forme une <strong>filtration</strong> — chaque
+  complexe contenu dans le suivant — qui grossit progressivement les détails du
+  nuage&nbsp;: c'est la version géométrique d'une analyse multi-échelle
+  (et l'ingrédient clé de la persistance, chapitre 9).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.4 — Marching cubes&nbsp;: polygoniser un champ implicite</span>
+  Pour extraire l'isosurface \(f(x) = c\) d'un champ échantillonné sur grille
+  (SDF, potentiel de densité, champ de signe), l'algorithme <strong>marching
+  cubes</strong> (Lorensen &amp; Cline, 1987) parcourt les cellules&nbsp;: les 8 coins
+  classés «&nbsp;dans/dehors&nbsp;» donnent jusqu'à 256 configurations (réduites à 15
+  par symétries)&nbsp;; les intersections arête/isosurface sont interpolées
+  linéairement (\(t = (f_0 - c)/(f_0 - f_1)\))&nbsp;; les triangles produits
+  cousent une surface fermée. C'est l'interface naturelle entre représentations
+  implicites (déf. 1.1) et maillages (déf. 1.2)&nbsp;— et l'outil historique de
+  l'imagerie médicale.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.5 — Une sphère en marching cubes, chiffres</span>
+  SDF \(f(x) = \|x\| - 1\) sur \([-1{,}2\,;\,1{,}2]^3\), maille \(h\)&nbsp;: la
+  surface polygonale est à distance \(\leq h/4\) environ de la sphère ( interpolation
+  linéaire d'un champ quadratique&nbsp;: erreur \(O(h^2)\) sur \(f\), divisée par le
+  gradient \(\approx 1\)). Pour \(h = 0{,}1\)&nbsp;: 24³ ≈ 13&nbsp;800 cellules,
+  5&nbsp;026 cellules traversées, ≈ 3&nbsp;100 triangles, erreur mesurée 0{,}006
+  (avant lissage)&nbsp;; \(h = 0{,}05\) ⟹ 12&nbsp;800 triangles, erreur 0{,}0015 —
+  ratio 4 conforme à la proposition 4.2. Les normales issues du gradient
+  \(\nabla f\) (différences centrées) sont de qualité «&nbsp;rendu&nbsp;» sans
+  calcul de courbure.
+</div>
+
+<div class="note">
+  <span class="tag">Reconstruction&nbsp;: le point de vue global</span>
+  Le <em>Crust</em> d'Amenta–Bern (1999) prouve&nbsp;: un \(\varepsilon\)-échantillon
+  suffisamment fin de la surface \(S\) + Voronoï/Delaunay = reconstruction
+  homéomorphe à \(S\) (garantie topologique)&nbsp;; la <em>Poisson surface
+  reconstruction</em> (Kazhdan et al., 2006) change de paradigme&nbsp;: ajuster une
+  fonction indicatrice \(\chi\) «&nbsp;dans/dehors&nbsp;» dont le gradient correspond
+  aux normales orientées \(\nabla\chi \approx \mathbf{n}\,\delta_S\) — un problème
+  de Poisson \(\Delta \chi = \nabla \cdot (\mathbf{n}\,\delta_S)\) résolu en
+  multi-résolution&nbsp;; robuste aux trous et aux données non uniformes. Les
+  approches récentes apprennent des SDF (deep learning sur maillages — cf. module
+  Multimodal GenAI, chapitre 3D), mais l'évaluation se fait toujours par
+  marching cubes&nbsp;: l'outil n'a pas pris une ride.
+</div>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. Lissage&nbsp;: du laplacien uniforme aux cotangentes</h2>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — Laplacien combinatoire et schéma de lissage</span>
+  Sur un maillage fermé, le <strong>laplacien uniforme</strong> (combinatoire) d'un
+  sommet \(i\) de voisinage \(\mathcal{N}(i)\) est
+  \(\delta_i = \dfrac{1}{|\mathcal{N}(i)|}\sum_{j \in \mathcal{N}(i)} p_j - p_i\),
+  et le <strong>lissage laplacien</strong> itère
+  $$p_i \leftarrow p_i + \lambda\,\delta_i, \qquad \lambda \in (0, 1].$$
+  C'est une méthode de <em>projection locale</em>&nbsp;; version «&nbsp;flux de
+  courbure moyenne&nbsp;»&nbsp;: \(p_i \leftarrow p_i + \lambda\,H_i \mathbf{n}_i\)
+  (chapitre 7 pour \(H_i\)). En matriciel&nbsp;: \(\mathbf{x} \leftarrow
+  (I - \lambda L)\,\mathbf{x}\) avec \(L = D^{-1}A - I\) (normalisé) ou
+  \(L = D - A\) (non normalisé).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Le lissage uniforme rétrécit&nbsp;: preuve spectrale 1D</span>
+  Sur un anneau de \(n\) sommets (cycle) de positions \(x_i\), l'itération
+  \(x_i \leftarrow (1-\lambda)x_i + \lambda \bar{x}_{\mathcal{N}(i)}\) conserve la
+  moyenne \(\bar{x}\) et fait décroître toute composante non constante&nbsp;:
+  \(x^{(k)} \to \bar{x}\mathbf{1}\) — le maillage 1D <em>rétrécit</em> jusqu'au
+  barycentre. Le taux de décroissance d'un mode de fréquence \(j\) vaut
+  \(\rho_j = 1 - \lambda\big(1 - \cos\tfrac{2\pi j}{n}\big) \in [0, 1)\).
+  <div class="proof">
+    Décomposons \(x\) sur la base orthogonale des modes de Fourier discrets
+    \(u^{(j)}_i = e^{2i\pi ji/n}\). La moyenne des voisins multiplie \(u^{(j)}\)
+    par \(\frac{1}{2}(e^{2i\pi j/n} + e^{-2i\pi j/n}) = \cos\frac{2\pi j}{n}\)&nbsp;;
+    donc l'itération multiplie le mode \(j\) par \((1-\lambda) +
+    \lambda\cos\frac{2\pi j}{n}\). Pour \(j = 0\) (constant)&nbsp;: facteur 1 —
+    conservation de la moyenne. Pour \(j \neq 0\)&nbsp;: \(\cos\frac{2\pi j}{n} &lt; 1\)
+    donne \(\rho_j &lt; 1\) (et \(\geq -1\) pour \(\lambda \leq 1\))&nbsp;: tous les
+    modes non constants décroissent géométriquement, le plus vite les hautes
+    fréquences. Limite = composante constante = barycentre.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 5.3 — Remèdes&nbsp;: Taubin λ|μ, cotangentes</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Taubin λ|μ</strong>&nbsp;: alterner un pas lissant
+    (\(\lambda \approx 0{,}5\)) et un pas «&nbsp;délissant&nbsp;» (\(\mu \approx
+    -0{,}53\))&nbsp;; les fréquences dans la bande de transmission
+    \((\rho_\mu, \rho_\lambda)\) sont préservées — le volume moyen est conservé
+    au lieu de s'effondrer&nbsp;;</li>
+    <li><strong>Laplacien cotangent</strong> (géométrique)&nbsp;:
+    $$\delta_i = \frac{1}{2 A_i}\sum_{j \in \mathcal{N}(i)}
+    \big(\cot \alpha_{ij} + \cot \beta_{ij}\big)\,(p_j - p_i),$$
+    où \(\alpha_{ij}, \beta_{ij}\) sont les angles opposés à l'arête \((i,j)\) et
+    \(A_i\) l'aire de Voronoï mixte du sommet — c'est l'opérateur convergent vers
+    le laplacien-Beltrami (théorie des formes de fonctions chapeau&nbsp;; cf.
+    module Geometric Deep Learning, chapitre opérateurs)&nbsp;;</li>
+    <li><strong>Ordre du filtrage</strong>&nbsp;: le lissage en <em>position</em>
+    régularise la géométrie&nbsp;; le lissage des <em>normales</em> puis
+    ré-projection (ou shrink-and-grow) sépare le débruitage de la
+    déformation — les deux familles coexistent dans les DCC.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 5.4 — Cotangentes sur un triangle rectangle isocèle</span>
+  Triangle unique \(A = (0,0)\), \(B = (1,0)\), \(C = (0,1)\), sommet \(A\).
+  Ses deux arêtes voisines sont \((A,B)\) et \((A,C)\)&nbsp;: pour l'arête
+  \((A,B)\), l'angle opposé est \(\angle ACB = 90°\), de cotangente nulle&nbsp;;
+  pour l'arête \((A,C)\), l'opposé \(\angle ABC = 90°\), cotangente nulle
+  également. L'arête \((B,C)\) n'est pas voisine de \(A\)&nbsp;: la somme de
+  cotangentes autour de \(A\) est nulle, \(\delta_A = 0\) — cohérent, un
+  maillage réduit à un triangle est «&nbsp;tout bord&nbsp;». Le vrai test de
+  l'implémentation est le <em>test du plan</em>&nbsp;: plonger un maillage plan
+  dans son plan ⟹ tous les \(\delta_i\) intérieurs sont nuls (équivalent
+  discret de \(\Delta f = 0\) pour les fonctions harmoniques). La preuve vient
+  de la formule de Green discrète&nbsp;:
+  \(\sum_i A_i\, f_i\, \delta_i = -\sum_{(i,j)} w_{ij}(f_j - f_i)^2 \leq 0\),
+  avec égalité ssi \(f\) est constante sur chaque composante.
+</div>
+
+<div class="note">
+  <span class="tag">Du lissage au deep learning géométrique</span>
+  La matrice de cotangentes <em>est</em> l'objet central du module M2 Geometric
+  Deep Learning&nbsp;: diffusion de descripteurs (HKS), convolutions
+  spectrales (bases de fonctions propres, chapitre 8 ci-dessous), DiffusionNet.
+  Le lissage de ce chapitre en est la version «&nbsp;déterministe&nbsp;»&nbsp;:
+  même opérateur, sans données apprises — et déjà non trivial&nbsp;: choix
+  aire/Voronoï mixte, poids négatifs sur maillages obtus (à tronquer ou régulariser).
+</div>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Simplification et remaillage</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Quadric Error Metrics (QEM)</span>
+  À chaque sommet \(v\) on associe l'ensemble \(\mathcal{P}(v)\) des plans des faces
+  supportées&nbsp;; son <strong>quadrique d'erreur</strong> est
+  $$E(v) = \sum_{\pi \in \mathcal{P}(v)} \big(\mathbf{n}_\pi \cdot v - d_\pi\big)^2
+  = v^\top\!A v + 2\,b^\top v + c, \qquad
+  A = \sum_{\pi} \mathbf{n}_\pi \mathbf{n}_\pi^\top,\ \ b = -\sum_\pi d_\pi \mathbf{n}_\pi,\
+  \ c = \sum_\pi d_\pi^2.$$
+  <strong>Contraction d'arête</strong> \((u, v) \to \bar{v}\)&nbsp;: choisir
+  \(\bar{v}\) minimisant \(E_{u \oplus v}\) (le quadrique somme), puis fusionner.
+  L'ordre des contractions suit le coût croissant (file de priorité)&nbsp;: c'est
+  l'algorithme de Garland–Heckbert (1997), encore le standard des LOD de jeux.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.2 — Additivité des quadriques et optimum algébrique</span>
+  (i) \(E_{u \oplus v}(x) = E_u(x) + E_v(x)\) pour tout \(x\) — les quadriques
+  s'additionnent coefficient par coefficient \((A, b, c) = (A_u + A_v,\ b_u + b_v,\
+  c_u + c_v)\). (ii) Si \(A = A_u + A_v\) est inversible, le coût minimal de la
+  contraction est atteint en \(\bar{v} = -A^{-1}b\) et vaut \(c - b^\top A^{-1} b\).
+  <div class="proof">
+    (i) Chaque quadrique est une <em>somme</em> de carrés sur des ensembles de
+    plans&nbsp;; fusionner les sommets fusionne les ensembles de plans (les faces
+    incidentes deviennent incidentes au sommet fusionné), et la somme des sommes
+    est la somme sur l'union — d'où l'additivité terme à terme des formes
+    quadratiques. (ii) \(E(x) = x^\top A x + 2b^\top x + c\), \(A\) symétrique
+    définie positive&nbsp;: \(\nabla E = 2(Ax + b) = 0\) donne \(x^\ast = -A^{-1}b\),
+    et \(E(x^\ast) = c - b^\top A^{-1}b\) (substitution directe).
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 6.3 — Deux contractions chiffrées</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Bord droit 1D</strong>&nbsp;: deux sommets d'une arête
+    droite portent les plans \(x = 0\) et \(x = 2\) (normale unitaire
+    \((1,0,0)\), déplacements 0 et 2)&nbsp;;
+    \(E(x) = x^2 + (x-2)^2 = 2(x-1)^2 + 2\), minimale en \(\bar{v} = (1,0,0)\)
+    au coût 2 — la contraction «&nbsp;colle&nbsp;» les deux plans à
+    mi-chemin&nbsp;;</li>
+    <li><strong>Coin de cube</strong>&nbsp;: plans \(x=0, y=0, z=0\) (normales
+    unitaires). \(A = I_3\), \(b = 0\), \(c = 0\) ⟹ \(\bar{v} = (0,0,0)\), coût
+    0&nbsp;: contracter les trois faces d'un coin du cube vers le coin exact ne
+    coûte <em>rien</em> — c'est la force des QEM&nbsp;: détecter les replis
+    algébriques exacts.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 6.4 — Remaillage isotrope</span>
+  Transformer un maillage en maillage quasi-uniforme (longueurs d'arêtes dans
+  \([l_{\min}, l_{\max}]\), triangles équilatéraux-ish) par la boucle&nbsp;:
+  (1) <strong>split</strong> des arêtes trop longues (mi-point projeté)&nbsp;;
+  (2) <strong>collapse</strong> des trop courtes&nbsp;; (3) <strong>flip</strong>
+  d'arêtes restaurant le valence 6 (interne) / 4 (bord)&nbsp;; (4) lissage
+  tangentiel (chapitre 5, projeté sur le plan tangent pour ne pas rétrécir la
+  forme). Résultat&nbsp;: maillage adapté aux simulations du module Computer
+  Animation et aux convolutions du module Geometric Deep Learning. La
+  <strong>paramétrisation</strong> (atlas de cartes) est l'alternative&nbsp;:
+  découper en disques topologiques, aplatir (Tutte/harmonique, ARAP), remailler
+  <em>dans le paramètre</em> — qualité supérieure, gestion des coupes plus
+  délicate.
+</div>
+
+<div class="note">
+  <span class="tag">Erreurs à budget</span>
+  En production, la simplification est <em>juge et partie</em>&nbsp;: le quadrique
+  QEM optimise une erreur algébrique (distance aux plans), pas la distance de
+  Hausdorff à la surface d'origine — les bords et les détails fins exigent des
+  <em>verrous</em> (arêtes/attributs préservés) et des plans de bord pondérés&nbsp;;
+  pour les attributs (couleur, normales), on empile les quadriques de
+  «&nbsp;plans&nbsp;» en dimension supérieure. Règle pratique&nbsp;: rapport de
+  réduction 10:1 presque invisible à l'écran sur des maillages denses — au-delà,
+  articuler par champs de courbure (chapitre 7) pour décider <em>où</em> garder
+  les triangles.
+</div>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Courbure discrète et Gauss–Bonnet</h2>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — Courbures au continu, pour fixer les cibles</span>
+  En un point d'une surface régulière, les directions principales ont des courbures
+  normales extrêmes \(\kappa_1, \kappa_2\)&nbsp;;
+  <strong>courbure de Gauss</strong> \(K = \kappa_1 \kappa_2\) (produit)&nbsp;;
+  <strong>courbure moyenne</strong> \(H = \tfrac{\kappa_1 + \kappa_2}{2}\)
+  (moyenne)&nbsp;; l'opérateur de forme vérifie \(H = \tfrac12 \mathrm{div}\,
+  \mathbf{n}\) — d'où le lien avec le laplacien du chapitre 5&nbsp;:
+  \(\Delta x = -2H\mathbf{n}\). \(K\) est intrinsèque (mesurable «&nbsp;depuis la
+    surface&nbsp;»)&nbsp;; \(H\) dépend du plongement — cette distinction structure
+  toute l'analyse de formes.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.2 — Déficit angulaire</span>
+  Au sommet \(i\) d'un maillage triangulé, le <strong>déficit angulaire</strong> est
+  $$\mathcal{K}_i = 2\pi - \sum_{j}\,\theta_{ij},$$
+  somme des angles des faces incidentes en \(i\). C'est la discrétisation
+  naturelle de la courbure de Gauss <em>intégrée</em> sur le voisinage&nbsp;:
+  positif aux pointes (cône), nul sur les zones développables, négatif aux cols
+  (selle). La <strong>courbure moyenne discrète</strong> s'obtient par le
+  théorème de Steiner discret&nbsp;: \(\mathbf{H}_i = \frac{1}{2 A_i}
+  \sum_j (\cot\alpha_{ij} + \cot\beta_{ij})(p_j - p_i)\) — la même matrice de
+  cotangentes qu'au chapitre 5&nbsp;: géométrie et analyse ne font qu'un.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.3 — Gauss–Bonnet discret</span>
+  Pour un maillage fermé de genre \(g\)&nbsp;:
+  $$\sum_{i \in V} \mathcal{K}_i = 2\pi\,\chi = 2\pi\,(2 - 2g),$$
+  où \(\chi = V - E + F\) est la caractéristique d'Euler (chapitre 9). La courbure
+  totale ne dépend que de la topologie — pas de la géométrie.
+  <div class="proof">
+    <em>Comptage.</em> La somme double des angles parcourt tous les angles de
+    toutes les faces&nbsp;: chaque triangle contribue \(\pi\), donc
+    \(\sum_i \sum_j \theta_{ij} = \pi F\) et
+    \(\sum_i \mathcal{K}_i = 2\pi V - \pi F\). Chaque face a 3 arêtes et chaque
+    arête porte 2 faces&nbsp;: \(3F = 2E\), donc \(2\pi E = 3\pi F\), d'où
+    $$-2\pi E + 2\pi F = -3\pi F + 2\pi F = -\pi F \quad\Longrightarrow\quad
+    2\pi(V - E + F) = 2\pi V - \pi F = \sum_i \mathcal{K}_i.$$
+    <em>Vérification sur le cube</em> (exemple 7.4 ci-dessous)&nbsp;: \(8\) sommets
+    de déficit \(\tfrac{\pi}{2}\) donnent \(4\pi = 2\pi \cdot 2\), conforme à
+    \(\chi = V - E + F = 8 - 12 + 6 = 2\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 7.4 — Tétraèdre régulier, et subdivisions</span>
+  Tétraèdre régulier&nbsp;: chaque sommet porte 3 angles de 60° ⟹
+  \(\mathcal{K} = 2\pi - \pi = \pi\), total \(4\pi\) = celui du cube — même sphère
+  topologique, courbures locales très différentes (sommets «&nbsp;pointus&nbsp;» du
+  tétraèdre), même <em>total</em>. Subdiviser chaque face du cube en 4 triangles
+  (mi-arêtes)&nbsp;: les nouveaux sommets d'arête sont plats (déficit nul&nbsp;:
+    \(2\pi\) d'angles autour d'eux), les 8 coins gardent le même déficit
+  \(\tfrac{\pi}{2}\) — la somme est inchangée&nbsp;: le théorème est
+  <em>invariant de subdivision</em>, condition indispensable pour que «&nbsp;courbure
+  discrète&nbsp;» converge vers la courbure continue quand le maillage se raffine.
+</div>
+
+<div class="note">
+  <span class="tag">Estimer en pratique</span>
+  Les déficits donnent une courbure <em>intégrée</em>&nbsp;; pour une courbure
+  <em>ponctuelle</em>, diviser par l'aire de Voronoï mixte \(A_i\)&nbsp;:
+  \(K_i \approx \mathcal{K}_i / A_i\), avec les mêmes aires qu'au chapitre 5.
+  Pour des maillages bruités, lisser d'abord (chapitre 5) — la courbure est une
+  <em>dérivée seconde</em>, deux fois plus sensible au bruit que les positions.
+  Ces descripteurs (\(K_i, H_i\), directions principales) alimentent
+  directement&nbsp;: le remaillage adaptatif (chapitre 6), les descripteurs du
+  Geometric Deep Learning, et les champs de direction pour la quadrangulation.
+</div>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Le spectre des formes</h2>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Laplace–Beltrami et spectre</span>
+  Sur une surface compacte \(S\) sans bord, l'opérateur de
+  <strong>Laplace–Beltrami</strong> \(\Delta_S\) (laplacien de surface) est
+  auto-adjoint, négatif, à résolvante compacte&nbsp;: son spectre est une suite
+  $$0 = \lambda_0 &lt; \lambda_1 \leq \lambda_2 \leq \dots \to \infty,$$
+  avec fonctions propres orthonormées \(\phi_0, \phi_1, \dots\) (base de
+  \(L^2(S)\)). Le <strong>spectre</strong> \(\{\lambda_k\}\) (ou son échantillonnage
+  \((\lambda_1, \dots, \lambda_N)\), «&nbsp;ShapeDNA&nbsp;») est un <em>invariant
+  isométrique</em>&nbsp;: deux surfaces isométriques ont même spectre. En
+  pratique&nbsp;: discrétiser par la matrice de cotangentes généralisée
+  \(L = A^{-1}W\) (chapitre 5) et résoudre le <em>problème aux valeurs propres
+  généralisé</em> \(W\phi = \lambda A \phi\), avec \(A\) la matrice diagonale des
+  aires de Voronoï mixtes — les mêmes objets qu'aux chapitres 5 et 7.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 8.2 — Spectres exacts&nbsp;: graphe chemin et cycle</span>
+  Pour le laplacien combinatoire d'un chemin à \(n\) sommets (chaîne)&nbsp;:
+  $$\lambda_k = 2 - 2\cos\frac{k\pi}{n+1}, \qquad k = 1, \dots, n,$$
+  et pour le cycle à \(n\) sommets (anneau fermé)&nbsp;:
+  \(\mu_k = 2 - 2\cos\frac{2\pi k}{n}\). Pour \(n = 10\) chemin&nbsp;:
+  \(\lambda_1 = 2 - 2\cos(\pi/11) \approx 0{,}081\), \(\lambda_{10} \approx
+  3{,}919\)&nbsp;; cycle&nbsp;: \(\mu_1 \approx 0{,}382\), \(\mu_5 = 4\) (alternance
+  ±1, la plus haute fréquence possible). Lecture géométrique&nbsp;: fermer la
+  chaîne «&nbsp;tend&nbsp;» la plus basse fréquence (\(\lambda_1\) multipliée par
+  ~4,7)&nbsp;: la plus petite valeur propre mesure la <em>gêne&nbsp;/&nbsp;connexité</em>
+  de la forme — c'est elle qui discrimine les composantes et les pincements
+  (les applications de segmentation spectrale).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 8.3 — Noyau de la chaleur et signatures spectrales</span>
+  La solution de l'équation de la chaleur \(\partial_t u = -\Delta_S u\),
+  \(u(0) = f\), s'écrit \(u(t) = e^{-t\Delta_S}f = \sum_k e^{-\lambda_k t}
+  \langle f, \phi_k\rangle \phi_k\) et le <strong>noyau de la chaleur</strong>
+  \(h_t(x, y) = \sum_k e^{-\lambda_k t}\phi_k(x)\phi_k(y)\) est invariant
+  isométrique. Les signatures ponctuelles (HKS&nbsp;: \(h_t(x, x)\) pour quelques
+  \(t\)&nbsp;; WKS&nbsp;: oscillation) décrivent chaque point par «&nbsp;sa&nbsp;» place
+  dans le spectre — la base des correspondances de formes non rigides, détaillée
+  au module M2 Geometric Deep Learning (chapitre signatures). Le retour
+  «&nbsp;spectre ⟹ forme&nbsp;» est faux&nbsp;: il existe des surfaces
+  <em>isospectrales non isométriques</em> («&nbsp;on n'entend pas la forme d'un
+  tambour&nbsp;», Gordon–Webb–Wolpert, 1992).
+</div>
+
+<div class="note">
+  <span class="tag">Interprétations et usages</span>
+  La valeur propre \(\lambda_k\) est le carré d'une fréquence spatiale&nbsp;:
+  petits \(k\) = grandes ondulations (silhouette), grands \(k\) = détails.
+  Applications directes&nbsp;: compression de formes (projeter sur les \(\phi_k\)
+  de petites \(k\)), correspondance (coordination des bases propres),
+  retrieval (vecteur \((\sqrt{\lambda_1}, \dots, \sqrt{\lambda_N})\) ré-normalisé
+  par échelle), segmentation (couper le long des lignes de niveau de
+  \(\phi_2\), la «&nbsp;fonction de Fiedler&nbsp;»). Attention numérique&nbsp;:
+  seules les ~\(\sqrt{N}\) premières valeurs propres d'une discrétisation à \(N\)
+  sommets sont fiables — au-delà, on décrit le maillage, pas la surface (même
+  phénomène que la dispersion numérique en éléments finis).
+</div>
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Topologie combinatoire&nbsp;: Euler, Betti, persistance</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 9.1 — Formule d'Euler–Poincaré</span>
+  Pour tout maillage fermé connexe de genre \(g\)&nbsp;:
+  $$\chi = V - E + F = 2 - 2g,$$
+  et plus généralement pour un complexe quelconque \(\chi = \sum_{k} (-1)^k c_k\)
+  (\(c_k\) = nombre de cellules de dimension \(k\)) \(= \sum_k (-1)^k b_k\)
+  (nombres de Betti). <em>Brouillon de preuve</em> pour une sphère&nbsp;: partir du
+  tétraèdre (\(\chi = 2\), exemple 1.4) et remarquer que subdiviser une face
+  (ajouter un sommet sur une arête ou au centre d'une face) ne change pas
+  \(\chi\) (un split d'arête&nbsp;: \(+1\) sommet, \(+1\) arête&nbsp;; un split de
+  face&nbsp;: \(+1\) sommet, \(+3\) arêtes, \(+2\) faces — \(\Delta\chi = 0\)
+  dans les deux cas)&nbsp;; toute triangulation de la sphère s'obtient depuis le
+  tétraèdre par ces opérations. Ajouter une «&nbsp;anse&nbsp;» retire 2 à \(\chi\)
+  — d'où \(2 - 2g\). <span class="qed">∎</span>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.2 — Homologie et nombres de Betti</span>
+  Sur un complexe \(K\), les groupes d'homologie \(H_k(K)\) (à coefficients dans
+  \(\mathbb{Z}_2\), pour simplifier) sont les classes de cycles modulo les bords&nbsp;:
+  \(H_k = \ker \partial_k / \mathrm{im}\, \partial_{k+1}\), avec
+  \(\partial_k \partial_{k+1} = 0\) (le bord d'un bord est nul). Les <strong>nombres
+  de Betti</strong> \(b_k = \dim H_k\) comptent les «&nbsp;trous&nbsp;» indépendants&nbsp;:
+  pour une surface fermée&nbsp;: \(b_0\) composantes connexes, \(b_1\) =
+  \(2g\) anses, \(b_2\) = 1 si orientable (le volume lui-même). Exemples&nbsp;:
+  sphère \((1, 0, 1)\), tore \((1, 2, 1)\), double tore \((1, 4, 1)\)&nbsp;;
+  vérification&nbsp;: \(\chi = b_0 - b_1 + b_2\) ✓. L'homologie se calcule par
+  élimination de Gauss sur les matrices de bord (Smith normal form)&nbsp;:
+  algorithmique purement combinatoire, coût polynomial.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.3 — Homologie persistante</span>
+  Soit une <strong>filtration</strong> \(K_0 \subseteq K_1 \subseteq \dots \subseteq
+  K_m\) (ex.&nbsp;: alpha-shapes \((\mathcal{C}_\alpha)_\alpha\) du chapitre 4, ou
+  sous-niveaux d'une fonction sur le maillage). À chaque pas, des cycles naissent
+  et meurent&nbsp;; la <strong>persistance</strong> d'un cycle est
+  \(\mathrm{pers} = \alpha_{mort} - \alpha_{naissance}\). Le
+  <strong>diagramme/barcode</strong> (une barre \([\alpha_{naiss},
+  \alpha_{mort}]\) par classe) sépare la structure (longues barres) du bruit
+  (courtes barres)&nbsp;; le théorème de stabilité garantit que le barcode change
+  peu quand les données changent peu — c'est ce qui rend la TDA utilisable sur
+  données réelles. Implémentation standard&nbsp;: algorithme de réduction par
+  colonnes (matrice de bord de la filtration, pivot de Gauss), en
+  \(O(m^\omega)\) pire cas, quasi linéaire en pratique.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 9.4 — Un anneau bruité, lu par persistance</span>
+  1&nbsp;000 points échantillonnant un anneau (disque de rayon 2 troué rayon 1) +
+  bruit gaussien σ = 0,1. Filtration par alpha-shapes&nbsp;: barres \(H_0\)&nbsp;:
+  999 courtes (clusters fusionnant, tout \(\alpha \lesssim 0{,}2\)) + 1 infinie
+  (la composante)&nbsp;; barres \(H_1\)&nbsp;: une longue barre
+  \([0{,}25\,;\,2{,}0]\) — le trou central — plus quelques barres de longueur
+  \(&lt; 0{,}2\) (petits trous de bruit bouchés tôt). Avec σ = 0{,}4, la barre
+  centrale survit \([0{,}4\,;\,1{,}7]\)&nbsp;: la persistance, contrairement au
+  comptage à \(\alpha\) fixe, est <em>robuste au bruit</em>. C'est le descripteur
+  topologique le plus utilisé pour l'apprentissage (vectorisations de
+  diagrammes de persistance, noyaux de persistance — cf. travaux de
+  l'équipe, chapitre 10).
+</div>
+
+<div class="note">
+  <span class="tag">Topologie et apprentissage</span>
+  Les invariants de ce chapitre servent de <em>régularisateurs structurels</em>
+  en apprentissage&nbsp;: loss de persistance pour reconstruire avec le bon nombre
+  de composantes/trous, contraintes de genre en génération de maillages (le
+  module Multimodal GenAI, chapitre 3D, en reparle)&nbsp;; le théorème de
+  Gauss–Bonnet (chapitre 7) est le cas «&nbsp;courbure&nbsp;» de la même idée&nbsp;:
+  des quantités globales qui contraignent les solutions locales.
+</div>
+</section>
+
+<!-- ============================ CH 10 ============================ -->
+<section class="chapter" id="ch10">
+<h2>10. Travaux de l'équipe pédagogique</h2>
+
+<div class="def">
+  <span class="tag">Mathieu Desbrun — géométrie différentielle discrète</span>
+  M.&nbsp;Desbrun (Caltech / associé Inria) est l'un des fondateurs du calcul
+  extérieur discret et des opérateurs géométriques discrets qui structurent ce
+  module&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Discrete Exterior Calculus</strong> (avec A.&nbsp;Hirani, M.&nbsp;Leok,
+    J.&nbsp;Marsden, 2005) — <a href="https://arxiv.org/abs/math/0508341">arXiv
+    math/0508341</a>&nbsp;: une théorie des formes différentielles sur complexes
+    simpliciaux qui préserve <em>exactement</em> les identités du continu
+    (Stokes, Hodge)&nbsp;: les laplaciens cotangents du chapitre 5 et les courbures du
+    chapitre 7 en sont des instances&nbsp;;</li>
+    <li><strong>Discrete Differential Forms for Computational Modeling</strong> (avec
+    E.&nbsp;Kanso, Y.&nbsp;Tong) — <a href="https://link.springer.com/chapter/10.1007/978-3-7643-8621-4_16">chapitre
+    Springer</a>&nbsp;: la version pédagogique (pourquoi la discrétisation
+    «&nbsp;naïve&nbsp;» des opérateurs perd la structure)&nbsp;;</li>
+    <li>Le cours <strong>Digital Geometry Processing with Discrete Exterior
+    Calculus</strong> (K.&nbsp;Crane, F.&nbsp;de&nbsp;Goes, M.&nbsp;Desbrun, P.&nbsp;Schröder,
+    SIGGRAPH Asia 2013) — <a href="https://dl.acm.org/doi/10.1145/2504435.2504442">ACM
+    DL</a> / <a href="https://www.cs.cmu.edu/~kmcrane/Projects/DDG/">notes
+    ouvertes DDG</a>&nbsp;: la référence des TP (libigl), du laplacien aux
+    flots géométriques.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Pooran Memari — topologie et reconstruction des formes</span>
+  Chargée de recherche CNRS au LIX (École Polytechnique), P.&nbsp;Memari travaille
+  à l'interface géométrie algorithmique / topologie&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Geometric Tomography with Topological Guarantees</strong> (avec
+    O.&nbsp;Amini, J.-D.&nbsp;Boissonnat, Discrete &amp; Computational Geometry,
+    2013) — <a href="https://arxiv.org/abs/1007.2452">arXiv</a> /
+    <a href="https://link.springer.com/article/10.1007/s00454-013-9531-z">Springer</a>&nbsp;:
+    reconstruire un solide 3D à partir de coupes 2D (microscopie série)&nbsp;;
+    l'analyse montre pourquoi les reconstructions naïves échouent (deux solides
+    de topologies différentes peuvent avoir les <em>mêmes</em> coupes) et donne
+    des garanties — exactement le programme «&nbsp;échantillonner, reconstruire,
+    garantir&nbsp;» du chapitre 4&nbsp;;</li>
+    <li>Sa thèse d'HDR, <strong>«&nbsp;Points, Patterns and Shapes&nbsp;: towards
+    accessible geometric modeling&nbsp;»</strong> (2024), synthétise ce
+    programme&nbsp;: motifs de points (échantillonnage, chapitre 4), structures
+    de proximité (Voronoï/Delaunay, chapitres 2–3), accessibilité des outils de
+    modélisation — page&nbsp;: <a href="https://www.lix.polytechnique.fr/~memari/">LIX</a>&nbsp;;</li>
+    <li>Ses travaux sur les triangulations Delaunay <em>distribuées</em> (Tile
+    &amp; Merge, IEEE Big Data 2019) prolongent le chapitre 3 à l'échelle du
+    cloud&nbsp;: mailler des milliards de points en découpant l'espace en
+    tuiles dont les Delaunay se recollent.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Fil conducteur</span>
+  Les deux programmes de recherche se rejoignent sur un principe&nbsp;: <em>une
+  discrétisation doit préserver la structure</em> — identités différentielles
+  d'un côté (Desbrun&nbsp;: Stokes discret exact), invariants topologiques de
+  l'autre (Memari&nbsp;: garanties de type d'homéomorphisme). C'est la ligne de
+  crête de tout le module&nbsp;: représenter <em>fidèlement</em> avant d'analyser,
+  puis apprendre — la porte d'entrée du Geometric Deep Learning (M2).
+</div>
+</section>
+
+<!-- ============================ EXOS ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Dualité guidée.</strong> Pour les sites \(p_1 = (0,0)\), \(p_2 =
+  (4,0)\), \(p_3 = (0,3)\) de l'exemple 2.4&nbsp;: (a) vérifier que \((2, 1{,}5)\)
+  est à distance 2,5 des trois sites&nbsp;; (b) tracer les trois médiatrices et
+  la cellule non bornée de \(p_2\)&nbsp;; (c) ajouter \(p_4 = (4,3)\) — pourquoi
+  les quatre points sont-ils cocycliques, et quelles triangulations de Delaunay
+  obtient-on (lever la dégénérescence par perturbation) ?</li>
+
+  <li><strong>Critère du cercle vide.</strong> Dans un quadrilatère convexe,
+  \(\angle abc = 70°\) et \(\angle adc = 125°\) (diagonale \(ac\)). (a) Décider
+  s'il faut flipper (lemme 3.2). (b) Après flip, que vaut au moins le plus petit
+  des angles opposés à la nouvelle diagonale&nbsp;? (c) Montrer le point (ii) de
+  la preuve&nbsp;: \(b \in \mathrm{disk}(a,c,d) \iff d \in \mathrm{disk}(a,b,c)\)
+  pour un quadrilatère convexe.</li>
+
+  <li><strong>Lift et incircle guidé.</strong> (a) Implémenter le test du
+  théorème 3.4&nbsp;: pour chaque triangle de <code>Delaunay</code> (scipy),
+  construire le plan \(\Pi\) et vérifier qu'aucun point relevé n'est sous
+  \(\Pi\) (tolérance \(10^{-12}\)). (b) Comparer avec le déterminant incircle
+  (signes&nbsp;: intérieur/extérieur). (c) Perturber un point vers le cercle
+  circonscrit d'un triangle voisin&nbsp;: observer le flip dans la triangulation
+  calculée.</li>
+
+  <li><strong>Lloyd.</strong> (a) Montrer que la relaxation de Lloyd décroît
+  l'énergie de quantification \(\mathcal{E} = \sum_i \int_{\mathcal{V}(p_i)}
+  \|x - p_i\|^2\,dx\) (chaque itération est une alternance&nbsp;: cellules
+  optimales pour les sites, puis centroïdes optimaux pour les cellules).
+  (b) Implémenter et tracer \(\mathcal{E}\) (approximée par échantillonnage)
+  en fonction des itérations sur 100 points du carré.</li>
+
+  <li><strong>Rétrécissement guidé.</strong> (a) Compléter la preuve du
+  théorème 5.2&nbsp;: pourquoi le mode \(j\) décroît-il de
+  \(\rho_j^k\) exactement&nbsp;? Que se passe-t-il pour \(\lambda &gt; 1\) ?
+  (b) Simuler un anneau de rayon 1, \(n = 50\), \(\lambda = 0{,}5\)&nbsp;; tracer
+  le rayon moyen — de combien rétrécit-il en 100 itérations&nbsp;?
+  (c) Appliquer Taubin \(\lambda = 0{,}5\), \(\mu = -0{,}53\) et mesurer.</li>
+
+  <li><strong>QEM.</strong> (a) Retrouver l'exemple 6.3 (coin de cube) en
+  détail&nbsp;: écrire \(A, b, c\), vérifier \(A = I\). (b) Deux plans
+  perpendiculaires \(x = 0, y = 0\) plus un plan «&nbsp;plafond&nbsp;» \(z = 1\)&nbsp;:
+  où tombe le point optimal et que vaut le coût&nbsp;? (c) Implémenter les
+  contractions d'arêtes par quadriques sur un maillage de tore (libigl) et
+  tracer l'erreur de Hausdorff en fonction du nombre de faces.</li>
+
+  <li><strong>Gauss–Bonnet.</strong> (a) Vérifier le théorème 7.3 sur le
+  tétraèdre et le cube (à la main), puis sur le tore minimal \(3 \times 3\)
+  (9 sommets, 27 arêtes, 18 faces — \(\chi = 0\)). (b) Montrer qu'un split
+  d'arête ne change pas \(\chi\) (compter). (c) Subdiviser le cube 3 fois et
+  vérifier numériquement l'invariance du total des déficits.</li>
+
+  <li><strong>Spectres.</strong> (a) Démontrer la formule de l'exemple 8.2 pour
+  le chemin (vérifier que \(u^{(k)}_i = \sin\frac{k\pi i}{n+1}\) est vecteur
+  propre). (b) Calculer les 10 premières valeurs propres cotangentes d'un
+  maillage de bande plate et de la même bande pliée (isométrique)&nbsp;;
+  comparer. (c) Discuter&nbsp;: pourquoi les spectres divergent-ils en pratique
+  (échantillonnage, triangulation) alors que la théorie prédit l'égalité&nbsp;?</li>
+
+  <li><strong>Persistance guidée.</strong> (a) Construire la filtration
+  alpha-shapes d'un anneau bruité (exercice du chapitre 9)&nbsp;; extraire le
+  barcode \(H_1\) (gudhi ou ripser). (b) Augmenter le bruit jusqu'à disparition
+  de la barre longue&nbsp;: à quel σ cela arrive-t-il, et pourquoi la prédiction
+  «&nbsp;σ ≈ rayon du trou / 3&nbsp;» est-elle raisonnable&nbsp;? (c) Remplacer
+  l'anneau par deux anneaux et vérifier \(b_1 = 2\).</li>
+</ol>
+</section>
+
+<!-- ============================ REFS ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>M. Desbrun, A. Hirani, M. Leok, J. Marsden, <a href="https://arxiv.org/abs/math/0508341">Discrete Exterior Calculus</a>, 2005&nbsp;;
+  M. Desbrun, E. Kanso, Y. Tong, <a href="https://link.springer.com/chapter/10.1007/978-3-7643-8621-4_16">Discrete Differential Forms for Computational Modeling</a>&nbsp;;
+  M. Meyer, M. Desbrun, P. Schröder, A. Barr, Discrete Differential-Geometry Operators for Triangulated 2-Manifolds, 2003 (Voronoi mixte, déficits).</li>
+  <li>K. Crane, F. de Goes, M. Desbrun, P. Schröder, <a href="https://dl.acm.org/doi/10.1145/2504435.2504442">Digital Geometry Processing with Discrete Exterior Calculus</a>, SIGGRAPH Asia Courses 2013 — notes&nbsp;: <a href="https://www.cs.cmu.edu/~kmcrane/Projects/DDG/">DDG</a>.</li>
+  <li>O. Amini, J.-D. Boissonnat, P. Memari, <a href="https://arxiv.org/abs/1007.2452">Geometric Tomography with Topological Guarantees</a>, Discrete &amp; Computational Geometry, 2013 (version <a href="https://link.springer.com/article/10.1007/s00454-013-9531-z">Springer</a>)&nbsp;; page de l'équipe&nbsp;: <a href="https://www.lix.polytechnique.fr/~memari/">LIX — P. Memari</a>.</li>
+  <li>J.-D. Boissonnat, F. Chazal, M. Yvinec, Geometric and Topological Inference, Cambridge Texts, 2018 (échantillonnage, reach, reconstruction)&nbsp;; H. Edelsbrunner, Geometry and Topology for Mesh Generation, Cambridge, 2001 (alpha-shapes, filtrations).</li>
+  <li>N. Amenta, M. Bern, Surface Reconstruction by Voronoi Filtering, Discrete &amp; Computational Geometry, 1999&nbsp;; M. Kazhdan, M. Bolitho, H. Hoppe, Poisson Surface Reconstruction, SGP 2006&nbsp;; W. Lorensen, H. Cline, Marching Cubes, SIGGRAPH 1987.</li>
+  <li>M. Garland, P. Heckbert, Surface Simplification Using Quadric Error Metrics, SIGGRAPH 1997&nbsp;; G. Taubin, A Signal Processing Approach to Fairing (λ|μ), ICCV 1995&nbsp;; U. Pinkall, K. Polthier, Computing Discrete Minimal Surfaces (cotangentes), 1993.</li>
+  <li>M. Reuter, F.-E. Wolter, N. Peinecke, Shape DNA (spectre de Laplace–Beltrami), CAD 2006&nbsp;; C. Gordon, D. Webb, S. Wolpert, One Cannot Hear the Shape of a Drum, Bull. AMS 1992&nbsp;; Sun, Ovsjanikov, Guibas, Heat Kernel Signature, SGP 2009.</li>
+  <li>H. Edelsbrunner, J. Harer, Persistent Homology — a Survey, Contemporary Mathematics 2008&nbsp;; la bibliothèque <a href="https://gudhi.inria.fr">GUDHI</a> (Inria) pour les TP.</li>
+  <li>Outils TP&nbsp;: <a href="https://www.scipy.org">SciPy</a> (<code>scipy.spatial</code>&nbsp;: Voronoi, Delaunay, cKDTree), <a href="https://libigl.github.io">libigl</a>, <a href="https://www.cgal.org">CGAL</a> (alpha-shapes, Delaunay, reconstruction), <a href="https://www.meshlab.net">MeshLab</a>.</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="m1p1-computer-animation.html"><span class="dir">← Précédent</span> Computer Animation</a>
+  <a class="next" href="m1p2-image-synthesis.html"><span class="dir">Suivant</span> Image Synthesis: Theory and Practice</a>
+</nav>
+
+</div>
+</body>
+</html>
