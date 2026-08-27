@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control in Generative AI — LLGA</title>
+<link rel="stylesheet" href="../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="course-hero">
+  <div class="wrap">
+    <div class="crumbs"><a href="../index.html">Programme</a> › M2 · Période 1 › Cours proposé (brochure)</div>
+    <div class="code-line">M2 · P1 (brochure)</div>
+    <h1>Control in Generative AI</h1>
+    <div class="tags"><span class="badge m2">M2</span><span class="badge position">Hors track recommandé</span></div>
+    <div class="facts">Enseignant&nbsp;: équipe du master · ~24&nbsp;h · pourquoi et comment piloter la génération — taxonomie du contrôle (conditionnement, guidance, contraintes dures, post-traitement), décodage contraint par automates avec algorithme de masquage détaillé, steering vectors, RLHF comme contrôle, watermarking des LLMs avec le test z démontré, contrôle des diffusions (CFG, ControlNet, éditing par inversion) et des générateurs de graphes, évaluation du compromis fidélité/diversité et robustesse aux attaques.</div>
+  </div>
+</div>
+
+<div class="course-layout">
+
+<nav class="toc">
+  <strong>Plan du module</strong>
+  <ol>
+    <li><a href="#ch0">Rappels&nbsp;: générer, conditionner, décoder</a></li>
+    <li><a href="#ch1">Pourquoi contrôler&nbsp;: sûreté, fidélité, propriété intellectuelle</a></li>
+    <li><a href="#ch2">Taxonomie&nbsp;: quatre familles de contrôle</a></li>
+    <li><a href="#ch3">Constrained decoding&nbsp;: grammaires, automates, masques</a></li>
+    <li><a href="#ch4">Steering&nbsp;: contrôler dans l'espace des activations</a></li>
+    <li><a href="#ch5">RLHF&nbsp;: le contrôle dans l'espace des comportements</a></li>
+    <li><a href="#ch6">Watermarking&nbsp;: prouver l'origine d'un texte</a></li>
+    <li><a href="#ch7">Contrôler les diffusions&nbsp;: CFG, ControlNet, inversion</a></li>
+    <li><a href="#ch8">Contrôler les générateurs de graphes</a></li>
+    <li><a href="#ch9">Évaluer le contrôle&nbsp;: fidélité contre diversité</a></li>
+    <li><a href="#ch10">Attaques du contrôle et robustesse</a></li>
+    <li><a href="#ex">Exercices / Labs</a></li>
+    <li><a href="#refs">Références</a></li>
+  </ol>
+</nav>
+
+<!-- ============================ CH 0 ============================ -->
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: générer, conditionner, décoder</h2>
+
+<div class="recap">
+  <div class="recap-title">Prérequis (modules M1 et M2) — ce qui est supposé acquis</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Génération autorégressive</strong> (module LLMs M2, ch. 1-2)&nbsp;: factorisation
+    \(p_\theta(y \mid x) = \prod_{t} p_\theta(y_t \mid x, y_{&lt;t})\), softmax sur le vocabulaire
+    (BPE&nbsp;: les tokens sont des <em>mots de sous-mots</em>, pas des caractères), échantillonnage
+    avec température, top-\(k\), top-\(p\) (ch. 6 du même module)&nbsp;;</li>
+    <li><strong>Conditionnement et alignement</strong> (module LLMs M2, ch. 4-5)&nbsp;: prompting,
+    SFT, RLHF/DPO/GRPO — nous y revenons au ch. 5 comme mécanisme de <em>contrôle</em>&nbsp;;</li>
+    <li><strong>Diffusion</strong> (module Multimodal GenAI M1, ch. 3-4)&nbsp;: DDPM, prédiction de
+    bruit \(\hat\epsilon_\theta(x_t, t)\), classifier guidance et classifier-<em>free</em> guidance
+    (CFG), DDIM et son inversion — rappelés au ch. 7 avec démonstration&nbsp;;</li>
+    <li><strong>VAE et ELBO</strong> (Multimodal GenAI ch. 1)&nbsp;: la borne variationnelle, le
+    compromis reconstruction/régularisation&nbsp;;</li>
+    <li><strong>Génération de graphes</strong> (module Graph ML M1 ch. 9&nbsp;; module Graph
+    Generative Models M2)&nbsp;: autorégressifs (GraphRNN, DeepGMG), VAE (NeVAE et ses masques de
+    valence), flows (GraphAF), diffusion discrète (DiGress) — le ch. 8 reprend leur contrôle&nbsp;;</li>
+    <li><strong>Tests d'hypothèses</strong> (module Refresher Statistics M1)&nbsp;: erreur de type
+    I/II, seuil, \(p\)-valeur, théorème central limite — le ch. 6 en fait un usage intensif.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">La ligne du module</span>
+  Les modules précédents ont répondu à «&nbsp;comment générer&nbsp;?&nbsp;». Celui-ci répond à
+  «&nbsp;comment générer <em>ce qu'on veut</em>&nbsp;?&nbsp;». La thèse du cours&nbsp;: le contrôle
+  n'est pas un patch posé après coup mais une <strong>famille unifiée de mécanismes</strong>
+  — conditionner, guider, contraindre, filtrer — qui se retrouvent à l'identique sur le texte
+  (ch. 3-6), les images (ch. 7) et les graphes (ch. 8), avec un compromis fidélité/diversité
+  commun (ch. 9) et une surface d'attaque commune (ch. 10).
+</div>
+
+<div class="note">
+  <span class="tag">Statut du module</span>
+  Cours proposé dans la brochure M2 (période 1)&nbsp;: l'équipe enseignante n'est pas encore
+  confirmée. Il n'y a donc pas de chapitre «&nbsp;travaux de l'enseignant&nbsp;»&nbsp;; le contenu
+  suit les standards du domaine et les modules déjà couverts par le master (croisés en permanence),
+  et sera complété le cas échéant.
+</div>
+</section>
+
+<!-- ============================ CH 1 ============================ -->
+<section class="chapter" id="ch1">
+<h2>1. Pourquoi contrôler&nbsp;: sûreté, fidélité, propriété intellectuelle</h2>
+
+<p>Un générateur est une <em>loi</em> sur un espace immense. Le demander poliment (un prompt) ne
+contraint cette loi que statistiquement&nbsp;: le format exact, la sûreté du contenu, la
+traçabilité de l'origine ne sont garantis par aucun théorème. Ce chapitre motiver chaque famille
+de besoins par ses échecs caractéristiques.</p>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Contrôler une génératrice</span>
+  Soit \(p_\theta(\cdot \mid x)\) une loi conditionnelle sur des sorties \(y \in \mathcal{Y}^*\)
+  (séquences de tokens, images, graphes). <strong>Contrôler</strong>, c'est remplacer
+  \(p_\theta\) par une loi \(\tilde p\) qui (i)&nbsp;vit sur un sous-ensemble spécifié
+  \(S \subseteq \mathcal{Y}^*\) (<em>contrainte de support</em>&nbsp;: un langage, un schéma JSON,
+  une valence chimique)&nbsp;; ou (ii)&nbsp;maximise en espérance une propriété \(c\)
+  (<em>contrainte de fidélité</em>&nbsp;: respecter la consigne, le style, la cible)&nbsp;; ou
+  (iii)&nbsp;porte une marque vérifiable d'origine (<em>contrainte de provenance</em>&nbsp;:
+  watermarking). Les chapitres 3 à 8 réalisent (i)-(ii)-(iii) par des mécanismes différents&nbsp;;
+  le ch. 2 les organisera.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 1.2 — Trois échecs réels, trois besoins</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Sûreté de format</strong>&nbsp;: on demande au LLM un JSON du type
+    <code>{"user": ...}</code>&nbsp;; il répond avec une virgule finale, une apostrophe
+    typographique, ou pire un préambule «&nbsp;Voici le JSON demandé&nbsp;». Tout parseur
+    en aval casse. Le besoin&nbsp;: \(S =\) <em>le langage JSON strict</em>, garantie 100&nbsp;%
+    — c'est le ch. 3.</li>
+    <li><strong>Fidélité</strong>&nbsp;: on demande un résumé <em>neutre</em> en français
+    <em>formel</em>&nbsp;; le modèle dérape en style familier une fois sur dix. Le prompt ne
+    garantit rien&nbsp;; le besoin est statistique — orientation <em>douce</em> de la loi&nbsp;:
+    ch. 4 et 5.</li>
+    <li><strong>Provenance</strong>&nbsp;: un texte circule&nbsp;: humain ou machine&nbsp;?
+    Le classifieur est peu fiable&nbsp;; le besoin est <em>cryptographique</em>&nbsp;: une marque
+    statistique plantée à la génération, testable — ch. 6.</li>
+  </ol>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.3 — La propriété intellectuelle et la loi comme moteurs du contrôle</span>
+  Le règlement (UE) 2024/1689 («&nbsp;AI Act&nbsp;», art. 50) impose la <strong>transparence de la
+  provenance</strong>&nbsp;: les fournisseurs de systèmes génératifs doivent marquer leurs sorties
+  de manière lisible par machine et détectable comme artificielles. Concrètement&nbsp;: le
+  watermarking (ch. 6) n'est plus un exercice académique mais une exigence de conformité&nbsp;;
+  idem pour le marquage audio (cf. module Signal Processing) et image. Ce cadre légal motive
+  l'articulation contrôle/robustesse (ch. 10)&nbsp;: une marque attaquable n'est pas une preuve.
+</div>
+
+<div class="note">
+  <span class="tag">Le contrôle traverse les modalités</span>
+  Le fil rouge du module&nbsp;: les <em>mêmes</em> quatre mécanismes (conditionner, guider,
+  contraindre le support, filtrer a posteriori) s'appliquent au texte, à l'image et aux graphes.
+  Les outils diffèrent (automates pour le texte&nbsp;; ControlNet et CFG pour l'image&nbsp;;
+  masques de valence pour les graphes), la théorie non. Le tableau du ch. 2 fixe la grille&nbsp;;
+  chaque chapitre la remplit pour une modalité.
+</div>
+</section>
+
+<!-- ============================ CH 2 ============================ -->
+<section class="chapter" id="ch2">
+<h2>2. Taxonomie&nbsp;: quatre familles de contrôle</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Les quatre familles</span>
+  Soit \(c\) le signal de contrôle (consigne, propriété cible, langage admissible).
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Conditionnement</strong>&nbsp;: \(c\) entre dans le modèle (prompt, préfixe,
+    embedding fusionné)&nbsp;; la loi devient \(p_\theta(\cdot \mid x, c)\). Coût nul à
+    l'inférence, aucune garantie — contrôle <em>mou</em>&nbsp;;</li>
+    <li><strong>Guidance</strong>&nbsp;: on biaise l'échantillonnage vers \(c\) sans réapprendre
+    \(p_\theta\) — score guidé \(\hat\epsilon_u + w(\hat\epsilon_c - \hat\epsilon_u)\) en
+    diffusion (ch. 7), steering d'activations pour les LLMs (ch. 4), guidage par gradient des
+    flows (ch. 8)&nbsp;; la force \(w\) règle la fidélité au prix de la diversité&nbsp;;</li>
+    <li><strong>Contraintes dures</strong>&nbsp;: on restreint le <em>support</em> — décodage
+    contraint par automate (ch. 3), masques de valence (ch. 8), inpainting. Garantie
+    100&nbsp;%&nbsp;; risque&nbsp;: loi renormalisée, possiblement appauvrie&nbsp;;</li>
+    <li><strong>Post-traitement / filtrage</strong>&nbsp;: générer, vérifier \(c\), rejeter
+    (best-of-\(n\), resampling, correction)&nbsp;; exact mais coûteux quand \(c\) est rare.</li>
+  </ol>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.2 — Le masque est un conditionnement exact (renormalisation)</span>
+  Soit \(S \subseteq \mathcal{Y}^*\) un ensemble de sorties admissibles et \(p_\theta\) une loi
+  par étapes (autorisé à chaque pas&nbsp;: un sous-ensemble de tokens). Si à chaque pas on
+  <em>masque</em> les tokens qui rendent \(S\) inatteignable, la loi effective est exactement
+  $$\tilde p_\theta(y \mid x) = \frac{p_\theta(y \mid x)\, \mathbf{1}[y \in S]}
+  {\sum_{y' \in S} p_\theta(y' \mid x)} = p_\theta(y \mid x,\ y \in S).$$
+  <div class="proof">
+  Par récurrence sur les pas&nbsp;: au pas \(t\), le masque autorise exactement les tokens
+  \(v\) tels qu'il existe un suffixe \(s\) avec \(y_{&lt;t} v s \in S\). La probabilité d'un
+  préfixe admissible est donc \(p_\theta(\text{préfixe}) \cdot Z_{t}^{-1}\) où
+  \(Z_t\) est la masse des continuations autorisées — le facteur de normalisation se
+  télescope de pas en pas et, au pas final, la masse totale sur \(S\) vaut 1&nbsp;: la loi
+  conditionnelle est exacte. Corollaire précieux&nbsp;: si le modèle estime correctement les
+  <em>ratios</em> des sorties admissibles (les données d'entraînement sont déjà dans \(S\) à
+  quelques exceptions près), alors \(\tilde p_\theta \approx p_\theta(\cdot \mid S)
+  \approx p_\star\) — le masque est quasi gratuit en biais et massif en garantie. C'est
+  l'analyse faite au ch. 3 du module Graph Generative Models pour les valences&nbsp;;
+  elle vaut pour tout langage. <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.3 — Le rejet coûte \(1/p_\star(S)\)</span>
+  Le filtrage par rejet (générer iid jusqu'à tomber dans \(S\)) réalise <em>aussi</em>
+  \(p_\theta(\cdot \mid S)\), mais le nombre de tirages suit une loi géométrique d'espérance
+  \(1/p_\theta(S \mid x)\).
+  <div class="proof">
+  Chaque tirage est une épreuve de Bernoulli indépendante avec succès de probabilité
+  \(q = p_\theta(S \mid x)\)&nbsp;; le temps d'attente du premier succès est géométrique,
+  \(\mathbb{E}[N] = \sum_{k \geq 1} k(1-q)^{k-1}q = 1/q\). Pour un JSON complexe non contraint,
+  \(q\) peut valoir \(10^{-2}\) (100 tirages en moyenne)&nbsp;; pour une molécule valide sans
+  contrainte, GraphAF mesure 68&nbsp;% (ch. 8)&nbsp;; pour une phrase respectant <em>à la
+  fois</em> dix contraintes rares, \(q\) s'effondre exponentiellement — d'où la supériorité
+  structurelle du masque, qui ne paie qu'une seule passe. <span class="qed">∎</span></div>
+</div>
+
+<table class="tbl">
+  <tr><th>Famille</th><th>Garantie</th><th>Coût</th><th>Diversité</th><th>Modificateur de loi</th></tr>
+  <tr><td>Conditionnement (prompt, instruction)</td><td>aucune</td><td>nul</td><td>préservée</td><td>change \(p_\theta\) elle-même</td></tr>
+  <tr><td>Guidance (CFG, steering, RLHF)</td><td>statistique (\(\uparrow w\))</td><td>1-2 passes</td><td>décroît avec \(w\)</td><td>\(p^{1-w} \cdot \mathrm{score}(c)^w\)</td></tr>
+  <tr><td>Contrainte dure (automate, masque)</td><td>100&nbsp;% sur \(S\)</td><td>1 passe + masque</td><td>bornée par \(|S|\)</td><td>renormalisation sur \(S\)</td></tr>
+  <tr><td>Rejet / best-of-\(n\)</td><td>100&nbsp;% (si test exact)</td><td>\(1/p(S)\) passes</td><td>conditionnée</td><td>conditionnement exact \(p(\cdot|S)\)</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Dur ou mou&nbsp;: comment choisir&nbsp;?</span>
+  Question d'examen favorite. Si l'échec est <em>catastrophique</em> (le parseur casse, la
+  molécule est invalide)&nbsp;: contrainte dure. Si l'échec est <em>graduel</em> (ton, style,
+  pertinence)&nbsp;: guidance, avec la force réglée par la courbe fidélité/diversité du ch. 9.
+  En pratique on <em>empile</em>&nbsp;: contrainte de format (dur) + alignement (RLHF) +
+  watermark (provenance) — les trois couches des systèmes de production 2026, dont le ch. 10
+  montre qu'elles tombent… ensemble si on n'y prend garde.
+</div>
+</section>
+
+<!-- ============================ CH 3 ============================ -->
+<section class="chapter" id="ch3">
+<h2>3. Constrained decoding&nbsp;: grammaires, automates, masques</h2>
+
+<p>Le cœur technique du module pour le texte&nbsp;: garantir qu'une sortie <em>autorisée token par
+token</em> appartient à un langage formel — expression régulière, grammaire hors-contexte (JSON,
+SQL), ou contrainte logique. L'idée fondatrice (PICARD, puis Outlines et XGrammar)&nbsp;: le
+décodage est une marche dans un <strong>automate</strong>, et le LLM n'est autorisé à suivre que
+des transitions valides.</p>
+
+<h3>3.1 Du regex à l'automate</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — AFD et langage régulier</span>
+  Un automate fini déterministe est un quintuplet \(A = (Q, \Sigma, \delta, q_0, F)\)&nbsp;:
+  états \(Q\), alphabet \(\Sigma\), transition \(\delta : Q \times \Sigma \to Q\), état initial
+  \(q_0\), états acceptants \(F\). On étend \(\delta\) aux mots par
+  \(\delta^*(q, uv) = \delta^*(\delta^*(q, u), v)\). Le langage reconnu est
+  \(L(A) = \{w \in \Sigma^* : \delta^*(q_0, w) \in F\}\). <strong>Construction</strong>&nbsp;:
+  regex \(\to\) AFN-\(\varepsilon\) (Thompson, linéaire en la taille du pattern), puis
+  déterminisation par <em>subset construction</em> (\(2^{|Q|}\) états au pire, rare en pratique).
+  Exemple du cours, la date ISO&nbsp;: <code>\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])</code>
+  — un \(F\) non trivial&nbsp;: «&nbsp;2026-02-31&nbsp;» doit être <em>syntaxiquement</em> accepté
+  (la sémantique du calendrier n'est pas un langage régulier simple&nbsp;: on y revient).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.2 — Élaguer avant de masquer&nbsp;: co-accessibilité</span>
+  Pour le masquage, on remplace \(A\) par son sous-automate <em>co-accessible</em>&nbsp;: on
+  supprime les états \(q\) d'où <em>aucun</em> état acceptant n'est atteignable (calcul&nbsp;:
+  parcours inverse des transitions depuis \(F\), \(\mathcal{O}(|Q| + |\delta|)\)). C'est ce
+  sous-automate qui garantit qu'un préfixe reste toujours <em>extensible</em> en mot complet&nbsp;:
+  sans élagage, le décodeur pourrait se verrouiller dans une impasse (aucun token admissible, y
+  compris EOS) et générer indéfiniment.
+</div>
+
+<h3>3.2 L'algorithme de masquage, en détail</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — Décodage contraint par index état→tokens (Willard &amp; Louf, 2023)</span>
+  Soit \(V\) le vocabulaire du <em>tokenizer</em> (des tokens multi-caractères&nbsp;!). On
+  précalcule, pour chaque état \(q\) du DFA élagué, l'ensemble des tokens admissibles
+  $$\mathrm{Adm}(q) = \big\{ v \in V \ : \ \delta^*(q, \mathrm{str}(v)) \ \text{est défini et co-accessible} \big\},$$
+  avec la table \(\mathrm{next}(q, v) = \delta^*(q, \mathrm{str}(v))\). Le décodage contraint
+  remplace chaque distribution par
+  $$p^{\mathrm{mask}}_\theta(v \mid y_{&lt;t}) \propto p_\theta(v \mid y_{&lt;t})\,
+  \mathbf{1}\big[v \in \mathrm{Adm}(q_t)\big], \qquad q_{t+1} = \mathrm{next}(q_t, v_t),$$
+  et n'autorise EOS que si \(q_t \in F\). Alors toute sortie est dans \(L(A)\)&nbsp;: la garantie
+  est <em>structurelle</em>, par induction sur les pas (théorème 2.2).
+  <div class="proof">
+  <strong>Complexité.</strong> Précalcul&nbsp;: \(|Q| \times |V|\) lectures de tokens, chacune
+  \(\mathcal{O}(|v|)\) transitions — une fois pour toute (et partageable entre requêtes de même
+  grammaire&nbsp;: XGrammar accélère encore en séparant les tokens <em>indépendants du
+  contexte</em>, pré-vérifiés globalement, des <em>dépendants</em>, seuls resimulés)&nbsp;.
+  En ligne&nbsp;: un lookup par pas, \(\mathcal{O}(1)\) — l'overhead sur la passe LLM
+  (\(\mathcal{O}(n^2)\)) est négligeable. <strong>Subtilité BPE</strong>&nbsp;: un token n'est
+  pas un caractère&nbsp;; <code>"12"</code> et <code>"12/"</code> sont deux tokens distincts&nbsp;;
+  la définition de \(\mathrm{Adm}\) s'en acquitte car \(\delta^*\) lit <em>la chaîne</em> du
+  token, caractère par caractère — le DFA ne sait même pas qu'on le fait tourner sur des BPE.
+  Contre-exemple instructif&nbsp;: un token peut franchir la frontière du langage
+  (<code>"},"</code> est valide en fin de JSON, <code>"},x"</code> non)&nbsp;; c'est bien
+  pourquoi on doit indexer sur les <em>tokens</em> et non sur les caractères.
+  <span class="qed">∎</span></div>
+</div>
+
+<pre class="code"><code># squelette pedagogique : decodage contraint par automate (cf. lab 1)
+import torch
+
+class DfaMask:
+    """dfa : transitions[q] = {caractere: q2}, accepting = {q...} (deja elague)."""
+
+    def __init__(self, dfa, tokenizer):
+        self.index = {}                        # q -> {token_id: q2}
+        for q in dfa.states:                   # precalcul O(|Q| x |V| x |v|)
+            self.index[q] = {}
+            for tid, s in tokenizer.vocab.items():
+                q2 = dfa.walk(q, s)            # lecture caractere par caractere
+                if q2 is not None:             # None = prefixe mort
+                    self.index[q][tid] = q2
+
+    def mask(self, logits, q):
+        mask = torch.full_like(logits, float("-inf"))
+        for tid in self.index[q]:
+            mask[tid] = 0.0
+        return logits + mask                   # -inf = interdit
+
+# boucle de generation (le DFA est l'etat du controle, le LLM fournit les logits)
+#   q = q0
+#   while True:
+#       logits = model(y)[..., -1, :]
+#       if q in dfa.accepting:  logits[eos_id] = 0.0    # sortie autorisee
+#       v = sample(softmax(mask(logits, q)))
+#       if v == eos_id:  break
+#       q = index[q][v] ; y = torch.cat([y, v])         # invariant : y in L(A)</code></pre>
+
+<div class="ex">
+  <span class="tag">Exemple 3.4 — La date ISO à la main</span>
+  Contrainte <code>\d{2}/\d{2}/\d{4}</code> simplifiée. Après <code>"26/0"</code>, l'état encode
+  «&nbsp;second chiffre du mois en cours, 0 déjà vu&nbsp;»&nbsp;; les tokens <code>"8"</code>,
+  <code>"9"</code> sont masqués (seuls <code>1</code>-<code>9</code> complètent un mois
+  <code>01</code>-<code>09</code>), <code>"/"</code> aussi. À l'inverse, si le premier chiffre du
+  mois était <code>1</code>, le second serait restreint à <code>0-2</code>. Écrire la table
+  \(\mathrm{Adm}(q)\) pour ces états est l'exercice 1&nbsp;; le piège classique&nbsp;: autoriser
+  le token <code>"13"</code> comme bloc BPE d'un seul tenant quand l'état n'accepte que
+  <code>"1"</code> suivi de <code>"0-2"</code> — <code>"13"</code> doit être masqué <em>entier</em>.
+</div>
+
+<div class="note">
+  <span class="tag">Au-delà des réguliers&nbsp;: grammaires et JSON Schema</span>
+  Les réguliers n'expriment pas l'emboîtement (<code>{"a": {"b": ...}}</code> de profondeur
+  arbitraire). Il faut les hors-contexte&nbsp;: PICARD (Scholak et al., EMNLP 2021) contraint un
+  T5 sur SQL par <em>parsing incrémental</em> (les logits interdits sont mis à \(-\infty\)
+  dès que le token rend la dérivation morte)&nbsp;; XGrammar compile des EBNF/JSON Schema vers
+  des masques quasi gratuits en ligne (2-10× plus rapides que l'état de l'art précédent).
+  En pratique industrielle 2026&nbsp;: <em>tout</em> appel d'outil LLM (function calling) passe
+  par un masque de grammaire — la sortie est un JSON valide <em>par construction</em>. Cf. module
+  LLMs (M2) ch. 8 pour la couche agents.
+</div>
+</section>
+
+<!-- ============================ CH 4 ============================ -->
+<section class="chapter" id="ch4">
+<h2>4. Steering&nbsp;: contrôler dans l'espace des activations</h2>
+
+<p>Le décodage contraint agit sur les <em>sorties</em>. Le steering agit <em>à l'intérieur</em>
+du réseau&nbsp;: si les concepts («&nbsp;positivité&nbsp;», «&nbsp;genre&nbsp;», «&nbsp;refus&nbsp;»)
+sont codés par des directions de l'espace d'activation, alors les déplacer <em>devrait</em>
+déplacer le comportement. C'est le contrôle le plus fascinant et le moins garanti du module.</p>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Vecteur de steering (ActAdd, Turner et al. 2023)</span>
+  Soit \(h^{(l)}(x) \in \mathbb{R}^d\) l'activation résiduelle de la couche \(l\) après lecture
+  du préfixe \(x\). Pour deux prompts contrastés \(x^+\) («&nbsp;Love&nbsp;») et \(x^-\)
+  («&nbsp;Hate&nbsp;»), on définit
+  $$v = h^{(l)}(x^+) - h^{(l)}(x^-) \in \mathbb{R}^d,$$
+  et, pendant la génération, on remplace
+  \(h^{(l)}(x_t) \leftarrow h^{(l)}(x_t) + \alpha\, v\) à <em>chaque</em> pas (et souvent sur
+  le premier token seulement)&nbsp;; \(\alpha \in [-4, 4]\) est la force de guidage. Le modèle,
+  les poids, le prompt&nbsp;: rien ne change — seul un vecteur est additionné.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.2 — L'expérience fondatrice, décrite pas à pas (à rejouer en lab 3)</span>
+  Modèle&nbsp;: GPT-2 (124M-1.5B dans le papier&nbsp;; le lab prend le small). (i)&nbsp;calculer
+  \(v\) = \(h^{(6)}(\texttt{Love}) - h^{(6)}(\texttt{Hate})\)&nbsp;; (ii)&nbsp;générer 200
+  suites du prompt «&nbsp;I want to tell you something&nbsp;» <em>sans</em> steering, puis avec
+  \(\alpha = +1\), puis \(\alpha = -1\)&nbsp;; (iii)&nbsp;compter les mots liés au mariage
+  («&nbsp;love, wedding, bride, forever…&nbsp;»)&nbsp;: leur fréquence bondit d'un facteur
+  plusieurs dizaines à \(\alpha = +1\), chute sous la baseline à \(\alpha = -1\)&nbsp;;
+  (iv)&nbsp;mesurer la perplexité sur OpenWebText&nbsp;: quasi inchangée à \(\alpha = \pm 1\),
+  elle explose vers \(|\alpha| \gtrsim 5\) (sorties dégénérées)&nbsp;; (v)&nbsp;constater le
+  désaccord inter-couches&nbsp;: le steering marche «&nbsp;mieux&nbsp;» (effet fort, texte
+  cohérent) sur certaines couches (milieu de réseau) que d'autres — un hyperparamètre de plus.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.3 — Pourquoi une simple addition déplace la sortie (analyse au premier ordre)</span>
+  Notons \(W_U\) la matrice de dés-embedding (couche de sortie). Le logit du token \(w\) vaut
+  \(\ell_w = \langle W_U^{(w)}, h^{(L)} \rangle\) (couche finale, en ignorant la softmax). Si
+  le résidu steered \(h^{(L)} + \alpha v^{(L)}\) reste dans le domaine de linéarité du réseau,
+  alors
+  $$\Delta \ell_w \;=\; \alpha\, \langle W_U^{(w)}, v^{(L)} \rangle\ :$$
+  <em>tous les tokens alignés avec la direction \(v\) sont favorisés proportionnellement à
+  \(\alpha\)</em> — un reweighting global et monotone, avant même tout effet non linéaire.
+  <div class="proof">
+  Différentiabilité&nbsp;: à première ordre, \(h^{(L)} \mapsto \ell_w\) est affine&nbsp;;
+  \(\Delta \ell_w = \nabla_h \ell_w^\top (\alpha v) = \alpha \langle W_U^{(w)}, v\rangle\).
+  C'est exactement la structure d'un <em>guidage</em> (ch. 2, famille 2)&nbsp;: le logit de
+  chaque token est décalé par un score de «&nbsp;compatibilité avec la direction&nbsp;». La
+  différence avec le masque&nbsp;: ici aucun logit n'est envoyé à \(-\infty\)&nbsp;— la loi
+  reste à support plein, le contrôle est mou&nbsp;; et l'approximation linéaire devient fausse
+  quand \(\alpha\) grandit, d'où la dégénerescence observée. <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">La famille steering en 2026&nbsp;: lecture, écriture, poids</span>
+  <strong>Lire</strong>&nbsp;: probing et directions de concepts (cf. module Explainability ch. 1)&nbsp;;
+  <strong>écrire</strong>&nbsp;: ActAdd (différence de deux activations), contrastive activation
+  addition (différences moyennées sur paires de comportements), inference-time intervention
+  (déplacer les activations <em>vers</em> la direction de véracité), representation engineering
+  (Zou et al., 2023&nbsp;: extraire par auto-interprétation des directions d'honnêteté, de
+  refus, de biais et les soustraire/additionner)&nbsp;; <strong>sur les poids</strong>&nbsp;:
+  l'arithmétique de tâches (Ilharco et al., ICLR 2023)&nbsp;: additionner <em>aux poids</em> la
+  différence entre modèle fine-tuné et modèle de base — le même geste «&nbsp;+ une
+  direction&nbsp;» déplacé d'un espace à l'autre, composable (additionner deux tâches, en
+  annuler une par soustraction). Limites communes&nbsp;: choix de couche et de \(\alpha\)
+  empiriques, effets non monotones, généralisation fragile hors distribution — et aucune
+  garantie de support&nbsp;: pour interdire <em>vraiment</em> un format, seul le ch. 3 parle.
+</div>
+</section>
+
+<!-- ============================ CH 5 ============================ -->
+<section class="chapter" id="ch5">
+<h2>5. RLHF&nbsp;: le contrôle dans l'espace des comportements</h2>
+
+<p>Le RLHF a été présenté comme alignement (cf. module LLMs M2 ch. 5 — on n'en refait pas la
+pratique)&nbsp;; ici on le relit comme mécanisme de <em>contrôle</em>, et on démontre qu'il est
+— mathématiquement — le <em>jumeau</em> du classifier-free guidance du ch. 7. Cette double
+lecture est le point de synthèse du module.</p>
+
+<div class="thm">
+  <span class="tag">Théorème 5.1 — RLHF = guidage exponentiel de la loi de sortie (solution fermée démontrée)</span>
+  Le programme d'alignement avec pénalité KL s'écrit
+  $$\pi^* = \arg\max_{\pi}\ \mathbb{E}_{y \sim \pi(\cdot \mid x)}\big[r(y, x)\big]
+  \;-\; \beta\, \mathrm{KL}\big(\pi(\cdot \mid x)\,\|\,\pi_{\mathrm{ref}}(\cdot \mid x)\big).$$
+  Sa solution unique est
+  $$\pi^*(y \mid x) \;=\; \frac{1}{Z(x)}\, \pi_{\mathrm{ref}}(y \mid x)\,
+  \exp\big(r(y, x)/\beta\big), \qquad Z(x) = \sum_{y'} \pi_{\mathrm{ref}}(y' \mid x)
+  e^{r(y',x)/\beta}.$$
+  <div class="proof">
+  On maximise sur la loi \(\pi\) (variable infinie-dimensionnelle). Posons
+  \(J(\pi) = \mathbb{E}_\pi[r] - \beta\,\mathbb{E}_\pi[\log \frac{\pi}{\pi_{\mathrm{ref}}}]\).
+  Premier ordre&nbsp;: pour toute perturbation \(\pi + \varepsilon(\nu - \pi)\) (\(\nu\) une
+  loi quelconque),
+  \(\frac{d}{d\varepsilon} J\big|_{\varepsilon=0} = \mathbb{E}_{\nu}[r - \beta\log\frac{\pi}{\pi_{\mathrm{ref}}} - \beta - c] = 0\)
+  pour tout \(\nu\), où \(c\) est le multiplicateur de la contrainte \(\sum_y \pi(y) = 1\).
+  Ceci force \(r(y,x) - \beta \log\frac{\pi(y|x)}{\pi_{\mathrm{ref}}(y|x)}\) constant en
+  \(y\)&nbsp;: \(\log \frac{\pi}{\pi_{\mathrm{ref}}} = r/\beta + \mathrm{cste}\), soit le
+  résultat (la constante est fixée par la normalisation&nbsp;; la stricte concavité du KL donne
+  l'unicité). <strong>Lecture contrôle</strong>&nbsp;: la politique alignée est la loi de
+  référence <em>repondérée par un facteur exponentiel en la récompense</em>, exactement comme
+  le CFG repondère \(p(x_t)\) par \(p(c \mid x_t)^w\) (ch. 7)&nbsp;; \(\beta\) (inverse de la
+  température de récompense) joue le rôle de la force de guidage \(w\), et le KL est le
+  <em>budget</em> d'écart consenti — grande fidélité à \(r\), petite diversité si \(\beta\)
+  petit. <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.2 — DPO&nbsp;: la même solution, sans modèle de récompense</span>
+  En réécrivant \(r = \beta \log \frac{\pi^*}{\pi_{\mathrm{ref}}} + \beta\log Z\), la préférence
+  entre \(y_w \succ y_l\) s'exprime directement en politiques&nbsp;: la perte DPO
+  $$\mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Big(\beta \log\tfrac{\pi_\theta(y_w|x)}{\pi_{\mathrm{ref}}(y_w|x)}
+  - \beta \log\tfrac{\pi_\theta(y_l|x)}{\pi_{\mathrm{ref}}(y_l|x)}\Big)$$
+  est la vraisemblance des préférences <em>sous la forme fermée du théorème 5.1</em>&nbsp;:
+  DPO apprend le même guidage exponentiel par régression directe sur les paires. GRPO (renfort
+  group-relative) en est l'extension par comparaisons intra-groupe — développés en détail au
+  ch. 5 du module LLMs (M2), qu'on consultera pour l'entraînement effectif.
+</div>
+
+<div class="note">
+  <span class="tag">Le reward hacking&nbsp;: quand le contrôle rate sa cible</span>
+  La récompense est une <em>spec</em>&nbsp;; le modèle optimise la spec, pas l'intention. Le
+  mécanisme (bien documenté)&nbsp;: la solution fermée 5.1 concentre la masse sur les pics de
+  \(r\) — y compris les pics <em>artefactuels</em> (réponses longues, sycophancie, formats
+  plébiscités par le modèle de récompense). Le KL freine (budget&nbsp;!), sans l'interdire&nbsp;:
+  à budget de KL \(k\) nul, \(\pi^* = \pi_{\mathrm{ref}}\)&nbsp;; à \(\beta \to 0\), collapse
+  sur l'argmax de \(r\). Même structure que le compromis fidélité/diversité du CFG —
+  ch. 9 pour la mesure, ch. 10 pour l'attaque (exploiter les artefacts du récompenseur est
+  un détournement de contrôle).
+</div>
+</section>
+
+<!-- ============================ CH 6 ============================ -->
+<section class="chapter" id="ch6">
+<h2>6. Watermarking&nbsp;: prouver l'origine d'un texte</h2>
+
+<p>Contrainte de provenance (déf. 1.1 iii)&nbsp;: modifier <em>la génération</em> pour que les
+sorties portent une marque statistique secrète, vérifiable sans faux-fuyant. Le schéma
+vert/rouge de Kirchenbauer et al. (ICML 2023) est le plus enseigné car son test se démontre au
+niveau M2 — c'est aussi le pont avec le watermarking audio du module Signal Processing et le
+ch. 9 du module Explainability.</p>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Watermark vert/rouge (Kirchenbauer et al., 2023)</span>
+  <strong>Clé</strong>&nbsp;: \(k\) secrète. <strong>À chaque pas</strong>&nbsp;: on hache le
+  token <em>précédent</em> avec \(k\) (PRF \(h_k\)), le résultat sert de graine pseudo-aléatoire
+  pour partitionner le vocabulaire&nbsp;: une <em>liste verte</em> \(G_k(y_{t-1})\) de fraction
+  \(\gamma\) (typiquement \(\gamma = 0{,}5\)), le reste en liste rouge. <strong>Génération</strong>&nbsp;:
+  avant la softmax, on ajoute \(\delta\) aux logits verts (typ. \(\delta = 2\))&nbsp;:
+  $$\ell^{(t)}_v \leftarrow \ell^{(t)}_v + \delta \cdot \mathbf{1}\big[v \in G_k(y_{t-1})\big].$$
+  <strong>Détection</strong>&nbsp;: connaissant \(k\), on recompte les verts.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.2 — Le test z, démontré (H0&nbsp;: texte non marqué)</span>
+  Soit un texte suspect de \(T\) tokens, \(s = \sum_{t=1}^T \mathbf{1}[y_t \in G_k(y_{t-1})]\)
+  son nombre de verts, et la statistique
+  $$z \;=\; \frac{s - \gamma T}{\sqrt{T\, \gamma (1 - \gamma)}}.$$
+  Sous l'hypothèse nulle «&nbsp;texte écrit sans connaissance de \(k\)&nbsp;» (donc humain, ou
+  modèle non marqué), \(z\) converge en loi vers \(\mathcal{N}(0, 1)\) quand \(T \to \infty\), et
+  on rejette \(H_0\) au seuil \(\alpha\) si \(z &gt; \Phi^{-1}(1 - \alpha)\).
+  <div class="proof">
+  (i)&nbsp;<em>Loi sous H0</em>. La graine \(h_k(y_{t-1})\) est pseudo-aléatoire&nbsp;: pour un
+  texte qui n'a <em>pas</em> été généré en fonction des listes, l'appartenance de \(y_t\) à la
+  liste verte est un tirage Bernoulli(\(\gamma\)) — indépendant de \(k\) en pratique (c'est la
+  propriété cryptographique du PRF&nbsp;; une heuristique standard en information théorique).
+  Donc \(s \sim \mathrm{Bin}(T, \gamma)\) (en négligeant la dépendance séquentielle faible).
+  (ii)&nbsp;<em>Normalité</em>. \(\mathbb{E}[s] = \gamma T\), \(\mathrm{Var}(s) =
+  T\gamma(1-\gamma)\)&nbsp;; le théorème de De Moivre-Laplace (CLT binomial — module Refresher
+  Statistics) donne \(\frac{s - \gamma T}{\sqrt{T\gamma(1-\gamma)}} \Rightarrow
+  \mathcal{N}(0,1)\). (iii)&nbsp;<em>Seuil</em>. P(faux positif) \(= \alpha\)&nbsp;: avec
+  \(z_{\mathrm{seuil}} = 4\), \(\alpha \approx 3{,}2 \times 10^{-5}\) — un texte humain est
+  accusé une fois sur ~30&nbsp;000. (iv)&nbsp;<em>Puissance sous H1</em>. Pour un texte marqué,
+  chaque pas tire un vert avec probabilité \(p_\delta &gt; \gamma\) (le bump \(\delta\) favorise
+  les verts)&nbsp;; \(\mathbb{E}[z \mid H1] \approx (p_\delta - \gamma)\sqrt{T}/\sqrt{\gamma(1-\gamma)}\),
+  qui croît en \(\sqrt{T}\)&nbsp;: avec \(\gamma = 0{,}5\), \(\delta = 2\), \(p_\delta \approx
+  0{,}7-0{,}8\) en pratique, et \(T = 200\), \(\mathbb{E}[z] \approx 5{,}7\)-8{,}5 — la
+  détection est quasi certaine. <span class="qed">∎</span></div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 6.3 — Le test en chiffres (exercice 2 en entier)</span>
+  \(T = 200\), \(\gamma = 0{,}5\). Un texte marqué observe \(s = 150\) (75&nbsp;% de verts)&nbsp;:
+  \(z = (150 - 100)/\sqrt{200 \times 0{,}25} = 50/\sqrt{50} \approx 7{,}07\) — rejet massif de
+  H0. Un texte humain <em>typique</em> aurait \(s \in [87, 113]\) à 95&nbsp;% (\(z \in
+  [-1{,}96, 1{,}96]\)). Question subsidiaire&nbsp;: combien faut-il de tokens pour distinguer
+  \(\gamma = 0{,}5\) de \(p_\delta = 0{,}6\) avec une puissance de 0,9&nbsp;? Réponse&nbsp;:
+  \(T \approx \big(\Phi^{-1}(0{,}9)\sqrt{0{,}25} + \Phi^{-1}(0{,}975)\sqrt{0{,}24}\big)^2 /
+  0{,}01 \approx 340\) — la résolution croît quadratiquement avec la finesse du signal, la
+  taille nécessaire linéairement avec \((p_\delta - \gamma)^{-2}\)&nbsp;: c'est <em>la</em>
+  loi d'échelle du watermark.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.4 — La famille&nbsp;: distorsion, robustesse, indétectabilité</span>
+  Quatre descendants structurent le domaine. (i)&nbsp;<strong>Unigram</strong> (Zhao et al.,
+  2023)&nbsp;: la liste verte est <em>fixe</em> (indépendante du contexte) — robuste à la
+  paraphrase (les tokens survivent au réordonnancement), au prix d'une détectabilité plus
+  faible à \(T\) donné. (ii)&nbsp;<strong>Gumbel/Aaronson</strong>&nbsp;: le tirage du token
+  suit un rang inverse échantillonné par PRF — <em>sans distorsion</em> (la loi marginale par
+  pas est exactement celle du modèle)&nbsp;; le score devient une somme de logs. (iii)&nbsp;
+  <strong>Kuditipudi et al. (2023)</strong>&nbsp;: marquage par <em>séquence de clés</em>
+  re-paramétrisable, distorsion nulle et robuste aux éditions&nbsp;; (iv)&nbsp;
+  <strong>SynthID-Text</strong> (Dathathri et al., Nature 2024)&nbsp;: déployé en production à
+  l'échelle de Gemini — un <em>tournoi</em> de clés par pas, qualitativement préservé, test
+  agrégé sur corpus. En regard&nbsp;: le résultat négatif de Sadasivan et al. (2023) — contre
+  un paraphraseur <em>assez bon</em>, tout détecteur (watermark inclus) tend vers l'aveugle&nbsp;;
+  et Christ, Gunn &amp; Zamir (2024) prouvent la frontière théorique&nbsp;: un watermark
+  «&nbsp;indétectable&nbsp;» ne peut pas battre le compromis qualité-détection du schéma
+  vert/rouge en général. Le ch. 10 y revient en mode attaque.
+</div>
+
+<div class="note">
+  <span class="tag">Réglage&nbsp;: \(\gamma\), \(\delta\), et le triple compromis</span>
+  Augmenter \(\delta\) → détection facile (\(p_\delta \to 1\)) mais texte dégradé (le choix
+  est biaisé vers les verts même quand un rouge était le «&nbsp;bon&nbsp;» mot)&nbsp;;
+  diminuer \(\gamma\) → listes vertes rares, signal plus net mais contrainte plus raide sur
+  la qualité. En production on vise \(\gamma = 0{,}25-0{,}5\), \(\delta = 1{-}2\)&nbsp;:
+  perte de qualité imperceptible (évaluée par perplexité et tests humains), \(z &gt; 4\)
+  atteint dès \(T \approx 50{-}100\). Le même réglage bipolaire <em>qualité du signal /
+  fidélité de la loi</em> structure le watermarking <em>audio</em> (WavMark, AudioSeal —
+  cf. module Speech Technology ch. 9)&nbsp;: deux modalités, une théorie.
+</div>
+</section>
+
+<!-- ============================ CH 7 ============================ -->
+<section class="chapter" id="ch7">
+<h2>7. Contrôler les diffusions&nbsp;: CFG, ControlNet, inversion</h2>
+
+<p>Le contrôle des modèles de diffusion a été introduit au M1 (module Multimodal GenAI
+ch. 4)&nbsp;; on en donne ici la <em>démonstration</em> courte (la partie qu'on n'avait pas
+faite), puis les deux industriels du contrôle spatial (ControlNet) et de l'édition
+(inversion).</p>
+
+<h3>7.1 CFG&nbsp;: la démonstration courte</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 7.1 — Classifier guidance et CFG sont le même reweighting exponentiel</span>
+  Notons \(\hat\epsilon_c, \hat\epsilon_u\) les bruits prédits avec/sans condition, et
+  \(\hat\epsilon_w = \hat\epsilon_u + w\,(\hat\epsilon_c - \hat\epsilon_u)\) la prédiction CFG.
+  Puisque \(\hat\epsilon(x_t, t) = -\sqrt{1 - \bar\alpha_t}\, \nabla_{x_t} \log p(x_t)\)
+  (paramétrage par le score), la combinaison CFG réalise
+  $$\nabla_{x_t} \log p_w(x_t) \;=\; \nabla_{x_t} \log p(x_t) + w\, \nabla_{x_t}
+  \log p(c \mid x_t) \;=\; \nabla_{x_t} \log \big[p(x_t \mid c)^w \, p(x_t)^{1-w}\big],$$
+  c'est-à-dire l'échantillonnage dans la loi <em>repondérée</em> \(p_w \propto p(x_t|c)^w
+  p(x_t)^{1-w}\) — exactement la famille du théorème 5.1 (RLHF) avec \(w \leftrightarrow
+  1/\beta\).
+  <div class="proof">
+  Linéarité du score&nbsp;: \(\hat\epsilon_w = (1 - w)\hat\epsilon_u + w \hat\epsilon_c\)
+  (réécrire la combinaison)&nbsp;; chaque terme est proportionnel au gradient de log-densité
+  correspondant, donc la somme est le gradient de la <em>somme</em> des logs. Pour le terme
+  conditionnel, la règle de Bayes \(p(x_t \mid c) \propto p(c \mid x_t)\, p(x_t)\) donne
+  \(\nabla \log p(x_t|c)^w p(x_t)^{1-w} = w\nabla\log p(c|x_t) + \nabla \log p(x_t)\) —
+  qui est précisément la formule du <em>classifier guidance</em> de poids \(w\)&nbsp;: CFG
+  l'obtient <em>sans classifieur</em>, en entraînant le même réseau avec dropout du
+  conditionnement. À \(w = 1\)&nbsp;: modèle conditionnel pur&nbsp;; \(w &gt; 1\)&nbsp;:
+  sur-guidage (fidélité \(\uparrow\), diversité \(\downarrow\), saturation de couleurs&nbsp;—
+  le symptôme visuel classique)&nbsp;; \(w &lt; 1\)&nbsp;: interpolation vers l'inconditionnel.
+  <span class="qed">∎</span></div>
+</div>
+
+<h3>7.2 ControlNet&nbsp;: le contrôle spatial, sans casser le pré-entraînement</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 7.2 — Architecture ControlNet (Zhang, Rao &amp; Agrawala, ICCV 2023)</span>
+  Soit \(F(x ; \Theta)\) un bloc du UNet gelé (opération sur l'activation \(x\) de la couche
+  \(i\)). ControlNet branche une <em>copie entraînable</em> initialisée à \(\Theta\) et verrouille
+  la sortie par deux convolutions <em>nulles</em> (zero-convolutions)&nbsp;:
+  $$y \;=\; F(x;\Theta) \;+\; Z_2\Big(F_c\big(Z_1(c;\Theta_{z_1});\ \Theta_c\big);\ \Theta_{z_2}\Big),$$
+  où \(c\) est la carte de contrôle (contours Canny, profondeur, pose squelettique…)&nbsp;;
+  \(Z_i\) est une convolution \(1\times1\) de poids <em>nuls à l'initialisation</em>.
+  <div class="proof">
+  <strong>Propriété d'identité au départ.</strong> À \(t = 0\)&nbsp;:
+  \(Z_2(\cdot) = W_2 \, h = 0\) car \(W_2 = 0\) — la branche sort exactement zéro, et le
+  modèle composé est <em>identiquement</em> le modèle pré-entraîné&nbsp;: le finetuning
+  démarre de la qualité du départ, sans «&nbsp;catastrophic shift&nbsp;». <strong>Le gradient
+  ne s'annule pas.</strong> La dérivée de la sortie par rapport à \(W_2\) vaut
+  \(\partial y / \partial W_2 = h_c \neq 0\) (la copie \(F_c\), initialisée à \(\Theta\),
+  produit des activations non nulles)&nbsp;: la première mise à jour tire \(W_2\) de zéro, ce
+  qui <em>déverrouille</em> ensuite les gradients vers \(F_c\) et \(Z_1\) (qui étaient nuls
+  tant que \(W_2 = 0\), par règle de la chaîne). Comparer l'alternative naïve (brancher
+  \(F_c\) directement)&nbsp;: au pas 0, un bruit aléatoire non maîtrisé s'ajoute aux
+  activations du UNet gelé et détruit la cohérence de la sortie pendant des centaines de pas.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi «&nbsp;copie&nbsp;» et pas «&nbsp;nouveau réseau&nbsp;»</span>
+  La copie hérite des features du pré-entraînement&nbsp;: le contrôle apprend <em>la
+  correspondance carte conditionnelle → features riches existantes</em>, pas la vision depuis
+  zéro — d'où l'efficacité données (quelques milliers de paires suffisent pour un nouveau type
+  de contrôle). C'est un pattern général du module&nbsp;: conditionner autour d'un modèle gelé
+  et protéger l'interface par une initialisation identité (le masque du ch. 3 est l'analogue
+  exact pour les logements discrets&nbsp;: n'autoriser que ce qui préserve l'invariant).
+</div>
+
+<h3>7.3 Éditer une image réelle&nbsp;: inversion et null-text</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 7.3 — DDIM inversion et son échec sous CFG</span>
+  DDIM définit un pas déterministe liant \(x_t\) et \(x_{t-1}\) via la prédiction
+  \(\hat x_0(x_t, c)\)&nbsp;; l'<em>inversion</em> parcourt la relation en sens inverse
+  (rappel&nbsp;: module Multimodal GenAI ch. 4)&nbsp;:
+  $$x_{t+1} = \sqrt{\bar\alpha_{t+1}}\, \hat x_0(x_t, c) + \sqrt{1 - \bar\alpha_{t+1}}\;
+  \hat\epsilon_c(x_t, c).$$
+  Avec CFG, le «&nbsp;bruit&nbsp;» appliqué dépend d'une combinaison \(w\) des prédictions
+  conditionnelle/inconditionnelle&nbsp;; l'inversion devient une équation implicite (le pas
+  dépend de \(x_t\) à travers deux réseaux)&nbsp;: l'erreur se cumule, la reconstruction
+  dérive. <strong>Null-text inversion</strong> (Mokady et al., CVPR 2023)&nbsp;: garder la
+  trajectoire d'inversion comme <em>ancrage</em> et optimiser, pas par pas, l'embedding de
+  condition <em>nulle</em> \(c_\varnothing^{(t)}\) pour minimiser
+  \(\|\hat x_0\big(x_t; c, c_\varnothing^{(t)}\big) - x_0\|^2\) — quelques dizaines de pas
+  de gradient par image&nbsp;; l'édition (Prompt-to-Prompt&nbsp;: substituer les cartes
+  d'attention croisées&nbsp;; InstructPix2Pix&nbsp;: apprendre l'édition sur données
+  synthétiques) opère alors <em>le long</em> de cette trajectoire fidèle.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 7.4 — CFG numérique (papier-crayon, format du module graphes)</span>
+  Vocabulaire de 3 «&nbsp;directions&nbsp;» artistiques, logits du pas \(t\) sans
+  condition&nbsp;: \((\text{peinture}: 2{,}0,\ \text{photo}: 1{,}5,\ \text{3D}: 0{,}5)\)&nbsp;;
+  avec condition «&nbsp;aquarelle&nbsp;»&nbsp;: \((3{,}0,\ 0{,}5,\ 0{,}5)\). À \(w = 3\)&nbsp;:
+  logits guidés \(= (1-w)\,u + w\,c = (-4{,}0,\ -1{,}0,\ 0{,}5)\)… en forme additive
+  équivalente \(u + w(c - u) = (5{,}0,\ -1{,}0,\ 0{,}5)\) — softmax \(\approx (0{,}95,
+  0{,}007,\ 0{,}04)\)&nbsp;: le style cible écrase la distribution, exactement comme le CFG
+  moléculaire de l'exemple 7.3 du module Graph Generative Models. \(w = 8\) → un seul mode
+  survit&nbsp;: la courbe du ch. 9, lisible sur un seul pas.
+</div>
+</section>
+
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Contrôler les générateurs de graphes</h2>
+
+<p>Chapitre de synthèse&nbsp;: le module Graph Generative Models (M2) développe chaque famille
+en détail — ici on relit ses chapitres 3, 4 et 5 à travers la grille du ch. 2, pour montrer que
+la théorie du contrôle y est <em>identique</em> à celle du texte et de l'image.</p>
+
+<div class="thm">
+  <span class="tag">Théorème 8.1 — Trois contrôles, trois mécanismes, une grille</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Contraintes dures&nbsp;: la valence chimique</strong>. Chaque pas de décodage
+    masque les liaisons qui excéderaient la valence restante \(r_v\) de l'atome \(v\) —
+    NeVAE (AAAI 2019) pousse la validité à &gt;&nbsp;90&nbsp;% sans post-traitement (contre
+    quelques pourcents sinon)&nbsp;; GraphAF masque de même et atteint 100&nbsp;% avec règles
+    (68&nbsp;% sans). C'est <em>mot pour mot</em> le théorème 2.2&nbsp;: renormalisation sur
+    l'ensemble légal \(\mathcal{L}\), garanti par construction&nbsp;;</li>
+    <li><strong>Guidance par gradient</strong>&nbsp;: GraphAF (ICLR 2020) — chaque décision
+    part d'un \(z_t \sim \mathcal N(0,1)\) passé dans un flow&nbsp;; pour maximiser une
+    propriété \(Q(G)\) (solubilité, docking), on déplace \(z_t\) le long de
+    \(\nabla_{z_t} Q(G_t)\) <em>pendant</em> la génération — la force de guidage est le pas
+    de gradient, le compromis fidélité/diversité y est mesuré (le module graphes ch. 4 le
+    dérive)&nbsp;;</li>
+    <li><strong>Conditionnement + inpainting</strong>&nbsp;: DiGress (ICLR 2023) entraîne le
+    débruiteur avec un descripteur \(c\) parfois masqué (classifier-free&nbsp;: thm 7.1
+    transposé) et fige des squelettes partiels&nbsp;; le posterior discret permet de générer
+    <em>autour</em> d'un motif imposé — l'analogue exact du null-text/inpainting image du
+    ch. 7.</li>
+  </ol>
+</div>
+
+<table class="tbl">
+  <tr><th>Contrôle</th><th>Mécanisme (ch. 2)</th><th>Où (module graphes)</th><th>Analogue texte</th><th>Analogue image</th></tr>
+  <tr><td>Validité chimique</td><td>masque (renormalisation)</td><td>ch. 3 (NeVAE)</td><td>automate du ch. 3</td><td>—</td></tr>
+  <tr><td>Propriété \(Q\) cible</td><td>guidage par gradient</td><td>ch. 4 (GraphAF)</td><td>steering (ch. 4)</td><td>CFG (ch. 7)</td></tr>
+  <tr><td>Squelette imposé</td><td>conditionnement + inpainting</td><td>ch. 5 (DiGress)</td><td>préfixe forcé</td><td>null-text (ch. 7)</td></tr>
+  <tr><td>Texte → graphe</td><td>conditionnement lourd (LLM)</td><td>ch. 7 (text-to-graph)</td><td>prompting</td><td>text-to-image complet</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Ce que les graphes apprennent au contrôle</span>
+  Deux leçons spécifiques. (i)&nbsp;Les contraintes <em>locales</em> (valence) se masquent
+  trivialement, les contraintes <em>globales</em> (connectivité, taille d'anneau) non&nbsp;:
+  l'automate correspondant serait exponentiel — la recherche «&nbsp;contraintes globales
+  tractables&nbsp;» est ouverte&nbsp;; (ii)&nbsp;l'évaluation du contrôle y est la plus mûre
+  (validité/unicité/nouveauté + FCD&nbsp;; module graphes ch. 6) — c'est le patron du ch. 9.
+</div>
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Évaluer le contrôle&nbsp;: fidélité contre diversité</h2>
+
+<p>Contrôler sans mesurer, c'est croire. Ce chapitre fixe le protocole&nbsp;: deux axes
+(fidélité, diversité), une courbe (le balayage de la force), une décomposition
+(précision/rappel), et une borne qui montre que le compromis est <em>structurel</em>, pas un
+défaut d'ingénierie.</p>
+
+<div class="def">
+  <span class="tag">Définition 9.1 — Fidélité et diversité</span>
+  <strong>Fidélité de contrôle</strong>&nbsp;: \(\mathrm{Fid}(S) = \frac{1}{n}\sum_i
+  \mathbf{1}[y_i \in S]\) (pass rate&nbsp;; ou une métrique continue — score de propriété,
+  similarité au prompt). <strong>Diversité</strong>&nbsp;: distance moyenne intra-lot
+  \(\mathrm{Div} = \frac{2}{n(n-1)}\sum_{i&lt;j} d(y_i, y_j)\) (auto-BLEU pour le texte,
+  distance LPIPS pour l'image, Tanimoto pour les molécules — module graphes ch. 6)&nbsp;;
+  ou entropie de la loi effective. <strong>Qualité</strong> au sens fidélité aux
+  données&nbsp;: FID (rappel du module Multimodal GenAI ch. 8), perplexité sous un modèle de
+  référence.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 9.2 — Le compromis est structurel (borne d'entropie)</span>
+  Soit \(S \subset \mathcal{Y}^*\) l'ensemble admissible (\(|S| = m\) fini&nbsp;; pour les
+  séquences, considérer les sorties de longueur \(\leq L\) sur un vocabulaire de taille
+  \(k\)&nbsp;: \(m \leq k^L\), l'espace entier). Toute loi \(\tilde p\) à support dans \(S\)
+  vérifie
+  $$H(\tilde p) \;\leq\; \log m \;=\; H_{\max}(\mathcal{Y}^{\leq L}) \;-\; \log\frac{k^L}{m}.$$
+  <div class="proof">
+  L'entropie est maximale à loi uniforme (inégalité de Gibbs&nbsp;: pour toute \(p\) sur
+  \(S\), \(\mathrm{KL}(p \,\|\, \mathrm{Unif}_S) = \log m - H(p) \geq 0\), avec égalité ssi
+  uniforme). Contrainte de support → plafond d'entropie abaissé de \(\log(k^L/m)\)&nbsp;:
+  chaque ordre de grandeur de contrainte divisant le nombre de sorties admissibles par
+  \(e\) coûte 1 nat de diversité maximale. Le guidage agit de même <em>en douceur</em>&nbsp;:
+  \(p_w \propto p^{1-w}\mathrm{score}(c)^w\) concentre la masse sur les modes compatibles
+  avec \(c\) — l'entropie effective décroît de façon monotone dans les cas usuels (théorème
+  5.1 et 7.1&nbsp;: le KL au départ est exactement le prix payé)&nbsp;; d'où la courbe.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 9.3 — La courbe de contrôle (protocole)</span>
+  Pour chaque force \(w \in \{0, 0{,}5, 1, 2, 4, 8, \dots\}\) (ou \(\delta\) du watermark,
+  \(\alpha\) du steering, \(\beta^{-1}\) du RLHF)&nbsp;: générer un lot fixe (mêmes seeds),
+  mesurer \((\mathrm{Fid}(w), \mathrm{Div}(w))\), tracer la trajectoire. Lecture&nbsp;:
+  (i)&nbsp;une méthode <em>domine</em> si sa courbe est au-dessus/à droite d'une autre partout&nbsp;;
+  (ii)&nbsp;le «&nbsp;coude&nbsp;» (fidélité cesse de croître, diversité s'effondre) est le
+  point de réglage recommandé&nbsp;; (iii)&nbsp;compléter par la décomposition
+  précision/rappel (Kynkäänniemi et al., NeurIPS 2019)&nbsp;: la <em>précision</em> mesure la
+  qualité des modes occupés, le <em>rappel</em> la couverture des modes de la donnée — le
+  sur-guidage tue le rappel (modes abandonnés) avant la précision. Anti-protocole
+  classique&nbsp;: ne tracer que la fidélité («&nbsp;100&nbsp;% de JSON valides&nbsp;!&nbsp;»)
+  et passer sous silence que le modèle n'émet plus que trois templates — le collapse de mode,
+  version contrôle.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 9.4 — Courbe jouet, à la main</span>
+  Loi sur 4 sorties de probabilités \((0{,}4,\ 0{,}3,\ 0{,}2,\ 0{,}1)\)&nbsp;; contrôle
+  exponentiel de score \(c = (3,\ 3,\ 0,\ 0)\) à force \(w\). À \(w=0\)&nbsp;: entropie
+  1,85 nat&nbsp;; \(w=1\)&nbsp;: \(\propto (8{,}0,\ 6{,}0,\ 0{,}2,\ 0{,}1) \to\) probs
+  \((0{,}56,\ 0{,}42,\ 0{,}014,\ 0{,}007)\), entropie 0,97&nbsp;; \(w=2\)&nbsp;:
+  \((7{,}2,\ 5{,}4,\ 0{,}004,\ 0{,}001)\) — deux modes à 99&nbsp;%, entropie 0,69&nbsp;;
+  \(w = 4\) collapse sur le mode 1. Fidélité moyenne au score&nbsp;: 0,5 → 0,98 → 0,99.
+  La paire \((\mathrm{Fid}, H)\) dessine exactement la frontière du théorème 9.2. Généraliser
+  à l'exercice 4.
+</div>
+</section>
+
+<!-- ============================ CH 10 ============================ -->
+<section class="chapter" id="ch10">
+<h2>10. Attaques du contrôle et robustesse</h2>
+
+<p>Un contrôle est une promesse&nbsp;; ce chapitre teste la promesse. Quatre surfaces, dans
+l'ordre du module&nbsp;: le masque, le steering/RLHF, le watermark, le contrôle spatial.</p>
+
+<div class="thm">
+  <span class="tag">Théorème 10.1 — Attaquer le décodage contraint (le contenu hostile <em>dans</em> le format)</span>
+  Le masque garantit \(y \in S\) — la <em>syntaxe</em>, jamais la <em>sémantique</em>. Un
+  prompt injecté peut remplir un JSON parfaitement valide avec
+  <code>{"instruction": "ignore les règles précédentes"}</code>&nbsp;; un appel d'outil
+  contraint peut être détourné en paramètres hostiles (l'injection de prompt dans les
+  agents&nbsp;: cf. module Explainability ch. 5). Deuxièmement&nbsp;: la <em>complexité</em> de
+  la grammaire est une surface — une grammaire ambiguë fait exploser le nombre d'états
+  (subset construction \(2^{|Q|}\)) et permet un déni de service <em>du contrôle lui-même</em>&nbsp;;
+  enfin l'<em>interaction tokeniseur</em>&nbsp;: changer de tokenizer invalide l'index état→tokens
+  (recompilation). Défenses&nbsp;: validation sémantique en aval (schéma + bornes&nbsp;:
+  \(\delta\)-contraintes au-delà du régulier), limite de taille d'états, grammaires
+  pré-compilées côté serveur (pattern défense en profondeur du module Explainability ch. 6).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 10.2 — Attaques du watermark (et résultats d'impossibilité)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Éditions</strong>&nbsp;: paraphrase, substitution synonyme, insertion
+    d'emoji/homoglyphes, réécriture par LLM — chaque échange d'un token vert contre un rouge
+    coûte \(\approx 1/\sqrt{T\gamma(1-\gamma)}\) en \(z\)&nbsp;; pour abaisser \(\mathbb{E}[z]
+    = 6\) sous 2 il faut réécrire une fraction substantielle des tokens, au prix de la
+    qualité&nbsp;;</li>
+    <li><strong>Spoofing</strong>&nbsp;: un attaquant <em>sans la clé</em> peut-il marquer un
+    texte innocent pour accuser un fournisseur&nbsp;? Les schémas à clé publique et l'analyse
+    de fiabilité (Kirchenbauer et al., ICLR 2024 — «&nbsp;On the Reliability&nbsp;»&nbsp;;
+    déjà référencé au module LLMs) quantifient ces faux accusés&nbsp;: la gestion des clés
+    devient le vrai problème (révocation, multi-clés, tests aggrégés)&nbsp;;</li>
+    <li><strong>Indétectabilité</strong>&nbsp;: Sadasivan et al. (2023) montrent qu'un
+    paraphraseur assez bon fait tendre <em>tout</em> détecteur vers le hasard&nbsp;;
+    Christ, Gunn &amp; Zamir (2024) bornent ce qui est atteignable&nbsp;: la robustesse
+    s'achète uniquement en distorsion. Conclusion opérationnelle&nbsp;: un watermark est un
+    <em>marqueur de provenance</em>, pas une preuve cryptographique d'origine&nbsp;; l'empiler
+    (texte + audio + image, styles multi-clés) est la stratégie réaliste.</li>
+  </ol>
+</div>
+
+<div class="note">
+  <span class="tag">Attaques du guidance et du steering, en bref</span>
+  Le steering (ch. 4) n'a aucune garantie de support&nbsp;: un comportement retiré à un prompt
+  de test réapparaît hors distribution (jailbreaks par reformulation, autres langues,
+  encodages)&nbsp;; le RLHF est vulnérable au <em>reward hacking</em> (ch. 5) et aux attaques
+  de préférences&nbsp;; le CFG/ControlNet&nbsp;: <em>prompt adverses</em> (contenus interdits
+  reformulés), <em>injections par image</em> (inpainting détourné, édition de personnes&nbsp;—
+  deepfakes), d'où le marquage obligatoire (théorème 1.3) et la modération en aval. Vaste
+  programme croisé avec les modules Explainability (sécurité LLMs) et Responsible AI.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 10.3 — Budget de robustesse (la grandeur à retenir)</span>
+  Pour un contrôle de fidélité \(c\) et une famille d'attaques \(\mathcal A\), on définit la
+  <strong>dégradation</strong> \(\Delta(w) = \mathrm{Fid}(w) - \mathbb{E}_{a \sim
+  \mathcal A}[\mathrm{Fid}(w, a)]\). Un contrôle robuste a \(\Delta\) plat en \(w\)&nbsp;;
+  l'évaluation du ch. 9 doit donc être répétée <em>sous attaque</em> — le protocole complet
+  tient en une phrase&nbsp;: <em>tracer la courbe fidélité/diversité, avec et sans adversaire,
+  à budget de qualité fixé</em>.
+</div>
+</section>
+
+<!-- ============================ EXERCICES ============================ -->
+<section class="exercises" id="ex">
+<h3>Exercices / Labs</h3>
+<ol>
+  <li><strong>Lab&nbsp;: constrained decoding sur regex (le lab du module).</strong>
+  (a)&nbsp;Construire le DFA de <code>^\d{2}/\d{2}/\d{4}$</code> à la main (états, élagage
+  co-accessible), table \(\mathrm{Adm}(q)\) sur un mini-vocabulaire incluant les tokens
+  multi-caractères <code>"12/"</code>, <code>"19"</code>&nbsp;; (b)&nbsp;implémenter
+  <code>DfaMask</code> (code du ch. 3) avec le tokenizer d'un petit GPT&nbsp;; (c)&nbsp;brancher
+  en <code>LogitsProcessor</code> HuggingFace et générer 1&nbsp;000 dates&nbsp;; (d)&nbsp;mesurer
+  pass rate avec/sans masque et l'overhead temporel par rapport à la génération libre.
+  <div class="proof">
+  Guidage (résultats attendus)&nbsp;: sans contrainte, le pass rate d'un petit modèle sur la
+  date exacte demandée plafonne (formats <code>2026-08-26</code>, <code>26/08/2026</code>
+  mélangés)&nbsp;; avec masque&nbsp;: 100&nbsp;% — dont des dates <em>fausses</em> mais
+  syntaxiquement valides (<code>31/02/2026</code>)&nbsp;: la sémantique exige une couche de
+  plus (validation de bornes), conclusion du ch. 10 vécue en TP. Overhead&nbsp;: ~0&nbsp;%
+  (le masque est négligeable devant la passe transformer)&nbsp;; le coût réel est le
+  <em>précalcul</em> de l'index, payé une fois. <span class="qed">∎</span></div></li>
+
+  <li><strong>Le test z en entier.</strong> Avec \(\gamma = 0{,}5\), \(\delta = 2\)&nbsp;:
+  (a)&nbsp;simuler 10&nbsp;000 textes humains (tokens iid uniformes) et vérifier
+  empiriquement \(\mathbb{P}(z &gt; 4) \approx 3 \times 10^{-5}\)&nbsp;; (b)&nbsp;estimer
+  \(p_\delta\) empiriquement en simulant la softmax biaisée à température 1&nbsp;;
+  (c)&nbsp;tracer la puissance du test en fonction de \(T \in [20, 500]\)&nbsp;;
+  (d)&nbsp;dériver le \(T\) minimal pour puissance 0,9 (comparer à l'exemple 6.3)&nbsp;;
+  (e)&nbsp;répéter avec \(\gamma = 0{,}25\) et conclure sur le réglage.
+  <div class="proof">
+  Guidage&nbsp;: (a) la distribution de \(z\) colle à \(\mathcal N(0,1)\) dès \(T \geq
+  50\) (De Moivre-Laplace)&nbsp;; (b) \(p_\delta\) dépend de l'écart-type des logits&nbsp;;
+  avec logits \(\mathcal N(0,1)\), \(p_\delta \approx 0{,}75\)&nbsp;; (c) puissance
+  sigmoïde en \(\sqrt{T}\)&nbsp;; (d) \(T \approx 30{-}50\) pour \((0{,}5, 2)\)&nbsp;;
+  (e) \(\gamma = 0{,}25\) divise la variance sous H0 (\(\times 0{,}75\)) et concentre le
+  signal — légèrement meilleur à \(\delta\) fixé, mais qualité de texte en baisse&nbsp;:
+  le triple compromis du ch. 6 est <em>vérifié numériquement</em>. <span class="qed">∎</span></div></li>
+
+  <li><strong>Steering pas à pas.</strong> Sur GPT-2 small&nbsp;: construire \(v =
+  h^{(l)}(\texttt{Love}) - h^{(l)}(\texttt{Hate})\) pour \(l \in \{2, 5, 8, 10\}\)&nbsp;;
+  balayer \(\alpha \in \{-2, -1, -0{,}5, 0, 0{,}5, 1, 2\}\)&nbsp;; mesurer (i)&nbsp;fréquence
+  des mots «&nbsp;mariage&nbsp;», (ii)&nbsp;perplexité, (iii)&nbsp;diversité intra-lot
+  (auto-BLEU).
+  <div class="proof">
+  Guidage&nbsp;: l'effet topic est net et quasi linéaire en \(\alpha\) à petit
+  \(\alpha\) (prop. 4.3), la perplexité bouge peu jusqu'à \(\alpha \approx 2\) puis
+  dérape&nbsp;; la diversité chute quand \(|\alpha|\) grandit — la même courbe
+  fidélité/diversité que le CFG (ch. 9), à nouveau. Discuter&nbsp;: pourquoi le steering
+  «&nbsp;réussit&nbsp;» sur des concepts latents larges et échoue à imposer un format
+  précis (réponse&nbsp;: support plein — ch. 2). <span class="qed">∎</span></div></li>
+
+  <li><strong>Frontière fidélité/diversité théorique.</strong> Démontrer la borne d'entropie
+  9.2 (Gibbs), puis généraliser l'exemple 9.4&nbsp;: loi initiale arbitraire, score \(c\),
+  tracer \((\mathrm{Fid}(w), H(w))\) pour \(w \in [0, 10]\) et vérifier que la courbe
+  converge vers le coin \((\max c, 0)\). Que devient la courbe si \(c\) est bruité&nbsp;?
+  <div class="proof">
+  Guidage&nbsp;: normaliser \(p_w \propto p\, e^{w c}\) (famille exponentielle)&nbsp;;
+  \(H(w)\) décroît (dériver \(dH/dw = -w\,\mathrm{Var}_w(c)\) — identité classique&nbsp;:
+  la dérivée de la log-partition donne la variance, celle de l'entropie sa variance
+  pondérée)&nbsp;; avec bruit, un plateau apparaît avant le collapse&nbsp;: l'analyste
+  choisit le coude. <span class="qed">∎</span></div></li>
+
+  <li><strong>Zero-convolution&nbsp;: le gradient sous la loupe.</strong> Pour la branche
+  ControlNet du théorème 7.2 à l'initialisation&nbsp;: (a)&nbsp;montrer que la sortie est
+  exactement nulle&nbsp;; (b)&nbsp;calculer \(\partial y / \partial W_2\) et montrer qu'il
+  est non nul&nbsp;; (c)&nbsp;montrer que \(\partial y / \partial \Theta_c = 0\) à
+  l'initialisation et expliquer pourquoi ce n'est <em>pas</em> un blocage&nbsp;;
+  (d)&nbsp;comparer avec l'initialisation aléatoire (brancher \(F_c\) sans \(Z\))&nbsp;:
+  simuler 10 pas de descente sur une tâche jouet et comparer les pertes initiales.
+  <div class="proof">
+  Guidage&nbsp;: (a) \(Z_2 = W_2 h = 0\)&nbsp;; (b) \(\partial y/\partial W_2 = h_c
+  \neq 0\) (activations de la copie initialisée à \(\Theta\))&nbsp;; (c) règle de la
+  chaîne à travers \(W_2 = 0\), débloquée dès la première mise à jour de \(W_2\)&nbsp;;
+  (d) la variante sans zero-conv part d'une perte élevée et détruit la sortie du modèle
+  gelé — l'expérience reproduit la figure de motivation du papier ControlNet.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Attaquer son propre watermark (bonus).</strong> Après le lab 2&nbsp;:
+  paraphraser les textes marqués (via un LLM, consigne «&nbsp;réécris avec les mêmes
+  idées&nbsp;»), mesurer la chute de \(z\) en fonction du taux de tokens remplacés, et
+  estimer le taux nécessaire pour passer sous \(z = 2\). Conclure sur la phrase «&nbsp;un
+  watermark est un marqueur, pas une preuve&nbsp;».
+  <div class="proof">
+  Guidage&nbsp;: chaque remplacement vert→rouge décale \(\mathbb E[z]\) de
+  \((p_\delta - \gamma)\big/\sqrt{T\gamma(1-\gamma)}\) environ&nbsp;; passer de
+  \(\mathbb E[z] = 7\) à 2 exige de réécrire la majorité des tokens — le texte qui
+  survit à l'attaque est si transformé que la traçabilité <em>du contenu</em> (plagiat)
+  redevient l'enjeu, pas celle de <em>la machine</em>. Boucle bouclée avec le ch. 10.
+  <span class="qed">∎</span></div></li>
+</ol>
+</section>
+
+<!-- ============================ RÉFÉRENCES ============================ -->
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li><strong>Décodage contraint</strong>&nbsp;: B. Willard, R. Louf, <a href="https://arxiv.org/abs/2307.09702">Efficient Guided Generation for LLMs</a>, 2023 (bibliothèque <a href="https://github.com/dottxt-ai/outlines">Outlines</a>)&nbsp;;
+  Y. Dong et al., <a href="https://arxiv.org/abs/2411.15100">XGrammar: Flexible and Efficient Structured Generation Engine for LLMs</a>, ICLR 2025 (<a href="https://github.com/mlc-ai/xgrammar">code</a>)&nbsp;;
+  T. Scholak, N. Schucher, D. Bahdanau, <a href="https://arxiv.org/abs/2109.05093">PICARD</a>, EMNLP 2021.</li>
+  <li><strong>Steering</strong>&nbsp;: A. Turner et al., <a href="https://arxiv.org/abs/2308.10248">Activation Addition: Steering Language Models Without Optimization</a>, 2023&nbsp;;
+  A. Zou et al., <em>Representation Engineering: A Top-Down Approach to AI Transparency</em>, 2023&nbsp;;
+  K. Li et al., <em>Inference-Time Intervention</em>, NeurIPS 2023&nbsp;;
+  G. Ilharco et al., <em>Editing Models with Task Arithmetic</em>, ICLR 2023.</li>
+  <li><strong>RLHF et alignement</strong>&nbsp;: L. Ouyang et al., <em>Training language models to follow instructions with human feedback</em> (InstructGPT), NeurIPS 2022&nbsp;;
+  R. Rafailov et al., <a href="https://arxiv.org/abs/2305.18290">Direct Preference Optimization</a>, NeurIPS 2023&nbsp;;
+  DeepSeek-AI, <a href="https://arxiv.org/abs/2402.03300">DeepSeekMath (GRPO)</a>, 2024 — le détail pratique est au <a href="m2-large-language-models.html">module LLMs (M2) ch. 5</a>.</li>
+  <li><strong>Watermarking</strong>&nbsp;: J. Kirchenbauer et al., <a href="https://arxiv.org/abs/2301.10226">A Watermark for Large Language Models</a>, ICML 2023&nbsp;;
+  J. Kirchenbauer et al., <a href="https://arxiv.org/abs/2306.04634">On the Reliability of Watermarks for LLMs</a>, ICLR 2024&nbsp;;
+  X. Zhao et al., <a href="https://arxiv.org/abs/2306.17439">Provable Robust Watermarking for AI-Generated Text</a> (unigram), 2023&nbsp;;
+  R. Kuditipudi et al., <a href="https://arxiv.org/abs/2307.15593">Robust Distortion-free Watermarks for Language Models</a>, TMLR 2024&nbsp;;
+  S. Dathathri et al., <a href="https://pubmed.ncbi.nlm.nih.gov/39443777/">Scalable watermarking for identifying large language model outputs</a> (SynthID-Text), Nature 634, 2024&nbsp;;
+  S. Sadasivan et al., <em>Can AI-Generated Text be Reliably Detected?</em>, 2023&nbsp;;
+  M. Christ, S. Gunn, R. Zamir, <em>Undetectable Watermarks for Language Models</em>, 2024 — prolongé par le <a href="m2-explainability-security-privacy-llms.html">module Explainability, Security, Privacy ch. 9</a>.</li>
+  <li><strong>Diffusion&nbsp;: guidage et contrôle</strong>&nbsp;: J. Ho, T. Salimans, <a href="https://arxiv.org/abs/2207.12598">Classifier-Free Diffusion Guidance</a>, 2022&nbsp;;
+  L. Zhang, A. Rao, M. Agrawala, <a href="https://arxiv.org/abs/2302.05543">Adding Conditional Control to Text-to-Image Diffusion Models</a> (ControlNet), ICCV 2023 (<a href="https://github.com/lllyasviel/ControlNet">code</a>)&nbsp;;
+  R. Mokady et al., <a href="https://arxiv.org/abs/2211.09794">Null-text Inversion for Editing Real Images</a>, CVPR 2023&nbsp;;
+  A. Hertz et al., <em>Prompt-to-Prompt Image Editing with Cross-Attention Control</em>, ICLR 2023&nbsp;;
+  C. Meng et al., <em>SDEdit: Guided Image Synthesis and Editing with Stochastic Differential Equations</em>, ICLR 2022&nbsp;;
+  T. Brooks et al., <em>InstructPix2Pix</em>, CVPR 2023 — bases au <a href="m1p2-multimodal-genai.html">module Multimodal GenAI ch. 3-4</a>.</li>
+  <li><strong>Graphes contrôlés</strong>&nbsp;: C. Shi et al., <a href="https://arxiv.org/abs/2001.09382">GraphAF: a Flow-based Autoregressive Model for Molecular Graph Generation</a>, ICLR 2020&nbsp;;
+  B. Samanta et al., <a href="https://arxiv.org/abs/1802.05283">NeVAE: A Deep Generative Model for Molecular Graphs</a>, AAAI 2019&nbsp;;
+  C. Vignac et al., <a href="https://arxiv.org/abs/2209.14734">DiGress: Discrete Denoising Diffusion for Graph Generation</a>, ICLR 2023&nbsp;;
+  J. You et al., <em>GraphRNN</em>, ICML 2018&nbsp;; Y. Li et al., <em>Deep Generative Models of Graphs</em> (DeepGMG), ICML 2018 — développés au <a href="m2-graph-generative-models.html">module Graph Generative Models (M2)</a>.</li>
+  <li><strong>Évaluation</strong>&nbsp;: T. Kynkäänniemi et al., <em>Improved Precision and Recall Metric for Assessing Generative Models</em>, NeurIPS 2019&nbsp;;
+  FID et évaluation des génératrices&nbsp;: <a href="m1p2-multimodal-genai.html">module Multimodal GenAI ch. 8</a>&nbsp;;
+  évaluation distributionnelle (MMD, FCD)&nbsp;: <a href="m2-graph-generative-models.html">module Graph Generative Models ch. 6</a>.</li>
+  <li><strong>Cadre réglementaire</strong>&nbsp;: <a href="https://eur-lex.europa.eu/eli/reg/2024/1689/oj">Règlement (UE) 2024/1689 — AI Act</a> (art. 50, transparence des contenus générés)&nbsp;;
+  <a href="https://genai.owasp.org/llm-top-10/">OWASP Top 10 for LLM Applications</a> (injections).</li>
+</ul>
+</section>
+
+<nav class="pager">
+  <a href="../index.html"><span class="dir">← Accueil</span> Programme</a>
+  <a class="next" href="m2-speech-technology.html"><span class="dir">Suivant</span> Speech Technology for Conversational AI</a>
+</nav>
+
+</div>
+</body>
+</html>
