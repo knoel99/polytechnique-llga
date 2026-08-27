@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimization and Responsible AI for Sustainability — Case studies: data centers, electric vehicles — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Optimization and Responsible AI for Sustainability</a> › Case studies: data centers, electric vehicles</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52073_EP</span>Optimization and Responsible AI for Sustainability</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: optimization, duality, complexity</a>
+<a href="ch1.html">Multi-objective optimization and the Pareto front</a>
+<a href="ch2.html">Optimizing under resource constraints</a>
+<a href="ch3.html">Model frugality: distillation, quantization</a>
+<a href="ch4.html">Sustainable decision support: LP and ILP</a>
+<a href="ch5.html" class="active">Case studies: data centers, electric vehicles</a>
+<a href="ch7.html">Limits, rebound effect and greenwashing</a>
+<a href="ch8.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Case studies: data centers and electric vehicles</h2>
+
+<div class="def">
+  <span class="tag">Case study 5.1 — Data center powered by renewable energies</span>
+  <strong>Data.</strong> A compute site: flexible load (deferrable jobs:
+  training runs, indexing, simulations) and rigid load (interactive
+  services). Local energies: solar \(s_t\) (daytime slots), wind \(w_t\),
+  grid complement \(g_t \geq 0\) at intensity \(c_t\).
+  <strong>Model (sliding-window LP).</strong>
+  $$\min \sum_t \Big(\gamma\, g_t\, c_t\Big)\;\Delta t \quad\text{subject to}\quad
+  \begin{cases} g_t + s_t + w_t \;\geq\; \mathrm{PUE}\cdot u_t &amp; \text{(power balance)}\\
+  \sum_{t \in \text{day}} u_t \;\geq\; D &amp; \text{(total deferred work)}\\
+  u_t \leq U^{\max}, \quad u_t = U^{\text{rigid}}_t + f_t,\; f_t \geq 0 &amp;\end{cases}$$
+  where \(f_t\) is the power allocated to flexible work. <strong>Dual
+  reading.</strong> The multiplier of the total work constraint equals
+  (in €/carbon kWh) "how much it costs to delay a kWh of compute": when
+  solar abounds it becomes zero (a period of carbon free-ness), when the
+  evening peak arrives it explodes: this is the dynamic price signal
+  <em>derived from the model</em>, and the same mechanism as the industrial
+  deployment described by Radovanovic et al. (references): planning
+  <em>ahead</em> with forecasts of \(s_t, w_t, c_t\) (forecasts to which
+  the Machine Learning module, ch. 5–6, applies directly).
+</div>
+
+<div class="def">
+  <span class="tag">Case study 5.2 — Coordinated charging of an electric vehicle fleet</span>
+  <strong>Data.</strong> \(N\) vehicles, each plugged in from \(a_i\) to
+  \(d_i\), need \(E_i\) (kWh), max power \(p_i\). Grid: hourly intensity
+  \(c_t\), tariff \(p_t^\text{elec}\), local transformer capacity \(K\)
+  (the real "bottleneck" of company parking lots: without coordination,
+  everyone plugs in at 6&nbsp;pm).
+  <strong>Model.</strong>
+  $$\min_{x_{i,t} \geq 0}\; \sum_{i,t}\; c_t\, x_{i,t} \quad\text{subject to}\quad
+  \begin{cases} \sum_{t=a_i}^{d_i} x_{i,t}\,\Delta t \;\geq\; E_i &amp; \forall i \;\;\text{(energy need)}\\
+  0 \leq x_{i,t} \leq p_i &amp; \forall (i,t) \\
+  \sum_i x_{i,t} \;\leq\; K &amp; \forall t \;\;\text{(transformer capacity)}\end{cases}$$
+  Pure LP (continuous): solved to the optimum in seconds for thousands of
+  vehicles. The dual delivers the usage prices of the transformer hour by
+  hour — enough to price the incentive rather than forbid. ILP variant:
+  <em>fast</em> charging available when needed (\(z_{i,t} \in \{0,1\}\),
+  \(x \leq M z\), fixed cost \(\kappa z\)); stochastic variant: unexpected
+  departures (scenarios, recourse); robust variant (ch. 8: uncertainty on
+  \(c_t\)).
+</div>
+
+<pre class="code"><code>import numpy as np
+from scipy.optimize import linprog
+
+# 3 vehicles, 8 hourly slots, transformer capacity 11 kW
+T, K = 8, 11.0
+c = np.array([ 60, 55, 52, 58,140,320,380,300])       # gCO2/kWh per slot
+veh = [ (0, 4, 20.0, 7.0), (1, 5, 28.0, 7.0), (3, 8, 15.0, 3.5) ]  # (a, d, E, p)
+n = len(veh) * T                                      # variable x[i, t] = idx i*T + t
+cost = np.array([c[idx % T] for idx in range(n)])     # minimize sum c_t x_it
+
+A_ub, b_ub = [], []                                   # capacity per slot
+for t in range(T):
+    row = [1.0 if idx % T == t else 0.0 for idx in range(n)]
+    A_ub.append(row); b_ub.append(K)
+A_eq, b_eq = [], []                                   # energy need
+for i, (a, d, E, p) in enumerate(veh):
+    row = [1.0 if (idx // T == i and a &lt;= idx % T &lt; d) else 0.0 for idx in range(n)]
+    A_eq.append(row); b_eq.append(E)
+bounds = [(0, p) for (a, d, E, p) in veh for _ in range(T)]
+res = linprog(cost, A_ub=np.array(A_ub), b_ub=b_ub, A_eq=np.array(A_eq),
+              b_eq=b_eq, bounds=bounds, method="highs")
+x = res.x.reshape(len(veh), T)
+print("optimal emissions (kg CO2eq):", round(res.fun / 1000, 2))
+print(np.round(x, 1))   # the cars wait for the low-carbon slots</code></pre>
+
+<div class="note">
+  <span class="tag">What these cases teach (meta-lesson)</span>
+  (1) Structure matters more than size: these models with thousands of
+  variables solve in seconds <em>because they are linear</em>; a single
+  non-linear term can change everything. (2) The dual is a product:
+  dynamic prices, incentive signals, marginal value of carbon. (3) The
+  hard part is not the optimizer but the <strong>data</strong> (forecasts,
+  measurements) and <strong>governance</strong> (who accepts that their
+  task waits?) — optimization is the art of making these trade-offs
+  explicit.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Sustainable decision support: LP and ILP</a><a class="next" href="ch7.html"><span class="dir">Next</span> Limits, rebound effect and greenwashing</a></nav>
+</main>
+</div>
+
+</body>
+</html>

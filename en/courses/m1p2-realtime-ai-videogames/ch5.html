@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real-time AI in Video Games: decisive &amp; collaborative actions — Monte-Carlo Tree Search: deciding in a few ms — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Real-time AI in Video Games: decisive &amp; collaborative actions</a> › Monte-Carlo Tree Search: deciding in a few ms</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">MSc&amp;T Brochure</span>Real-time AI in Video Games: decisive &amp; collaborative actions</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: graphs, priority queues, probability</a>
+<a href="ch1.html">The game loop and the real-time budget</a>
+<a href="ch2.html">Navigation: grids, navmesh, A*</a>
+<a href="ch3.html">Behaviors: state machines, behavior trees, utility</a>
+<a href="ch4.html">Collective decisions: steering, boids, formations</a>
+<a href="ch5.html" class="active">Monte-Carlo Tree Search: deciding in a few ms</a>
+<a href="ch6.html">Learned agents: RL and self-play in games</a>
+<a href="ch7.html">Cooperative and multi-agent games</a>
+<a href="ch8.html">Conversational NPCs (LLMs) and anti-cheat</a>
+<a href="ch9.html">Performance, profiling and budgets</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Monte-Carlo Tree Search: deciding in a few ms</h2>
+
+<h3>5.1. The bandit reminder: UCB1</h3>
+<div class="recap">
+  <div class="recap-title">Reminder (Reinforcement Learning module, chapter 6) — UCB1</div>
+  A bandit with \(K\) arms, rewards in \([0,1]\); the UCB1 policy draws
+  $$a_t = \arg\max_{a} \left[ \bar r_a + c\,\sqrt{\frac{2 \ln t}{n_a}} \right],$$
+  where \(\bar r_a\) is the average reward of arm \(a\), \(n_a\) its number of
+  draws, \(t\) the total time. The first term <em>exploits</em>, the second
+  <em>explores</em> the little-tried arms; UCB1 achieves logarithmic regret
+  (Auer et al., 2002) — the theoretical basis of MCTS.
+</div>
+
+<h3>5.2. The MCTS loop</h3>
+<div class="def">
+  <span class="tag">Definition 5.1 — Monte-Carlo Tree Search</span>
+  MCTS incrementally builds a game tree where each node stores \((N_n, W_n)\):
+  visits and cumulative reward. Each iteration:
+  <ol style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Selection</strong>: from the root, descend by choosing at each node
+    the child maximizing UCT;</li>
+    <li><strong>Expansion</strong>: at the first node not fully developed, add one
+    child;</li>
+    <li><strong>Simulation</strong> (rollout): play at random (default policy) until
+    the end of the game;</li>
+    <li><strong>Backpropagation</strong>: propagate the result (1 win / 0 loss, from
+    the point of view of the player who just moved) up through all the traversed
+    nodes.</li>
+  </ol>
+  The <strong>UCT</strong> formula (Upper Confidence bound applied to Trees):
+  $$\mathrm{UCT}(n, a) = \frac{W_{n'}}{N_{n'}} + c\,\sqrt{\frac{\ln N_n}{N_{n'}}},$$
+  where \(n'\) is the child of \(n\) via action \(a\). After the iteration budget,
+  play the most visited action at the root.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.2 — Tic-tac-toe: one iteration in numbers</span>
+  Root (X to move, 21 visits, 12 wins). Three candidate children:
+  <table class="tbl">
+    <tr><th>Action (cell)</th><th>Visits \(N\)</th><th>Wins \(W\)</th><th>\(W/N\)</th><th>Exploration \(c\sqrt{\ln 21 / N}\) (c = 0.7)</th><th>UCT</th></tr>
+    <tr><td>center</td><td>12</td><td>9</td><td>0.75</td><td>0.7·√(3.04/12) = 0.35</td><td><strong>1.10</strong></td></tr>
+    <tr><td>corner</td><td>7</td><td>4</td><td>0.57</td><td>0.7·√(3.04/7) = 0.46</td><td>1.03</td></tr>
+    <tr><td>edge</td><td>2</td><td>1</td><td>0.50</td><td>0.7·√(3.04/2) = 0.86</td><td>1.36 → selected</td></tr>
+  </table>
+  The edge, little explored, is chosen (dominant exploration term); random rollout:
+  X wins. Update: root → edge path: \(N\!: 2 \to 3\), \(W\!: 1 \to 2\) (for X's
+  nodes); the opponent's nodes in the tree receive the complementary reward. One
+  observes the key property: <em>each</em> node is a bandit whose arms are the moves,
+  and the sample of each arm is obtained by playing out the game — hence
+  "Monte-Carlo". On tic-tac-toe, ~2000 iterations suffice for optimal play; exercise
+  6 works it out by hand.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.3 — The exploration bonus decreases as \(\sqrt{\ln N / n}\)</span>
+  For a child node visited \(n\) times when the parent totals \(N\) visits, the
+  exploration bonus decreases as \(n^{-1/2}\): a consistently disappointing child
+  sees its candidacy melt away, but it remains re-examined logarithmically (the
+  \(\ln N\) in the numerator keeps growing — never a definitive elimination, hence no
+  irreversible regret if the initial estimate was misleading).
+  <div class="proof">
+  The bonus equals \(c\sqrt{\ln N / n}\). At fixed \(N\), it is proportional to
+  \(n^{-1/2}\), strictly decreasing in \(n\) (derivative
+  \(-\tfrac12 c \sqrt{\ln N}\, n^{-3/2} &lt; 0\)). Between two children of means
+  \(\mu_1 &gt; \mu_2\), child 2 stops being chosen when
+  \(\mu_2 + c\sqrt{\ln N/n_2} \leq \mu_1\) — but since \(\ln N \to \infty\), any
+  frozen \(n_2\) eventually violates the inequality: the child is tried again. This
+  is exactly the mechanism of UCB1's logarithmic regret (see RL module, chapter 6).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<h3>5.3. MCTS in real time: engineering tricks</h3>
+<ul>
+  <li><strong>budget</strong>: one limits by iterations <em>or</em> by time (e.g.
+  5 ms per decision); the tree is <strong>reused</strong> at the next move (the
+  sub-tree of the played move becomes the root);</li>
+  <li><strong>random rollouts too weak</strong>: replace the default policy with a
+  learned policy or a light heuristic (dominations, patterns); or truncate and
+  evaluate with a value function — this is the bridge toward AlphaZero (chapter 6);</li>
+  <li><strong>huge branching factor</strong> (continuous games, real time):
+  <strong>progressive widening</strong>: allow only \(\lceil k\,N^\alpha \rceil\)
+  children per node (α ≈ 0.5); in real time: "determinized" MCTS over sampled
+  futures (imperfect-information games);</li>
+  <li><strong>interruptibility</strong>: MCTS is "anytime" — quality grows with the
+  budget, and an interrupted decision remains playable (take the most visited
+  action): perfect for the tick of chapter 1.</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Note — The legacy</span>
+  Coulom (2006) introduced MCTS (CIG); Kocsis &amp; Szepesvári (2006) grafted UCT
+  onto it; the application to <em>Go</em> and then the successes of AlphaGo (2016) —
+  MCTS guided by policy and value networks — are covered in the Reinforcement
+  Learning module, chapters 5–6; the reference synthesis is the survey by Browne et
+  al. (2012). In industry: <em>Total War</em> (Creative Assembly) uses MCTS for
+  strategic AI; many digital board games (<em>Through the Ages</em>,
+  <em>Armello</em>…) make it their decision engine.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Collective decisions: steering, boids, formations</a><a class="next" href="ch6.html"><span class="dir">Next</span> Learned agents: RL and self-play in games</a></nav>
+</main>
+</div>
+
+</body>
+</html>

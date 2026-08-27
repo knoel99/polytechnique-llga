@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimization for AI — Variance reduction: SAGA and SVRG — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Optimization for AI</a> › Variance reduction: SAGA and SVRG</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_52067_EP</span>Optimization for AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: convexity and duality</a>
+<a href="ch1.html">Optimization inside the AI loop</a>
+<a href="ch2.html">Gradient descent: convergence proved</a>
+<a href="ch3.html">Conditioning and Nesterov acceleration</a>
+<a href="ch4.html">Proximal methods: ISTA and FISTA</a>
+<a href="ch5.html">Stochastic gradient descent</a>
+<a href="ch6.html" class="active">Variance reduction: SAGA and SVRG</a>
+<a href="ch7.html">Newton and quasi-Newton</a>
+<a href="ch8.html">Constraints in machine learning</a>
+<a href="ch9.html">Hyperparameter optimization</a>
+<a href="ch10.html">Optimizing the training of networks</a>
+<a href="ch11.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Variance reduction: SAGA and SVRG</h2>
+
+<p>Between the "complete but expensive" and the "stochastic but noisy"
+gradient, a third way: keep <strong>memory</strong> of past gradients to build an
+unbiased estimator whose variance vanishes by itself.</p>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — SAGA (Defazio, Bach, Lacoste-Julien, 2014)</span>
+  One maintains a table \(\phi_i \approx \nabla f_i(x)\) of the latest
+  gradient computed for each term, and \(\bar\phi = \frac{1}{n}\sum_i
+  \phi_i\). At each iteration, draw \(i\), update the table, then:
+  $$x_{k+1} = x_k - \eta\Big(\nabla f_i(x_k) - \phi_i + \bar\phi\Big).$$
+  The estimator is unbiased (the table does not depend on the current
+  draw); its variance is \(\frac{1}{n}\sum_i \|\nabla f_i(x_k) - \phi_i\|^2
+  \to 0\) at convergence — instead of SGD's permanent \(\sigma^2\).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 6.2 — SVRG (Johnson–Zhang, 2013)</span>
+  Without a table: every \(m\) steps, recompute a full gradient
+  \(\tilde\nabla = \nabla f(\tilde{x})\) at a "viewpoint" \(\tilde x\)
+  (snapshot), then use
+  $$x_{k+1} = x_k - \eta\Big(\nabla f_i(x_k) - \nabla f_i(\tilde x) + \tilde\nabla\Big).$$
+  Also unbiased; variance \(\propto \|\nabla f_i(x_k) - \nabla f_i(\tilde x)\|^2\),
+  small when \(x_k\) stays near the snapshot. Memory cost: \(O(d)\) — the
+  big industrial argument.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.3 — Linear convergence (statement, sketch)</span>
+  For \(f = \frac{1}{n}\sum f_i\) \(\mu\)-strongly convex, each \(f_i\)
+  \(L\)-smooth, SAGA and SVRG with step \(\eta \asymp 1/L\) converge
+  <em>linearly</em>:
+  $$\mathbb{E}\big[F(x_k) - F(x^\star)\big] \;\leq\; \Big(1 - c\,\min\Big(\frac{1}{n}, \frac{\mu}{L}\Big)\Big)^{k}\,\big(F(x_0)-F(x^\star)\big),$$
+  that is \(O\big((n + \kappa)\log\frac{1}{\varepsilon}\big)\) evaluations
+  of individual gradients — versus \(O(n\kappa\log\frac{1}{\varepsilon})\)
+  for deterministic descent. <em>Sketch.</em> The proof couples two
+  recurrences: the decrease in function value (as in ch. 2, via
+  unbiasedness) and the decrease of the estimator's variance (extra
+  contraction provided by the table/snapshot); the variance becoming
+  multiplicative, it converts SGD's \(O(\eta\sigma^2)\) plateau into a
+  geometric contraction. <span class="qed">∎</span>
+</div>
+
+<table class="tbl">
+<thead><tr><th>Method</th><th>Gradient/iteration</th><th>Memory</th><th>Evaluations for \(\varepsilon\) (strongly convex)</th></tr></thead>
+<tbody>
+<tr><td>GD (ch. 2)</td><td>\(n\)</td><td>\(O(d)\)</td><td>\(O(n\,\kappa \log 1/\varepsilon)\)</td></tr>
+<tr><td>AGD (ch. 3)</td><td>\(n\)</td><td>\(O(d)\)</td><td>\(O(n\,\sqrt{\kappa} \log 1/\varepsilon)\)</td></tr>
+<tr><td>SGD (ch. 5)</td><td>1</td><td>\(O(d)\)</td><td>\(O\big(\sigma^2/(\mu^2\varepsilon)\big)\) — not linear</td></tr>
+<tr><td>SAGA / SVRG (this ch.)</td><td>1 (+\(n\) every \(m\))</td><td>\(O(nd)\) / \(O(d)\)</td><td>\(O\big((n+\kappa)\log 1/\varepsilon\big)\)</td></tr>
+<tr><td>SVRG + acceleration</td><td>1</td><td>\(O(d)\)</td><td>\(O\big(n + \sqrt{n\kappa}\big)\log 1/\varepsilon\) — optimal</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <span class="tag">Where theory stops (and deep learning begins)</span>
+  In deep learning, \(f_i\) is not convex, the SAGA table explodes (\(n\)
+  gradient-sized models), and SGD noise is an ally (prop. 5.3): strict
+  variance reduction is little used there. But the <em>structure</em> of the
+  trade-off — variance vs cost per iteration — governs the batch choices,
+  step schedules and Adam variants (ch. 10). Convex theory is the compass,
+  not the territory.
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Stochastic gradient descent</a><a class="next" href="ch7.html"><span class="dir">Next</span> Newton and quasi-Newton</a></nav>
+</main>
+</div>
+
+</body>
+</html>

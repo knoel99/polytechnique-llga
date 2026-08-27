@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimization and Responsible AI for Sustainability — Model frugality: distillation, quantization — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Optimization and Responsible AI for Sustainability</a> › Model frugality: distillation, quantization</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52073_EP</span>Optimization and Responsible AI for Sustainability</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: optimization, duality, complexity</a>
+<a href="ch1.html">Multi-objective optimization and the Pareto front</a>
+<a href="ch2.html">Optimizing under resource constraints</a>
+<a href="ch3.html" class="active">Model frugality: distillation, quantization</a>
+<a href="ch4.html">Sustainable decision support: LP and ILP</a>
+<a href="ch5.html">Case studies: data centers, electric vehicles</a>
+<a href="ch7.html">Limits, rebound effect and greenwashing</a>
+<a href="ch8.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Model frugality: distillation, quantization, pruning</h2>
+
+<p>The cheapest kg CO<sub>2</sub> is the one not emitted: reducing the
+model's cost <em>at equal quality</em> is the first lever of sustainable
+AI. Three families, complementary, all "Pareto-active" (ch. 1).</p>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — Distillation (Hinton, Vinyals, Dean, 2015)</span>
+  Train a small <strong>student</strong> to reproduce the <em>soft</em>
+  outputs of a large <strong>teacher</strong>:
+  $$\mathcal{L} = \alpha\, \tau^2\, \mathrm{KL}\big(\mathrm{softmax}(z_T/\tau)\,\|\,\mathrm{softmax}(z_S/\tau)\big) + (1-\alpha)\,\ell(y, z_S),$$
+  where \(\tau\) is the temperature: at high temperature, the teacher's
+  logits deliver <em>similarities between classes</em> (dark knowledge) —
+  far more information per example than the one-hot label alone.
+  Reference: Hinton et al. 2015; for the LLM case (logit distillation),
+  see the Deep Learning P2 module, ch. 6.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.2 — Uniform quantization error (proved)</span>
+  Uniform quantization \(q(x) = \mathrm{clip}\big(\mathrm{round}(x/s) + z,\, 0, 2^b-1\big)\)
+  with \(s = \frac{x_{\max}-x_{\min}}{2^b - 1}\) (step \(\Delta = s\))
+  satisfies, over \([x_{\min}, x_{\max}]\):
+  $$|q(x)\cdot s - x| \;\leq\; \frac{\Delta}{2}.$$
+  For a network with \(L\)-Lipschitz layers of constants
+  \(\mathrm{Lip}_1, \dots, \mathrm{Lip}_L\) and quantizations of steps
+  \(\Delta_1, \dots, \Delta_L\):
+  $$\|\hat f(x) - f(x)\| \;\leq\; \sum_{\ell=1}^{L} \Big(\Delta_\ell/2\Big) \prod_{m &gt; \ell} \mathrm{Lip}_m.$$
+  <div class="proof">
+  First inequality: nearest-neighbor rounding of a value inside a cell of
+  width \(\Delta\) moves it by at most \(\Delta/2\); clipping only moves
+  values closer to the bounds. Second: by induction on depth. Let
+  \(\varepsilon_\ell\) be the perturbation at the <em>output</em> of layer
+  \(\ell\), and assume (standard assumption) that quantizing the weights
+  of layer \(\ell\) shifts its output by at most \(\Delta_\ell/2\). Layer
+  \(\ell+1\), Lipschitz, propagates \(\varepsilon_\ell\) to
+  \(\mathrm{Lip}_{\ell+1}\,\varepsilon_\ell\), then its own quantization
+  adds at most \(\Delta_{\ell+1}/2\):
+  \(\varepsilon_{\ell+1} \leq \mathrm{Lip}_{\ell+1}\,\varepsilon_\ell +
+  \Delta_{\ell+1}/2\). Unrolling from \(\varepsilon_1 = \Delta_1/2\), each
+  \(\Delta_\ell/2\) is multiplied by the Lipschitz constants of the
+  <em>subsequent</em> layers, giving the announced sum (partial products
+  \(\prod_{m&gt;\ell}\mathrm{Lip}_m\)). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">PTQ vs QAT, pruning: the trade-off map</span>
+  <table class="tbl">
+  <thead><tr><th>Technique</th><th>What it touches</th><th>Typical gain (orders of magnitude)</th><th>Cost</th></tr></thead>
+  <tbody>
+  <tr><td>PTQ (post-training quantization)</td><td>rounding of trained weights (int8/int4), calibration without retraining</td><td>4× memory and bandwidth; 2–4× CPU speed</td><td>minutes of calibration; possible loss &gt; 1&nbsp;pt below 8 bits on small models</td></tr>
+  <tr><td>QAT (quantization-aware training)</td><td>simulating rounding <em>during</em> training (fake quantization, STE)</td><td>int8 nearly lossless; int4 on large models</td><td>partial or full retraining</td></tr>
+  <tr><td>Unstructured pruning</td><td>zeroing individual weights (magnitude)</td><td>up to 90% zeros, no real gain without sparse hardware</td><td>sparse storage; CSR</td></tr>
+  <tr><td>Structured pruning</td><td>removing whole channels/heads/layers</td><td>effective speedup (conv, attention)</td><td>loss to compensate by distillation</td></tr>
+  <tr><td>Distillation</td><td>new training of a small model</td><td>10–50× fewer parameters at similar quality on targeted tasks</td><td>a teacher to train (once)</td></tr>
+  </tbody>
+  </table>
+  Foundational references: Jacob et al. 2018 (int8 PTQ/QAT, deployed);
+  Han et al. 2016 (Deep Compression: pruning + quantization + Huffman).
+  Caution (ch. 7): the "up to 10×" of brochures must be measured — the
+  protocol of ch. 6 is non-negotiable.
+</div>
+
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(0)
+
+def quantize_uniform(x, bits=8):
+    xmin, xmax = x.min(), x.max()
+    s = (xmax - xmin) / (2**bits - 1)
+    q = np.clip(np.round((x - xmin)/s), 0, 2**bits - 1).astype(np.int8)
+    return q, q*s + xmin                       # codes + dequantize
+
+W = rng.normal(size=(64, 128)) * 0.03          # a trained layer (fictitious)
+for bits in (16, 8, 4, 2):
+    _, Wq = quantize_uniform(W, bits)
+    err = np.abs(Wq - W).max()
+    print(f"{bits:2d} bits: max error {err:.2e} (step/2 = "
+          f"{((W.max()-W.min())/(2**bits-1))/2:.2e})")
+# the error exactly follows the step/2 of proposition 3.2; at 4 bits it becomes
+# perceptible -> that is where QAT (simulated fine-tuning) takes over.</code></pre>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Optimizing under resource constraints</a><a class="next" href="ch4.html"><span class="dir">Next</span> Sustainable decision support: LP and ILP</a></nav>
+</main>
+</div>
+
+</body>
+</html>

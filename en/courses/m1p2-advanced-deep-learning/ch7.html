@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Deep Learning — Training at scale: recipes and scaling laws — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Advanced Deep Learning</a> › Training at scale: recipes and scaling laws</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52087_EP</span>Advanced Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: transformers, optimization, normalization</a>
+<a href="ch1.html">Vision Transformers: ViT, DeiT, Swin</a>
+<a href="ch2.html">Modern convnets: the ConvNeXt lesson</a>
+<a href="ch3.html">Mixture of Experts (MoE)</a>
+<a href="ch4.html">Self-supervision I: contrastive (SimCLR and its lineage)</a>
+<a href="ch5.html">Self-supervision II: masking (MAE, BEiT, DINOv2)</a>
+<a href="ch6.html">Efficient architectures: MobileNet and distillation</a>
+<a href="ch7.html" class="active">Training at scale: recipes and scaling laws</a>
+<a href="ch8.html">Reproducible research: experimental protocol</a>
+<a href="ch9.html">Multimodal and generative: cross-references</a>
+<a href="ch10.html">Research of the teaching team</a>
+<a href="ch11.html">Projects: read, explain, replicate</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Training at scale: recipes and scaling laws</h2>
+
+<h3>7.1. The modern recipe</h3>
+<ul>
+  <li><strong>learning rate</strong>: linear warm-up (a few thousand steps —
+  stabilizes Adam and the norms; indispensable for large batches) then cosine
+  decay; decoupled weight decay (AdamW);</li>
+  <li><strong>linear scaling rule</strong> (Goyal et al., 2017): batch × \(k\) ⇒
+  lr × \(k\) (valid as long as the batch stays "under the horizon"; beyond,
+  diminishing gains — hence LARS/LAMB which normalize the gradient per
+  layer);</li>
+  <li><strong>regularization at scale</strong>: label smoothing — the target
+  \(\mathrm{CE}\) is \((1-\varepsilon)\) on the correct class and
+  \(\varepsilon/(K-1)\) elsewhere; stochastic depth; mixup/cutmix;</li>
+  <li><strong>mixed precision</strong>: bf16 (or fp16 + loss scaling) — beware of
+  reductions (sums in fp32) and sensitive functions; the "zero" of chapter 8:
+  a single hardware configuration does not transpose identically;</li>
+  <li><strong>minimal distributed setup</strong>: data parallel (DDP); beyond that,
+  state/optimizer sharding (FSDP/ZeRO); the Emerging Subjects in ML module
+  covers distributed SGD in depth.</li>
+</ul>
+
+<h3>7.2. Scaling laws — Kaplan then Chinchilla</h3>
+<div class="def">
+  <span class="tag">Definition 7.1 — Power law for the loss</span>
+  Kaplan et al. (2020): for transformers trained with \(N\) parameters and
+  \(D\) tokens, the test loss empirically follows
+  $$L(N, D) \approx E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}},$$
+  with irreducible \(E &gt; 0\) and \(\alpha, \beta &gt; 0\) (around 0.3–0.5);
+  valid over several orders of magnitude — the most cited graph of modern
+  deep learning.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 7.2 — Compute-optimal optimum (symmetric case, Chinchilla sketch)</span>
+  With the compute budget \(C \approx 6ND\) fixed, minimizing \(L\) leads to a
+  point \((N^*, D^*)\) where \(N^*\) and \(D^*\) <strong>both grow as
+  \(\sqrt{C}\)</strong> — models and data must be enlarged <em>together</em>, in
+  roughly equal parts (tokens per parameter ≈ constant, ~20 in the paper).
+  <div class="proof">
+  (Case \(\alpha = \beta\), as a sketch; the general case is an exercise.) We
+  minimize \(A/N^\alpha + B/D^\beta\) under the constraint \(ND = C/6\). Set
+  \(\mu = C/6\) and \(D = \mu/N\):
+  \(F(N) = A N^{-\alpha} + B N^{\alpha}/\mu^{\alpha}\) (using \(\beta =
+  \alpha\)). \(F'(N) = -\alpha A N^{-\alpha-1} + \alpha B N^{\alpha-1}/\mu^{\alpha}
+  = 0\) gives \(N^{2\alpha} = A \mu^{\alpha} / B\), that is \(N^* = (A/B)^{1/2\alpha}
+  \mu^{1/2}\) — proportional to \(\mu^{1/2} \propto C^{1/2}\), and
+  \(D^* = \mu / N^* \propto \mu^{1/2} \propto C^{1/2}\). Chinchilla (Hoffmann
+  et al., 2022) estimates \(\alpha \approx 0{,}34\), \(\beta \approx 0{,}28\) by
+  regression and confirms ~\(C^{0{,}5}\) — revealing that GPT-3 and the like
+  were "too big for their data"; at equal budget, 70B/1.4T beats 280B/300G.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<h3>7.3. MuP — transferring hyperparameters (sketch)</h3>
+<p>The practical problem: the scaling law applies to losses, but every model
+size requires <em>its own</em> hyperparameters (lr above all) — and one cannot
+grid-search a 70B model. <strong>µP (muParametrization)</strong> (Yang &amp; Hu —
+Tensor Programs IV–V): a rule for parametrizing the initializations and the lr
+<em>by width</em> (hidden layers; multipliers in \(d^{-1/2}\), \(d^{-1}\)…)
+under which the training behavior becomes <strong>independent of width</strong>;
+one can then tune the hyperparameters on a small model and <strong>transfer them
+with zero trials</strong> to the large one (muTransfer) — spectacular savings on
+very large runs. We demonstrate the idea on an MLP of variable width
+(exercise 9) and refer to the paper for the full program.</p>
+
+<div class="note">
+  <span class="tag">Note — Reading a recipe</span>
+  A serious training paper publishes: the exact configuration (lr, schedule,
+  wd, batch, precision), seeds and variances, the FLOPs budget, hardware and
+  duration, and the ablation justifying every ingredient. It is this level of
+  detail that enables replication — the subject of the next chapter.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Efficient architectures: MobileNet and distillation</a><a class="next" href="ch8.html"><span class="dir">Next</span> Reproducible research: experimental protocol</a></nav>
+</main>
+</div>
+
+</body>
+</html>

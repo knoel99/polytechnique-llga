@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Deep Learning — Mixture of Experts (MoE) — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Advanced Deep Learning</a> › Mixture of Experts (MoE)</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52087_EP</span>Advanced Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: transformers, optimization, normalization</a>
+<a href="ch1.html">Vision Transformers: ViT, DeiT, Swin</a>
+<a href="ch2.html">Modern convnets: the ConvNeXt lesson</a>
+<a href="ch3.html" class="active">Mixture of Experts (MoE)</a>
+<a href="ch4.html">Self-supervision I: contrastive (SimCLR and its lineage)</a>
+<a href="ch5.html">Self-supervision II: masking (MAE, BEiT, DINOv2)</a>
+<a href="ch6.html">Efficient architectures: MobileNet and distillation</a>
+<a href="ch7.html">Training at scale: recipes and scaling laws</a>
+<a href="ch8.html">Reproducible research: experimental protocol</a>
+<a href="ch9.html">Multimodal and generative: cross-references</a>
+<a href="ch10.html">Research of the teaching team</a>
+<a href="ch11.html">Projects: read, explain, replicate</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Mixture of Experts (MoE)</h2>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — Sparse MoE layer</span>
+  A MoE feed-forward layer replaces the single MLP with \(E\) <strong>experts</strong>
+  (identical MLPs with distinct parameters) and a <strong>routing gate</strong> \(g\)
+  that computes per-token weights:
+  $$y = \sum_{i=1}^{E} \mathbb{1}[i \in \mathrm{TopK}(g(x), k)]\; g_i(x)\;
+  E_i(x), \qquad g(x) = \mathrm{softmax}(W_g x),$$
+  typically \(k = 1\) (Switch) or \(k = 2\) (Mixtral), \(E = 8\) to 128. Per
+  token, only \(k\) experts are <em>executed</em>: total parameters grow with
+  \(E\), but FLOPs per token grow as \(k\), not as \(E\) — capacity and compute
+  are decoupled.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.2 — Capacity/cost decoupling</span>
+  For a MoE layer of dimension \(d\), expansion \(r = 4\), \(E\) experts, top-k:
+  parameters \(\approx 2 E r d^2\); FLOPs per token \(\approx 2 k r d^2\) (plus
+  the routing \(Ed\), negligible); loading memory \(\propto E\), activation
+  memory \(\propto k\).
+  <div class="proof">
+  An MLP \(d \to r d \to d\) has \(2 r d^2\) parameters and \(4 r d^2\) FLOPs
+  per token (two matrix products); with \(E\) experts, the parameters are
+  multiplied by \(E\); the computation executes only the \(k\) selected experts
+  — the factor is \(k\), and the routing (a \(d \times E\) matrix) costs
+  \(2Ed\), below \(4krd^2\) as soon as \(r \geq 1\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<h3>3.1. Balancing the load</h3>
+<p>The canonical risk: the gate learns to send everything to the same experts
+(<strong>routing collapse</strong>) — the other experts receive no more gradient and
+die. The historical remedy of Shazeer et al. (2017): noise in the routing + an
+auxiliary loss; <strong>Switch Transformer</strong> (Fedus et al., 2022)
+formalizes the <strong>load balancing loss</strong>:
+$$\mathcal{L}_{\mathrm{aux}} = \alpha\, E \sum_{i=1}^{E} f_i\, P_i, \qquad
+f_i = \frac{\text{tokens sent to } i}{\text{total tokens}}, \quad
+P_i = \frac{1}{T}\sum_{t} p_i(x_t),$$
+where \(P_i\) is the average probability <em>assigned</em> to expert \(i\) by the
+gate (differentiable) and \(f_i\) the fraction <em>actually routed</em>
+(non-differentiable); the product is minimal (\(1/E\)) when the load is uniform,
+and the minimization pushes the gate via \(P_i\). Added to this are the
+<strong>capacity</strong> \((\text{tokens}) \times \text{cap. factor}\) per expert —
+beyond it, tokens "overflow" (passed on to the rest of the network) — and
+per-expert parallelization (expert parallelism: each device holds experts).</p>
+
+<pre class="code"><code>import torch, torch.nn as nn, torch.nn.functional as F
+
+class MoE(nn.Module):
+    def __init__(self, d=1024, r=4096, E=8, k=2, alpha=0.01):
+        super().__init__()
+        self.experts = nn.ModuleList(
+            [nn.Sequential(nn.Linear(d, r), nn.GELU(), nn.Linear(r, d)) for _ in range(E)])
+        self.gate = nn.Linear(d, E)
+        self.k, self.E, self.alpha = k, E, alpha
+
+    def forward(self, x):                      # x: (B*T, d)
+        logits = self.gate(x)                  # (B*T, E)
+        probs = logits.softmax(-1)
+        topk_w, topk_i = probs.topk(self.k, dim=-1)
+        topk_w = topk_w / topk_w.sum(-1, keepdim=True)
+        out = torch.zeros_like(x)
+        for e in range(self.E):
+            mask = (topk_i == e)               # tokens assigned to expert e
+            sel = mask.any(-1)
+            if sel.any():
+                out[sel] += topk_w[sel].masked_fill(~mask[sel], 0).sum(-1, keepdim=True) \
+                            * self.experts[e](x[sel])
+        f = torch.zeros(self.E, device=x.device)     # routed fraction (non-diff.)
+        f.scatter_add_(0, topk_i.flatten(),
+                       torch.ones(topk_i.numel(), device=x.device))
+        f = f / x.size(0)
+        aux = self.alpha * self.E * (f * probs.mean(0)).sum()
+        return out, aux                           # (output, auxiliary loss)</code></pre>
+
+<h3>3.2. Panorama and readings</h3>
+<ul>
+  <li><strong>Shazeer et al. 2017</strong> ("Outrageously Large Neural Networks"):
+  MoE over LSTM, noisy top-k, proof that \(E\) can grow without exploding the
+  compute;</li>
+  <li><strong>GShard / Switch</strong>: translation at 600B parameters, then the
+  top-1 single expert and clean balancing — the era of <em>transformer</em>
+  MoE;</li>
+  <li><strong>Mixtral 8x7B</strong> (2024): an open LLM, 8 experts top-2, 47B
+  active parameters out of 39B × 8 — MoE arrives in everyday models; analysis
+  in the M2 Large Language Models module (inference);</li>
+  <li><strong>beyond</strong>: finely learned routings (residual capacity, shared
+  experts, MoE on alternating layers). Reading question: what do the experts
+  actually specialize in? (Interpretability studies often show
+  <em>syntactic</em> more than topical specializations.)</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Example 3.3 — A routing in practice</span>
+  A MoE layer \(d = 1024\), \(r = 4096\), \(E = 8\), \(k = 2\): parameters
+  \(2 \times 8 \times 4 \times 1024^2 \approx 67\)B per layer; FLOPs per token
+  \(\approx 2 \times 2 \times 4 \times 1024^2 \approx 17\) M — like a standard
+  dense MLP; a 32-layer model loads \(\approx 2{,}1\)B parameters but activates
+  only \(\approx 0{,}53\)B per token. Compare with the compute-matched dense
+  model (larger \(d\)): the MoE wins on data-abundant tasks, pays in memory and
+  system complexity (all parameters must reside in memory — see ch. 6 for the
+  remedies).</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Modern convnets: the ConvNeXt lesson</a><a class="next" href="ch4.html"><span class="dir">Next</span> Self-supervision I: contrastive (SimCLR and its lineage)</a></nav>
+</main>
+</div>
+
+</body>
+</html>

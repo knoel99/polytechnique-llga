@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Theoretical complexity of training — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Deep Learning</a> › Theoretical complexity of training</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_52183_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Compact refresher: the P1 foundation</a>
+<a href="ch1.html">Counting: FLOPs, memory, scaling laws</a>
+<a href="ch2.html" class="active">Theoretical complexity of training</a>
+<a href="ch3.html">Parallelism: data, tensor, pipeline</a>
+<a href="ch4.html">Communication: all-reduce and friends</a>
+<a href="ch5.html">Memory efficiency: checkpointing, ZeRO</a>
+<a href="ch6.html">Efficient inference</a>
+<a href="ch7.html">Real systems: roofline, GPU, 7B LLM</a>
+<a href="ch8.html">Research of the instructor</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Theoretical complexity of training</h2>
+
+<p>Before stacking GPUs, a theory question: is there a <em>limit</em> to
+what parallelism can buy? Answer: yes, and it is <em>provable</em>. This
+chapter is the module's signature (and the instructor's — ch. 8).</p>
+
+<div class="def">
+  <span class="tag">Definition 2.1 — Decentralized distributed optimization over a graph</span>
+  \(P\) machines, each with its own convex function \(f_i\), connected by
+  a graph \(G\) (each machine talks only to its neighbors); common goal:
+  $$\min_x\; f(x) = \frac{1}{P}\sum_{i=1}^{P} f_i(x).$$
+  The <strong>execution time</strong> counts two currencies: the number
+  of <em>local</em> iterations (compute: gradients up to the condition
+  number — see the Optimization for AI module, ch. 2–3) and the
+  <strong>communication rounds</strong> (one gossip round = mixing the
+  vectors between neighbors). The quality of the network is summarized by
+  the <strong>spectral gap</strong> \(\gamma \in [0,1)\) of the gossip
+  matrix \(W\) (second largest eigenvalue in modulus): mixing converges
+  as \(\gamma^t\) — the closer \(\gamma \to 1\), the slower the network
+  reaches consensus.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 2.2 — Lower bounds and optimality (Scaman, Bach, Bubeck, Lee, Massoulié, ICML 2017; statement)</span>
+  For \(f = \frac1P \sum f_i\) \(\mu\)-strongly convex and \(L\)-smooth
+  (\(\kappa = L/\mu\)), <em>every</em> distributed algorithm (in the sense
+  of def. 2.1) requires a time
+  $$T \;=\; \Omega\!\Big(\sqrt{\kappa}\;\cdot\;\frac{1}{\sqrt{1-\gamma}}\Big) \qquad\text{(up to constants, in homogeneous time)},$$
+  and this order is <strong>attained</strong> by the combination: Nesterov
+  accelerated gradient descent (see the Optimization for AI module, ch. 3)
+  + <em>Chebyshev accelerated gossip</em> (replacing \(W\) by a degree
+  \(m\) polynomial in \(W\) chosen to flatten the spectrum over
+  \([\gamma, 1]\) — the same trick that accelerates gradients, applied to
+  the graph). The JMLR 2019 version extends the result to the non-strongly
+  convex case: \(\Omega(\sqrt{L/\varepsilon})\) is compounded by a
+  network factor.
+  <div class="proof">
+  <em>Sketch of the lower bound (the "adversary" argument).</em> One
+  constructs a family of "local" quadratics at each node, whose solution
+  \(x^\star\) depends on spread-out information: for machine \(i\) to
+  learn what machine \(j\) knew, the information must travel along the
+  graph, and the <em>mixing of the graph</em> imposes
+  \(\Omega(1/\sqrt{1-\gamma})\) communication rounds (each gossip
+  multiplies the imbalance by only \(\gamma\)); independently, even
+  sequentially, a quadratic with condition number \(\kappa\) requires
+  \(\Omega(\sqrt\kappa)\) gradient accesses (Nesterov's bound —
+  Optimization for AI module, ch. 3). The construction crosses the two
+  obstacles into a quadratic <em>on the product</em> graph × condition
+  number: no algorithm can beat the product of the two bounds.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Reading: the two regimes, and why they structure practice</span>
+  <table class="tbl">
+  <thead><tr><th>Regime</th><th>Condition</th><th>Dominant time</th><th>Practical equivalent</th></tr></thead>
+  <tbody>
+  <tr><td><strong>sequential (compute)</strong></td><td>fast network, small \(\gamma\) (NVLink, \(\gamma \approx 0{,}1\))</td><td>\(\sqrt{\kappa}\): Nesterov reigns</td><td>a single node, 8 welded GPUs</td></tr>
+  <tr><td><strong>parallel (communication)</strong></td><td>slow network, \(\gamma \to 1\) (Ethernet, large clusters)</td><td>\(\sqrt{\kappa/(1-\gamma)}\): the network caps everything</td><td>multi-datacenter, federated (see the Emerging ML module, ch. 3)</td></tr>
+  </tbody>
+  </table>
+  Engineering consequence: <strong>adding machines does not reduce the
+  time below the communication floor</strong>. This is the exact analogue
+  of Amdahl's law (ch. 7) for optimization: the "sequential" part is no
+  longer a program but the geometry of the network. All of ch. 4
+  (all-reduce, compression, overlap) is a war against this
+  \(\sqrt{1/(1-\gamma)}\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.3 — What parallelism <em>can</em> buy: the "finite sum" regime</span>
+  The bound of theorem 2.2 concerns the time to <em>reach</em> an
+  \(\varepsilon\)-optimal point when the data are <em>partitioned</em>
+  (each \(f_i\) is opaque). If instead all machines can evaluate the
+  <em>same</em> function (replicated data), parallelism reduces the
+  variance of SGD (mini-batching: Optimization for AI module, ch. 5) —
+  but the optimal statistical rate bounds the gain (Dieuleveut et al.,
+  see the Optimization for AI module, ch. 11). In short: parallelism
+  speeds up <em>compute</em>, never (or marginally) the <em>statistical
+  complexity</em> — a distinction that commercial announcements like to
+  forget.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Previous</span> Counting: FLOPs, memory, scaling laws</a><a class="next" href="ch3.html"><span class="dir">Next</span> Parallelism: data, tensor, pipeline</a></nav>
+</main>
+</div>
+
+</body>
+</html>

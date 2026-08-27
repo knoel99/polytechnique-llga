@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimization for AI — Newton and quasi-Newton — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Optimization for AI</a> › Newton and quasi-Newton</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_52067_EP</span>Optimization for AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: convexity and duality</a>
+<a href="ch1.html">Optimization inside the AI loop</a>
+<a href="ch2.html">Gradient descent: convergence proved</a>
+<a href="ch3.html">Conditioning and Nesterov acceleration</a>
+<a href="ch4.html">Proximal methods: ISTA and FISTA</a>
+<a href="ch5.html">Stochastic gradient descent</a>
+<a href="ch6.html">Variance reduction: SAGA and SVRG</a>
+<a href="ch7.html" class="active">Newton and quasi-Newton</a>
+<a href="ch8.html">Constraints in machine learning</a>
+<a href="ch9.html">Hyperparameter optimization</a>
+<a href="ch10.html">Optimizing the training of networks</a>
+<a href="ch11.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Newton and quasi-Newton</h2>
+
+<p>Changing markets: pay for second-order information (Hessian) in exchange
+for <em>quadratic</em> local convergence — the number of correct digits
+<em>doubles</em> at every iteration.</p>
+
+<div class="thm">
+  <span class="tag">Theorem 7.1 — Local quadratic convergence (proved)</span>
+  Let \(f\) be twice differentiable, \(\mu I \preceq \nabla^2 f(x) \preceq LI\)
+  everywhere (\(f\) therefore strongly convex), Hessian \(M\)-Lipschitz.
+  Newton's method \(x_{k+1} = x_k - \nabla^2 f(x_k)^{-1} \nabla f(x_k)\)
+  satisfies, as soon as \(\|x_0 - x^\star\| \leq \mu/M\):
+  $$\|x_{k+1} - x^\star\| \;\leq\; \frac{M}{2\mu}\,\|x_k - x^\star\|^2.$$
+  <div class="proof">
+  Write \(e_k = x_k - x^\star\) and expand \(\nabla f\) at \(x_k\) around
+  \(x^\star\) (where \(\nabla f(x^\star) = 0\)):
+  $$0 = \nabla f(x^\star) = \nabla f(x_k) - \int_0^1 \nabla^2 f(x^\star + s e_k)\, e_k \, ds \;\Rightarrow\; \nabla f(x_k) = H_k e_k - \rho_k,\quad \|\rho_k\| \leq \frac{M}{2}\|e_k\|^2,$$
+  where \(H_k = \nabla^2 f(x_k)\) and \(\rho_k = \int_0^1 (H_k - \nabla^2 f(x^\star+se_k))e_k\,ds\)
+  collects the Hessian gap (\(\leq M \|e_k\|\) in operator norm, hence the
+  \(\tfrac{M}{2}\|e_k\|^2\) after integration). Then
+  $$e_{k+1} = e_k - H_k^{-1}\nabla f(x_k) = H_k^{-1}\rho_k \;\Rightarrow\; \|e_{k+1}\| \leq \|H_k^{-1}\| \,\frac{M}{2}\|e_k\|^2 \leq \frac{M}{2\mu}\|e_k\|^2. \;\blacksquare$$
+  If \(\|e_0\| \leq \mu/M\), the error at least halves at every step — and
+  then decreases quadratically once below 1. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">The price to pay — and the workaround</span>
+  <table class="tbl">
+  <thead><tr><th></th><th>GD / Nesterov</th><th>Newton</th><th>BFGS / L-BFGS</th></tr></thead>
+  <tbody>
+  <tr><td>cost per iteration (dimension \(d\))</td><td>\(O(d)\)</td><td>\(O(d^3)\) (factorization)</td><td>\(O(d^2)\) / \(O(md)\), \(m \approx 10\)</td></tr>
+  <tr><td>information</td><td>gradients</td><td>full Hessian</td><td>approximation from gradient differences</td></tr>
+  <tr><td>convergence</td><td>global, linear/\(k^2\)</td><td>local quadratic</td><td>superlinear (in practice: fast linear)</td></tr>
+  <tr><td>scale invariance</td><td>no (suffers from \(\kappa\))</td><td>yes (affine invariant)</td><td>almost</td></tr>
+  </tbody>
+  </table>
+  Newton is not global: far from the minimum, the direction can be bad —
+  hence <em>damped Newton</em> (step by line search) and the
+  "self-concordant" analysis (Nesterov–Nemirovski) which gives a globally
+  convergent version; this is the heart of interior-point LP/QP solvers
+  (see the Responsible AI module, ch. 4).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 7.2 — BFGS in three ideas</span>
+  (1) <strong>Goal</strong>: replace \(\nabla^2 f\) with \(B_k \succ 0\) updated at
+  cost \(O(d^2)\). (2) <strong>Secant equation</strong>: impose
+  \(B_{k+1} s_k = y_k\) with \(s_k = x_{k+1}-x_k\), \(y_k = \nabla f(x_{k+1})-\nabla f(x_k)\)
+  — the only second-order information extractable from gradients. (3)
+  <strong>Rank-2 update</strong> (closest to \(B_k\) in the Frobenius sense under
+  these constraints):
+  $$B_{k+1} = B_k - \frac{B_k s_k s_k^\top B_k}{s_k^\top B_k s_k} + \frac{y_k y_k^\top}{y_k^\top s_k}.$$
+  <strong>L-BFGS</strong> stores only the last \(m\) pairs \((s_k, y_k)\) and
+  reconstructs the product \(B_k^{-1}\nabla f\) by recursion: it is the
+  standard weapon for smooth convex losses in high dimension (and the
+  default solver of <code>scipy.optimize.minimize(method="L-BFGS-B")</code>).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.3 — Quadratic speed, experienced</span>
+  Minimize \(f(x) = \frac{x^2}{2} + e^{-x}\)... hmm let us take \(f(x)=x\log x\)
+  (\(x&gt;0\), convex): Newton is exactly second-order there: \(f''(x) = 1/x\)
+  and the iterate \(x_{k+1} = x_k - f'(x_k)/f''(x_k)\) can be computed by
+  hand. Exercise 7: show that for \(f(x) = x^4\), starting from \(x_0 = 2\),
+  Newton gives \(x_k = 2^{(1-(-1/3)^k \cdot \ldots)}\)... — the simplest is to
+  observe it numerically: count the correct digits at each iteration, watch
+  them double, then compare L-BFGS via SciPy on the smoothed LASSO of ch. 4
+  (in dimension \(d = 200\)).
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Variance reduction: SAGA and SVRG</a><a class="next" href="ch8.html"><span class="dir">Next</span> Constraints in machine learning</a></nav>
+</main>
+</div>
+
+</body>
+</html>

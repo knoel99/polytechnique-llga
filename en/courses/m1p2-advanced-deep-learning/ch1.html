@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Deep Learning — Vision Transformers: ViT, DeiT, Swin — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Advanced Deep Learning</a> › Vision Transformers: ViT, DeiT, Swin</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52087_EP</span>Advanced Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: transformers, optimization, normalization</a>
+<a href="ch1.html" class="active">Vision Transformers: ViT, DeiT, Swin</a>
+<a href="ch2.html">Modern convnets: the ConvNeXt lesson</a>
+<a href="ch3.html">Mixture of Experts (MoE)</a>
+<a href="ch4.html">Self-supervision I: contrastive (SimCLR and its lineage)</a>
+<a href="ch5.html">Self-supervision II: masking (MAE, BEiT, DINOv2)</a>
+<a href="ch6.html">Efficient architectures: MobileNet and distillation</a>
+<a href="ch7.html">Training at scale: recipes and scaling laws</a>
+<a href="ch8.html">Reproducible research: experimental protocol</a>
+<a href="ch9.html">Multimodal and generative: cross-references</a>
+<a href="ch10.html">Research of the teaching team</a>
+<a href="ch11.html">Projects: read, explain, replicate</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Vision Transformers: ViT, DeiT, Swin</h2>
+
+<h3>1.1. ViT — "An Image is Worth 16x16 Words"</h3>
+<p>The pivotal paper (Dosovitskiy et al., ICLR 2021) transposes the transformer to
+images with disarming radicality: <strong>cut the image into patches and treat them
+as tokens</strong>.</p>
+<ul>
+  <li><strong>Patch embedding</strong>: the image \(x \in \mathbb{R}^{3 \times H
+  \times W}\) is cut into \(N = HW/P^2\) patches of \(P \times P\) (typically
+  16×16); each patch is linearly projected into a vector of dimension \(d\) —
+  implemented as a <strong>convolution with \(P \times P\) kernel and stride
+  \(P\)</strong>;</li>
+  <li><strong>special tokens</strong>: a prepended \(\texttt{[class]}\) token (its
+  final state serves for classification) and learned additive <strong>positional
+  embeddings</strong> (ViT has <em>no</em> a priori knowledge of the 2D structure:
+  everything must be learned);</li>
+  <li><strong>classification</strong>: MLP + softmax on \(\texttt{[class]}\).</li>
+</ul>
+
+<pre class="code"><code>import torch, torch.nn as nn
+
+class ViT(nn.Module):
+    def __init__(self, img=224, patch=16, d=768, L=12, heads=12, n_classes=1000):
+        super().__init__()
+        self.n = (img // patch) ** 2                     # 196 patches
+        self.patch = nn.Conv2d(3, d, kernel_size=patch, stride=patch)
+        self.cls = nn.Parameter(torch.zeros(1, 1, d))
+        self.pos = nn.Parameter(torch.zeros(1, self.n + 1, d))
+        layer = nn.TransformerEncoderLayer(
+            d, heads, dim_feedforward=4*d, batch_first=True, norm_first=True)
+        self.encoder = nn.TransformerEncoder(layer, L)
+        self.head = nn.Linear(d, n_classes)
+
+    def forward(self, x):
+        p = self.patch(x).flatten(2).transpose(1, 2)     # (B, n, d)
+        z = torch.cat([self.cls.expand(p.size(0), -1, -1), p], dim=1)
+        z = self.encoder(z + self.pos)
+        return self.head(z[:, 0])                        # [class] token</code></pre>
+
+<div class="prop">
+  <span class="tag">Proposition 1.1 — Complexities: attention vs convolution</span>
+  For an input with \(n\) tokens/spatial positions and dimension \(d\) (one layer):
+  <table class="tbl">
+    <tr><th>Layer</th><th>FLOPs</th><th>Params</th><th>Spatial dependence</th></tr>
+    <tr><td>Self-attention</td><td>\(O(n^2 d)\)</td><td>\(O(d^2)\)</td><td>global, dynamic</td></tr>
+    <tr><td>MLP (d → 4d → d)</td><td>\(O(n d^2)\)</td><td>\(O(d^2)\)</td><td>none</td></tr>
+    <tr><td>Conv \(k \times k\)</td><td>\(O(k^2 n d^2)\)</td><td>\(O(k^2 d^2)\)</td><td>local, static</td></tr>
+  </table>
+  <div class="proof">
+  Attention: \(QK^\top\) is an \(n \times d\) by \(d \times n\) product →
+  \(2n^2 d\) FLOPs; weighting \(V\) adds \(2 n^2 d\); the projections
+  \(Q, K, V, O\) cost \(4 \times 2nd^2 = 8nd^2\) — hence the total
+  \(\Theta(n^2 d + n d^2)\). Conv: each position (n of them) combines \(k^2\)
+  neighbors over \(d\) input/output channels → \(2 k^2 n d^2\). Two
+  consequences: (i) for large \(n\), attention costs \(n^2\) — the wall of
+  high-resolution images; (ii) for \(d \gg n\), the projections dominate —
+  identical to the MLP; the <strong>ratio</strong> depends on \(n/d\), not on a
+  "transformers always more expensive" rule. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Note — The lesson of the ViT paper's data</span>
+  ViT without massive pre-training is <em>inferior</em> to ResNet; only from
+  hundreds of millions of images (JFT-300M) onward does it dominate: the
+  transformer trades <strong>convolutional inductive bias</strong> (locality,
+  translation) for the <strong>ability to ingest data</strong>. This
+  architecture×data interaction is THE lesson of the paper — and the guiding
+  thread of the module.
+</div>
+
+<h3>1.2. DeiT — training matters as much as the architecture</h3>
+<p>Touvron et al. (2021) obtain competitive ViTs on ImageNet-1k <strong>alone</strong>
+(1.3 M images): strong augmentation (RandAugment, mixup, cutmix), regularization
+(stochastic depth, tuned weight decay), the AdamW optimizer, and <strong>token
+distillation</strong>: a second token \(\texttt{[dist]}\) is supervised by the outputs
+of a convnet teacher (RegNet); the student thereby learns the inductive bias that
+the convnet provides for free. Moral: comparing architectures with unequal
+training recipes is meaningless — we will return to this with ConvNeXt (ch. 2)
+and the experimental protocol (ch. 8).</p>
+
+<h3>1.3. Swin — local attention via shifted windows</h3>
+<p>To curb attention's cubic growth in image size, the <strong>Swin
+Transformer</strong> (Liu et al., ICCV 2021): (i) attention computed within local
+<strong>windows</strong> of \(M \times M\) patches (cost linear in the number of
+windows); (ii) each subsequent layer <strong>shifts</strong> the windows by \(M/2\) —
+cross-window connections arise from the shift; (iii) <strong>progressive patch
+merging</strong> like a convolutional encoder — Swin serves as a dense backbone
+(detection, segmentation) where ViT was 1 token = 1 class. ViT (global,
+data-dependent, quadratic) and Swin (hierarchical, local, linear) embody the two
+poles that all subsequent architectures negotiate.
+</p>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Refresher: transformers, optimization, normalization</a><a class="next" href="ch2.html"><span class="dir">Next</span> Modern convnets: the ConvNeXt lesson</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Real systems: roofline, GPU, 7B LLM — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Deep Learning</a> › Real systems: roofline, GPU, 7B LLM</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_52183_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Compact refresher: the P1 foundation</a>
+<a href="ch1.html">Counting: FLOPs, memory, scaling laws</a>
+<a href="ch2.html">Theoretical complexity of training</a>
+<a href="ch3.html">Parallelism: data, tensor, pipeline</a>
+<a href="ch4.html">Communication: all-reduce and friends</a>
+<a href="ch5.html">Memory efficiency: checkpointing, ZeRO</a>
+<a href="ch6.html">Efficient inference</a>
+<a href="ch7.html" class="active">Real systems: roofline, GPU, 7B LLM</a>
+<a href="ch8.html">Research of the instructor</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Real systems: roofline, GPU, and the complete budget of a 7B LLM</h2>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — Roofline model (why a "312 TFLOP/s" GPU delivers 45%)</span>
+  An operation has an <strong>arithmetic intensity</strong>
+  \(I = \mathrm{FLOPs}/\mathrm{bytes\ read+written}\). The achievable
+  throughput is
+  $$P_\mathrm{achievable} \;=\; \min\big(P_\mathrm{peak},\; B_\mathrm{mem}\cdot I\big)$$
+  with \(P_\mathrm{peak}\) the compute throughput and \(B_\mathrm{mem}\)
+  the memory bandwidth. A huge GEMM (large \(I\)): compute-bound; an
+  activation, a normalization, a tokenizer, token-by-token generation
+  (low \(I\)): <em>memory</em>-bound — increasing the GPU's FLOP/s
+  changes nothing there. The 35–50% MFU of LLMs is precisely the share
+  of layers actually in the compute regime; FlashAttention (prop. 6.2)
+  wins by <em>reducing bytes</em>, not FLOPs — a pure roofline move.
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 7.2 — Amdahl's law (proved) — the ceiling of all parallelism</span>
+  If a fraction \(s\) of the work is sequential (inevitably so), the
+  speedup on \(P\) processors is capped:
+  $$A(P) \;=\; \frac{1}{s + (1-s)/P} \;\leq\; \frac{1}{s}.$$
+  <div class="proof">
+  Sequential time \(T_1 = T_s + T_p\) with \(s = T_s/T_1\). On \(P\)
+  processors, the parallel part divides at best by \(P\):
+  \(T_P = T_s + T_p/P\), hence \(A(P) = T_1/T_P = 1/(s + (1-s)/P)\),
+  increasing in \(P\) and bounded above by \(1/s\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.3 — Complete case study: training a "7B" LLM (end-to-end computation)</span>
+  Assumptions (close to Touvron et al. 2023): \(N = 6{,}7\times10^9\)
+  parameters, \(D = 10^{12}\) tokens, A100-80GB bf16 (312 TFLOP/s peak,
+  2 TB/s HBM, 400 W), one node = 8 GPUs + NVLink.
+  <table class="tbl">
+  <thead><tr><th>Question</th><th>Computation</th><th>Result</th></tr></thead>
+  <tbody>
+  <tr><td>Total FLOPs</td><td>\(6ND = 6 \times 6{,}7\times10^9 \times 10^{12}\)</td><td>\(4{,}0\times10^{22}\) FLOPs</td></tr>
+  <tr><td>GPU-hours (45% MFU)</td><td>\(4\times10^{22} / (312\times10^{12}\times0{,}45) / 3600\)</td><td>≈ 79,000 GPU·h — the paper announces 82,432: the \(6ND\) rule is accurate to ±5%</td></tr>
+  <tr><td>States memory</td><td>\(16\,N = 16 \times 6{,}7\times10^9\)</td><td>107 GB &gt; 80 GB: ZeRO-2/3 or TP required (ch. 3, 5)</td></tr>
+  <tr><td>Activations (checkpointing, batch 4×2048 tokens)</td><td>\(\approx 2\sqrt{32}\times(\text{layer act.})\)</td><td>a few GB/GPU: checkpointing (th. 5.1) makes the batch viable</td></tr>
+  <tr><td>Time on 256 GPUs (32 nodes)</td><td>79,000/256 h</td><td>≈ 13 days — hence the vital importance of MFU (half the time = 6 days saved)</td></tr>
+  <tr><td>GPU-only energy</td><td>79,000 h × 0.4 kW (+ PUE, see the Responsible AI module, ch. 6)</td><td>≈ 32 MWh before PUE; emissions by region: 1.6 t (FR) to ~15 t (world average)</td></tr>
+  <tr><td>fp16 inference</td><td>weights \(2N\) = 13.4 GB; KV cache 2048 ctx ≈ 1.1 GB (def. 6.1)</td><td>fits on 1 80 GB GPU; throughput ≈ 140 tok/s (memory wall)</td></tr>
+  </tbody>
+  </table>
+  This table — reused in exercise 7 — is the module's typical
+  deliverable: a quantified budget, every line traceable to a theorem of
+  the course (1.3, 5.1, 6.1, 7.1), and an engineer's conclusion (where
+  to invest the next euro: MFU? memory? quantization?).
+</div>
+
+<div class="note">
+  <span class="tag">The system's keyboard: what to know about a GPU</span>
+  Memory hierarchy (registers → SRAM ~20 MB → HBM ~80 GB → NVLink →
+  IB); each level ~10× slower; winning kernels are those that maximize
+  locality (tiling, fusion — FlashAttention again); "tensor cores" do
+  bf16 GEMMs in 16×16×16 blocks — hence the importance of dimensions
+  that are multiples of powers of 2, and why padding genuinely wastes.
+  For the ML engineer: profile <em>before</em> optimizing (nsight,
+  PyTorch profiler), look at the roofline's "memory bound" line, and
+  remember that the best code optimizer is a better algorithm (ch. 6).
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Efficient inference</a><a class="next" href="ch8.html"><span class="dir">Next</span> Research of the instructor</a></nav>
+</main>
+</div>
+
+</body>
+</html>

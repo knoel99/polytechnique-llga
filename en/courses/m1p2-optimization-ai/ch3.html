@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimization for AI — Conditioning and Nesterov acceleration — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Optimization for AI</a> › Conditioning and Nesterov acceleration</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_52067_EP</span>Optimization for AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: convexity and duality</a>
+<a href="ch1.html">Optimization inside the AI loop</a>
+<a href="ch2.html">Gradient descent: convergence proved</a>
+<a href="ch3.html" class="active">Conditioning and Nesterov acceleration</a>
+<a href="ch4.html">Proximal methods: ISTA and FISTA</a>
+<a href="ch5.html">Stochastic gradient descent</a>
+<a href="ch6.html">Variance reduction: SAGA and SVRG</a>
+<a href="ch7.html">Newton and quasi-Newton</a>
+<a href="ch8.html">Constraints in machine learning</a>
+<a href="ch9.html">Hyperparameter optimization</a>
+<a href="ch10.html">Optimizing the training of networks</a>
+<a href="ch11.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Conditioning and Nesterov acceleration</h2>
+
+<p>Can we go faster <em>without second-order information</em> (no Hessian)?
+Nesterov's answer (1983): yes, by a factor \(\sqrt{\kappa}\) — and this is
+<strong>optimal</strong>: no first-order algorithm can do better on the class of
+smooth convex functions. This is one of the rare results of the discipline
+where optimality is known <em>and</em> achieved by a usable algorithm.</p>
+
+<div class="thm">
+  <span class="tag">Theorem 3.1 — First-order lower bound (Nesterov 1983; Nemirovski–Yudin 1983)</span>
+  For any first-order method (having access only to gradients at the visited
+  points), there exists a \(\mu\)-strongly convex and \(L\)-smooth function
+  such that, after \(T\) iterations,
+  $$f(x_T) - f(x^\star) \;\geq\; \Big(1 - \frac{1}{\sqrt{\kappa}}\Big)^{2T}\,\big(f(x_0)-f(x^\star)\big) \quad\text{(up to constants).}$$
+  In other words: \(\Omega\!\big(\sqrt{\kappa}\,\log(1/\varepsilon)\big)\)
+  iterations are necessary, versus \(\Omega(\kappa \log(1/\varepsilon))\) for
+  gradient descent; and \(\Omega(1/\sqrt{\varepsilon})\) iterations in the
+  general smooth convex case (vs \(\Omega(1/\varepsilon)\)). The proofs
+  construct a blockwise quadratic "trap function" whose information
+  propagates only one coordinate per iteration: they can be found in
+  Nesterov (2004, §2.1) and Bubeck (2015, §3.5).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.2 — Accelerated scheme (Nesterov, strongly convex case)</span>
+  With \(\gamma = \frac{1 - \sqrt{\mu/L}}{1 + \sqrt{\mu/L}}\) and step \(t = 1/L\):
+  $$y_k = x_k + \gamma\,(x_k - x_{k-1}), \qquad x_{k+1} = y_k - t\,\nabla f(y_k),$$
+  and the initialization \(y_0 = x_0\). Convergence is linear with factor
+  \(1 - \sqrt{\mu/L} = 1 - 1/\sqrt{\kappa}\) — the promised \(\sqrt{\kappa}\)
+  factor. "Smooth convex" variant: \(\gamma_k = \frac{k-1}{k+2}\) (growing
+  momentum), rate \(f(x_k) - f^\star \leq \frac{2L\|x_0-x^\star\|^2}{(k+1)^2}\).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.3 — Intuition of the proof: estimate sequences</span>
+  The idea (detailed in Nesterov 2004, §2.2): build a family of quadratics
+  \(\phi_k(x) = \ell_k + \frac{\gamma_k}{2}\|x - v_k\|^2\) that (i) lower
+  bound \(f\) everywhere, (ii) approach \(f(x_k)\) from above via the
+  recursion
+  $$\phi_{k+1}(x) = (1-\alpha_k)\,\phi_k(x) + \alpha_k\Big(f(y_k) + \langle\nabla f(y_k), x - y_k\rangle\Big),$$
+  where the "look-ahead" point \(y_k\) minimizes \(\phi_k\) shifted by the
+  latest linearization. Two recurrences fight each other: the mass
+  \(\gamma_k\) grows (at best quadratically, \(\gamma_{k+1} = (1-\alpha_k)\gamma_k\),
+  \(\alpha_k^2/\gamma_{k+1} \leq 2L\)), while the gap
+  \(\phi_k^\star \leq f(x_k)\) closes at the pace of the \(\alpha_k \sim 2/k\).
+  Result: \(f(x_k) - \phi_k^\star = O(L R^2/k^2)\). In continuous time
+  (\(t = \varepsilon k\)), the scheme converges to the ODE
+  \(\ddot{x} + \tfrac{3}{t}\dot{x} + \nabla f(x) = 0\) — a ball in the valley
+  with vanishing friction: the energy decreases like \(1/t^2\), the signature
+  of acceleration.
+</div>
+
+<div class="note">
+  <span class="tag">Momentum in practice: from Nesterov to PyTorch</span>
+  <table class="tbl">
+  <thead><tr><th>Variant</th><th>Update</th><th>Typical use</th></tr></thead>
+  <tbody>
+  <tr><td>Heavy ball (Polyak 1964)</td><td>\(v_{k+1} = \beta v_k - t\nabla f(x_k)\), \(x_{k+1} = x_k + v_{k+1}\)</td><td>networks (SGD+momentum 0.9); optimal for quadratics, no general guarantee</td></tr>
+  <tr><td>Nesterov (this chapter)</td><td>gradient evaluated at the <em>future</em> point \(y_k\)</td><td>optimal guarantees, FISTA (ch. 4), convex case</td></tr>
+  <tr><td>Adaptive restart (O'Donoghue–Candès 2015)</td><td>reset \(\gamma_k\) to zero when \(f\) rises</td><td>practical twist: linearizes convergence of the strongly convex case without knowing \(\mu\)</td></tr>
+  </tbody>
+  </table>
+  In the Deep Learning module (ch. 3), momentum appears as a recipe; here we
+  know where it comes from: the only way — in the sense of the lower bound —
+  to exploit the geometry of valleys.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Gradient descent: convergence proved</a><a class="next" href="ch4.html"><span class="dir">Next</span> Proximal methods: ISTA and FISTA</a></nav>
+</main>
+</div>
+
+</body>
+</html>

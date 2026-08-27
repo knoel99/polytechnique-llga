@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real-time AI in Video Games: decisive &amp; collaborative actions — Collective decisions: steering, boids, formations — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Real-time AI in Video Games: decisive &amp; collaborative actions</a> › Collective decisions: steering, boids, formations</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">MSc&amp;T Brochure</span>Real-time AI in Video Games: decisive &amp; collaborative actions</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: graphs, priority queues, probability</a>
+<a href="ch1.html">The game loop and the real-time budget</a>
+<a href="ch2.html">Navigation: grids, navmesh, A*</a>
+<a href="ch3.html">Behaviors: state machines, behavior trees, utility</a>
+<a href="ch4.html" class="active">Collective decisions: steering, boids, formations</a>
+<a href="ch5.html">Monte-Carlo Tree Search: deciding in a few ms</a>
+<a href="ch6.html">Learned agents: RL and self-play in games</a>
+<a href="ch7.html">Cooperative and multi-agent games</a>
+<a href="ch8.html">Conversational NPCs (LLMs) and anti-cheat</a>
+<a href="ch9.html">Performance, profiling and budgets</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Collective decisions: steering, boids, formations</h2>
+
+<h3>4.1. Steering behaviors</h3>
+<div class="def">
+  <span class="tag">Definition 4.1 — Steering (steering behavior)</span>
+  A steering behavior computes a <strong>steering force</strong>
+  \(s = \mathrm{seek}(p, v, p_{\mathrm{target}}, v_{\mathrm{target}})\) — a desired
+  acceleration — added to the velocity, typically bounded \(\|s\| \leq a_{\max}\) and
+  smoothed (weighted blend of behaviors). Classic components (Reynolds, 1999): seek,
+  flee, arrive (soft deceleration), wander, pursue (anticipate the target), avoid
+  (obstacles).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 4.2 — Arrive: the right deceleration</span>
+  Pure seek toward a point gives a jittery orbit around the target (the velocity
+  always points at it); <em>arrive</em> defines a desired velocity decreasing with
+  distance:
+  $$v_{\mathrm{des}} = \hat d \cdot v_{\max} \cdot
+  \min\!\Big(1, \frac{\|d\|}{r_{\mathrm{arr}}}\Big), \qquad
+  s = \frac{v_{\mathrm{des}} - v}{\tau},$$
+  with \(d = p_{\mathrm{target}} - p\), arrival radius \(r_{\mathrm{arr}}\) and
+  response time \(\tau\) (e.g. 0.2 s): braking is anticipated instead of oscillating —
+  the famous "overshooting" of amateur NPCs comes from the absence of this term.
+</div>
+
+<h3>4.2. Boids: three local rules, one global behavior</h3>
+<p>Reynolds' <strong>boids</strong> model (1987) simulates bird flocks with, per
+individual, three forces computed on its neighbors (perception radius \(r\),
+possibly anisotropic):</p>
+<ol>
+  <li><strong>Separation</strong>: \(s_{\mathrm{sep}} = -\sum_{j \in \mathcal{N}(i)}
+  \frac{p_i - p_j}{\|p_i - p_j\|}\) — move away from neighbors that are too close
+  (weighted by proximity);</li>
+  <li><strong>Alignment</strong>: \(s_{\mathrm{ali}} =
+  \bar v_{\mathcal{N}(i)} - v_i\) — adopt the average velocity of the neighbors;</li>
+  <li><strong>Cohesion</strong>: \(s_{\mathrm{coh}} =
+  \bar p_{\mathcal{N}(i)} - p_i\) — move toward the local center of mass.</li>
+</ol>
+<p>The acceleration is a weighted blend of the three (plus seek toward a possible
+leader); no global variable exists: the flock is an <strong>emergent behavior</strong>.
+This result — "three local rules produce a coherent group" — is the gateway to
+collective AI: we program the individuals, we get the crowd. The same engine drives
+schools of fish, zombie hordes (to be mixed with the flow navigation of chapter 2),
+swarms of projectiles… The number of neighbors to consider is bounded (computational
+parsimony: neighborhood query by spatial partitioning — see chapter 9 and Refresher
+CS, chapter 8, for quadtrees).</p>
+
+<h3>4.3. Formations: slots and the virtual leader</h3>
+<div class="def">
+  <span class="tag">Definition 4.3 — Slot-based formation</span>
+  A formation is a set of relative positions \(\{o_1, \dots, o_k\}\) in the
+  formation's frame; the world position of slot \(j\) is
+  $$p_j^{\mathrm{slot}} = p_{\mathrm{anchor}} + R(\theta)\, o_j,$$
+  where the anchor (a real leader or a <strong>virtual leader</strong> — an invisible
+  point following the global path) provides position \(p_{\mathrm{anchor}}\) and
+  orientation \(\theta\). With each member steering toward its slot, the formation
+  moves credibly; <strong>slot assignment</strong> is a minimum-cost matching
+  \(\sum_{i} \|p_i - p_{\sigma(i)}^{\mathrm{slot}}\|\) — the Hungarian algorithm,
+  again (the same assignment problem as in the Computational Optimal Transport module,
+  chapters 1–2, and in the Computer Vision (P2) module, chapter 4, for tracking).
+</div>
+
+<div class="note">
+  <span class="tag">Note — Coordinating without talking: the blackboard and beyond</span>
+  Three industrial coordination patterns: (1) <strong>blackboard</strong> — shared
+  memory where agents publish/consume observations (an NPC "announces" the player's
+  position); (2) <strong>assigned roles</strong> — a leader distributes (left flank,
+  suppression, medic), often via the Hungarian matching; (3) <strong>emergence</strong>
+  — boids/RVO: no negotiation. The <strong>AI Director</strong> of <em>Left 4 Dead</em>
+  (Valve, 2008) illustrates a higher level: a global system regulates the
+  <em>intensity</em> (enemy spawns, items, music) according to the players' measured
+  tension — game design AI, not NPC AI.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Behaviors: state machines, behavior trees, utility</a><a class="next" href="ch5.html"><span class="dir">Next</span> Monte-Carlo Tree Search: deciding in a few ms</a></nav>
+</main>
+</div>
+
+</body>
+</html>

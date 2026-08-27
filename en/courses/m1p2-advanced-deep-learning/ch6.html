@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Deep Learning — Efficient architectures: MobileNet and distillation — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course Materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Advanced Deep Learning</a> › Efficient architectures: MobileNet and distillation</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52087_EP</span>Advanced Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: transformers, optimization, normalization</a>
+<a href="ch1.html">Vision Transformers: ViT, DeiT, Swin</a>
+<a href="ch2.html">Modern convnets: the ConvNeXt lesson</a>
+<a href="ch3.html">Mixture of Experts (MoE)</a>
+<a href="ch4.html">Self-supervision I: contrastive (SimCLR and its lineage)</a>
+<a href="ch5.html">Self-supervision II: masking (MAE, BEiT, DINOv2)</a>
+<a href="ch6.html" class="active">Efficient architectures: MobileNet and distillation</a>
+<a href="ch7.html">Training at scale: recipes and scaling laws</a>
+<a href="ch8.html">Reproducible research: experimental protocol</a>
+<a href="ch9.html">Multimodal and generative: cross-references</a>
+<a href="ch10.html">Research of the teaching team</a>
+<a href="ch11.html">Projects: read, explain, replicate</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Efficient architectures: MobileNet and distillation</h2>
+
+<h3>6.1. Depthwise separable — the exact accounting</h3>
+<div class="prop">
+  <span class="tag">Proposition 6.1 — Cost of a depthwise separable convolution</span>
+  A standard \(k \times k\) convolution, \(d_{\mathrm{in}} \to d_{\mathrm{out}}\),
+  over an \(h \times w\) map, costs \(h w k^2 d_{\mathrm{in}} d_{\mathrm{out}}\)
+  MACs. Its <strong>depthwise</strong> decomposition (one \(k \times k\) filter per
+  channel; \(h w k^2 d_{\mathrm{in}}\) MACs) + <strong>pointwise</strong> (\(1 \times 1\)
+  mixing the channels; \(h w d_{\mathrm{in}} d_{\mathrm{out}}\) MACs) costs
+  $$h w\, k^2 d_{\mathrm{in}} + h w\, d_{\mathrm{in}} d_{\mathrm{out}}.$$
+  For \(d_{\mathrm{in}} = d_{\mathrm{out}} = d\), the ratio to the standard conv
+  is
+  $$\frac{k^2 d + d^2}{k^2 d^2} = \frac{1}{d} + \frac{1}{k^2},$$
+  that is, for \(k = 3\), \(d = 256\): \(\approx 0{,}12\) — <strong>a factor ~8 of
+  compute saved</strong> at comparable "functional sector" (at the price of
+  reduced per-layer expressiveness).
+  <div class="proof">
+  Accounting for the decomposition: depthwise — for each of the
+  \(d_{\mathrm{in}}\) channels, a \(k \times k\) filter slides over \(h w\)
+  positions; \(h w k^2 d_{\mathrm{in}}\). Pointwise — at each position, a
+  \(d_{\mathrm{in}} \times d_{\mathrm{out}}\) matrix product over \(h w\)
+  positions; \(h w d_{\mathrm{in}} d_{\mathrm{out}}\). The sum factors as
+  \(h w d (k^2 + d)\), to be compared with \(h w d^2 k^2\) — hence the ratio
+  \((k^2 + d)/(k^2 d) = 1/d + 1/k^2\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<ul>
+  <li><strong>MobileNetV1</strong> (Howard, 2017): stacks separable + RELU blocks;
+  two compression hyperparameters: <em>width multiplier</em> \(\alpha\)
+  (channels × \(\alpha\)) and <em>resolution multiplier</em> \(\rho\) (input ×
+  \(\rho\)) — cost \(\approx \alpha^2 \rho^2\);</li>
+  <li><strong>MobileNetV2</strong> (Sandler, 2018): block with <strong>inverted
+  bottleneck</strong> (expand \(d \to 6d\) pointwise → depthwise → project
+  \(6d \to d'\)) and <strong>linear bottleneck</strong> (no nonlinearity after the
+  projection — ReLU would destroy information in the low-dimensional space);
+  the shortcuts connect the bottlenecks — this is the block ConvNeXt will
+  reuse (ch. 2) and EfficientNet will stack;</li>
+  <li><strong>EfficientNet</strong> (Tan &amp; Le, 2019): <strong>compound
+  scaling</strong> — depth, width and resolution grow together:
+  \(\text{depth} = \alpha^{\phi}\), \(\text{width} = \beta^{\phi}\),
+  \(\text{resolution} = \gamma^{\phi}\) with \(\alpha \beta^2 \gamma^2 \approx 2\)
+  (FLOPs × ~2 per step of \(\phi\)) — the architecture as a <em>parameterized
+  family</em>, not an isolated model; a forerunner of the scaling laws of
+  chapter 7.</li>
+</ul>
+
+<h3>6.2. Knowledge distillation</h3>
+<div class="def">
+  <span class="tag">Definition 6.2 — Temperature KD (Hinton et al., 2015)</span>
+  With \(z_p, z_e\) the logits of the teacher and the student and \(T\) the
+  temperature:
+  $$\mathcal{L}_{\mathrm{KD}} = (1-\lambda)\,\mathrm{CE}(y, z_e) \;+\;
+  \lambda\, T^2\, \mathrm{KL}\big(\mathrm{softmax}(z_p / T)\,\big\|\,\mathrm{softmax}(z_e / T)\big),$$
+  \(\lambda \in [0{,}1]\), \(T\) typically 3–20. At high temperature, the
+  teacher's "soft" distribution reveals the <strong>structure of the errors</strong>
+  ("this cat looks like a lynx, not like a truck"): bit-rich per-class
+  information that the hard (1-of-K) label does not contain; the \(T^2\)
+  factor compensates for the shrinking gradients.
+</div>
+<p>Applications: compression (student = MobileNet, ch. 6.1 — the standard
+production chain); <strong>self-distillation</strong> (DeiT, ch. 1; Born-Again
+Networks); and <em>label-free</em> distillation on massive unlabeled data
+(Noisy Student, DINOv2). Bridges: quantization/pruning on the deployment side
+is covered in the Computer Vision (P2) module, chapter 8; distilled LLMs in
+the M2 Large Language Models module.</p>
+
+<h3>6.3. The "efficiency" reading grid</h3>
+<table class="tbl">
+  <tr><th>Objective</th><th>Technique</th><th>Key metric</th><th>Pivotal paper</th></tr>
+  <tr><td>FLOPs ↓</td><td>separable convolutions</td><td>MACs/image</td><td>MobileNet</td></tr>
+  <tr><td>FLOPs ↓ (family)</td><td>compound scaling</td><td>accuracy vs FLOPs</td><td>EfficientNet</td></tr>
+  <tr><td>params ↓ / transfer</td><td>distillation</td><td>student/teacher accuracy</td><td>Hinton KD, DeiT</td></tr>
+  <tr><td>capacity ≠ compute</td><td>top-k MoE</td><td>active params</td><td>Switch, Mixtral (ch. 3)</td></tr>
+  <tr><td>hardware latency</td><td>INT8 quantization</td><td>ms/image (P99)</td><td>Jacob et al. — CV P2 module ch. 8</td></tr>
+  </table>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Self-supervision II: masking (MAE, BEiT, DINOv2)</a><a class="next" href="ch7.html"><span class="dir">Next</span> Training at scale: recipes and scaling laws</a></nav>
+</main>
+</div>
+
+</body>
+</html>
