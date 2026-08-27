@@ -2,6 +2,8 @@
 
 Supports de cours (tutoriels HTML) pour le master **MSc&T « Large Language Models, Graphs and Applications » (LLGA)** de l'École Polytechnique.
 
+**Site en ligne** : <https://knoel99.github.io/polytechnique-llga/>
+
 ## Objectif
 
 Reconstituer, module par module, un **cours complet et auto-contenu** correspondant au *track recommandé* du master LLGA, destiné à un étudiant ayant **un bon niveau L3 de mathématiques**. Chaque module contient :
