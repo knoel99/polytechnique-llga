@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multimodal Generative AI — VAEs and latent spaces — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Multimodal Generative AI</a> › VAEs and latent spaces</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52002_EP</span>Multimodal Generative AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: probabilities, networks, ELBO</a>
+<a href="ch1.html" class="active">VAEs and latent spaces</a>
+<a href="ch2.html">GANs: adversary, equilibrium, Wasserstein</a>
+<a href="ch3.html">Diffusion: DDPM and score matching</a>
+<a href="ch4.html">Guidance, DDIM and latent diffusion</a>
+<a href="ch5.html">CLIP and vision-language alignment</a>
+<a href="ch6.html">Text-to-image: the complete pipeline</a>
+<a href="ch7.html">Beyond images: video, 3D, LLMs</a>
+<a href="ch8.html">Evaluation, costs, ethics</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. VAEs and latent spaces</h2>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Conditional &amp; hierarchical VAE</span>
+  Conditioning the generation: \(p_\theta(x \mid c)\) with \(c\) a class, a text
+  (encoded), another modality. <strong>Hierarchical VAEs</strong> (HiVAE) stack
+  latents \(p(z_1 \mid z_2)\, p(z_2 \mid z_3)\dots\); <strong>VQ-VAEs</strong>
+  quantize the latent into a learned dictionary (discrete codes — the ancestor of
+  image tokens); VQ-VAE-2 reached image fidelity before diffusion.
+</div>
+
+<div class="prop">
+  <span class="tag">What the latent buys</span>
+  Compressing \(512 \times 512 \times 3\) into \(64 \times 64\) latents = \(\times 64\)
+  less computation; all large image generative models (Stable Diffusion,
+  DALL·E&nbsp;2/3) generate in latent space — the autoencoder (light) and the
+  generator (heavy) are decoupled. The same principle applies to <em>graphs</em>:
+  latent graph, discrete codes (Graph ML module, ch. 7).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 1.2 — ELBO decomposition: reconstruction + regularization</span>
+  $$\mathrm{ELBO}_\phi(x) = \underbrace{\mathbb{E}_{q_\phi(z\mid x)}\big[\log p_\theta(x \mid z)\big]}_{\text{reconstruction}}
+  \;-\; \underbrace{\mathrm{KL}\big(q_\phi(z\mid x)\,\|\,p(z)\big)}_{\text{latent regularization}}.$$
+  <em>Interpretation of the two forces</em>: the first term asks for a \(z\) that
+  <em>explains</em> \(x\) (auto-encoding), the second for a \(z\) that is
+  <em>typical</em> under the prior. The tension between the two structures the latent
+  space: without the KL, \(q\) can memorize ("hole" regions not covered by the
+  prior); without reconstruction, \(z\) encodes nothing.
+</div>
+
+<div class="proof">
+The decomposition is already the form obtained in thm. 0.2; what matters is seeing
+where each term comes from. Expand \(\mathbb{E}_{q}\big[\log \frac{p_\theta(x\mid z)\,p(z)}{q_\phi(z\mid x)}\big]\):
+$$\mathbb{E}_q[\log p_\theta(x\mid z)] + \mathbb{E}_q[\log p(z)] - \mathbb{E}_q[\log q_\phi(z\mid x)]
+= \mathbb{E}_q[\log p_\theta(x\mid z)] - \mathrm{KL}(q_\phi \| p),$$
+where we recognize the definition \(\mathrm{KL}(q\|p) = \mathbb{E}_q[\log q - \log p]\).
+When \(p_\theta(x\mid z)\) is a diagonal Gaussian of mean \(D_\theta(z)\) and fixed
+variance \(\sigma^2\), the reconstruction term equals
+\(-\frac{1}{2\sigma^2}\|x - D_\theta(z)\|^2 + \mathrm{cst}\): the "reconstruction
+MSE" of the labs is nothing but the negative of a Gaussian log-likelihood.
+When \(q_\phi\) and \(p\) are Gaussian, the second term closes via prop. 0.4.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Posterior collapse: diagnosis and remedies</span>
+  The decoder (often an autoregressive transformer) becomes so powerful that it
+  ignores \(z\): \(q_\phi(z\mid x) \to p(z)\), the KL drops toward 0 and the VAE
+  degenerates into a non-conditional model (the latent "collapses"). Causes: a
+  strong autoregressive decoder, a dominant KL early in training, an overly simple
+  prior.
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><strong>KL annealing</strong>: weight the KL by a coefficient that slowly
+  rises from 0 to 1 — let the reconstruction settle first;</li>
+  <li><strong>\(\beta\)-VAE</strong> (Higgins et al., 2017): maximizing
+  \(\mathbb{E}[\log p(x\mid z)] - \beta\,\mathrm{KL}\) with \(\beta &gt; 1\) forces a
+  <em>disentangled</em> latent (one direction = one factor of variation); in
+  practice, against collapse one rather uses \(\beta &lt; 1\);</li>
+  <li><strong>Free bits</strong>: penalize the KL <em>per dimension</em> only beyond
+  a budget \(\lambda\): \(\max(\mathrm{KL}_j, \lambda)\) — every dimension receives
+  a free "information allowance", which prevents it from dying.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Construction 1.3 — VQ-VAE: quantizing the latent</span>
+  The encoder produces \(z_e(x) \in \mathbb{R}^{H \times W \times D}\); a
+  <em>codebook</em> \(\{e_1, \dots, e_K\} \subset \mathbb{R}^D\) is learned; each
+  position is quantized to the nearest code:
+  $$z_q(x) = e_k, \qquad k = \arg\min_j \|z_e(x) - e_j\|_2.$$
+  The argmin is not differentiable. One uses the <strong>straight-through</strong>
+  estimator (gradient copy) and the total loss:
+  $$\mathcal{L} = \log p_\theta\big(x \mid z_q\big)
+  + \big\|\mathrm{sg}[z_e] - e\big\|_2^2
+  + \beta\,\big\|z_e - \mathrm{sg}[e]\big\|_2^2,$$
+  where \(\mathrm{sg}\) is the <em>stop-gradient</em> operator.
+</div>
+
+<div class="proof">
+Why this three-term loss? <strong>(i)</strong> The reconstruction must be a function
+of the quantized codes \(z_q\) — but \(\nabla_{z_e} z_q = 0\) (argmin): we define
+\(\frac{\partial \mathcal{L}}{\partial z_e} \mathrel{:=}
+\frac{\partial \mathcal{L}}{\partial z_q}\) (straight-through); the estimator is
+biased yet empirically effective. <strong>(ii)</strong> The term
+\(\|\mathrm{sg}[z_e] - e\|^2\) is quadratic in \(e\) (the codes migrate toward the
+produced encodings); the stop-gradient symmetrically prevents the encoder from
+moving. <strong>(iii)</strong> The term \(\beta\|z_e - \mathrm{sg}[e]\|^2\) does the
+opposite: it pulls the encoder toward the codes. The two "gear" (commitment)
+terms synchronize encoder and dictionary, while the first term trains the decoder;
+together they implement a continuous K-means inside the training loop.
+<span class="qed">∎</span>
+</div>
+
+<p><strong>Hierarchy and sampling.</strong> In a HiVAE, the ELBO becomes
+$$\mathbb{E}_{q(z_1, z_2\mid x)}\big[\log p_\theta(x \mid z_1) + \log p(z_1 \mid z_2) + \log p(z_2)
+- \log q_\phi(z_1 \mid x, z_2) - \log q_\phi(z_2 \mid x)\big],$$
+each level compressing the previous one (the "low" scales govern composition,
+the "high" ones the details — exactly the levels of a U-Net).
+To <em>generate</em>: sample \(z \sim \mathcal{N}(0, I)\) (or the levels of the
+learned prior, as in VQ-VAE-2), then decode in a single network pass;
+<em>latent traversals</em> (interpolating \(z\) between two images) are the visual
+test of the continuity of the learned space.</p>
+
+<pre class="code"><code>import torch
+
+class MiniVAE(torch.nn.Module):
+    """Minimal convolutional VAE for MNIST-like data (28x28)."""
+    def __init__(self, d=8):
+        super().__init__()
+        self.enc = torch.nn.Sequential(            # x: (B,1,28,28)
+            torch.nn.Conv2d(1, 32, 4, 2, 1), torch.nn.ReLU(),   # 14x14
+            torch.nn.Conv2d(32, 64, 4, 2, 1), torch.nn.ReLU(),  # 7x7
+            torch.nn.Flatten(), torch.nn.Linear(64*7*7, 2*d))
+        self.dec = torch.nn.Sequential(
+            torch.nn.Linear(d, 64*7*7), torch.nn.Unflatten(1, (64, 7, 7)),
+            torch.nn.ConvTranspose2d(64, 32, 4, 2, 1), torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(32, 1, 4, 2, 1), torch.nn.Sigmoid())
+    def forward(self, x):
+        h = self.enc(x); mu, logvar = h.chunk(2, dim=1)
+        z = mu + torch.exp(0.5*logvar) * torch.randn_like(mu)   # reparametrization
+        return self.dec(z), mu, logvar
+
+def vae_loss(x, xh, mu, logvar, beta=1.0):
+    rec = torch.nn.functional.binary_cross_entropy(
+        xh, x, reduction="sum") / x.size(0)                      # reconstruction
+    kl  = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / x.size(0)
+    return rec + beta * kl                                      # ELBO (prop. 0.4)</code></pre>
+
+<div class="note">
+  <span class="tag">LLGA analogies</span> The VQ-VAE manufactures <em>image
+  tokens</em>: DALL·E&nbsp;1 generates these tokens autoregressively (LLMs module),
+  latent diffusion replaces them with continuous denoising (ch. 4). On graphs, the
+  same discrete/continuous dichotomy opposes discrete VAEs and edge diffusion
+  (Graph ML, ch. 7); in NLP, the CLIP "latent" (ch. 5) is the shared text-image
+  space.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Review: probabilities, networks, ELBO</a><a class="next" href="ch2.html"><span class="dir">Next</span> GANs: adversary, equilibrium, Wasserstein</a></nav>
+</main>
+</div>
+
+</body>
+</html>

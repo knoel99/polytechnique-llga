@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computational Optimal Transport for ML and Fairness — Fairness through transport — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Computational Optimal Transport for ML and Fairness</a> › Fairness through transport</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">Option P2 (APM)</span>Computational Optimal Transport for ML and Fairness</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: convexity and LP duality</a>
+<a href="ch1.html">The transport problem</a>
+<a href="ch2.html">Duality and the Wasserstein distance</a>
+<a href="ch3.html">Entropic regularization: Sinkhorn</a>
+<a href="ch4.html">OT and machine learning</a>
+<a href="ch5.html">Gromov-Wasserstein and beyond</a>
+<a href="ch6.html" class="active">Fairness through transport</a>
+<a href="ch7.html">The instructor's research</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Fairness through transport</h2>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — The framework: sensitive attribute, demographic parity, equalized odds</span>
+  Data \((X, S, Y)\): features, <strong>sensitive attribute</strong> \(S\)
+  (gender, origin…), label \(Y\); predictor \(\hat Y = h(X)\) (possibly
+  randomized). Two emblematic criteria:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Demographic parity</strong> (DP): \(\hat Y\) independent of
+    \(S\) — the same positive decision rates per group;</li>
+    <li><strong>Equalized odds</strong> (EO, Hardt, Price &amp; Srebro, 2016):
+    \(\hat Y\) independent of \(S\) <em>given</em> \(Y\) — the same true positive
+    <em>and</em> false positive rates per group.</li>
+  </ul>
+  OT enters both scenarios: (i) <em>pre-processing</em> — repair the
+  feature distribution with a Wasserstein barycenter; (ii)
+  <em>post-processing</em> — couple the per-group score distributions. In both
+  cases, the central object is a <strong>coupling</strong>, i.e. a transport
+  plan as in ch. 1.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.2 — Repair by Wasserstein barycenter (Gordaliza, Del Barrio, Gamboa &amp; Loubes, ICML 2019)</span>
+  <strong>Algorithm (full repair, scalar case then multivariate).</strong>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li>Estimate the conditional laws \(\mu_s = \mathcal{L}(X \,|\, S = s)\) by the
+    empirical quantiles \(Q_s = \hat F_s^{-1}\) (sorting, prop. 2.6).</li>
+    <li>Form the <strong>barycenter</strong> of the \(\mu_s\) weighted by the
+    proportions \(p_s = \mathbb{P}(S = s)\); in 1D, corollary 2.8 gives its quantile
+    function pointwise:
+    $$Q^\star(u) \;=\; \sum_s\ p_s\, Q_s(u).$$</li>
+    <li><strong>Repair</strong>: replace each observation by its counterpart at the
+    same quantile level in the barycenter:
+    \(\tilde X_i = Q^\star\big(\hat F_s(X_i)\big)\) for \(S_i = s\). In the
+    multivariate case, replace the 1D transport by a Sinkhorn plan between each
+    cloud and a common entropic barycenter (def. 4.3), then use the barycentric
+    projection of the OTDA algorithm (ch. 4).</li>
+    <li>Retrain the model on the \((\tilde X_i, Y_i)\) <em>without</em> the
+    sensitive attribute.</li>
+  </ol>
+  <div class="proof">
+  <em>Full repair guarantees demographic parity.</em> Let
+  \(U_s = \hat F_s(X)\) for \(X \sim \mu_s\): \(U_s\) is (asymptotically)
+  uniform on \([0,1]\), and \(\tilde X = Q^\star(U_s)\). Hence
+  \(\mathcal{L}(\tilde X\,|\,S = s)
+  = \mathcal{L}\big(Q^\star(U)\big)\) <em>is the same law for every \(s\)</em> —
+  the barycenter. Identical conditionals give independence:
+  \(\mathbb{P}(\tilde X \in A, S = s) = \mathbb{P}(\tilde X \in A\,|\,S = s)\,
+  \mathbb{P}(S = s) = \mathbb{P}(\tilde X \in A)\,\mathbb{P}(S = s)\). Any
+  predictor \(h(\tilde X)\) then inherits independence from \(S\): DP,
+  regardless of the downstream classifier.<span class="qed">∎</span></div>
+  <strong>Partial repair</strong>: interpolate the quantiles,
+  \(\tilde X^{(\lambda)} = (1-\lambda)\, Q_s(U_s) + \lambda\, Q^\star(U_s)\) with
+  \(\lambda \in [0, 1]\) — \(\lambda = 0\): untouched data;
+  \(\lambda = 1\): full repair. <strong>Utility/fairness trade-off</strong>:
+  as \(\lambda\) is swept, the demographic parity gap decreases (the conditionals
+  get closer in Wasserstein distance, linearly in \(\lambda\) for the interpolated
+  transport) while accuracy decreases all the faster as \(X\) carries signal
+  <em>correlated</em> with \(S\): the curve (DP gap on the x-axis,
+  accuracy on the y-axis) is typically decreasing with a "knee" — one
+  chooses \(\lambda\) at the elbow, where a lot of equity has been bought for
+  little utility. This is the curve plotted in the lab below.
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 6.3 — Bicausal OT, counterfactuals and optimal EO post-processing by coupling (simple case proved)</span>
+  <strong>Bicausal OT.</strong> To compare two "twin" individuals differing
+  only in the sensitive attribute, we couple the <em>joint</em> laws
+  \(\mathcal{L}(S, X)\) with a plan \(\pi\) <em>respecting the causal structure
+  \(S \to X\)</em> (<strong>bicausal</strong> coupling: the copy of \(X\) depends
+  on the copy of \(S\) only through the coupling of the conditionals
+  \(\mathcal{L}(X\,|\,S = s)\) — de Lara, González-Sanz, Asher, Risser &amp; Loubes,
+  JMLR 2024). The <strong>counterfactual</strong> \(X^\star(s')\) — "the value
+  \(X\) would have taken had \(S\) been \(s'\)" — is the coupled point:
+  constructed by OT between \(\mathcal{L}(X\,|\,S = s)\) and \(\mathcal{L}(X\,|\,S = s')\).
+  Applications: measuring discrimination
+  \(\mathbb{E}\big[c(X, X^\star)\big]\), predicting on the counterfactual
+  ("counterfactual" fairness).
+  <div class="proof">
+  <em>EO post-processing: the optimal coupling is the increasing coupling.</em>
+  Simple setting: \(Y \in \{0,1\}\), real score \(R_s = f(X)\) per group, and a
+  <em>randomized</em> post-processing \(\hat Y_s = g_s(R_s, U)\), \(U \sim
+  \mathcal{U}[0,1]\) common. (i) Such a post-processing is exactly a
+  <strong>coupling</strong> between the law of \(R_s\,|\,Y = y\) and a target
+  Bernoulli law — the noise \(U\) realizes the plan. (ii) EO requires that the law
+  of \(\hat Y_s\,|\,Y = y\) be the same for both groups: we therefore couple
+  <em>simultaneously</em> the two conditional score laws to a common target.
+  (iii) Among these couplings, the one maximizing utility (accuracy, increasing
+  in the score within each class) is the <strong>increasing coupling</strong> —
+  quantile matching: the <em>uncrossing</em> argument of the proof of
+  prop. 2.6 applies word for word: uncrossing two pairs (making the coupling
+  more comonotone) cannot decrease a utility that is increasing in both scores.
+  Concretely: bring each score to its rank \(U_s = \hat F_s(R_s)\) (quantile
+  within its group), then apply the <em>same</em> decision rule to the
+  \(U_s\) — the equalization of the conditional laws happens on the quantiles, and
+  choosing the common operating point (TPR, FPR) maximizes the linear utility
+  \(\mathbb{P}(Y{=}1)\,\mathrm{TPR} + \mathbb{P}(Y{=}0)\,(1 - \mathrm{FPR})\) over
+  the feasible set (the intersection of the two regions convexified by
+  randomization — the "mixture of predictors" procedure of Hardt et al.,
+  reread as an OT coupling).<span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Limits and debate: incompatible metrics, utility, causal assumptions</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Theoretical incompatibilities</strong>: when the base rates
+    \(\mathbb{P}(Y = 1\,|\,S = s)\) differ across groups, calibration <em>and</em>
+    equalized odds are mutually exclusive (Kleinberg, Mullainathan &amp; Raghavan
+    2016; Chouldechova 2017): no method — OT included — can
+    satisfy all the criteria; choosing the metric is choosing the
+    trade-off.</li>
+    <li><strong>Utility cost</strong>: DP repair can destroy a legitimate
+    signal (if \(S\) genuinely predicts \(Y\), independence forces a loss);
+    "blind" repair is not always fair in the individual sense.</li>
+    <li><strong>Causal assumptions</strong>: counterfactuals by bicausal OT
+    assume a structure \(S \to X\) and the absence of unmeasured confounding;
+    two different optimal bicausal couplings (non-uniqueness, cf. example 1.2) can
+    yield different counterfactuals — OT provides a <em>family</em> of
+    models, to be audited (the JMLR 2024 paper proposes statistical tests).</li>
+    <li><strong>Position of the course</strong>: OT is not an answer to the
+    question of justice, but a <em>geometric language</em> for quantifying
+    trade-offs: distances between groups, barycenters, optimal couplings — the
+    same objects as in ch. 1-5.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Guided lab — repair and trade-off curves on Adult (UCI)</span>
+<pre class="code"><code>import numpy as np, ot
+from sklearn.linear_model import LogisticRegression
+# Adult: X = numerical variables, S = gender, Y = income &gt; 50k
+# (load with pandas.read_csv("adult.data"), encode the categoricals)
+
+def repair_1d(x, s, lam):
+    """Partial quantile repair, feature by feature (th. 6.2)."""
+    xR = x.copy()
+    qs = {sv: np.sort(x[s == sv]) for sv in np.unique(s)}
+    n = min(len(v) for v in qs.values())          # common ranks
+    bary = np.mean([v[np.linspace(0, len(v)-1, n).astype(int)]
+                    for v in qs.values()], axis=0)  # Q*: average of the quantiles
+    for sv in np.unique(s):
+        v, idx = np.sort(x[s == sv]), np.argsort(x[s == sv])
+        ranks = np.linspace(0, len(v)-1, n)
+        rep = (1-lam) * np.interp(ranks, range(len(v)), v) + lam * bary
+        xR[s == sv] = np.interp(np.argsort(np.argsort(x[s == sv])),
+                                ranks, rep)[np.argsort(idx)]
+    return xR
+
+for lam in np.linspace(0, 1, 11):                  # lambda -&gt; trade-off curve
+    Xr = repair_1d(X_num, S, lam)
+    clf = LogisticRegression().fit(Xr, Y)
+    acc = clf.score(Xr, Y)
+    dp = abs(clf.predict_proba(Xr[S==0])[:,1].mean()
+           - clf.predict_proba(Xr[S==1])[:,1].mean())
+    print(f"lambda={lam:.1f}  accuracy={acc:.3f}  ecart_DP={dp:.3f}")
+# Plot accuracy vs ecart_DP: knee of the curve, discussion in the lab</code></pre>
+  Lab questions: (i) where is the knee, and what does it say? (ii) compare
+  marginal 1D repair and multivariate repair by Sinkhorn; (iii) also measure
+  the EO gap before/after; (iv) does repair preserve calibration?
+  (connect to the debate above).
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Gromov-Wasserstein and beyond</a><a class="next" href="ch7.html"><span class="dir">Next</span> The instructor's research</a></nav>
+</main>
+</div>
+
+</body>
+</html>

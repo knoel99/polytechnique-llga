@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Vision: From Fundamentals to Applications — Evaluation (mAP) and modern detectors — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Computer Vision: From Fundamentals to Applications</a> › Evaluation (mAP) and modern detectors</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">MSc&amp;T Brochure</span>Computer Vision: From Fundamentals to Applications</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: convolution, CNNs, boxes</a>
+<a href="ch1.html">Object detection: the two paradigms</a>
+<a href="ch2.html" class="active">Evaluation (mAP) and modern detectors</a>
+<a href="ch3.html">Segmentation: semantic, instance, panoptic, SAM</a>
+<a href="ch4.html">Multi-object tracking</a>
+<a href="ch5.html">Applied 3D vision: stereo and LiDAR</a>
+<a href="ch6.html">Data, benchmarks and annotation</a>
+<a href="ch7.html">Industrial case studies</a>
+<a href="ch8.html">Deployment: ONNX, quantization, edge</a>
+<a href="ch9.html">Ethics, robustness and limits</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Evaluation (mAP) and modern detectors</h2>
+
+<h3>2.1. Precision, recall and AP — computed on an example</h3>
+<div class="def">
+  <span class="tag">Definition 2.1 — Precision, recall, AP and mAP</span>
+  For a given class, a detection is a <strong>true positive</strong> (TP) if
+  \(\mathrm{IoU}(\text{prediction}, \text{ground truth}) \geq \tau\)
+  (<em>and</em> if that ground truth is not already matched); otherwise it is a
+  false positive (FP); an undetected ground truth is a false negative (FN). Then
+  $$\text{precision} = \frac{TP}{TP + FP}, \qquad
+  \text{recall} = \frac{TP}{TP + FN} = \frac{TP}{|\text{ground truths}|}.$$
+  The <strong>average precision</strong> (AP) is the area under the
+  precision-recall curve obtained by sweeping the score threshold; the COCO
+  <strong>mAP</strong> averages the APs over 80 classes and over 10 IoU
+  thresholds \(\tau \in \{0.5,\, 0.55,\, \dots,\, 0.95\}\) — denoted
+  \(\mathrm{mAP}@[0.5{:}0.95]\).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.2 — AP of one class by hand</span>
+  One class ("cat") with 3 ground truths and 5 detections sorted by decreasing
+  score, evaluated at threshold \(\tau = 0.5\):
+  <table class="tbl">
+    <tr><th>Rank</th><th>Score</th><th>Verdict</th><th>Cumulative TP</th><th>Precision</th><th>Recall</th></tr>
+    <tr><td>1</td><td>0.95</td><td>TP</td><td>1</td><td>1/1 = 1.00</td><td>1/3 = 0.33</td></tr>
+    <tr><td>2</td><td>0.90</td><td>FP</td><td>1</td><td>1/2 = 0.50</td><td>0.33</td></tr>
+    <tr><td>3</td><td>0.85</td><td>TP</td><td>2</td><td>2/3 = 0.67</td><td>2/3 = 0.67</td></tr>
+    <tr><td>4</td><td>0.70</td><td>FP</td><td>2</td><td>2/4 = 0.50</td><td>0.67</td></tr>
+    <tr><td>5</td><td>0.40</td><td>TP</td><td>3</td><td>3/5 = 0.60</td><td>3/3 = 1.00</td></tr>
+  </table>
+  With "all-points" interpolation (precision clipped by the maximum to the
+  right), the retained points are \((0.33; 1.00)\), \((0.67; 0.67)\) and
+  \((1.00; 0.60)\), hence
+  $$\mathrm{AP} \approx 0.33 \times 1.00 + 0.34 \times 0.67 + 0.33 \times 0.60
+  \approx 0.75.$$
+  The AP rewards <em>both</em> the ranking of the scores (an FP at high score is
+  costly) and completeness; this is why it is more informative than a simple
+  accuracy at a fixed threshold.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Why multiple thresholds</span>
+  At \(\tau = 0.5\), a detector can be right "loosely": averaging over
+  \([0.5{:}0.95]\) penalizes mediocre localizations. COCO also publishes
+  \(\mathrm{mAP}_S, \mathrm{mAP}_M, \mathrm{mAP}_L\) by object size — a
+  "globally" good industrial model can be very poor on small objects, a crucial
+  point for video surveillance or microscopy.
+</div>
+
+<h3>2.2. Without anchors: anchor-free detectors</h3>
+<p>Anchors impose an arbitrary grid of hypotheses. <strong>Anchor-free</strong>
+detectors directly predict, per pixel of the feature map: (i) a probability of
+being an object center (<em>centerness</em> / center heatmap, cf.
+<strong>FCOS</strong> and <strong>CenterNet</strong>) and (ii) regressions of the
+distances to the four edges. The decoding becomes:
+$$b = (x_c - l, \; y_c - t, \; x_c + r, \; y_c + b'),$$
+where \((x_c, y_c)\) is the position of the central pixel and \(l, t, r, b'\)
+the regressed distances — all of it without any reference box. Benefits: fewer
+hyperparameters (scales/ratios), no anchor/object imbalance, better on atypical
+shapes; cost: an NMS is still needed, and the center-to-ground-truth assignment
+requires zone rules (assignment by feature zone).</p>
+
+<h3>2.3. Detection as set prediction: DETR</h3>
+<div class="def">
+  <span class="tag">Definition 2.3 — DETR (DEtection TRansformer)</span>
+  DETR treats detection as a <strong>set prediction</strong> problem:
+  a CNN extracts features, a transformer encoder-decoder (cf. Deep Learning
+  module, chapter 6) produces \(N\) <em>object queries</em> decoded into \(N\)
+  (box, class) pairs; training matches predictions and ground truths by
+  <strong>minimum-cost bipartite coupling</strong> (Hungarian algorithm):
+  $$\hat\sigma = \arg\min_{\sigma \in \mathfrak{S}_N} \sum_{i=1}^{N}
+  \Big( \mathcal{L}_{\mathrm{box}}(b_i, g_{\sigma(i)}) +
+  \mathcal{L}_{\mathrm{cls}}(c_i, y_{\sigma(i)}) \Big),$$
+  then applies a "set prediction"-type loss (Hungarian loss) on the optimal
+  matching. Since the output is a learned <em>set</em> without redundancy, DETR
+  removes NMS and anchors.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Why DETR converges slowly, and the fix</span>
+  Global attention struggles to precisely localize small boxes (attention
+  spreads over the whole image): DETR needed ~500 epochs. <strong>Deformable
+  DETR</strong> replaces dense attention with <em>deformable attention</em> that
+  samples only a small set of relevant points per query, speeding up convergence
+  by an order of magnitude. The Hungarian matching is a minimum-cost assignment
+  coupling — exactly the discrete transport seen in the Computational Optimal
+  Transport module, chapters 1–2 (there solved by the Hungarian method rather
+  than by Sinkhorn).
+</div>
+
+<h3>2.4. The industrial YOLO ecosystem</h3>
+<table class="tbl">
+  <tr><th>Version</th><th>Year</th><th>Key contribution</th><th>Typical use</th></tr>
+  <tr><td>YOLOv1</td><td>2016</td><td>single-pass dense prediction, real time</td><td>proof of concept</td></tr>
+  <tr><td>YOLOv3</td><td>2018</td><td>multi-scale predictions (FPN), anchors per scale</td><td>legacy surveillance</td></tr>
+  <tr><td>YOLOv5</td><td>2020</td><td>tooling (ONNX/TF Lite export, S–X sizes), Ultralytics ecosystem</td><td>fast deployment</td></tr>
+  <tr><td>YOLOv8+</td><td>2023</td><td>anchor-free heads, unified detection + segmentation + pose + tracking</td><td>current industrial standard</td></tr>
+</table>
+<p>The important point for the engineer: these versions are less scientific
+revolutions than <strong>training and tooling recipes</strong> (mosaic
+augmentation, dynamic assignment loss, multi-format export). Knowing how to
+read a detector's changelog — which modules change, which data, which licenses
+(GPL for the Ultralytics line, Apache-2.0 for others) — is part of the module's
+skills.</p>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Previous</span> Object detection: the two paradigms</a><a class="next" href="ch3.html"><span class="dir">Next</span> Segmentation: semantic, instance, panoptic, SAM</a></nav>
+</main>
+</div>
+
+</body>
+</html>

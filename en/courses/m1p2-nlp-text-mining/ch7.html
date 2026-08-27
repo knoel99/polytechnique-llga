@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Introduction to Text Mining and NLP — Transformers for NLP — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Introduction to Text Mining and NLP</a> › Transformers for NLP</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52082_EP</span>Introduction to Text Mining and NLP</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: vector spaces and probabilities</a>
+<a href="ch1.html">The text processing pipeline</a>
+<a href="ch2.html">Bag of words, TF-IDF and BM25</a>
+<a href="ch3.html">Word embeddings</a>
+<a href="ch4.html">Topic models</a>
+<a href="ch5.html">Text classification</a>
+<a href="ch6.html">Sequences: NER, HMM, CRF</a>
+<a href="ch7.html" class="active">Transformers for NLP</a>
+<a href="ch8.html">Industrial text mining</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Transformers for NLP</h2>
+
+<ul>
+  <li><strong>Architecture</strong>: carried over from the Deep Learning module ch. 6
+  (multi-head attention \(\mathrm{softmax}(QK^\top/\sqrt{d_k})V\), residuals, LayerNorm,
+  encoder/decoder); here we <em>apply</em> it to text — the M2 LLMs
+  course (ch. 2) will revisit the architecture in depth (RoPE, GQA, MoE…);</li>
+</ul>
+
+<div class="thm">
+  <span class="tag">BERT (Devlin et al., 2019): MLM + NSP in detail</span>
+  Bidirectional encoder, pretrained on two tasks:
+  <strong>(1) Masked LM</strong>: 15&nbsp;% of tokens drawn; among them 80&nbsp;%
+  replaced by <code>[MASK]</code>, 10&nbsp;% by a random word, 10&nbsp;% unchanged;
+  the original token is predicted (output: per-position classification). The mixing
+  avoids a pretraining/fine-tuning mismatch (the model will never see
+  <code>[MASK]</code> downstream again) and forces a robust representation.
+  <strong>(2) Next
+  Sentence Prediction</strong>: classify whether two sentences follow each other (the
+  pair <code>[CLS]</code> A <code>[SEP]</code> B) — a weak task, abandoned by RoBERTa in
+  favor of more data. Result: <code>[CLS]</code> = sentence representation;
+  one model, dozens of tasks via a simple head layer.
+</div>
+
+<div class="thm">
+  <span class="tag">GPT (Radford et al.) and T5 (Raffel et al., 2019)</span>
+  <strong>GPT</strong>: causal decoder —
+  \(\mathcal{L}=-\sum_t\log p(x_t\mid x_{&lt;t})\), pretraining = predicting the next
+  token; generative by construction, zero task-specific architecture (this is the
+  family extended in M2). <strong>T5</strong>: everything in text-to-text — span
+  corruption (masking continuous fragments and regenerating them), every task
+  (classification, translation, QA…) formulated as textual input→output;
+  it unifies MLM and CLM.
+</div>
+
+<div class="def">
+  <span class="tag">Protocol 7.1 — Full fine-tuning (the stable recipe)</span>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li><strong>Head</strong>: a linear layer \(\mathrm{Linear}(d, K)\) on
+    <code>[CLS]</code> (classification) or per position (NER, POS);</li>
+    <li><strong>Optimizer</strong>: AdamW, learning rate
+    \(\{2\times10^{-5}, 3\times10^{-5}, 5\times10^{-5}\}\) — a short grid,
+    fine-tuning is sensitive but flat around the optimum; linear warmup for
+    10&nbsp;% then linear decay;</li>
+    <li><strong>Epochs</strong>: 2 to 4 (beyond that: brutal overfitting
+    on small corpora — watch the dev set); batch 16-32;</li>
+    <li><strong>Small corpora (&lt;1k)</strong>: freeze the lower layers, layer-wise
+    decay (<em>layer-wise lr decay</em>), or adapters/LoRA (added parameters
+    &lt;&lt; 1&nbsp;% — revisited in M2, ch. 6);</li>
+    <li><strong>Cost</strong>: distillation (DistilBERT ≈ −40&nbsp;% params, −97&nbsp;%
+    of training time, ~97&nbsp;% of the performance), int8 quantization — the
+    performance/cost trade-off is an engineering criterion, deepened in M2
+    (LLMs ch. 6, ML Ops).</li>
+  </ol>
+</div>
+
+<div class="thm">
+  <span class="tag">Sentence-BERT (Reimers &amp; Gurevych, 2019): the triplet loss derived</span>
+  To encode sentences in a comparable space (search, clustering, RAG):
+  siamese BERT + pooling (mean), trained with a <em>triplet loss</em> on
+  (anchor \(a\), positive \(p\), negative \(n\)):
+  $$\mathcal{L}=\max\big(0,\ d(a,p)-d(a,n)+\varepsilon\big).$$
+  <div class="proof">
+  If the margin is respected (\(d(a,p)+\varepsilon\le d(a,n)\)), the loss is zero:
+  nothing to learn. Otherwise, the gradient \(\nabla = \nabla d(a,p)-\nabla d(a,n)\)
+  <em>pulls</em> the anchor toward the positive and <em>pushes</em> it away from the
+  negative, with a force proportional to the violation. Crucial point: the quality
+  depends on the negatives (mini-batch: the other pairs provide <em>hard</em>
+  negatives — this is what shapes the space). This is the kind of embeddings that
+  indexes the corpora of RAG systems — detailed in M2 LLMs ch. 7 (dense retrieval,
+  reranking).
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">French: CamemBERT, FlauBERT, JuriBERT</span>
+  CamemBERT (Martin et al., 2020): RoBERTa retrained on 138&nbsp;GB of French
+  text — the reference French model; FlauBERT: an academic French
+  BERT; <strong>JuriBERT</strong> (Douka et al., 2021 — research from this course,
+  ch. 9): an adaptation to <em>legal</em> French, where the vocabulary (doctrine,
+  grievances, appeal) confuses general models. Multilingual: mBERT, XLM-R
+  (100+ languages, shared embeddings — at the price of capacity diluted per
+  language).
+</div>
+
+<pre class="code"><code>from transformers import pipeline
+
+classifier = pipeline("text-classification",
+                      model="distilbert-base-uncased-finetuned-sst-2-english")
+print(classifier("Graph RAG is a game changer for enterprise search."))
+
+ner = pipeline("ner", aggregation_strategy="simple")
+print(ner("Michalis Vazirgiannis teaches at Ecole Polytechnique."))
+
+# sentence embeddings for RAG (cf. ch. 8 and M2 LLMs ch. 7)
+from sentence_transformers import SentenceTransformer
+enc = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+print(enc.encode(["résumé automatique", "automatic summarization"]).shape)</code></pre>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Sequences: NER, HMM, CRF</a><a class="next" href="ch8.html"><span class="dir">Next</span> Industrial text mining</a></nav>
+</main>
+</div>
+
+</body>
+</html>

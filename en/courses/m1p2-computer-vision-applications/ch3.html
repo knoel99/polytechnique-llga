@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Vision: From Fundamentals to Applications — Segmentation: semantic, instance, panoptic, SAM — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Computer Vision: From Fundamentals to Applications</a> › Segmentation: semantic, instance, panoptic, SAM</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">MSc&amp;T Brochure</span>Computer Vision: From Fundamentals to Applications</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: convolution, CNNs, boxes</a>
+<a href="ch1.html">Object detection: the two paradigms</a>
+<a href="ch2.html">Evaluation (mAP) and modern detectors</a>
+<a href="ch3.html" class="active">Segmentation: semantic, instance, panoptic, SAM</a>
+<a href="ch4.html">Multi-object tracking</a>
+<a href="ch5.html">Applied 3D vision: stereo and LiDAR</a>
+<a href="ch6.html">Data, benchmarks and annotation</a>
+<a href="ch7.html">Industrial case studies</a>
+<a href="ch8.html">Deployment: ONNX, quantization, edge</a>
+<a href="ch9.html">Ethics, robustness and limits</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Segmentation: semantic, instance, panoptic, SAM</h2>
+
+<h3>3.1. Three granularities</h3>
+<table class="tbl">
+  <tr><th>Task</th><th>Output</th><th>Question answered</th><th>Examples</th></tr>
+  <tr><td>Semantic</td><td>class map \(H \times W\)</td><td>"what is the class of this pixel?"</td><td>U-Net, DeepLab</td></tr>
+  <tr><td>Instance</td><td>set of masks \((m_i, c_i, s_i)\)</td><td>"which distinct objects?"</td><td>Mask R-CNN</td></tr>
+  <tr><td>Panoptic</td><td>map of segmented identifiers</td><td>"'stuff' pixels + 'thing' instances"</td><td>Panoptic FPN</td></tr>
+</table>
+
+<h3>3.2. Semantic segmentation: from FCN to U-Net and DeepLab</h3>
+<ul>
+  <li><strong>FCN</strong> (2015): fully convolutional classification — the
+  fully-connected layers become 1×1 convolutions, and <em>upsampling</em>
+  (transposed) layers restore the resolution; dense output, end-to-end
+  training;</li>
+  <li><strong>U-Net</strong> (2015): symmetric encoder-decoder with
+  <strong>skip connections</strong> that reinject the encoder's high-resolution
+  details into the decoder; designed for medical imaging with few annotated
+  images, and still the domain's reference;</li>
+  <li><strong>DeepLab</strong> (v1→v3+): <strong>dilated</strong> (atrous)
+  convolutions: a \(3 \times 3\) kernel with dilation \(d\) sees a neighborhood
+  of size \(2d+1\), enlarging the receptive field without losing resolution;
+  the ASPP module (Atrous Spatial Pyramid Pooling) combines several dilations
+  in parallel to capture several scales; v3+ adds a light decoder.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Example 3.1 — Dice and IoU of masks</span>
+  For a predicted binary mask \(p\) and a ground truth \(g\) (sets of pixels),
+  the IoU is \(|p \cap g| / |p \cup g|\) and the <strong>Dice</strong>
+  \(2|p \cap g| / (|p| + |g|)\). With \(|p| = 1200\), \(|g| = 1000\) and
+  \(|p \cap g| = 900\): IoU \(= 900/1300 \approx 0.69\) and
+  Dice \(= 1800/2200 \approx 0.82\). One checks the identity
+  \(\mathrm{Dice} = 2\,\mathrm{IoU} / (1 + \mathrm{IoU})\):
+  \(2 \times 0.692 / 1.692 = 0.818\) — the two metrics are interchangeable as a
+  ranking, but Dice looks "kinder": always specify the metric in a report.
+</div>
+
+<h3>3.3. Instance segmentation: Mask R-CNN</h3>
+<p><strong>Mask R-CNN</strong> (2017) extends Faster R-CNN: in parallel with the
+classification and box-regression heads, each region of interest receives a
+segmentation head that predicts a \(28 \times 28\) binary mask (per class).
+The decisive detail is <strong>RoI Align</strong>: the original RoI pooling
+quantized the cell coordinates (rounding), shifting the features by a few
+tenths of a pixel — negligible for classification, disastrous for aligning a
+mask. RoI Align samples by bilinear interpolation at the real coordinates,
+without rounding: ~2 mask AP points gained from a mere numerical-precision
+fix — a fine engineering lesson.</p>
+
+<h3>3.4. Panoptic: a single metric</h3>
+<div class="def">
+  <span class="tag">Definition 3.2 — Panoptic Quality (PQ)</span>
+  Predicted segments and ground truths are matched per class with
+  \(\mathrm{IoU} &gt; 0.5\) (at-most-one-to-one coupling). With TP the set of
+  matches, FP the unmatched predictions and FN the unmatched ground truths:
+  $$\mathrm{PQ} \;=\; \underbrace{\frac{1}{|\mathrm{TP}|}\sum_{(p,g) \in \mathrm{TP}}
+  \mathrm{IoU}(p, g)}_{\text{segmentation quality (SQ)}}
+  \;\times\;
+  \underbrace{\frac{|\mathrm{TP}|}{|\mathrm{TP}| + \tfrac12|\mathrm{FP}| + \tfrac12|\mathrm{FN}|}}_{\text{recognition quality (RQ = F1 score)}},$$
+  then averaged over the classes. PQ cleanly decouples "are the boundaries
+  right?" (SQ) and "did I find the right objects?" (RQ).
+</div>
+
+<h3>3.5. SAM: promptable segmentation</h3>
+<p>The <strong>Segment Anything Model</strong> (Meta, 2023) changes paradigm:
+instead of training a model per task, SAM learns a <em>general task</em> —
+produce a valid mask for any <strong>prompt</strong> (point, box, coarse mask,
+text to come):</p>
+<ul>
+  <li><strong>architecture</strong>: a heavy image encoder (ViT, cf. Advanced
+  Deep Learning module (P2), chapter 1) computed once per image; a light
+  prompt encoder; a light mask decoder, re-runnable in real time (~50&nbsp;ms)
+  for every prompt — the expensive-once / light-many-times separation is the
+  "interactive" deployment pattern;</li>
+  <li><strong>data engine</strong>: an assisted-annotation loop (model
+  suggests, human corrects) at first, then semi-automatic then automatic
+  annotation — culminating in SA-1B: 11 million licensed images,
+  <strong>1.1 billion masks</strong>, 99&nbsp;% automatic;</li>
+  <li><strong>usage</strong>: zero-shot mask extraction, serving as a base for
+  fine-tuning (medical, satellite), or as an annotation assistant — SAM closes
+  the loop there: the model manufactures its own data.</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Evaluation (mAP) and modern detectors</a><a class="next" href="ch4.html"><span class="dir">Next</span> Multi-object tracking</a></nav>
+</main>
+</div>
+
+</body>
+</html>

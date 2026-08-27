@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Introduction to Text Mining and NLP — The text processing pipeline — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Introduction to Text Mining and NLP</a> › The text processing pipeline</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52082_EP</span>Introduction to Text Mining and NLP</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: vector spaces and probabilities</a>
+<a href="ch1.html" class="active">The text processing pipeline</a>
+<a href="ch2.html">Bag of words, TF-IDF and BM25</a>
+<a href="ch3.html">Word embeddings</a>
+<a href="ch4.html">Topic models</a>
+<a href="ch5.html">Text classification</a>
+<a href="ch6.html">Sequences: NER, HMM, CRF</a>
+<a href="ch7.html">Transformers for NLP</a>
+<a href="ch8.html">Industrial text mining</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. The text processing pipeline</h2>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Standard pipeline</span>
+  <strong>Raw text</strong> → cleaning (HTML, case, accents, Unicode) → sentence
+  segmentation → <strong>tokenization</strong> (splitting into units: words, subwords,
+  characters) → lexical normalization (<em>stemming</em> raw root /
+  <em>lemmatization</em> canonical form; stopwords) → representation (ch. 2-4) →
+  model (ch. 5-7) → evaluation. Each stage destroys information; the engineer's
+  craft is deciding <em>which</em> information is expendable for the task at hand.
+</div>
+
+<h3>1.1. Unicode normalization and "clean" text</h3>
+
+<div class="def">
+  <span class="tag">Definition 1.2 — Unicode normal forms</span>
+  The same glyph admits several encodings: "é" = one codepoint
+  <code>U+00E9</code> in <strong>NFC</strong> (canonical composition), but two
+  (<code>e</code> + combining accent <code>U+0301</code>) in <strong>NFD</strong>.
+  <strong>NFKC</strong> goes further: ligature "ﬁ" → "fi",
+  digit "²" → "2", full-width letters → ASCII. Two strings that are visually
+  identical but distinct in bytes break counting, deduplication and search;
+  so we normalize <em>before anything else</em> (in practice NFKC, or NFC if
+  typography and units must be preserved).
+</div>
+
+<ul>
+  <li><strong>Case</strong>: <code>lower()</code> merges "Polytechnique"
+  and "polytechnique" but also the acronym and the common word; in French,
+  <em>keep the accents</em> in lowercase ("élève" ≠ "eleve");</li>
+  <li><strong>Sentence segmentation</strong>: rules (punctuation + capital letter)
+  or learning (Punkt, Kiss &amp; Strunk 2006); real pitfalls:
+  "M.", "etc.", German abbreviations ("z. B."),
+  period before a closing quote. Bad segmentation wrecks ch. 8 (extractive
+  summarization: the sentence is the unit being selected);</li>
+  <li><strong>Stemming vs lemmatization</strong>: the stemmer (Porter, Snowball)
+  cuts off suffixes by rules — fast, crude, suited to information retrieval;
+  the lemmatizer uses a dictionary and morphology ("sont" →
+  "être") — slower, better for fine-grained analysis. In industry:
+  stemmer for search, lemmatizer for analysis.</li>
+</ul>
+
+<h3>1.2. Subword tokenization: BPE, WordPiece, Unigram, SentencePiece</h3>
+
+<div class="note">
+  <span class="tag">Why subwords</span>
+  Splitting on spaces works poorly: German compounds
+  ("Donaudampfschifffahrt"), French elisions ("l'arbre":
+  1 or 2 tokens?), some Asian languages write without spaces, and any
+  closed vocabulary runs into unknown words (typos, neologisms, product
+  references). <strong>Subword tokenizers</strong> learn, on the corpus, a
+  fixed-size vocabulary (~32k-128k) whose concatenation reconstructs <em>any</em>
+  string: frequent words = 1 token, rare words = a sequence of pieces.
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithm 1.3 — BPE (Byte Pair Encoding, Sennrich et al. 2016)</span>
+  Initial vocabulary: characters (or bytes). Iteratively: (1) count all
+  pairs of adjacent symbols in the corpus (weighted by word frequencies);
+  (2) merge the most frequent pair into a new symbol; (3) repeat until
+  reaching \(|V|\). The result is an ordered set of <em>merge rules</em>;
+  tokenizing a new text = applying the merges in the learned order.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 1.4 — Step-by-step BPE training</span>
+  Mini-corpus (words, frequencies): <code>base</code>×5, <code>bases</code>×4,
+  <code>basse</code>×3, <code>basique</code>×2. Initial alphabet:
+  b, a, s, e, i, q, u. We write each word as a sequence of symbols and count
+  adjacent pairs:
+  <table class="tbl">
+    <tr><th>Step</th><th>Most frequent pairs</th><th>Chosen merge</th></tr>
+    <tr><td>1</td><td>(b,a)=14, (a,s)=14, (s,e)=12, (e,s)=4, (s,s)=3, (s,i)=(i,q)=(q,u)=(u,e)=2</td><td><strong>ba</strong> (14; tie with (a,s), arbitrary choice)</td></tr>
+    <tr><td>2</td><td>(ba,s)=14, (s,e)=12, (e,s)=4, (s,s)=3, …</td><td><strong>bas</strong> (14)</td></tr>
+    <tr><td>3</td><td>(bas,e)=9, (s,e)=7, (bas,s)=3, (e,s)=3, …</td><td><strong>base</strong> (9)</td></tr>
+    <tr><td>4</td><td>(base,s)=4, (bas,s)=3, (s,e)=3, …</td><td><strong>bases</strong> (4)</td></tr>
+    <tr><td>5</td><td>(bas,s)=3, (s,e)=3, …</td><td><strong>bass</strong> (3)</td></tr>
+    <tr><td>6</td><td>(bass,e)=3, …</td><td><strong>basse</strong> (3)</td></tr>
+  </table>
+  In the end, <code>base</code>, <code>bases</code>, <code>basse</code> and
+  <code>basique</code> are whole tokens; an unexpected word like
+  "basiste" breaks down cleanly into <code>bas</code>+<code>iste</code>-or-characters:
+  never an unknown, at worst an overhead in length. <em>This is exactly the
+  mechanism, pushed to bytes and 128k tokens, that equips GPT and Llama — developed
+  in M2 LLMs, ch. 1.</em>
+</div>
+
+<div class="thm">
+  <span class="tag">Variants 1.5 — WordPiece (BERT), Unigram (T5), SentencePiece</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>WordPiece</strong>: the same merge loop, but a pair's score
+    is \(\frac{f(x,y)}{f(x)\,f(y)}\) — we merge the pair whose <em>relative</em>
+    frequency increases the most, a proxy for the likelihood gain of a unigram
+    model (justification: merging \(x,y\) replaces two symbols with one; the
+    gain in bits is all the greater as the collocation is over-represented
+    relative to independence);</li>
+    <li><strong>Unigram</strong> (Kudo, 2018): a <em>generative</em> model — a candidate
+    vocabulary (characters + frequent substrings), each segment \(s\) has a
+    probability \(p(s)\), a word is segmented by Viterbi by maximizing
+    \(\sum_j \log p(s_j)\).
+    Training by EM: <strong>E</strong> — for each word, the posterior
+    distribution over its segmentations (∝ product of the \(p(s_j)\), computable by
+    a forward dynamic program); <strong>M</strong> — \(p(s)\) = normalized
+    expected counts; then <em>pruning</em> of the segments that degrade the
+    likelihood the least, until \(|V|\). Unlike BPE, the segmentation is
+    probabilistic and admits several analyses (subword regularization);</li>
+    <li><strong>SentencePiece</strong>: a <em>language-independent</em> layer that
+    treats the sentence as a sequence of bytes, the space becoming a "▁" symbol;
+    no pre-tokenization on spaces — essential for languages without spaces
+    and for multilingual settings (it is the foundation of Llama and T5).</li>
+  </ul>
+</div>
+
+<pre class="code"><code>import re
+from collections import Counter
+
+# --- Toy BPE: learning merges on the mini-corpus of example 1.4 ---
+words = {"b a s e": 5, "b a s e s": 4, "b a s s e": 3, "b a s i q u e": 2}
+merges = []
+for _ in range(8):
+    pairs = Counter()
+    for w, f in words.items():
+        sym = w.split()
+        for pair in zip(sym, sym[1:]):
+            pairs[pair] += f
+    if not pairs:
+        break
+    best = max(pairs, key=pairs.get)          # most frequent adjacent pair
+    merges.append(best)
+    big = " ".join(best)
+    words = {re.sub(r"(?&lt;!\S)" + re.escape(big) + r"(?!\S)", "".join(best), w): f
+             for w, f in words.items()}
+print("fusions :", merges[:6])
+# tokenize a new word = replay the merges in the learned order
+def encode(word, merges):
+    sym = list(word)
+    for a, b in merges:
+        i, out = 0, []
+        while i &lt; len(sym):
+            if i + 1 &lt; len(sym) and (sym[i], sym[i+1]) == (a, b):
+                out.append(a + b); i += 2
+            else:
+                out.append(sym[i]); i += 1
+        sym = out
+    return sym
+print(encode("basiste", merges))</code></pre>
+
+<h3>1.3. Stopwords, n-grams, collocations</h3>
+
+<ul>
+  <li><strong>Stopwords</strong>: to be removed for classical text mining
+  (they saturate the BoW); to be <em>kept</em> for transformers — negation
+  ("ne…pas") and syntax matter. The decision must be justified by the task,
+  not by habit;</li>
+  <li><strong>N-grams</strong>: sequences of \(n\) tokens; "New York"
+  (bigram) ≠ "New" + "York"; in classification, moving from
+  unigrams to bigrams captures compositional polarity ("pas cher");
+  cost: the vocabulary explodes (potentially \(|V|^n\)) — hence
+  <code>ngram_range=(1,2)</code> and <code>min_df</code> in the code of ch. 5;</li>
+  <li><strong>Collocations</strong>: bigrams whose frequency exceeds what
+  independence predicts, measured by mutual information
+  \(\mathrm{PMI}(x,y) = \log \frac{P(x,y)}{P(x)P(y)}\) — a criterion reused
+  as-is in ch. 2 to justify IDF, and in ch. 4 for topic
+  coherence.</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Review: vector spaces and probabilities</a><a class="next" href="ch2.html"><span class="dir">Next</span> Bag of words, TF-IDF and BM25</a></nav>
+</main>
+</div>
+
+</body>
+</html>

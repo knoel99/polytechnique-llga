@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Vision: From Fundamentals to Applications — Object detection: the two paradigms — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Computer Vision: From Fundamentals to Applications</a> › Object detection: the two paradigms</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">MSc&amp;T Brochure</span>Computer Vision: From Fundamentals to Applications</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: convolution, CNNs, boxes</a>
+<a href="ch1.html" class="active">Object detection: the two paradigms</a>
+<a href="ch2.html">Evaluation (mAP) and modern detectors</a>
+<a href="ch3.html">Segmentation: semantic, instance, panoptic, SAM</a>
+<a href="ch4.html">Multi-object tracking</a>
+<a href="ch5.html">Applied 3D vision: stereo and LiDAR</a>
+<a href="ch6.html">Data, benchmarks and annotation</a>
+<a href="ch7.html">Industrial case studies</a>
+<a href="ch8.html">Deployment: ONNX, quantization, edge</a>
+<a href="ch9.html">Ethics, robustness and limits</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Object detection: the two paradigms</h2>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — The detection task</span>
+  Given an image \(x\), produce a set
+  \(\{(b_i, c_i, s_i)\}_{i=1}^{N}\) where \(b_i\) is a bounding box,
+  \(c_i\) a class among \(K\) classes and \(s_i \in [0,1]\) a confidence
+  score. Unlike classification (cf. Deep Learning module, chapter 1), the
+  output has variable cardinality: the number of objects is unknown and depends
+  on the image content.
+</div>
+
+<h3>1.1. The two-stage family: propose then refine</h3>
+<p><strong>Two-stage</strong> detectors separate the generation of candidates from
+their classification:</p>
+<ul>
+  <li><strong>R-CNN</strong> (2014): ~2000 candidate regions extracted by
+  cluster-based segmentation (selective search), each crop goes through a CNN;
+  slow (tens of seconds per image), but the proof of concept of the CNN in
+  detection;</li>
+  <li><strong>Fast R-CNN</strong> (2015): the whole image passes through the CNN
+  once, candidates are projected into the feature space (RoI pooling);
+  only a light classifier is applied per candidate;</li>
+  <li><strong>Faster R-CNN</strong> (2015): candidates are produced by an
+  integrated, end-to-end learned <em>Region Proposal Network</em> (RPN) — the
+  canonical scheme;</li>
+  <li><strong>FPN</strong> (2017): feature pyramid; small objects are
+  detected on the high-resolution maps, large ones on the low-resolution
+  maps.</li>
+</ul>
+
+<div class="def">
+  <span class="tag">Definition 1.2 — Anchors</span>
+  For each cell of a feature map, the RPN predicts offsets with respect to a
+  fixed set of \(A\) reference rectangles — the <strong>anchors</strong> —
+  produced by the Cartesian product of \(S\) scales and \(R\) aspect ratios
+  (typically \(S = 5\), \(R = 3\), hence \(A = 15\) anchors per position). The
+  box regression encodes
+  $$t_x = \frac{x - x_a}{w_a}, \quad t_y = \frac{y - y_a}{h_a}, \quad
+  t_w = \log\frac{w}{w_a}, \quad t_h = \log\frac{h}{h_a},$$
+  where \((x_a, y_a, w_a, h_a)\) are the center and size of the anchor.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — Why the logarithm for sizes</span>
+  The logarithmic parameterization makes the regression <strong>scale
+  invariant</strong>: the same offset \(t_w\) corresponds to the same size ratio.
+  An error \(|t_w| = \varepsilon\) means \(w = w_a e^{\pm\varepsilon}\), i.e. a
+  constant relative error rate; with a linear parameterization, the same
+  absolute error would be negligible for a truck (600&nbsp;px) and fatal for a
+  distant pedestrian (10&nbsp;px).
+  <div class="proof">
+  With \(t_w = \log(w / w_a)\), we have \(w = w_a e^{t_w}\), so the relative
+  error equals \(|e^{t_w} - 1| \approx |t_w|\) at first order — independent of
+  \(w_a\). With a direct parameterization \(\tilde t_w = w - w_a\), the relative
+  error \(|\tilde t_w| / w_a\) depends on \(w_a\); fixing a homogeneous noise
+  scale for all object sizes would require weighting by size class, and the
+  loss would be dominated by large objects. <span class="qed">∎</span>
+  </div>
+</div>
+
+<h3>1.2. The single-stage family: everything in one pass</h3>
+<p><strong>Single-stage</strong> detectors directly predict boxes and
+classes over a dense grid, in a single pass:</p>
+<ul>
+  <li><strong>YOLO</strong> (2015): the image is cut into a
+  \(7 \times 7\) grid; each cell predicts 2 boxes + class probabilities;
+  remarkable speed (45 images/s at the time), at the cost of coarser
+  localization;</li>
+  <li><strong>SSD</strong> (2016): multi-scale predictions via feature maps of
+  decreasing resolutions, anchors per cell;</li>
+  <li><strong>RetinaNet</strong> (2017): introduced the <strong>focal loss</strong>
+  to correct the foreground/background imbalance (hundreds of thousands of easy
+  anchors against a few objects), reconciling single-stage and two-stage
+  accuracy.</li>
+</ul>
+
+<div class="def">
+  <span class="tag">Definition 1.4 — Focal loss</span>
+  For per-anchor binary classification with logit \(z\), predicted probability
+  \(p = \sigma(z)\) and label \(y \in \{0, 1\}\):
+  $$\mathrm{FL}(p) \;=\; -\alpha\,(1 - p_t)^{\gamma}\,\log(p_t), \qquad
+  p_t = y\,p + (1 - y)(1 - p),$$
+  with balancing factor \(\alpha \in [0,1]\) and <strong>focusing</strong>
+  \(\gamma &gt; 0\) (typically \(\gamma = 2\)). When \(\gamma = 0\) and
+  \(\alpha = 0.5\), one recovers cross-entropy.
+</div>
+
+<p>The effect of the factor \((1 - p_t)^{\gamma}\) is to <strong>divide the
+contribution of easy examples</strong>: a background anchor classified at
+\(p_t = 0.9\) has its loss reduced by a factor \(0.1^2 = 0.01\); the rare
+hard examples (small \(p_t\)) keep an almost intact gradient. The gradient
+becomes
+\(\frac{\partial \mathrm{FL}}{\partial z} = -\alpha\,(1-p_t)^{\gamma}\big(\gamma\, p_t \log p_t + 1 - p_t\big)\,\frac{\partial p_t}{\partial z}\):
+the magnitude concentrates on the decision boundary.</p>
+
+<table class="tbl">
+  <tr><th>Criterion</th><th>Two-stage (Faster R-CNN + FPN)</th><th>Single-stage (YOLO/SSD/RetinaNet)</th></tr>
+  <tr><td>Principle</td><td>proposals then refined classification</td><td>dense prediction in one pass</td></tr>
+  <tr><td>Accuracy (COCO mAP)</td><td>historically the high reference</td><td>comparable since RetinaNet and recent YOLOs</td></tr>
+  <tr><td>Latency</td><td>higher (two passes + RoI)</td><td>low, suited to real time</td></tr>
+  <tr><td>Small objects</td><td>good (FPN, aligned RoIs)</td><td>sensitive to input resolution</td></tr>
+  <tr><td>Use cases</td><td>offline analysis, medical imaging</td><td>embedded, video, robotics</td></tr>
+</table>
+
+<h3>1.3. Non-maximum suppression (NMS)</h3>
+<p>Dense detectors emit many redundant boxes around the same object.
+<strong>NMS</strong> keeps the highest-scoring box and removes the ones that
+overlap it too much:</p>
+<ol>
+  <li>sort the \(N\) detections by decreasing score;</li>
+  <li>take the first box \(b\), add it to the kept ones;</li>
+  <li>remove every box \(b'\) such that \(\mathrm{IoU}(b, b') &gt; \tau\)
+  (typically \(\tau = 0.5\));</li>
+  <li>resume at step 2 with the remaining boxes, until exhaustion.</li>
+</ol>
+
+<pre class="code"><code>import numpy as np
+
+def nms(boxes, scores, tau=0.5):
+    """boxes: (N,4) [x1,y1,x2,y2]; scores: (N,); returns the kept indices."""
+    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    areas = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    order = scores.argsort()[::-1]          # sort by decreasing score
+    keep = []
+    while order.size &gt; 0:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+        inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+        iou = inter / (areas[i] + areas[order[1:]] - inter)
+        order = order[1:][iou &lt;= tau]       # remove the overlapping ones
+    return np.array(keep)</code></pre>
+
+<div class="note">
+  <span class="tag">Note — Limits of greedy NMS</span>
+  NMS is <strong>greedy</strong>: worst-case \(O(N^2)\), it can remove a true
+  detection that overlaps a distinct object (two people touching, aligned train
+  cars). <strong>Soft-NMS</strong> (Bodla et al., 2017) replaces the binary
+  removal with a score decay \(s_i \mapsto s_i \cdot f(\mathrm{IoU})\) — linear
+  or Gaussian — giving overlapping boxes a second chance; per-class NMS must be
+  applied class by class, except in "class-agnostic" variants.
+  The set-prediction detectors of chapter 2 replace NMS with a global,
+  differentiable matching.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Review: convolution, CNNs, boxes</a><a class="next" href="ch2.html"><span class="dir">Next</span> Evaluation (mAP) and modern detectors</a></nav>
+</main>
+</div>
+
+</body>
+</html>

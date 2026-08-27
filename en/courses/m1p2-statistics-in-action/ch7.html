@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statistics in Action — The bootstrap in practice — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Statistics in Action</a> › The bootstrap in practice</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_52066_EP</span>Statistics in Action</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: the statistician's survival kit</a>
+<a href="ch1.html">The life cycle of a statistical study</a>
+<a href="ch2.html">Experimental designs: randomization, blocks, power</a>
+<a href="ch3.html">Observational versus experimental: biases</a>
+<a href="ch4.html">Causal inference: potential outcomes and DiD</a>
+<a href="ch5.html">Regression in practice: diagnostics and transformations</a>
+<a href="ch6.html">Multiple testing: Bonferroni and Benjamini-Hochberg</a>
+<a href="ch7.html" class="active">The bootstrap in practice</a>
+<a href="ch8.html">A/B testing: sequential and targeted effects</a>
+<a href="ch9.html">Case study: agricultural trials and blocks</a>
+<a href="ch10.html">Communicating: intervals, p-values, honest visualizations</a>
+<a href="ch11.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. The bootstrap in practice</h2>
+
+<div class="recap">
+  <div class="recap-title">Reminder (cf. Refresher Statistics module, ch. 4)</div>
+  The nonparametric bootstrap resamples \(B\) times, <em>with replacement</em>,
+  \(n\) observations, recomputes the statistic on each resample, and reads the
+  variability off the bootstrap distribution. Here we push through to
+  intervals, edge cases and code.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — The plug-in principle (Efron, 1979)</span>
+  The empirical law \(\hat P_n = \frac{1}{n}\sum_i \delta_{x_i}\) is the
+  natural nonparametric estimator of the unknown law \(P\). The bootstrap
+  <em>simulates</em> the inference problem by replacing \(P\) with
+  \(\hat P_n\): if \(T_n = t(x_1, \dots, x_n\,; P)\) is the statistic of
+  interest, its bootstrap version
+  \(T_n^* = t(x_1^*, \dots, x_n^* ; \hat P_n)\) is computed by Monte Carlo.
+  Ideal: the law of \(T_n^* - t(\hat P_n)\) approximates that of
+  \(T_n - t(P)\).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 7.2 — Consistency for the mean (and beyond, sketch)</span>
+  If \(x_i\) are i.i.d., \(\mathbb{E}X^2 &lt; \infty\), the law of
+  \(\sqrt n(\bar x^* - \bar x)\) conditional on the data converges to the same
+  limit \(\mathcal{N}(0, \sigma^2)\) as \(\sqrt n(\bar x_n - \mu)\).
+  <div class="proof">
+  Conditional on the data, the \(x_i^*\) are i.i.d. with law \(\hat P_n\),
+  expectation \(\bar x\) and variance
+  \(\hat\sigma_n^2 = \frac{1}{n}\sum (x_i - \bar x)^2\). The CLT applied to
+  this sequence (for almost every draw of the data) gives
+  \(\sqrt n(\bar x^* - \bar x) \Rightarrow \mathcal{N}(0, \hat\sigma_n^2)\),
+  and \(\hat\sigma_n^2 \to \sigma^2\) almost surely (LLN) — the conditional
+  Slutsky lemma concludes. The same scheme holds for <em>regular</em>
+  functionals of \(P\) (differentiable functionals — functional delta
+  method); this is the subject of the empirical Donsker theorem and van der
+  Vaart's theory (ch. 23). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.3 — Three intervals for the median</span>
+  Eight response times (ms): 118, 132, 127, 141, 122, 135, 128, 240 (one
+  heavy point). Observed median: \((128+132)/2 = 130\). A "hand-made" normal
+  CI: delicate (no simple \(\sqrt n\) formula for the median). Bootstrap with
+  \(B = 2000\): draw 2000 resamples, each yields a median \(m_b^*\); take
+  the 2.5&nbsp;% and 97.5&nbsp;% percentiles; typical output:
+  CI ≈ [124; 137]. The <em>basic</em> interval (reverse percentile)
+  reverses: \([2\hat m - q_{97.5}^*,\ 2\hat m - q_{2.5}^*]\), which corrects
+  a version bias; BCa additionally readjusts for bias and skewness via
+  jackknife. Reading rule: if percentile and basic differ strongly, the
+  bootstrap distribution is very asymmetric — a signal in itself.
+</div>
+
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(0)
+
+x = np.array([118, 132, 127, 141, 122, 135, 128, 240])
+n, B = len(x), 5000
+med_star = np.median(rng.choice(x, size=(B, n), replace=True), axis=1)
+mhat = np.median(x)
+
+# 1. percentile: quantiles of the bootstrap law
+lo, hi = np.quantile(med_star, [0.025, 0.975])
+# 2. basic (reverse percentile): symmetrization around the estimate
+lo_b, hi_b = 2*mhat - hi, 2*mhat - lo
+print(f"mediane = {mhat}, IC percentile [{lo:.0f}, {hi:.0f}], IC basic [{lo_b:.0f}, {hi_b:.0f}]")
+# 3. bootstrap bias: E*[m*] - mhat
+print(f"biais bootstrap estime : {med_star.mean() - mhat:+.2f} ms")</code></pre>
+
+<div class="note">
+  <span class="tag">When the bootstrap fails</span>
+  <strong>Dependent data</strong>: the i.i.d. bootstrap breaks the structure —
+  use the block bootstrap (weather, financial series, web streams);
+  <strong>extremes and deep quantiles</strong>: the empirical law does not
+  have a rich enough tail; <strong>small \(n\)</strong> (&lt; 10): the
+  empirical law is too coarse a scale (at most \(n^n\) distinct resamples,
+  and often far fewer distinct values of the statistic);
+  <strong>non-regular statistics</strong> (boundaries, number of components):
+  the bootstrap can be inconsistent.
+  Research bridge: Naulet, Roy, Sharma &amp; Veitch use <em>weighted</em>
+  bootstraps for the graphex tail index — the estimator of the "hidden mass"
+  of large networks (ch. 11).
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Multiple testing: Bonferroni and Benjamini-Hochberg</a><a class="next" href="ch8.html"><span class="dir">Next</span> A/B testing: sequential and targeted effects</a></nav>
+</main>
+</div>
+
+</body>
+</html>
