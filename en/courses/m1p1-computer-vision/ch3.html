@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — Edges: gradient and Canny — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Analysis and Computer Vision</a> › Edges: gradient and Canny</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: linear algebra, convolution, probability</a>
+<a href="ch1.html">Image formation: camera and sampling</a>
+<a href="ch2.html">Filtering and convolution</a>
+<a href="ch3.html" class="active">Edges: gradient and Canny</a>
+<a href="ch4.html">Interest points: Harris and SIFT</a>
+<a href="ch5.html">Projective geometry and homographies</a>
+<a href="ch6.html">Stereo vision and epipolar geometry</a>
+<a href="ch7.html">Optical flow: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation: k-means and graph cuts</a>
+<a href="ch9.html">CNNs for vision: detection and segmentation</a>
+<a href="ch10.html">3D point clouds: ICP and urban analysis</a>
+<a href="ch11.html">Research of the instructor: urban LiDAR at IGN</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Edges: gradient and Canny</h2>
+
+<p>An edge is a rapid variation of intensity: the first order
+(gradient) locates it by its maxima, the second order (Laplacian) by its
+zero crossings. The Canny detector (1986) combines these ideas into a
+pipeline still present in industrial chains.</p>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — Image gradient</span>
+  \(\nabla I = (I_x, I_y)^\top\); <strong>magnitude</strong>
+  \(|\nabla I| = \sqrt{I_x^2 + I_y^2}\) (rate of variation),
+  <strong>direction</strong> \(\theta = \mathrm{atan2}(I_y, I_x)\) — edges
+  are perpendicular to \(\nabla I\). In the discrete setting, \(I_x, I_y\)
+  are estimated by Sobel (Example 2.4) after Gaussian smoothing.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 3.2 — Gradient by hand</span>
+  Intensities of a neighborhood \(\begin{pmatrix} 52 &amp; 54 &amp; 55\\
+  50 &amp; 120 &amp; 122 \\ 48 &amp; 118 &amp; 120\end{pmatrix}\) at the central
+  point: with Sobel,
+  \(I_x = \frac{(55 + 2\cdot122 + 120) - (52 + 2\cdot50 + 48)}{4} =
+  \frac{419 - 200}{4} \approx 55\),
+  \(I_y = \frac{(48 + 2\cdot118 + 120) - (52 + 2\cdot54 + 55)}{4} =
+  \frac{404 - 215}{4} \approx 47\). Magnitude \(\sqrt{55^2+47^2} \approx 72\)
+  levels/pixel, direction \(\theta \approx \mathrm{atan2}(47, 55) \approx
+  40.5^\circ\) — a strong, diagonal edge. A pixel from a homogeneous
+  area would give \(\pm 5\) under the noise: magnitude thresholding separates
+  signal from noise.
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithm 3.3 — The Canny detector</span>
+  <ol style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>Gaussian <strong>smoothing</strong> \(G_\sigma\) (\(\sigma\) sets
+    the scale of the detected edges);</li>
+    <li><strong>gradient</strong> (Sobel) → magnitude and direction;</li>
+    <li><strong>non-maximum suppression</strong>: quantize
+    \(\theta\) into 4 directions (0°, 45°, 90°, 135°) and keep a pixel only
+    if its magnitude exceeds that of its two neighbors <em>in the direction
+    of the gradient</em> — an edge one pixel wide;</li>
+    <li><strong>hysteresis thresholding</strong> at two levels
+    (\(s_{low} &lt; s_{high}\)): a pixel ≥ \(s_{high}\) is a starting
+    point; the edge is propagated to neighbors ≥ \(s_{low}\) — which
+    reconnects edges interrupted by noise without multiplying the false
+    positives a single low threshold would produce.</li>
+  </ol>
+  Two settings (\(\sigma\), thresholds) — and a remarkable property:
+  good detection/localization trade-off, implemented in a handful of
+  milliseconds (OpenCV: <code>cv2.Canny(img, s_low, s_high)</code>).
+</div>
+
+<div class="note">
+  <span class="tag">Note — Zero crossings of the Laplacian (LoG)</span>
+  The second order detects edges as the zeros of \(\Delta(G*I) =
+  (\Delta G)*I\) — the "LoG" kernel, close to the "difference of
+  Gaussians" of ch. 4. The zero crossing is finer than the gradient
+  maximum but more sensitive to noise, and the sign on either side
+  encodes the bright/dark transition. Marr and Hildreth made it a model of
+  the first level of the visual cortex — the biological prehistory of the
+  convolutional networks of ch. 9.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Filtering and convolution</a><a class="next" href="ch4.html"><span class="dir">Next</span> Interest points: Harris and SIFT</a></nav>
+</main>
+</div>
+
+</body>
+</html>

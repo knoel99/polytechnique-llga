@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models — Simulating: inverse, rejection, Box-Muller — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models</a> › Simulating: inverse, rejection, Box-Muller</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_51056_EP</span>Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: measure, random variables, convergence</a>
+<a href="ch1.html">Measure and integration: expectation, Tonelli-Fubini</a>
+<a href="ch2.html">Convergence: LLN, CLT, delta method</a>
+<a href="ch3.html">Conditional expectation</a>
+<a href="ch4.html">Markov chains: stationarity, reversibility, ergodicity</a>
+<a href="ch5.html" class="active">Simulating: inverse, rejection, Box-Muller</a>
+<a href="ch6.html">Monte Carlo and variance reduction</a>
+<a href="ch7.html">Importance sampling</a>
+<a href="ch8.html">MCMC: Metropolis-Hastings, Gibbs, diagnostics, annealing</a>
+<a href="ch9.html">Langevin dynamics and generative models</a>
+<a href="ch10.html">Research of the teaching team: sampling in high dimension</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Simulating: inverse, rejection, Box-Muller</h2>
+
+<div class="prop">
+  <span class="tag">Proposition 5.1 — Inverse transform method (proved)</span>
+  Let \(F\) be a cumulative distribution function and \(F^{-1}(u) = \inf\{x : F(x) \geq u\}\)
+  (generalized inverse). If \(U \sim \mathcal{U}[0,1]\), then \(X = F^{-1}(U)\) has
+  distribution \(F\).
+  <div class="proof">
+  \(F^{-1}(u) \leq x\) is equivalent to \(u \leq F(x)\) (property of the infimum);
+  hence
+  \(\mathbb{P}(F^{-1}(U) \leq x) = \mathbb{P}(U \leq F(x)) = F(x)\).<span class="qed">∎</span></div>
+  Application: \(X = -\ln U \sim \mathcal{E}(1)\) (distribution \(1-e^{-x}\)), and
+  \(X = \lfloor nU \rfloor + 1\) is uniform on \(\{1,\dots,n\}\). Conversely,
+  every algorithm producing "random reals" on a machine truncates a
+  uniform distribution — the only primitive source (together with physical
+  generators) of the whole chapter.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.2 — Rejection method (correction proved)</span>
+  Let \(f\) be the target density (with respect to \(\lambda\)), and \(g\) a proposal
+  density such that \(f \leq M g\) with \(M &lt; \infty\). Algorithm:
+  draw independent \(X \sim g\), \(U \sim \mathcal{U}[0,1]\); <em>accept</em>
+  if \(U \leq f(X)/(Mg(X))\), otherwise start over. Then:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>the acceptance probability at each trial equals \(1/M\);</li>
+    <li>the distribution of \(X\) conditional on acceptance is exactly \(f\).</li>
+  </ul>
+  <div class="proof">
+  For every Borel set \(A\):
+  $$\mathbb{P}(X \in A,\ \text{accepted}) = \int_A g(x)\,
+  \frac{f(x)}{Mg(x)}\,dx = \frac{1}{M}\int_A f(x)\,dx = \frac{\pi_f(A)}{M},$$
+  where we used the independence of \(U\) and \(X\) and then Fubini. Taking
+  \(A = \mathbb{R}\): \(\mathbb{P}(\text{accepted}) = 1/M\). By Bayes' formula,
+  \(\mathbb{P}(X \in A \mid \text{accepted}) =
+  \frac{\pi_f(A)/M}{1/M} = \pi_f(A)\).<span class="qed">∎</span></div>
+  The number of trials follows a geometric distribution with parameter \(1/M\)
+  (expectation \(M\)): all the art lies in choosing \(g\) close to \(f\) to minimize
+  \(M\).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.3 — Simulating \(\mathcal{N}(0,1)\) with a Laplace proposal (numbers)</span>
+  Proposal: \(g(x) = \tfrac12 e^{-|x|}\). The ratio
+  \(\frac{f(x)}{g(x)} = \sqrt{2/\pi}\; e^{-x^2/2 + |x|}\) is maximal at \(|x|=1\),
+  where \(-x^2/2+|x| = 1/2\): \(M = \sqrt{2e/\pi} \approx 1.3155\), acceptance
+  rate \(1/M = \sqrt{\pi/(2e)} \approx 76\,\%\). On average 1.31 proposals
+  per accepted sample: very efficient, and requiring no knowledge of the
+  normalization constant of \(f\) (a truncated distribution, for instance). It is the
+  mechanism behind most generators of "exotic" distributions.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.4 — Box-Muller (proved by change of variables)</span>
+  Let \(U,V\) be i.i.d. \(\mathcal{U}[0,1]\). Set \(R = \sqrt{-2\ln U}\) and
+  \(\Theta = 2\pi V\). Then \(Z_1 = R\cos\Theta\) and \(Z_2 = R\sin\Theta\) are
+  i.i.d. \(\mathcal{N}(0,1)\).
+  <div class="proof">
+  \(\mathbb{P}(R \leq r) = \mathbb{P}(U \geq e^{-r^2/2}) = 1 - e^{-r^2/2}\), density
+  \(f_R(r) = r e^{-r^2/2}\) (Rayleigh), independent of \(\Theta\) (uniform). The pair
+  has density \(f_{R,\Theta}(r,\theta) = \frac{r}{2\pi} e^{-r^2/2}\) on
+  \((0,\infty) \times (0,2\pi)\). Inverse polar change of variables
+  \((r,\theta) \mapsto (x,y) = (r\cos\theta, r\sin\theta)\), with Jacobian
+  \(\left|\det \frac{\partial(x,y)}{\partial(r,\theta)}\right| = r\) (direct
+  computation): the density of the pair \((Z_1,Z_2)\) equals
+  $$f_{Z_1,Z_2}(x,y) = \frac{f_{R,\Theta}(r,\theta)}{r}
+  = \frac{1}{2\pi} e^{-(x^2+y^2)/2},$$
+  which is the product of the two densities \(\varphi(x)\varphi(y)\): independence
+  and Gaussian marginals.<span class="qed">∎</span></div>
+  Example 1.5 (the Gaussian integral) provides the constant \(\frac{1}{2\pi}\): the
+  chapters echo one another.
+</div>
+
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(42)
+
+def box_muller(n):                      # n standard Gaussians (n even)
+    u = rng.random(n // 2); v = rng.random(n // 2)
+    r = np.sqrt(-2.0 * np.log(u)); t = 2.0 * np.pi * v
+    return np.concatenate([r * np.cos(t), r * np.sin(t)])
+
+def gaussian_rejection(n, m=1.3155):    # N(0,1) by rejection with Laplace
+    out = []
+    while len(out) &lt; n:
+        x = rng.laplace(0.0, 1.0)       # density (1/2) exp(-|x|)
+        u = rng.random()
+        if u &lt; np.exp(-x*x/2.0) / (m * 0.5 * np.exp(-abs(x))):
+            out.append(x)
+    return np.array(out)
+
+z1, z2 = box_muller(200000), gaussian_rejection(200000)
+print(z1.mean(), z1.var())              # ~0.000 , ~1.000
+print(z2.mean(), z2.var())              # ~0.001 , ~1.000
+
+def mixture(n):                          # 0.4 N(-2,0.5^2) + 0.6 N(2.5,0.8^2)
+    j = rng.random(n) &lt; 0.6
+    return np.where(j, 2.5 + 0.8*rng.standard_normal(n),
+                       -2.0 + 0.5*rng.standard_normal(n))</code></pre>
+
+<div class="note">
+  <span class="tag">Practice</span>
+  In production one uses <code>rng.standard_normal</code> (ziggurat, an optimized
+  rejection variant) — but Box-Muller and rejection remain the pedagogical building
+  blocks and the fallback tools when the target is no longer standard: truncated
+  distributions, distributions with an unknown normalization constant (typical in the
+  Bayesian setting, ch. 8). All the methods in the rest of the module are
+  generalizations of this program:
+  <em>target known up to a constant → i.i.d. samples (rejection, IS) or correlated
+  ones (MCMC)</em>.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Markov chains: stationarity, reversibility, ergodicity</a><a class="next" href="ch6.html"><span class="dir">Next</span> Monte Carlo and variance reduction</a></nav>
+</main>
+</div>
+
+</body>
+</html>

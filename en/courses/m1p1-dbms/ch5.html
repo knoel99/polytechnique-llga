@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — Indexes: B+ trees and hashing — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">DataBase Management System</a> › Indexes: B+ trees and hashing</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51053_EP</span>DataBase Management System</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: sets, relations, complexity</a>
+<a href="ch1.html">The relational model and algebra</a>
+<a href="ch2.html">SQL: queries, aggregates, windowing</a>
+<a href="ch3.html">Design: dependencies and normal forms</a>
+<a href="ch4.html">Storage: pages, files, external sorting</a>
+<a href="ch5.html" class="active">Indexes: B+ trees and hashing</a>
+<a href="ch6.html">Transactions and concurrency</a>
+<a href="ch7.html">The log and crash recovery</a>
+<a href="ch8.html">Query optimization</a>
+<a href="ch9.html">Beyond relational: NoSQL, graphs, vectors</a>
+<a href="ch10.html">Web data and heterogeneous integration</a>
+<a href="ch11.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Indexes: B+ trees and hashing</h2>
+
+<p>An index is a secondary structure that speeds up locating records without
+scanning them all. Two families dominate: <strong>B+ trees</strong> for range
+queries and sorting, <strong>hashing</strong> for exact equality. The DBMS
+maintains the index at every write: each additional index slows down
+insertions — there is no free index.</p>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — B+ tree</span>
+  A B+ tree of order \(d\) is a balanced tree in which every node contains
+  between \(d\) and \(2d\) keys (only the root may contain fewer, at least 1),
+  every internal node has (number of keys + 1) children, all
+  the data resides in the leaves, and the leaves are chained together
+  (range scan without going back up). The keys of an internal node are
+  separators: the subtree between two keys contains the records of the
+  corresponding open interval. When a leaf splits, the median key is
+  <em>copied</em> to the parent (it remains present in the right
+  leaf); when an internal node splits, it is <em>moved</em> up to the parent.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.2 — Height of a B+ tree</span>
+  A B+ tree of order \(d\) containing \(n\) entries has height
+  $$h \;\leq\; 2 + \log_{d+1}(n/2),$$
+  so that search, insertion, and deletion cost \(\Theta(\log_d n)\) logical
+  I/Os — in practice 3 to 5 pages.
+  <div class="proof" style="margin-top:.5rem;">Count the minimal number of leaves
+  of a tree of height \(h\) (root at level 1, leaves at level \(h\),
+  \(h \geq 2\)). The root has at least 2 children; every internal non-root node
+  has at least \(d+1\) children (because at least \(d\) keys); every leaf carries
+  at least \(d\) entries. The number of leaves is therefore at least
+  \(2\,(d+1)^{h-2}\), and each contains at least \(d\) entries:
+  \(n \geq 2d\,(d+1)^{h-2} \geq 2\,(d+1)^{h-2}\) (since \(d \geq 1\)), hence
+  \((d+1)^{h-2} \leq n/2\) and the announced bound. Search: one page per
+  level; insertion: descent plus possible split cascades upward,
+  one page per level; both are \(\Theta(h)\).
+  <span class="qed">∎</span></div>
+  <div class="ex" style="margin-top:.4rem;">
+  <span class="tag">Example 5.3 — A billion entries in 4 hops</span>
+  With 8 KiB pages, 16 B keys+pointers, a node holds up to ~512 keys: take
+  \(d = 63\) (fan-out 64 to 128). For
+  \(n = 10^9\) entries:
+  \(h \leq 2 + \log_{64}(5\times10^8) = 2 + \frac{\ln(5\times10^8)}{\ln 64}
+  = 2 + \frac{20.03}{4.16} \approx 6.8\), hence \(h \leq 6\) (and even 5 for a
+  fan-out of 128). The upper levels fit in RAM: an equality
+  search costs 1-2 page reads instead of the \(1.2\times10^6\) of the full scan
+  (Prop. 4.2).</div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.4 — Cascading insertions (d = 1)</span>
+  Insert 10, 20, 5, 15, 30, 25, 35, 40, 45 into a B+ tree of order 1 (1 to 2
+  keys per node). After 10, 20: leaf [10, 20]. The 5 overflows:
+  split into [5, 10] and [20], copy of 20 to the new root. The 15 refills the
+  first leaf: [5,10,15] → [5,10] and [15], root [15, 20], three
+  leaves. The 30 fills the right leaf [20, 30]. The 25 makes it overflow:
+  [20,25] / [30], copy of 30 — the root [15,20,30] overflows in turn:
+  <em>internal</em> split, key 20 is moved to the new root [20].
+  The 35, the 40 (split of [30,35,40] → [30,35] / [40], copy of 40) and the 45
+  lead to the final tree (height 3):
+<pre class="code"><code>                    [20]
+             ┌────────┴────────┐
+           [15]              [30, 40]
+         ┌──┴──┐        ┌──────┼──────┐
+      [5,10]  [15]   [20,25] [30,35] [40,45]
+      ──────── leaves chained ────────▶
+</code></pre>
+  Each leaf has between 1 and 2 keys, the root at least 1: the structure stays
+  at least half full after each deletion rebalanced by borrowing or
+  merging — this is what guarantees Theorem 5.2 <em>over time</em>.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 5.5 — Static and extendible hashing</span>
+  An <strong>on-disk hash table</strong> applies \(h(k) = k \bmod B\) to
+  store the record with key \(k\) in bucket \(h(k)\): exact equality in
+  1 + (overflows) I/Os. <strong>Extendible hashing</strong> grows \(B\)
+  dynamically: a directory of \(2^g\) pointers (global
+  depth \(g\)) pointing to buckets, each of which uses only the \(p_i \leq g\)
+  high-order bits of the hash (local depth); when a bucket overflows, double
+  the directory if needed (\(g{+}{=}g{+}1\)) then split the bucket according to
+  bit \(p_i{+}1\). Example: buckets of 2 slots, hashes 4 (100), 12 (1100) and
+  20 (10100) — all in 00; at \(g=2\) bucket 00 overflows, moves to
+  depth 1 and splits into 0 (4, 20) and 1 (12) without doubling the directory.
+  The load factor stays
+  under control without global reorganization; Litwin's <em>linear hashing</em>
+  achieves the same effect without a directory.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.6 — What each index can do</span>
+  <table class="tbl">
+    <tr><th>Criterion</th><th>B+ tree</th><th>Hashing</th></tr>
+    <tr><td>Equality (=)</td><td>\(\log\) pages</td><td>1 page (ideal)</td></tr>
+    <tr><td>Range, prefix, order</td><td>excellent (leaves chained)</td><td>impossible</td></tr>
+    <tr><td>Insertion</td><td>\(\log\), balance guaranteed</td><td>amortized O(1), overflows</td></tr>
+    <tr><td>Typical uses</td><td>primary keys, filtered/sorted columns, foreign keys</td><td>exact join tables, hash joins (ch. 8), in-memory dedup</td></tr>
+  </table>
+  Composite index rule: a B+ index on (a, b, c) serves predicates on
+  \(a\), then (a, b), then (a, b, c) — but <em>not</em> b alone: the keys are
+  sorted like a dictionary (a first). An index can also <em>cover</em> a
+  query (all requested columns are in the index: the table is
+  never read — a <em>covering index</em> often divides times by 10).
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Storage: pages, files, external sorting</a><a class="next" href="ch6.html"><span class="dir">Next</span> Transactions and concurrency</a></nav>
+</main>
+</div>
+
+</body>
+</html>

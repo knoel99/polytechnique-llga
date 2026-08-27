@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — Projective geometry and homographies — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Analysis and Computer Vision</a> › Projective geometry and homographies</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: linear algebra, convolution, probability</a>
+<a href="ch1.html">Image formation: camera and sampling</a>
+<a href="ch2.html">Filtering and convolution</a>
+<a href="ch3.html">Edges: gradient and Canny</a>
+<a href="ch4.html">Interest points: Harris and SIFT</a>
+<a href="ch5.html" class="active">Projective geometry and homographies</a>
+<a href="ch6.html">Stereo vision and epipolar geometry</a>
+<a href="ch7.html">Optical flow: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation: k-means and graph cuts</a>
+<a href="ch9.html">CNNs for vision: detection and segmentation</a>
+<a href="ch10.html">3D point clouds: ICP and urban analysis</a>
+<a href="ch11.html">Research of the instructor: urban LiDAR at IGN</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Projective geometry and homographies</h2>
+
+<p>Two views of the same <em>plane</em> (facade, document, whiteboard), or one
+camera that only <em>rotates</em> about itself: in both cases, the relation
+between pixels is a homography. It is the basic tool of registration,
+panoramas, and augmented reality.</p>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — Homography</span>
+  A <strong>homography</strong> is a projective map of the plane
+  \(\mathbb{P}^2\) defined by a matrix \(H \in \mathbb{R}^{3\times3}\) of
+  rank 3, up to a scale factor:
+  \(\tilde{x}' \sim H\tilde{x}\). It therefore has \(9 - 1 = 8\) degrees of
+  freedom: 4 pairs of points (2 independent equations each)
+  suffice to determine it. In \(\mathbb{P}^2\), points and lines are in
+  duality: the line through \(x_1, x_2\) is \(l = x_1 \times x_2\), the
+  intersection point of \(l_1, l_2\) is \(l_1 \times l_2\), and a
+  homography carries points and lines (\(l' \sim H^{-\top} l\)).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.2 — When a homography applies</span>
+  The relation between two views is a homography if (i) the scene is
+  planar, or (ii) the camera undergoes only a pure rotation about its
+  optical center.
+  <div class="proof" style="margin-top:.5rem;">Case (i): plane
+  \(\Pi = \{\tilde{X} : \tilde{n}^\top \tilde{X} = d\}\) in the frame of
+  camera 1, relative motion \((R, t)\). For \(X \in \Pi\):
+  \(X_2 = R X_1 + t = (R + t\,\tilde{n}^\top/d)\,X_1\) — the depth is
+  eliminated in favor of a 3×3 linear combination; with
+  \(u_1 \sim K_1 X_1\) it follows that
+  \(u_2 \sim K_2 (R + t\tilde n^\top/d) R_1^\top K_1^{-1} u_1 = H u_1\).
+  Case (ii): if \(t = 0\), \(P = K R\) and \(\tilde{u}_2 \sim
+  K_2 R_2 R_1^\top K_1^{-1}\,\tilde{u}_1\) — a \(3\times3\) product, and
+  we are done. <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.3 — Direct linear estimation (DLT)</span>
+  Each correspondence \(\tilde{x} \leftrightarrow \tilde{x}'\) provides
+  \(\tilde{x}' \times (H\tilde{x}) = 0\), i.e. 2 linear equations in the 9
+  coefficients of \(H\) (up to scale, one fixes \(\|h\| = 1\)). With
+  \(n \geq 4\) correspondences, the system \(Ah = 0\) (\(2n \times 9\)) is
+  solved by SVD: \(h\) is the right singular vector associated with the
+  smallest singular value — the "smallest residual" version of homogeneous
+  least squares. Golden rule: <strong>normalize</strong> the
+  points before DLT (translate the centroid to the origin, scale so that the
+  mean distance is \(\sqrt2\); Hartley) — otherwise the conditioning
+  degrades the solution by several orders of magnitude. With
+  noisy correspondences: nonlinear refinement (Levenberg-Marquardt)
+  of the reprojection error \(\sum_i \|\tilde{x}'_i \times H\tilde{x}_i\|^2\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.4 — RANSAC: estimating amid outliers</span>
+  SIFT correspondences contain <em>false positives</em>. The
+  RANSAC paradigm (RANdom SAmple Consensus) draws at random a minimal set of
+  points (here 4), estimates \(H\), counts the <em>inliers</em> (residual
+  &lt; \(\varepsilon\)), repeats, and refines the model on the best consensus.
+  With a proportion \(w\) of inliers and 4 points drawn: probability
+  that a draw is clean \(= w^4\); for a success rate \(p\) after
+  \(N\) draws:
+  $$N \;\geq\; \frac{\log(1-p)}{\log(1-w^4)}.$$
+  Worked example: 50% inliers, \(p = 0.99\) →
+  \(N = \frac{-4.605}{\ln(1 - 0.0625)} = \frac{-4.605}{-0.0645} \approx 72\)
+  draws. At 90% inliers: \(w^4 = 0.656\), \(N = 3\). The cost
+  is trivial compared to least squares on contaminated data — and the
+  model extends to any pair (minimal estimator, number of inliers).</div>
+
+<div class="note">
+  <span class="tag">Note — Panoramas and warping</span>
+  Assembling a panorama: SIFT correspondences between pairs of neighboring
+  images → homographies by RANSAC → a global "bundle adjustment"
+  to avoid drift → final projection (plane, cylindrical, or
+  spherical depending on the angular amplitude). <em>Warping</em> is written
+  in inverse coordinates: for each output pixel, \(x = H^{-1}x'\),
+  then bilinear interpolation — interpolating in the forward direction would
+  leave holes.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Interest points: Harris and SIFT</a><a class="next" href="ch6.html"><span class="dir">Next</span> Stereo vision and epipolar geometry</a></nav>
+</main>
+</div>
+
+</body>
+</html>

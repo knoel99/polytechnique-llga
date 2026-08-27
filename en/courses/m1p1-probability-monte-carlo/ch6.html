@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models — Monte Carlo and variance reduction — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models</a> › Monte Carlo and variance reduction</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_51056_EP</span>Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: measure, random variables, convergence</a>
+<a href="ch1.html">Measure and integration: expectation, Tonelli-Fubini</a>
+<a href="ch2.html">Convergence: LLN, CLT, delta method</a>
+<a href="ch3.html">Conditional expectation</a>
+<a href="ch4.html">Markov chains: stationarity, reversibility, ergodicity</a>
+<a href="ch5.html">Simulating: inverse, rejection, Box-Muller</a>
+<a href="ch6.html" class="active">Monte Carlo and variance reduction</a>
+<a href="ch7.html">Importance sampling</a>
+<a href="ch8.html">MCMC: Metropolis-Hastings, Gibbs, diagnostics, annealing</a>
+<a href="ch9.html">Langevin dynamics and generative models</a>
+<a href="ch10.html">Research of the teaching team: sampling in high dimension</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Monte Carlo and variance reduction</h2>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — Monte Carlo estimator</span>
+  To estimate \(\theta = \mathbb{E}[h(X)]\), \(X \sim \pi\), draw \(X_1, \dots, X_n\)
+  i.i.d. from \(\pi\) and set \(\hat\theta_n = \frac1n \sum_{i=1}^n h(X_i)\). Then
+  \(\mathbb{E}[\hat\theta_n] = \theta\) (unbiased, LLN);
+  \(\mathrm{Var}(\hat\theta_n) = \sigma_h^2/n\) where
+  \(\sigma_h^2 = \mathrm{Var}(h(X_1))\); and by the CLT (Thm 2.3),
+  $$\frac{\sqrt n}{\sigma_h}\big(\hat\theta_n - \theta\big)
+  \approx \mathcal{N}(0,1), \qquad
+  \theta \in \left[\hat\theta_n \pm 1.96\,\frac{\hat\sigma_h}{\sqrt n}\right]
+  \ \text{at 95\%},$$
+  with \(\hat\sigma_h^2 = \frac1{n-1}\sum_i (h(X_i) - \hat\theta_n)^2\). The
+  (<em>RMSE</em>) error decreases like \(\sigma_h/\sqrt n\), that is like \(1/\sqrt n\)
+  <em>independently of the dimension</em> of the space of \(X\): this is the strength
+  of Monte Carlo over quadrature, whose cost grows exponentially with dimension.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 6.2 — Estimating \(\pi\), with error bars (numbers)</span>
+  \(X,Y\) i.i.d. \(\mathcal{U}[-1,1]\), \(h = \mathbf{1}_{X^2+Y^2 \leq 1}\),
+  \(\theta = \pi/4\). Here \(\sigma_h^2 = \theta(1-\theta) \approx 0.1685\),
+  \(\sigma_h \approx 0.4105\). For \(n = 10^4\): standard error
+  \(\approx 0.0041\), interval \(\pm 0.0081\) at 95%; for three exact
+  digits after the decimal point (\(\pm 5\times10^{-4}\) on \(\pi\), i.e.
+  \(2\times10^{-4}\) on \(\theta\)) one needs
+  \(n \approx (1.96 \times 0.4105 / 2\times 10^{-4})^2 \approx 1.6 \times 10^7\).
+  The price of one additional decimal digit is \(\times 100\) samples:
+  the only way out is to <strong>reduce \(\sigma_h\)</strong>.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.3 — Antithetic variables (example computed exactly)</span>
+  For monotone \(f\), \(f(U)\) and \(f(1-U)\) are negatively correlated:
+  $$\mathrm{Var}\Big(\frac{f(U)+f(1-U)}{2}\Big)
+  = \frac{\mathrm{Var}(f(U)) + \mathrm{Cov}(f(U),f(1-U))}{2}
+  \leq \frac{\mathrm{Var}(f(U))}{2}.$$
+  Application to \(I = \int_0^1 \frac{dx}{1+x} = \ln 2\) with \(f(u) = \frac1{1+u}\):
+  exact computations give \(\mathrm{Var}(f(U)) = \tfrac12 - (\ln 2)^2 \approx 0.0195\),
+  \(\mathbb{E}[f(U)f(1-U)] = \tfrac23 \ln 2 \approx 0.4621\), hence
+  \(\mathrm{Cov} \approx -0.0184\) and a per-pair variance
+  \(\approx 5.5\times10^{-4}\) versus \(9.75\times 10^{-3}\) for two independent
+  draws: a <strong>gain of a factor ~18</strong>, for free. In practice:
+  uniforms (\(u, 1-u\)), Gaussians (\(z, -z\)), and more generally any measurable
+  transformation with negative covariance.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.4 — Control variates (proved, worked example)</span>
+  Let \(C\) be an r.v. with known expectation \(\mu_C\), correlated with \(h(X)\).
+  Estimator \(\hat\theta_\beta = \hat\theta_n - \beta(\bar C_n - \mu_C)\), unbiased for
+  every \(\beta\). The variance \(\mathrm{Var}(\hat\theta_\beta) =
+  \frac{1}{n}\big(\sigma_h^2 - 2\beta\,\mathrm{Cov}(h,C) + \beta^2 \sigma_C^2\big)\) is
+  minimal at \(\beta^* = \mathrm{Cov}(h,C)/\sigma_C^2\), where it equals
+  \(\frac{\sigma_h^2(1-\rho^2)}{n}\), with \(\rho\) the correlation: any nonzero
+  correlation improves the estimator.
+  <div class="proof">
+  Quadratic polynomial in \(\beta\), minimum at \(\beta^*\); the minimal value
+  rewrites as \(\sigma_h^2(1 - \rho^2)\) by definition of \(\rho\).
+  The unknown \(\beta^*\) is estimated from the sample (small cost, negligible
+  \(\mathcal{O}(1/n)\) bias).<span class="qed">∎</span></div>
+  Example: estimate \(\mathbb{E}[e^U] = e - 1 \approx 1.7183\) with the control
+  \(C = U\) (\(\mathbb{E}C = 1/2\)): \(\mathrm{Cov}(e^U, U) = 1 - (e-1)/2 \approx
+  0.1409\), \(\mathrm{Var}(U) = 1/12\), \(\beta^* \approx 1.6905\);
+  \(\mathrm{Var}(e^U) \approx 1.2420 \to 1.2420\,(1-\rho^2) \approx 1.0038\):
+  19% less variance. Conditioning (Example 3.5) is a special case where the
+  control is \(\mathbb{E}[h(X)\mid\mathcal{G}]\) itself.
+</div>
+
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(7)
+
+n = 500_000
+x, y = rng.uniform(-1, 1, (2, n))
+pi_hat = 4.0 * np.mean(x*x + y*y &lt;= 1.0)
+se = 4.0 * np.std(x*x + y*y &lt;= 1.0, ddof=1) / np.sqrt(n)
+print(f"pi = {pi_hat:.5f} +/- {1.96*se:.5f}")
+
+# antithetic for ln 2
+u = rng.random(n // 2)
+est = 0.5 * ((1/(1+u)) + (1/(2-u)))
+print(f"ln2 = {est.mean():.6f} (variance per draw {est.var(ddof=1):.2e})")
+
+# control variate for E[e^U]
+u = rng.random(n)
+e = np.exp(u); beta = np.cov(e, u, ddof=1)[0, 1] / u.var(ddof=1)
+mc = e - beta * (u - 0.5)
+print(f"E[e^U] = {mc.mean():.6f}, e-1 = {np.e-1:.6f}")</code></pre>
+
+<div class="note">
+  <span class="tag">Overview of methods</span>
+  Three families to reduce \(\sigma_h\) or reach inaccessible distributions:
+  <em>antithetic/control</em> (this chapter); <em>importance sampling</em>
+  (ch. 7); <em>conditioning</em> (ch. 3). And when sampling \(X \sim \pi\) directly is
+  impossible (unknown normalization constant): MCMC (ch. 8).
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Simulating: inverse, rejection, Box-Muller</a><a class="next" href="ch7.html"><span class="dir">Next</span> Importance sampling</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — The log and crash recovery — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">DataBase Management System</a> › The log and crash recovery</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51053_EP</span>DataBase Management System</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: sets, relations, complexity</a>
+<a href="ch1.html">The relational model and algebra</a>
+<a href="ch2.html">SQL: queries, aggregates, windowing</a>
+<a href="ch3.html">Design: dependencies and normal forms</a>
+<a href="ch4.html">Storage: pages, files, external sorting</a>
+<a href="ch5.html">Indexes: B+ trees and hashing</a>
+<a href="ch6.html">Transactions and concurrency</a>
+<a href="ch7.html" class="active">The log and crash recovery</a>
+<a href="ch8.html">Query optimization</a>
+<a href="ch9.html">Beyond relational: NoSQL, graphs, vectors</a>
+<a href="ch10.html">Web data and heterogeneous integration</a>
+<a href="ch11.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. The log and crash recovery</h2>
+
+<p>Durability requires writing to persistent storage <em>before</em> answering
+"commit", and atomicity requires being able to undo — even after a crash right
+in the middle. Both requirements are solved by one and the same structure: the
+<strong>log</strong> (<em>write-ahead log</em>, WAL), an ordered sequence
+of records describing every modification, written sequentially (hence
+fast, see ch. 4).</p>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — WAL, LSN, STEAL/FORCE policy</span>
+  Each log record receives a sequence number (<strong>LSN</strong>).
+  For a page write by a transaction: &lt;LSN, T, page, row,
+  before-image, after-image, previous-LSN-of-T&gt;. The <strong>WAL</strong> rule:
+  the log fragment of a modification must reach the disk <em>before</em> the
+  modified page. Possible policies: <strong>STEAL</strong> (one may evict an
+  uncommitted modified page from the buffer → one must know how to undo) vs
+  NO-STEAL; <strong>FORCE</strong> (all pages are written at commit → no need
+  to redo) vs NO-FORCE. Every serious DBMS chooses STEAL/NO-FORCE — the most
+  performant, the one that requires both <em>undo</em> and <em>redo</em>.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.2 — Idempotence and ARIES recovery</span>
+  The recovery passes must be <em>idempotent</em> (replayed twice, same
+  effect): this holds if redo/undo are driven by the LSNs stored in the
+  pages. The <strong>ARIES</strong> algorithm (Mohan et al., 1992), deployed in
+  all major DBMSs, recovers in three phases:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Analysis</strong>: reread the log since the last
+    <em>checkpoint</em> to rebuild the table of in-progress transactions and the
+    dirty page table;</li>
+    <li><strong>Redo</strong>: replay, in LSN order, the after-image of
+    every modification whose LSN exceeds the one recorded in the page
+    (repeating history, including uncommitted transactions);</li>
+    <li><strong>Undo</strong>: cancel, in <em>reverse</em> LSN order,
+    the modifications of uncommitted transactions, writing compensation
+    records (CLR) — if the machine crashes again during recovery, one resumes
+    where one had stopped.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.3 — Rolling out a recovery by hand</span>
+  Log (LSN: 1-7) then crash:
+  <table class="tbl">
+    <tr><th>LSN</th><th>Record</th><th>Effect</th></tr>
+    <tr><td>1</td><td>checkpoint</td><td>T1 active</td></tr>
+    <tr><td>2</td><td>T1: update X (before 10 → after 15)</td><td>page P1 dirty</td></tr>
+    <tr><td>3</td><td>T2: update Y (before 5 → after 8)</td><td>page P2 dirty</td></tr>
+    <tr><td>4</td><td>T1: commit</td><td>T1 completed</td></tr>
+    <tr><td>5</td><td>T2: update X (before 15 → after 20)</td><td>P1 dirty</td></tr>
+    <tr><td>6</td><td>T3: update Z (before 3 → after 7)</td><td>P3 dirty</td></tr>
+    <tr><td>7</td><td>T2: … (no commit)</td><td>crash here</td></tr>
+  </table>
+  ARIES recovery: analysis → T2 and T3 in progress, T1 committed, pages P1-P3
+  potentially dirty. Redo: LSN 2, 3, 5, 6 replayed (X=20, Y=8, Z=7).
+  Undo (reverse order): LSN 6 canceled (Z=3, CLR written), then LSN 5 (X=15)
+  and LSN 3 (Y=5); T2 and T3 are rolled back, T1 survives. Note that redo
+  reapplies LSN 5 (a write of T2, uncommitted) before undoing it: this is the
+  mark of ARIES — "repeat history" — and the reason for the CLR, which makes
+  undo itself restartable.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Checkpoints and the cost of durability</span>
+  A fuzzy <em>checkpoint</em> forces the buffer to disk and bars a record in
+  the log, bounding the length of the redo; without it, recovery would reread
+  the whole log. In exchange, every commit waits for at least one
+  sequential log write (<em>group commit</em>: concurrent commits share a
+  single flush): typically ~1 ms — the measurable price of ACID.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Transactions and concurrency</a><a class="next" href="ch8.html"><span class="dir">Next</span> Query optimization</a></nav>
+</main>
+</div>
+
+</body>
+</html>

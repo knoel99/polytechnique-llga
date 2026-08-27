@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — Storage: pages, files, external sorting — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">DataBase Management System</a> › Storage: pages, files, external sorting</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51053_EP</span>DataBase Management System</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: sets, relations, complexity</a>
+<a href="ch1.html">The relational model and algebra</a>
+<a href="ch2.html">SQL: queries, aggregates, windowing</a>
+<a href="ch3.html">Design: dependencies and normal forms</a>
+<a href="ch4.html" class="active">Storage: pages, files, external sorting</a>
+<a href="ch5.html">Indexes: B+ trees and hashing</a>
+<a href="ch6.html">Transactions and concurrency</a>
+<a href="ch7.html">The log and crash recovery</a>
+<a href="ch8.html">Query optimization</a>
+<a href="ch9.html">Beyond relational: NoSQL, graphs, vectors</a>
+<a href="ch10.html">Web data and heterogeneous integration</a>
+<a href="ch11.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Storage: pages, files, external sorting</h2>
+
+<p>A DBMS lives on a hierarchy of memories with performance gaps of several
+orders of magnitude. The whole discipline of storage follows from this brute
+fact:</p>
+
+<table class="tbl">
+  <tr><th>Level</th><th>Order of magnitude</th><th>Access</th></tr>
+  <tr><td>Registers / L1-L3 cache</td><td>1-100 ns</td><td>words</td></tr>
+  <tr><td>RAM</td><td>~100 ns, a few tens of GB</td><td>bytes</td></tr>
+  <tr><td>NVMe SSD</td><td>~20-100 µs per access, TB</td><td>pages (4-16 KiB)</td></tr>
+  <tr><td>SATA SSD / HDD</td><td>~100 µs / ~5-10 ms, tens of TB</td><td>blocks</td></tr>
+  <tr><td>Network / object store</td><td>~10-100 ms, unlimited</td><td>objects</td></tr>
+</table>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — Page, record, organization</span>
+  The <strong>page</strong> (block) is the unit of input/output: one reads and
+  writes whole pages (typically 4 to 16 KiB), never isolated bytes.
+  Records are stored in pages with <em>slots</em> (<em>slotted
+  pages</em>: a directory at the head of the page gives the address of each
+  record, allowing insertions, deletions, and variable-length records). A
+  <strong>file organization</strong> defines how pages are linked:
+  <em>heap</em> (append at the end, sequential read),
+  <em>sorted</em> (order maintained: costly insertion, binary search), or
+  <em>hashed</em> (ch. 5).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Cost of a sequential scan</span>
+  For a file of \(N\) pages and a sequential throughput \(D\) pages/s, a full
+  scan costs \(N/D\). Worked example: a 10 GB table in 8 KiB pages occupies
+  \(N = 10^{10}/8192 \approx 1.22\times 10^6\) pages;
+  on HDD at 150 MB/s: \(\approx 67\) s; on NVMe SSD at
+  3 GB/s: \(\approx 3.3\) s; in random accesses at
+  10,000 IOPS: 122 s — hence the DBMS obsession with
+  sequential access and prefetching.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.3 — External merge sort</span>
+  With \(M\) pages of buffer memory available and \(N\) pages to sort, external
+  merge sort produces sorted initial <em>runs</em> of \(M\) pages, then merges
+  them with arity \(M-1\) (one output page). The number of passes equals
+  $$p \;=\; 1 + \Big\lceil \log_{M-1} \lceil N/M \rceil \Big\rceil,$$
+  and the total I/O cost is \(2Np\) (each pass rereads and rewrites everything).
+  <div class="proof" style="margin-top:.5rem;">Pass 0 reads \(N\) pages and writes
+  \(\lceil N/M\rceil\) sorted runs: cost \(2N\). At each merge pass, at most
+  \(M-1\) runs are consumed into one run (fan-in \(M-1\) because one buffer page
+  must be kept for output): the number of runs is divided by at least \(M-1\),
+  hence \(\lceil\log_{M-1}\lceil N/M\rceil\rceil\) merges. Each merge rereads/rewrites
+  the pages involved, hence \(2N\) per pass. <span class="qed">∎</span></div>
+  <div class="ex" style="margin-top:.4rem;">
+  <span class="tag">Example 4.4 — Numbers</span>  \(N = 1000\) pages, \(M = 50\):
+  initial runs: 20; \(\log_{49}(20) \to 1\) merge pass (fan-in
+  49&nbsp;≥&nbsp;20); \(p = 2\), cost \(2\times1000\times2 = 4000\) pages
+  read+written. With \(N = 10^6\), \(M = 10^3\): 1000 runs, fan-in 999,
+  \(\lceil\log_{999}(1001)\rceil = 2\), \(p=3\), cost \(6\times10^6\) — at
+  10,000 pages/s, about ten minutes: sorting remains
+  <em>nearly linear</em> in practice thanks to the base (not the factor) of the
+  logarithm.</div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 4.5 — Buffer pool</span>
+  Between the disk and the processor, the DBMS manages a <strong>buffer
+  pool</strong>: a RAM cache of page bytes, organized into <em>frames</em> the
+  size of a page, with a <strong>page-to-frame mapping table</strong>. Every
+  read goes through it: <em>hit</em> (the page is already there, RAM access) or
+  <em>miss</em> (disk read then installation in a free frame). When no frame is
+  free, a <strong>replacement policy</strong> chooses the victim — LRU as a
+  first approximation, but real DBMSs prefer variants (LRU-K, clock with a
+  reference bit, <em>least-frequently-used</em>): a massive sequential scan must
+  not evict hot pages (hence the usage counter of scans). Writes: a modified
+  page becomes <em>dirty</em>
+  and is rewritten to disk only upon eviction — or earlier, by checkpointing
+  (ch. 7). The parameter \(M\) of the sort and join algorithms (ch. 8)
+  is precisely the share of the buffer pool allocated to the operator: the whole
+  physics of queries plays out in this cache.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Storing columns, not just rows</span>
+  Modern warehouses (Parquet, BigQuery, Snowflake, DuckDB) store tables
+  <em>by columns</em>: reading 3 columns out of 100 reads only ~3% of the
+  data, with adapted encodings (dictionary, RLE) and min/max statistics per
+  block to skip chunks. The logical model remains relational:
+  a perfect illustration of logical/physical independence — and reading
+  columns fast is producing learning matrices fast (see the
+  <em>Machine Learning</em> module, ch. 6).
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Design: dependencies and normal forms</a><a class="next" href="ch5.html"><span class="dir">Next</span> Indexes: B+ trees and hashing</a></nav>
+</main>
+</div>
+
+</body>
+</html>

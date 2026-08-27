@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — Optical flow: Lucas-Kanade — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Analysis and Computer Vision</a> › Optical flow: Lucas-Kanade</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: linear algebra, convolution, probability</a>
+<a href="ch1.html">Image formation: camera and sampling</a>
+<a href="ch2.html">Filtering and convolution</a>
+<a href="ch3.html">Edges: gradient and Canny</a>
+<a href="ch4.html">Interest points: Harris and SIFT</a>
+<a href="ch5.html">Projective geometry and homographies</a>
+<a href="ch6.html">Stereo vision and epipolar geometry</a>
+<a href="ch7.html" class="active">Optical flow: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation: k-means and graph cuts</a>
+<a href="ch9.html">CNNs for vision: detection and segmentation</a>
+<a href="ch10.html">3D point clouds: ICP and urban analysis</a>
+<a href="ch11.html">Research of the instructor: urban LiDAR at IGN</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Optical flow: Lucas-Kanade</h2>
+
+<p>The apparent motion of luminances between two images — <strong>optical
+flow</strong> — is the ingredient of tracking, video compression, and
+navigation. Lucas-Kanade (1981) remains the reference formulation, and its
+mathematics is a condensed version of the course.</p>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — Gradient constraint and the aperture problem</span>
+  Luminance conservation assumption:
+  \(I(x + u, y + v, t + \Delta t) = I(x, y, t)\). First-order Taylor
+  expansion:
+  $$I_x u + I_y v + I_t = 0 \qquad (\text{with } u = dx/dt,\; v = dy/dt,\; I_t = \partial I/\partial t),$$
+  a <em>single</em> equation for <em>two</em> unknowns \((u, v)\): the
+  line of possible flows. Locally, an aperture (small window) does not
+  suffice to determine the motion of an edge — this is the
+  <strong>aperture problem</strong>, or the illusion of the wheel turning
+  behind a slot.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 7.2 — Lucas-Kanade: least squares over a window</span>
+  Assuming the flow is <em>constant</em> in a window \(W\), each pixel
+  provides a gradient constraint; the optimal flow minimizes
+  $$J(u, v) = \sum_{(x,y)\in W} w(x,y)\,\big(I_x u + I_y v + I_t\big)^2.$$
+  Setting the gradient to zero (\(\partial J/\partial u = \partial J/\partial v = 0\))
+  yields the normal equations
+  $$\underbrace{\begin{pmatrix}\sum w\,I_x^2 &amp; \sum w\,I_xI_y\\
+  \sum w\,I_xI_y &amp; \sum w\,I_y^2\end{pmatrix}}_{=\,M,\ \text{the structure tensor!}}
+  \begin{pmatrix}u\\ v\end{pmatrix} = -\begin{pmatrix}\sum w\,I_xI_t\\ \sum w\,I_yI_t\end{pmatrix}.$$
+  <div class="proof" style="margin-top:.5rem;">Derivative with respect to \(u\):
+  \(2\sum w\,I_x(I_xu + I_yv + I_t) = 0\) → first row;
+  symmetrically for \(v\) → second row. The matrix \(M\) is
+  exactly Harris's structure tensor (Def. 4.1): Lucas-Kanade is
+  solvable precisely where Harris detects a corner — same large
+  \(\lambda_1, \lambda_2\). <span class="qed">∎</span></div>
+  Domain of validity: small motions (Taylor), locally
+  constant flow — hence the two remedies: (i) <em>iterative
+  resolution</em> by successive warping; (ii) <em>coarse-to-fine</em>
+  approach via a pyramid (Prop. 2.5): estimate large at the coarse scale,
+  refine while going down.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.3 — A 2×2 system by hand</span>
+  Window of 4 pixels, gradients and time derivative \((I_x, I_y\,;\,I_t)\):
+  (3, 1; 8), (5, 2; 10), (4, 2; 9),
+  (6, 3; 12). Sums:
+  \(M = \begin{pmatrix}9+25+16+36 &amp; 3+10+8+18\\ \cdot &amp; 1+4+4+9\end{pmatrix}
+  = \begin{pmatrix}86 &amp; 39\\ 39 &amp; 18\end{pmatrix}\), right-hand side
+  \(-\big(\sum I_xI_t, \sum I_yI_t\big) = -(182, 82)\). Let us solve:
+  \(\det M = 86\times18 - 39^2 = 1548 - 1521 = 27\) — nearly singular
+  (eigenvalues ≈ 103.7 and 0.26: nearly aligned gradients).
+  Cramer's formulas: \(u = \frac{-182\times18 + 82\times39}{27} =
+  \frac{-78}{27} \approx -2.89\), \(v = \frac{86\times(-82) + 39\times182}{27} =
+  \frac{46}{27} \approx 1.70\). The flow is computable but
+  <em>unreliable</em>: \(\lambda_2 \ll \lambda_1\) signals an edge, not a
+  corner — Example 4.2 gave the opposite diagnosis on another tensor.
+  In practice: require \(\lambda_2 &gt; \tau\) before trusting the
+  flow (and weight by the distance to the centroid to smooth).
+</div>
+
+<div class="note">
+  <span class="tag">Note — Horn-Schunck, the global version</span>
+  Instead of a window, Horn-Schunck (1981) regularizes over the whole image:
+  minimize \(\int (I_xu + I_yv + I_t)^2 + \lambda\,\big(\|\nabla u\|^2 +
+  \|\nabla v\|^2\big)\): data attachment (gradient constraint)
+  + a <em>smooth</em> flow field. The Euler-Lagrange equations are solved
+  iteratively; \(\lambda\) tunes the data/regularity trade-off — the same
+  energy structure as the graph cuts of ch. 8, and as many inverse problems
+  of the <em>Signal Processing</em> module. Modern variant:
+  learned networks supervised by these very energies.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Stereo vision and epipolar geometry</a><a class="next" href="ch8.html"><span class="dir">Next</span> Segmentation: k-means and graph cuts</a></nav>
+</main>
+</div>
+
+</body>
+</html>

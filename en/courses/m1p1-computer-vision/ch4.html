@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — Interest points: Harris and SIFT — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Analysis and Computer Vision</a> › Interest points: Harris and SIFT</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: linear algebra, convolution, probability</a>
+<a href="ch1.html">Image formation: camera and sampling</a>
+<a href="ch2.html">Filtering and convolution</a>
+<a href="ch3.html">Edges: gradient and Canny</a>
+<a href="ch4.html" class="active">Interest points: Harris and SIFT</a>
+<a href="ch5.html">Projective geometry and homographies</a>
+<a href="ch6.html">Stereo vision and epipolar geometry</a>
+<a href="ch7.html">Optical flow: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation: k-means and graph cuts</a>
+<a href="ch9.html">CNNs for vision: detection and segmentation</a>
+<a href="ch10.html">3D point clouds: ICP and urban analysis</a>
+<a href="ch11.html">Research of the instructor: urban LiDAR at IGN</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Interest points: Harris and SIFT</h2>
+
+<p>Matching two images amounts to finding points that are <em>distinctive</em>
+and <em>stable</em> there: corners, blobs, local structures. Two classics
+organize the chapter: Harris (1988) to <em>detect</em>, SIFT (2004)
+to <em>describe</em> — and the CNNs of ch. 9 are their learned heirs.</p>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — The structure tensor and the Harris criterion</span>
+  Measure the change of appearance of a window \(W\) shifted by
+  \((u, v)\):
+  $$E(u, v) = \sum_{(x,y)\in W} w(x,y)\,\big[I(x+u, y+v) - I(x, y)\big]^2.$$
+  A first-order Taylor expansion (\(I(x+u, y+v) \approx I +
+  u\,I_x + v\,I_y\)) gives the quadratic form
+  $$E(u, v) \approx \begin{pmatrix}u &amp; v\end{pmatrix}
+  M \begin{pmatrix}u\\ v\end{pmatrix},\qquad
+  M = \sum_W w \begin{pmatrix} I_x^2 &amp; I_xI_y \\ I_xI_y &amp; I_y^2\end{pmatrix},$$
+  the <strong>structure tensor</strong>. If \(\lambda_1, \lambda_2\) are
+  its eigenvalues: both small = flat area; one large and one
+  small = edge; both large = <strong>corner</strong> (varies
+  in all directions). The Harris criterion avoids the explicit
+  extraction of the eigenvalues:
+  \(R = \det M - k\,(\mathrm{tr}\,M)^2 = \lambda_1\lambda_2 -
+  k(\lambda_1+\lambda_2)^2\), with \(k \approx 0.04\) — positive = corner,
+  negative = edge.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 4.2 — Harris with numbers</span>
+  A window yields \(\sum I_x^2 = 126\), \(\sum I_xI_y = 43\),
+  \(\sum I_y^2 = 18\):
+  \(M = \begin{pmatrix}126 &amp; 43\\ 43 &amp; 18\end{pmatrix}\),
+  \(\det M = 2268 - 1849 = 419\), \(\mathrm{tr}M = 144\), hence
+  \(R = 419 - 0.04\times 144^2 = 419 - 829 = -410 &lt; 0\) → <em>edge</em>.
+  The eigenvalues \(\lambda_{1,2} = \frac{144 \pm \sqrt{144^2 -
+  4\cdot419}}{2} \approx 141\) and \(3\) confirm: one direction varies
+  47× more than the other. A corner would typically have \(M \sim
+  \begin{pmatrix}400 &amp; 10\\ 10 &amp; 380\end{pmatrix}\), \(R = 151\,900 -
+  0.04\times 625^2 \approx 137\,000 &gt; 0\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.3 — Invariances of Harris, and its flaw</span>
+  The tensor \(M\) is an average of matrices \(\nabla I\,\nabla I^\top\):
+  under a rotation \(R\) of the image, \(\nabla I \mapsto R\,\nabla I\), hence
+  \(M \mapsto RMR^\top\) and the eigenvalues — hence the corner/edge decision
+  and the response \(R\) — are <strong>rotation-invariant</strong>;
+  an affine change of illumination \(I \mapsto aI + b\) multiplies \(M\)
+  by \(a^2\) without changing the signs. Zooming, however, changes the number of
+  pixels participating in the corner: Harris is <strong>not
+  scale-invariant</strong> — precisely the problem SIFT solves.
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithm 4.4 — SIFT: detection + description</span>
+  <ol style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>scale space</strong>: convolve with Gaussians
+    \(L(x, \sigma) = G_\sigma * I\) for \(\sigma\) increasing by octaves;
+    the difference of Gaussians \(\mathrm{DoG}(x,\sigma) = L(x, k\sigma) -
+    L(x, \sigma)\) approximates the normalized Laplacian \(\sigma^2\Delta I\),
+    required for scale invariance;</li>
+    <li><strong>space-scale extrema</strong>: keypoints are the
+    local extrema of DoG in the volume \((x, y, \sigma)\) — comparison with
+    the 26 neighbors (8 in space, 9×2 in scale);</li>
+    <li><strong>localization</strong>: refinement by 2D Taylor;
+    rejection of low-contrast points and of edges via the Harris ratio
+    applied to the 2×2 Hessian matrix (\(\mathrm{tr}^2/\det &lt; r\) rejected);</li>
+    <li><strong>orientation</strong>: histogram (36 bins) of the
+    gradients of a neighborhood, weighted by a Gaussian;
+    the dominant orientation provides the canonical frame of the
+    descriptor → <strong>rotation invariance</strong>;</li>
+    <li><strong>descriptor</strong>: around the point, 4×4 cells,
+    each an orientation histogram with 8 bins → \(4\times4\times8 =
+    128\) values, normalized (thresholding at 0.2 for robustness to
+    saturations) → <strong>affine illumination invariance</strong>.</li>
+  </ol>
+  Matching is done by nearest neighbor with Lowe's <em>ratio test</em>:
+  accept if \(d_1/d_2 &lt; 0.8\) (distance to the first neighbor
+  over distance to the second): rejecting ambiguities costs less than
+  tolerating false matches.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.5 — Cost of matching</span>
+  Two images with \(n\) descriptors each: the exhaustive nearest-neighbor
+  search costs \(O(n^2)\) in 128D distance — for
+  \(n = 10^4\), \(10^8\) distances ≈ a few seconds. The kd-tree (or its
+  randomized counterpart) answers in \(O(\log n)\) <em>in low dimension</em>,
+  but the curse of dimensionality makes approximation
+  (kd-tree forests, FLANN, locally sensitive hashing) indispensable in
+  practice — the same problematic as the vector search of the
+  <em>DataBase Management System</em> module (ch. 9), 128 dimensions apart.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 4.6 — Harris and SIFT in Python (numpy + OpenCV)</span>
+<pre class="code"><code>import cv2, numpy as np
+
+img  = cv2.imread("scene.jpg", cv2.IMREAD_GRAYSCALE)
+imgf = img.astype(np.float32)
+
+# --- 1. manual Harris: structure tensor, response, thresholding
+Ix = cv2.Sobel(imgf, cv2.CV_32F, 1, 0, ksize=3)
+Iy = cv2.Sobel(imgf, cv2.CV_32F, 0, 1, ksize=3)
+A  = cv2.GaussianBlur(Ix*Ix, (5, 5), 1.5)     # weighted local sum
+B  = cv2.GaussianBlur(Ix*Iy, (5, 5), 1.5)
+C  = cv2.GaussianBlur(Iy*Iy, (5, 5), 1.5)
+R  = (A*C - B*B) - 0.04*(A + C)**2
+corners = np.argwhere(R > 0.01 * R.max())        # relative thresholding
+
+# --- 2. OpenCV versions
+ Rc = cv2.cornerHarris(imgf, 2, 3, 0.04)
+ sift = cv2.SIFT_create(nfeatures=2000)
+ kps, desc = sift.detectAndCompute(img, None)   # 128-D per keypoint
+ img2 = cv2.drawKeypoints(img, kps, None,
+                          flags=cv2.DRAW_RICH_KEYPOINTS)
+
+# --- 3. matching two views with Lowe's ratio test
+kps2, desc2 = sift.detectAndCompute(cv2.imread("scene2.jpg", 0), None)
+bf  = cv2.BFMatcher()
+mch = [m for m, n in bf.knnMatch(desc, desc2, k=2) if m.distance < 0.8*n.distance]
+print(len(mch), "matches kept out of", len(desc))
+# and for the rest of the course: Canny + quick Hough transform
+edges = cv2.Canny(img, 80, 200)
+</code></pre>
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Edges: gradient and Canny</a><a class="next" href="ch5.html"><span class="dir">Next</span> Projective geometry and homographies</a></nav>
+</main>
+</div>
+
+</body>
+</html>

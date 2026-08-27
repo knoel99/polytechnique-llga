@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — Image formation: camera and sampling — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Analysis and Computer Vision</a> › Image formation: camera and sampling</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: linear algebra, convolution, probability</a>
+<a href="ch1.html" class="active">Image formation: camera and sampling</a>
+<a href="ch2.html">Filtering and convolution</a>
+<a href="ch3.html">Edges: gradient and Canny</a>
+<a href="ch4.html">Interest points: Harris and SIFT</a>
+<a href="ch5.html">Projective geometry and homographies</a>
+<a href="ch6.html">Stereo vision and epipolar geometry</a>
+<a href="ch7.html">Optical flow: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation: k-means and graph cuts</a>
+<a href="ch9.html">CNNs for vision: detection and segmentation</a>
+<a href="ch10.html">3D point clouds: ICP and urban analysis</a>
+<a href="ch11.html">Research of the instructor: urban LiDAR at IGN</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Image formation: camera and sampling</h2>
+
+<p>A digital image is the discretization of a projection of the 3D world onto a
+plane. Understanding the <em>formation model</em> is indispensable: it is what
+connects the pixels to geometry (ch. 5-6), and what imposes the limits of
+sampling (aliasing).</p>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Pinhole model and homogeneous coordinates</span>
+  The pinhole projects a 3D point \(X = (X_1, X_2, X_3)^\top\) onto the image
+  plane \(Z = f\) along a straight line through the optical center:
+  \(x = f\,X_1/X_3\), \(y = f\,X_2/X_3\). In <strong>homogeneous
+  coordinates</strong> \(\tilde{x} = (x, y, 1)^\top \sim (f X_1, f X_2, X_3)^\top\),
+  the projection becomes <em>linear</em>:
+  $$\lambda\,\tilde{u} = K\,[\,R \mid t\,]\,\tilde{X},\qquad
+  K = \begin{pmatrix} f_x &amp; s &amp; c_x \\ 0 &amp; f_y &amp; c_y \\ 0 &amp; 0 &amp; 1\end{pmatrix},$$
+  with \(R \in SO(3)\) the orientation, \(t\) the position, \(K\) the
+  intrinsic parameters (focal length in pixels \(f_x = f/dx\), principal
+  point \((c_x, c_y)\), skew \(s \approx 0\)). The \(3\times4\) matrix
+  \(P = K[R\mid t]\) is the <strong>projection matrix</strong>; the equality is
+  up to a factor \(\lambda\) — all of projective geometry follows from this
+  scale indeterminacy.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 1.2 — Projective projection preserves alignment</span>
+  The image by a pinhole camera of a line in space is a line (never
+  a curve), and incidence is preserved.
+  <div class="proof" style="margin-top:.5rem;">A 3D line is
+  \(\{X_0 + \lambda v\}\); its images are \(P\tilde{X_0} + \lambda P\tilde{v}\),
+  that is, the vector plane of \(\mathbb{R}^3\) spanned by \(P\tilde{X_0}\)
+  and \(P\tilde{v}\) (provided they are independent); now the projective
+  points belonging to a common 2-dimensional vector plane form precisely a
+  projective line of the image plane \(\mathbb{P}^2\).
+  <span class="qed">∎</span></div>
+  Practical consequence: rectangles do not remain rectangles (except in the
+  frontal case), circles become ellipses, length ratios are not
+  preserved — but alignment is. This is what makes the epipolar geometry of
+  ch. 6 possible.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 1.3 — Numbers: field of view and focusing</span>
+  Sensor 4000×3000 pixels of 3.45&nbsp;µm (physical width
+  \(w = 4000 \times 3.45\,\text{µm} = 13.8\) mm), lens of focal length
+  \(f = 50\) mm:
+  $$\mathrm{FOV} = 2\arctan\frac{w/2}{f} = 2\arctan\frac{6.9}{50}
+  = 2 \times 7.86^\circ \approx 15.7^\circ.$$
+  The same optics on a "full frame" 36&nbsp;mm sensor would give
+  \(2\arctan(18/50) \approx 39.6^\circ\): at equal focal length, the field
+  depends on the sensor size — hence the use of <em>35&nbsp;mm-equivalent</em>
+  focal lengths.
+  In pixels, \(f_x = 0.05/3.45\times10^{-3} \approx 14\,490\) px.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.4 — Sampling, folding, aliasing</span>
+  Discretizing an image = sampling a 2D signal: the Shannon
+  theorem (see the <em>Signal Processing</em> module, ch. 4) requires a
+  step \(\leq 1/(2\nu_{max})\) in each direction. A real sensor cannot
+  satisfy Shannon perfectly: frequencies beyond the Nyquist
+  frequency (half the sampling frequency) <em>fold over</em>
+  (aliasing) — moiré on fabrics, wheels turning backwards. Sensors therefore
+  combine an optical low-pass filter (the famed "OLPF") and the binning of
+  photosites; software <em>antialiasing</em> does the same job in image
+  synthesis.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.5 — Color: Bayer mosaic and spaces</span>
+  Most sensors place behind each photosite a red,
+  green, or blue filter according to the <strong>Bayer mosaic</strong> (2 greens
+  for 1 red and 1 blue, human sensitivity to green dominating);
+  <em>demosaicing</em> interpolates the two missing components per pixel.
+  Color is then handled in adapted spaces: RGB for
+  sensors, YUV/YCbCr for compression (full-resolution luminance,
+  chrominance subsampled 4:2:0), HSV/Lab for segmentation (ch. 8:
+  separating hue from luminance stabilizes the k-means).
+</div>
+
+<div class="note">
+  <span class="tag">Note — Distortions of real lenses</span>
+  The pinhole is an idealization; real optics add a
+  radial distortion \(r \mapsto r(1 + k_1 r^2 + k_2 r^4)\) (barrel or
+  pincushion) and a tangential distortion. Calibration (checkerboard,
+  Zhang 2000) estimates \(K\) and the coefficients \(k_i\), and the image is
+  <em>rectified</em> before any geometric measurement: otherwise the
+  homographies of ch. 5 lose several pixels at the edge of the field.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Review: linear algebra, convolution, probability</a><a class="next" href="ch2.html"><span class="dir">Next</span> Filtering and convolution</a></nav>
+</main>
+</div>
+
+</body>
+</html>
