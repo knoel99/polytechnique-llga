@@ -34,10 +34,16 @@ Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste de
 ## Structure
 
 ```
-index.html          Page d'accueil (brochure cliquable)
-assets/style.css    Feuille de style commune
-courses/            Un fichier HTML par module
+index.html              Page d'accueil (brochure cliquable : tronc commun + moments de choix)
+assets/style.css        Feuille de style commune (layout tutoriel : volet sommaire + contenu)
+tools/split_modules.py  Script de découpe d'un module en pages par section (rejouable)
+courses/<module>/       Un dossier par module :
+  index.html            Accueil du module (hero + sommaire cliquable)
+  ch1.html … chN.html   Une page par section (rappels, chapitres)
+  ex.html, refs.html    Exercices et références
 ```
+
+Chaque page de section affiche un **volet sommaire à gauche** (section active surlignée, navigation directe) et le **contenu à droite**, avec pager précédent/suivant — comme un tutoriel classique.
 
 ## Sources
 
