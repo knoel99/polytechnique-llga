@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — Exercices / Labs — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › Exercices / Labs</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer des graphes au M1</a>
+<a href="ch1.html">Le problème, formalisé</a>
+<a href="ch2.html">Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</a>
+<a href="ch3.html">VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a>
+<a href="ch4.html">Normalizing flows&nbsp;: changement de variable et GraphAF</a>
+<a href="ch5.html">Diffusion discrète&nbsp;: DiGress en détail</a>
+<a href="ch6.html">Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a>
+<a href="ch7.html">Génération conditionnelle et text-to-graph</a>
+<a href="ch8.html">Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a>
+<a href="ch9.html">Travaux de l'équipe LLGA</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html" class="active">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="exercises" id="ex">
+<h3>Exercices / Labs</h3>
+<ol>
+  <li><strong>TP guidé&nbsp;: une évaluation complète «&nbsp;maison&nbsp;» (le lab du
+  module, ch. 6).</strong>
+  (a)&nbsp;Construire trois familles de référence&nbsp;: 500 graphes Erdős-Rényi
+  \(G(n, p{=}0{,}15)\), 500 SBM à deux blocs (\(p_{in} = 0{,}3\), \(p_{out} = 0{,}05\)),
+  500 Barabási-Albert (\(m = 2\)), avec \(n \sim \mathcal{U}\{20, \dots, 40\}\)&nbsp;;
+  (b)&nbsp;implémenter les features (histogrammes de degrés, coefficients de clustering,
+  comptages de 4 motifs&nbsp;: triangle, chemin de longueur 3, étoile) et le MMD à noyau
+  gaussien (déf. 6.1), estimateur non biaisé&nbsp;; (c)&nbsp;calculer les 3×3 MMD
+  familles contre familles&nbsp;; (d)&nbsp;refaire (c) avec \(n = 50\) puis \(n = 2\,000\)
+  échantillons et tracer le biais&nbsp;; (e)&nbsp;bootstrap&nbsp;: intervalles à 95&nbsp;%
+  sur chaque MMD (200 rééchantillonnages)&nbsp;; (f)&nbsp;rédiger le tableau du ch. 6 et
+  conclure&nbsp;: quelles familles le MMD-spectre sépare-t-il, lesquelles confond-il&nbsp;?
+  <pre class="code"><code># squelette du TP (networkx + numpy)
+import networkx as nx, numpy as np
+
+def features(gs):                     # gs : liste de graphes
+    return np.array([[np.mean(list(nx.degree(g))),                  # a degre moyen
+                      np.mean(list(nx.clustering(g).values())),     # b clustering
+                      sum(nx.triangles(g).values()) / g.number_of_nodes()]  # c triangles
+                     for g in gs])
+
+def mmd(X, Y, sigma=None):            # noyau gaussien, largeur mediane
+    Z = np.vstack([X, Y]); n, m = len(X), len(Y)
+    sigma = sigma or np.median(np.linalg.norm(Z[:, None] - Z[None], axis=-1))
+    K = np.exp(-np.linalg.norm(Z[:, None] - Z[None], axis=-1) ** 2 / (2 * sigma ** 2))
+    return np.sqrt(K[:n, :n].sum() / (n * (n - 1)) + K[n:, n:].sum() / (m * (m - 1))
+                   - 2 * K[:n, n:].mean())                          # diagonales retirees</code></pre>
+  <div class="proof">
+  Guidage (résultats attendus)&nbsp;: le MMD sépare nettement ER des deux autres sur les
+  degrés (distribution de Poisson contre queue lourde)&nbsp;; SBM et BA se distinguent
+  par le clustering (fort dans le SBM, faible dans le BA)&nbsp;; à features fixées, le
+  MMD décroît grossièrement en \(1/\sqrt{n}\) — comparer deux modèles à tailles
+  d'échantillon différentes est invalide (ch. 6, piège 2), le TP le <em>mesure</em>.
+  Les triangles seules ne séparent pas ER de SBM à \(p\) moyen égal&nbsp;: toujours
+  rapporter plusieurs features. Le bootstrap montre des recouvrements d'intervalles
+  entre familles proches&nbsp;: un MMD sans intervalle n'est pas une conclusion.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Masque de valence (ch. 3).</strong> Alphabet \(\{C, O, N\}\) de valences
+  \(\{4, 2, 3\}\), liaisons simples uniquement. (a)&nbsp;Écrire le décodeur
+  séquentiel masqué (état = valences restantes \(r_v\), proposition 3.3)&nbsp;;
+  (b)&nbsp;sampler 1&nbsp;000 molécules sans masque (têtes non contraintes, logits
+  \(\mathcal{N}(0,1)\)) puis avec masque, jusqu'à 12 atomes&nbsp;; (c)&nbsp;mesurer la
+  validité (toutes valences exactement nulles en fin de génération) et la comparer au
+  raisonnement de la proposition 3.3.
+  <div class="proof">
+  Solution&nbsp;: sans masque, chaque liaison tirée viole une valence avec probabilité
+  croissante au fil de la génération (les \(r_v\) ne sont plus respectés)&nbsp;; la
+  validité observée est typiquement de quelques pourcents à 12 atomes — et
+  \(1-(1-\varepsilon)^T \to 1\) explique l'effondrement (prop. 3.3). Avec masque&nbsp;:
+  validité 100&nbsp;% <em>par construction</em> (le support est restreint aux sorties
+  légales), au prix d'un léger biais si les logits sont mal calibrés — la renormalisation
+  redistribue la masse des interdits sur les légaux. Le code&nbsp;: maintenir
+  \(r_v\), interdire les liaisons \(b\) avec \(b &gt; r_u\) ou \(b &gt; r_v\), resampler
+  parmi les légales — huit lignes, l'investissement le plus rentable du module.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Le posterior absorbant, en forme fermée (ch. 5).</strong> Pour le noyau
+  <em>absorbant</em> (rester dans l'état \(k\) avec probabilité \(\alpha_t = 1 -
+  \beta_t\), être masqué sinon&nbsp;: état puits \([\textsf{MASK}]\)), démontrer&nbsp;:
+  $$q(X_{t-1} = X_0 \mid X_t = \textsf{MASK},\ X_0) = \frac{A_{t-1}\,\beta_t}{1 - A_t},
+  \qquad A_t = \prod_{s \leq t} \alpha_s,$$
+  et vérifier que la masse restante porte sur \(X_{t-1} = \textsf{MASK}\).
+  <div class="proof">
+  Solution&nbsp;: \(X_t = \textsf{MASK}\) advient avec probabilité \(1 - A_t\) (complément
+  de «&nbsp;jamais masqué jusqu'à t&nbsp;»)&nbsp;; conjointement
+  \(X_{t-1} = X_0, X_t = \textsf{MASK}\) exige «&nbsp;jamais masqué jusqu'à \(t-1\)&nbsp;
+  <em>puis</em> masqué exactement en \(t\)&nbsp;»&nbsp;: probabilité \(A_{t-1}\beta_t\).
+  Le quotient donne la formule&nbsp;; la masse restante vaut
+  \((1 - A_{t-1})/(1 - A_t)\) — les deux somment à 1 car
+  \(1 - A_t = (1 - A_{t-1}) + A_{t-1}\beta_t\). C'est le posterior de D3PM-absorbant&nbsp;:
+  quand \(X_t\) est masqué, \(X_{t-1}\) n'est <em>jamais</em> révélé — le réseau doit le
+  <em>deviner</em> (\(\hat X_0\)) puis l'échantillonner avec ces probabilités&nbsp;: la
+  machine à <em>inpainting</em> du ch. 5. <span class="qed">∎</span></div></li>
+
+  <li><strong>Flow et guidance (ch. 4).</strong> (a)&nbsp;Pour le
+  <code>CouplingStep</code> du ch. 4, montrer que le log-déterminant du jacobien vaut
+  \(\sum_i \log s_i\) et se calcule en \(\mathcal{O}(d)\)&nbsp;;
+  (b)&nbsp;dériver le pas de guidage&nbsp;: pour maximiser \(Q(G_t)\), montrer que
+  $$\nabla_{z_t} Q\big(G_t\big) = J_{f_\theta}(z_t)^\top\, \nabla_{x_t}\,
+  Q\big(\mathrm{disc}(x_t)\big),$$
+  où \(\mathrm{disc}\) est la discrétisation (argmax/échantillonnage)&nbsp;; discuter le
+  passage par la discrétisation (gradient droit / Gumbel-softmax).
+  <div class="proof">
+  Indications&nbsp;: (a)&nbsp;le jacobien est triangulaire par blocs
+  \(\begin{pmatrix} I &amp; 0 \\ \ast &amp; \mathrm{diag}(s) \end{pmatrix}\)
+  (prop. 4.2)&nbsp;: le déterminant est le produit des diagonales&nbsp;;
+  (b)&nbsp;règle de la chaîne sur \(z_t \mapsto x_t = f_\theta(z_t) \mapsto G_t\)&nbsp;;
+  la discrétisation n'étant pas différentiable, on la remplace par une relaxation
+  (softmax à température) ou on remonte le gradient du prédicteur continu&nbsp;: le pas
+  de guidage déplace \(z_t\) <em>sans</em> changer les poids — mais chaque déplacement
+  écarte la trajectoire de la loi apprise&nbsp;: trop grand, il fabrique des graphes
+  hors distribution que le prédicteur note bien mais que la chimie rejette (le
+  compromis fidélité/diversité du module Control ch. 9). <span class="qed">∎</span></div></li>
+
+  <li><strong>Le balayage CFG (ch. 7).</strong> Reprendre l'exemple 7.3 (logits
+  non conditionnés \((2{,}0\,;\ 1{,}5\,;\ 0{,}5)\), conditionnés \((3{,}0\,;\ 0{,}5\,;
+  0{,}5)\)) et tracer \(w \mapsto\) (probabilité du carbone, entropie) pour
+  \(w \in \{0, 1, 2, 3, 8\}\). Où est le «&nbsp;coude&nbsp;»&nbsp;?
+  <div class="proof">
+  Solution&nbsp;: logits guidés \(u + w(c - u) = (2 + w\,;\ 1{,}5 - w\,;\ 0{,}5)\).
+  \(w = 0\)&nbsp;: probs \((0{,}55\,;\ 0{,}33\,;\ 0{,}12)\), \(H \approx 1{,}15\) nat&nbsp;;
+  \(w = 1\)&nbsp;: \((0{,}86\,;\ 0{,}07\,;\ 0{,}07)\), \(H \approx 0{,}50\)&nbsp;;
+  \(w = 2\)&nbsp;: \((0{,}96\,;\ 0{,}01\,;\ 0{,}03)\), \(H \approx 0{,}19\)&nbsp;;
+  \(w = 3\)&nbsp;: \((0{,}987\,;\ 0{,}002\,;\ 0{,}011)\), \(H \approx 0{,}08\)&nbsp;;
+  \(w = 8\)&nbsp;: carbone à 99{,}99&nbsp;%, \(H \approx 0\). La fidélité (probabilité du
+  carbone) est déjà quasi maximale à \(w = 2\) tandis que l'entropie a été divisée par
+  six&nbsp;: le coude est à \(w \approx 2\) — au-delà, on paie la diversité sans gagner
+  la cible. La courbe exacte du théorème 9.2 du module Control, sur un seul pas.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Graphon en escalier et densité de triangles (ch. 1 et 6).</strong> Soit
+  \(W\) constante par blocs sur \([0,1]^2\) avec deux blocs&nbsp;: densité \(p\) dans le
+  bloc 1 (\(x, y \leq \tfrac{1}{2}\)), \(q\) dans le bloc 2, \(r\) entre blocs.
+  (a)&nbsp;Montrer
+  $$t(K_3, W) = \tfrac{1}{8}\big(p^3 + q^3 + 3 p r^2 + 3 q r^2\big)$$
+  (intégrale sur les 8 combinaisons de blocs)&nbsp;; (b)&nbsp;vérifier numériquement
+  avec \(p = 0{,}9\), \(q = 0{,}6\), \(r = 0{,}05\) et par échantillonnage d'un graphe
+  de \(n = 100\) nœuds (50/50) — pourquoi les deux coïncident-ils à
+  \(\mathcal{O}(1/\sqrt{n})\) près&nbsp;?
+  <div class="proof">
+  Solution&nbsp;: chaque triplet \((a, b, c)\) de blocs contribue
+  \(\tfrac{1}{8} W_{ab} W_{bc} W_{ac}\)&nbsp;; \((1,1,1)\) donne \(p^3\), \((2,2,2)\)
+  donne \(q^3\), les trois permutations de \((1,1,2)\) donnent \(p r^2\) chacune, celles
+  de \((2,2,1)\) donnent \(q r^2\). Numériquement
+  \(t = (0{,}729 + 0{,}216 + 0{,}0068 + 0{,}0045)/8 \approx 0{,}1195\). L'échantillonnage
+  réalise des Bernoulli de paramètres \(W(x_i, x_j)\) iid conditionnellement aux
+  latents&nbsp;: la densité de triangles empirique est une moyenne de variables bornées
+  — concentration (Hoeffding) autour de \(t(K_3, W)\) en \(\mathcal{O}(1/\sqrt{n})\)&nbsp;:
+  c'est le lemme de comptage du théorème 1.4, vérifié les mains dans le cambouis.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>FCD en dimension 2 (ch. 6).</strong> Deux familles d'embeddings gaussiens
+  de \(\mathbb{R}^2\) diagonaux&nbsp;: \(\mu_1 = (0, 0)\),
+  \(\Sigma_1 = \mathrm{diag}(1, 4)\)&nbsp;; \(\mu_2 = (1, 0)\),
+  \(\Sigma_2 = \mathrm{diag}(4, 9)\). Calculer la distance de Fréchet&nbsp;; que
+  devient-elle si les deux familles ont même moyenne&nbsp;?
+  <div class="proof">
+  Solution&nbsp;: pour des covariances diagonales,
+  \((\Sigma_1 \Sigma_2)^{1/2}\) est diagonale de racines des produits&nbsp;:
+  \(\sqrt{1 \times 4} = 2\), \(\sqrt{4 \times 9} = 6\). D'où
+  \(\|\mu_1 - \mu_2\|^2 = 1\) et
+  \(\mathrm{tr}(\Sigma_1 + \Sigma_2 - 2(\Sigma_1\Sigma_2)^{1/2}) = (1 + 4 + 4 + 9) -
+  2(2 + 6) = 2\)&nbsp;: FCD \(= 3\). À moyennes égales, seule la trace subsiste (ici
+  2)&nbsp;: la FCD sépare moyennes <em>et</em> covariances — pourquoi elle détecte à la
+  fois un décalage de propriétés moyennes (logP…) et un appauvrissement de la diversité
+  (variances réduites), les deux échecs types des génératrices.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Ouvert&nbsp;: text-to-graph et features cibles (ch. 7, 9).</strong>
+  (a)&nbsp;Demander à un LLM de produire du <em>code</em> NetworkX générant 500 graphes
+  avec un cahier des charges statistique (degré moyen 4, clustering 0{,}3, n entre 20
+  et 40) — la voie «&nbsp;Demystifying&nbsp;» du ch. 7&nbsp;; (b)&nbsp;évaluer avec le MMD
+  du TP 1 contre une famille SBM calibrée aux mêmes features&nbsp;; (c)&nbsp;critiquer&nbsp;:
+  le LLM a-t-il <em>optimisé</em> les features (en les lisant dans le prompt) ou
+  <em>généré</em> une loi (propriétés distributionnelles non demandées)&nbsp;? Comparer à
+  la démarche NGG (conditionnement par features, ch. 9)&nbsp;: quelles garanties
+  supplémentaires donne le modèle entraîné&nbsp;? (Question de synthèse — soutenance.)
+  <div class="proof">
+  Indications&nbsp;: mesurer aussi des features <em>non demandées</em> (spectre,
+  diamètre, motifs)&nbsp;: la différence LLM/SBM y est la preuve que le LLM satisfait la
+  lettre du cahier des charges sans en capturer l'esprit distributionnel (ou
+  l'inverse)&nbsp;; NGG, lui, apprend la loi <em>conditionnelle aux features</em> sur
+  données réelles — les corrélations non spécifiées viennent des données, pas du prompt.
+  C'est la frontière exacte du problème ouvert 10.4.
+  <span class="qed">∎</span></div></li>
+</ol>
+</section>
+<nav class="pager"><a href="ch10.html"><span class="dir">← Précédent</span> Problèmes ouverts</a><a class="next" href="refs.html"><span class="dir">Suivant</span> Références</a></nav>
+</main>
+</div>
+
+</body>
+</html>

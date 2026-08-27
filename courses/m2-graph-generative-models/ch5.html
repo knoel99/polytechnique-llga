@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — Diffusion discrète&nbsp;: DiGress en détail — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › Diffusion discrète&nbsp;: DiGress en détail</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer des graphes au M1</a>
+<a href="ch1.html">Le problème, formalisé</a>
+<a href="ch2.html">Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</a>
+<a href="ch3.html">VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a>
+<a href="ch4.html">Normalizing flows&nbsp;: changement de variable et GraphAF</a>
+<a href="ch5.html" class="active">Diffusion discrète&nbsp;: DiGress en détail</a>
+<a href="ch6.html">Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a>
+<a href="ch7.html">Génération conditionnelle et text-to-graph</a>
+<a href="ch8.html">Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a>
+<a href="ch9.html">Travaux de l'équipe LLGA</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Diffusion discrète&nbsp;: DiGress en détail</h2>
+
+<p>La diffusion continue (module Multimodal GenAI ch. 3) bruite par gaussiennes — sans objet
+pour des types d'atomes catégoriels. DiGress (Vignac et al., ICLR 2023) transpose la machinerie
+au <em>categorical</em>, via le cadre D3PM (Austin et al., 2021)&nbsp;: bruitage = chaînes de
+Markov sur les catégories, débruitage = posterior bayésien en forme fermée. Objectif de ce
+chapitre&nbsp;: maîtriser <em>toutes</em> les équations.</p>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — Processus avant par matrices de transition</span>
+  On représente un type \(x\) (atome parmi \(K\)) en one-hot \(X \in \{0,1\}^K\). Le bruitage
+  est une chaîne de Markov <em>indépendante par nœud et par arête</em>&nbsp;:
+  $$q(X_t \mid X_{t-1}) = \mathrm{Cat}\big(X_t;\ Q_t X_{t-1}\big),$$
+  où \(Q_t \in [0,1]^{K \times K}\) est stochastique (lignes sommant à 1)&nbsp;: la ligne
+  \(k\) est la loi du nouveau type sachant l'ancien \(k\). Les cas usuels&nbsp;:
+  <strong>uniforme</strong> \(Q_t = (1 - \beta_t) I + \beta_t \frac{1}{K}\mathbf{1}\mathbf{1}^\top\)
+  (avec probabilité \(\beta_t\), oublier et re-tirer uniformément)&nbsp;; <strong>absorbant</strong>
+  (vers un état masque <code>[MASK]</code> — l'analogue du MLM de BERT, cf. module LLMs M2
+  ch. 3)&nbsp;; <strong>discrétisée gaussienne</strong> (transiter vers les types voisins).
+  La composition est exacte&nbsp;: \(q(X_t \mid X_s) = \mathrm{Cat}(X_t\,;\ \bar Q_s^t X_s)\)
+  avec \(\bar Q_s^t = Q_{s+1} \dots Q_t\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.2 — Marginale stationnaire (démontrée dans le cas uniforme)</span>
+  Pour le noyau uniforme ci-dessus, \(q(X_t \mid X_0) = \mathrm{Cat}\big((1-\bar\beta_t) X_0 +
+  \bar\beta_t\, \mathbf{u}\big)\) avec \(\mathbf{u}\) la loi uniforme et
+  \(\bar\beta_t = 1 - \prod_{s \leq t}(1 - \beta_s)\)&nbsp;: à \(t = T\) grand, la loi est
+  (presque) l'uniforme — indépendant de \(X_0\), condition d'un bruitage «&nbsp;total&nbsp;».
+  <div class="proof">
+  Par récurrence&nbsp;: notons \(p_t = q(X_t \mid X_0)\) (vecteur ligne)&nbsp;;
+  \(p_t^\top = Q_t\, p_{t-1}^\top = \big[(1-\beta_t) I + \frac{\beta_t}{K}\mathbf{1}\mathbf{1}^\top\big] p_{t-1}^\top
+  = (1-\beta_t)\,p_{t-1}^\top + \beta_t\, \mathbf{u}^\top\) car
+  \(\mathbf{1}^\top p_{t-1}^\top = 1\) (loi de masse)&nbsp;; en déroulant,
+  \(p_t^\top = \big(\prod_s (1-\beta_s)\big) X_0^\top + \big(1 - \prod_s(1-\beta_s)\big)\mathbf{u}^\top\).
+  À \(t = T\), le poids de \(X_0\) est \(\prod_s (1-\beta_s) \approx 0\) (calendrier
+  \(\beta_s \to 1\))&nbsp;: la loi marginale <em>du dataset</em> est aussi accessible — on peut
+  faire converger vers la marginale empirique \(\mathbf{m} = \frac{1}{N}\sum_i X_0^{(i)}\)
+  plutôt que l'uniforme, en remplaçant \(\mathbf{u}\) par \(\mathbf{m}\)&nbsp;: DiGress
+  utilise cette option (les arêtes «&nbsp;pas de liaison&nbsp;» dominent, les refléter dans
+  la loi finale aide le débruitage). <span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.3 — Posterior \(q(X_{t-1} \mid X_t, X_0)\) en forme fermée (le cœur de DiGress)</span>
+  $$q(X_{t-1} = j \mid X_t = i,\ X_0 = k) =
+  \frac{(Q_{t-1})_{k j}\,(\bar Q_{t})_{j i}}
+  {(\bar Q_{t-1})_{k i}},$$
+  toutes les quantités étant des lignes/colonnes des matrices de transition — calcul direct,
+  aucun réseau n'intervient&nbsp;; le réseau ne sert qu'à estimer \(\hat X_0\).
+  <div class="proof">
+  Bayes sur la chaîne&nbsp;: \(q(X_{t-1} \mid X_t, X_0) \propto q(X_t \mid X_{t-1})\,
+  q(X_{t-1} \mid X_0)\) (Markov&nbsp;: \(X_t \perp X_0 \mid X_{t-1}\)). En one-hot,
+  \(q(X_t = i \mid X_{t-1} = j) = (Q_t)_{j i}\) et \(q(X_{t-1} = j \mid X_0 = k) =
+  (\bar Q_{t-1})_{k j}\)&nbsp;; le dénominateur est la marginale \(q(X_t = i \mid X_0 = k) =
+  \sum_j (Q_t)_{j i} (\bar Q_{t-1})_{k j} = (\bar Q_t)_{k i}\) (produit matriciel — c'est
+  exactement la composition de la définition 5.1). <span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.4 — DiGress&nbsp;: architecture, pertes et perturbations de topologie</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Réseau débruiteur</strong>&nbsp;: un GNN hybride (MPNN + couches d'attention
+    globale, type graph transformer — cf. module Advanced GNN ch. 4) prédit
+    \(\hat X_0, \hat E_0 = \mathrm{softmax}_K\big(\mathrm{GNN}(X_t, E_t)\big)\)&nbsp;;
+    l'entraînement maximise la vraisemblance des types <em>propres</em> aux pas \(t\) tirés&nbsp;:
+    $$\mathcal{L} = \mathbb{E}_{t, G_0}\;\mathbb{E}_{q(X_t, E_t \mid X_0, E_0)}
+    \big[-\log p_\theta(\hat X_0 = X_0) - \log p_\theta(\hat E_0 = E_0)\big]\,;$$</li>
+    <li><strong>Pertes auxiliaires chimiques</strong>&nbsp;: pénalités sur les features
+    dérivées — violations de valence, longueurs de liaisons, angles&nbsp;: pondérées par des
+    \(\lambda\)&nbsp;; elles ne changent pas la vraisemblance mais orientent le débruitage
+    vers les régions chimiquement plausibles (même leçon que NeVAE ch. 3, transposée)&nbsp;;</li>
+    <li><strong>Topologie bruitée</strong>&nbsp;: les arêtes <em>apparaissent/disparaissent</em>
+    aussi&nbsp;: à chaque pas, une fraction d'arêtes est re-tirée (ajout/retrait) autour de la
+    diagonale de densité — sans cela, le nombre d'arêtes serait figé par le conditionnement&nbsp;;
+    l'échangeabilité est <em>exacte</em>&nbsp;: aucun ordre de nœuds n'existe dans le
+    processus (contrairement à GraphRNN)&nbsp;;</li>
+    <li><strong>Échantillonnage</strong>&nbsp;: de \((X_T, E_T)\) (loi marginale), itérer
+    \(\hat X_0 \to q(X_{t-1} \mid X_t, \hat X_0)\) (théorème 5.3)&nbsp;; coût&nbsp;: \(T\)
+    passes GNN (typiquement \(T\) réduit par DDIM discret), chacune \(\mathcal{O}(n^2)\) —
+    parallèle sur tous les nœuds&nbsp;: le contraste avec les \(\Theta(n^2)\) pas
+    <em>séquentiels</em> de GraphRNN&nbsp;;</li>
+    <li><strong>Guidance</strong>&nbsp;: conditionnement par classifieur-free (rappel du module
+    Multimodal GenAI ch. 4)&nbsp;: DiGress entraîne le réseau avec un descripteur conditionnel
+    \(c\) parfois masqué&nbsp;; à l'échantillonnage,
+    \(\hat X_0^{cfg} \propto \hat X_0^{uncond}\cdot\big(\hat X_0^{cond}/\hat X_0^{uncond}\big)^{w}\)
+    — les arcs-séquences «&nbsp;guidés&nbsp;» suivent la propriété cible (p.&nbsp;ex.
+    \(QED\), pénalité logP) au prix mesuré de diversité (le compromis du ch. 6 du module
+    Control in Generative AI)&nbsp;;</li>
+    <li><strong>Inpainting</strong>&nbsp;: figer un squelette (types et arêtes connus),
+    bruiter le reste, générer&nbsp;: le posterior 5.3 se contraint trivialement (les
+    positions figées ne se débruitent pas) — la génération conditionnelle par graphe
+    partiel sans ré-entraînement.</li>
+  </ol>
+</div>
+
+<div class="note">
+  <span class="tag">Cousins et descendances</span>
+  <strong>EDP-GNN</strong> (Niu et al., 2020)&nbsp;: score matching <em>continu</em> sur
+  l'adjacence permutée (avec annealing de permutations)&nbsp;; <strong>GDSS</strong> (Jo et al.,
+  ICML 2022)&nbsp;: système d'EDS couplées nœuds/arêtes, résolu comme diffusion continue
+  conjointe&nbsp;; <strong>EDM/EDT</strong> (3D)&nbsp;: positions équivariantes en plus des
+  types — le point d'entrée géométrique (cf. module Geometric Deep Learning M2 pour
+  l'équivariance)&nbsp;; <strong>NGG</strong> (ch. 9)&nbsp;: la recette déplacée dans un
+  <em>espace latent</em> de features de graphe. La famille diffusion domine l'état de l'art
+  moléculaire 2023-2026 sur le compromis qualité/échangeabilité — les autorégressifs gardent
+  la vraisemblance exacte, les flows le guidance par gradient&nbsp;: le ch. 6 montre comment
+  les comparer loyalement.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Précédent</span> Normalizing flows&nbsp;: changement de variable et GraphAF</a><a class="next" href="ch6.html"><span class="dir">Suivant</span> Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a></nav>
+</main>
+</div>
+
+</body>
+</html>

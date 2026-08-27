@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer des graphes au M1</a>
+<a href="ch1.html">Le problème, formalisé</a>
+<a href="ch2.html">Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</a>
+<a href="ch3.html" class="active">VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a>
+<a href="ch4.html">Normalizing flows&nbsp;: changement de variable et GraphAF</a>
+<a href="ch5.html">Diffusion discrète&nbsp;: DiGress en détail</a>
+<a href="ch6.html">Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a>
+<a href="ch7.html">Génération conditionnelle et text-to-graph</a>
+<a href="ch8.html">Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a>
+<a href="ch9.html">Travaux de l'équipe LLGA</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</h2>
+
+<h3>3.1 Le VAE de graphes&nbsp;: ELBO et décodeur en un bloc</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 3.1 — GraphVAE (Simonovsky &amp; Komodakis, 2018) et le problème du matching</span>
+  Encodeur GNN \(q_\phi(z \mid G) = \mathcal{N}(\mu_\phi(G), \mathrm{diag}(\sigma^2_\phi(G)))\),
+  décodeur <em>one-shot</em>&nbsp;: \(p_\theta(G \mid z) = p(n \mid z) \cdot
+  p_\theta(\hat A, \hat X \mid z)\) avec adjacence continue \(\hat A \in [0,1]^{n\times n}\)
+  (sigmoïdes indépendantes) et features \(\hat X\). La vraisemblance s'écrit contre la donnée
+  via une <strong>matrice de correspondance</strong> (matching hongrois, algorithme
+  \(\mathcal{O}(n^3)\))&nbsp;: le décodeur n'émet pas dans un ordre canonique, il faut apparier
+  ses nœuds à ceux de \(G\) — le prix du décodage en bloc. L'ELBO&nbsp;:
+  $$\log p_\theta(G) \geq \mathbb{E}_{q_\phi(z \mid G)}[\log p_\theta(G \mid z)]
+  - \mathrm{KL}\big(q_\phi(z\mid G)\,\|\,\mathcal{N}(0, I)\big),$$
+  prouvé au M1 (module Multimodal GenAI ch. 1)&nbsp;; ici le terme de reconstruction n'est pas
+  une simple somme de Bernoulli à cause du matching — il est <em>borné inférieurement</em> par
+  l'appariement optimal (somme des log-probabilités sur les couples retenus), ce qui conserve
+  la validité de l'ELBO.
+</div>
+
+<h3>3.2 NeVAE en détail&nbsp;: la valence comme architecte</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 3.2 — NeVAE (Samanta et al., AAAI 2019)&nbsp;: VAE granulaire à décodage contraint</span>
+  Quatre ingrédients, à connaître précisément&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Encodeur parcimonieux</strong>&nbsp;: un embedding par atome
+    \(z_i \in \mathbb{R}^d\), messages MPNN entre atomes <em>voisins</em> seulement —
+    \(\mathcal{O}(n + m)\) en mémoire au lieu de \(\mathcal{O}(n^2)\)&nbsp;: le graphe
+    moléculaire est creux, l'exploiter divise la mémoire par \(\Theta(n)\)&nbsp;;
+    la loi a posteriori est un produit de gaussiennes locales
+    \(q(z_i \mid G) = \mathcal{N}(\mu_i, \sigma_i^2)\)&nbsp;;</li>
+    <li><strong>Valence restante</strong> comme état&nbsp;: on note
+    \(r_v^{(t)} \in \{0, \dots, 4\}\) la valence <em>disponible</em> de l'atome \(v\) à l'étape
+    \(t\) (4 pour C, 2 pour O, 1 pour H…). Chaque tête de décodage est <em>conditionnée</em> à
+    cet état&nbsp;:
+    $$p\big(\text{liaison }(u, v, b)\big) = \mathrm{softmax}\big(f\,[\,z_u, z_v, r_u, r_v\,]\big),$$
+    où le masque interdit tout \(b\) avec \(b &gt; r_u\) ou \(b &gt; r_v\) — un carbone saturé
+    (r = 0) ne peut <em>plus</em> recevoir de liaison, par construction&nbsp;;</li>
+    <li><strong>Aromaticité</strong>&nbsp;: les cycles aromatiques ne sont pas des liaisons
+    simples/doubles alternées mais un type dédié&nbsp;; des têtes spécifiques tirent l'appartenance
+    aux cycles — sinon le modèle sous-estime massivement les noyaux benzéniques&nbsp;;</li>
+    <li><strong>Correction de bruit</strong>&nbsp;: pendant l'entraînement, si une liaison tirée
+    viole la valence, elle est rééchantillonnée parmi les légales <em>avant</em> le calcul de la
+    perte — la pénalité des interdits est adoucie et le gradient ne casse pas&nbsp;; résultat
+    mesuré&nbsp;: validité chimique &gt;&nbsp;90&nbsp;% <em>sans</em> sanitization RDKit, contre
+    quelques pourcents pour GraphVAE non contraint.</li>
+  </ol>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.3 — Pourquoi le masque de valence est-il une bonne idée statistique&nbsp;?</span>
+  Masquer les sorties interdites revient à remplacer \(p_\theta\) par sa <em>renormalisation
+  sur le sous-ensemble légal</em> \(\mathcal{L}\)&nbsp;:
+  $$\tilde p_\theta(y \mid x) = \frac{p_\theta(y \mid x)\,\mathbf{1}[y \in \mathcal{L}]}
+  {\sum_{y' \in \mathcal{L}} p_\theta(y' \mid x)}.$$
+  <div class="proof">
+  Deux effets&nbsp;. (i)&nbsp;<em>Correction de support</em>&nbsp;: la masse interdite (typiquement
+  \(\varepsilon\) par pas, mais \(1 - (1-\varepsilon)^T \to 1\) sur \(T\) pas) est redistribuée&nbsp;;
+  le support de \(\tilde p\) est inclus dans les molécules valides <em>par construction</em>, ce
+  qu'aucun post-traitement ne garantit (le post-traitement <em>répare</em>, il ne garantit pas
+  que la loi réparée soit proche de la loi cible). (ii)&nbsp;<em>Biais</em>&nbsp;: si le modèle
+  estime bien les <em>ratios</em> des options légales, \(\tilde p_\theta \approx p_\star(\cdot
+  \mid \mathcal{L})\) — or les datasets moléculaires sont (presque) entièrement dans
+  \(\mathcal{L}\), donc \(p_\star(\cdot \mid \mathcal{L}) \approx p_\star\)&nbsp;: le masque est
+  quasi gratuit en biais et massif en gain de validité. La même analyse vaut pour tous les
+  masques de décodage du module Control in Generative AI (ch. 3). <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">De GraphVAE à NeVAE&nbsp;: la leçon générale</span>
+  Injecter la connaissance du domaine <em>dans l'architecture</em> (valence, aromaticité) bat le
+  post-traitement&nbsp;; cette leçon se répétera&nbsp;: pertes auxiliaires de DiGress (ch. 5),
+  fragments chimiquement valides des junction trees (ch. 2), contraintes de valence du module
+  Control (ch. 8). Contrepartie&nbsp;: le modèle devient spécifique à un domaine (chimie
+  organique) — pour des graphes généraux (réseaux sociaux), l'analogue «&nbsp;contrainte
+  dure&nbsp;» n'existe pas, et c'est précisément l'un des problèmes ouverts du ch. 10.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 3.4 — Décodeur NeVAE pas à pas (à la main)</span>
+  Préfixe&nbsp;: C—C—O (valences restantes C: 3, C: 2, O: 1). Étape suivante&nbsp;: choisir le
+  prochain atome et sa liaison. Têtes&nbsp;: \(p(\text{atome}) = (\text{C}: 0{,}6,\ \text{O}: 0{,}3,\
+  \text{N}: 0{,}1)\)&nbsp;; supposons C tiré, accroché à l'O (seul \(r_v \neq 0\) exploitable
+  avec probabilité élevée)&nbsp;; liaison masquée à \(\{0, 1\}\) (O a \(r=1\))&nbsp;; après
+  fixation C—O, l'O a \(r = 0\) — il est <em>clos</em> pour toujours. À écrire en tableau pour
+  4-5 étapes&nbsp;: chaque ligne = tirage, masque appliqué, nouveaux \(r_v\)&nbsp;; l'exercice 2
+  le programme.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Précédent</span> Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</a><a class="next" href="ch4.html"><span class="dir">Suivant</span> Normalizing flows&nbsp;: changement de variable et GraphAF</a></nav>
+</main>
+</div>
+
+</body>
+</html>

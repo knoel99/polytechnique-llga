@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — Travaux de l'équipe LLGA — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › Travaux de l'équipe LLGA</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer des graphes au M1</a>
+<a href="ch1.html">Le problème, formalisé</a>
+<a href="ch2.html">Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</a>
+<a href="ch3.html">VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a>
+<a href="ch4.html">Normalizing flows&nbsp;: changement de variable et GraphAF</a>
+<a href="ch5.html">Diffusion discrète&nbsp;: DiGress en détail</a>
+<a href="ch6.html">Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a>
+<a href="ch7.html">Génération conditionnelle et text-to-graph</a>
+<a href="ch8.html">Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a>
+<a href="ch9.html" class="active">Travaux de l'équipe LLGA</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Travaux de l'équipe LLGA</h2>
+
+<p>Le master LLGA est porté par le laboratoire <strong>DaSciM</strong> (Data Science and
+Mining, LIX, CNRS — École Polytechnique&nbsp;: M.&nbsp;Vazirgiannis, J.&nbsp;Lutzeyer,
+G.&nbsp;Nikolentzos et leurs doctorants), laboratoire d'accueil des stages et thèses. Ce
+chapitre présente quatre de ses travaux, choisis parce qu'ils touchent
+<em>directement</em> les objets de ce module&nbsp;: l'encodeur des génératrices (PathNN),
+la question de l'ordre (GOAT), une génératrice à diffusion latente conditionnée par
+features (NGG) et la frontière LLM × graphes (pseudo-code prompting). Les autres axes du
+laboratoire sont couverts par les modules Graph ML (ch. 10) et Advanced GNN (ch. 8)&nbsp;;
+ici, chaque article se lit comme le <em>prolongement d'un chapitre</em>.</p>
+
+<div class="thm">
+  <span class="tag">Travail 9.1 — PathNN&nbsp;: agréger des chemins, pas des voisins (Michel, Nikolentzos, Lutzeyer &amp; Vazirgiannis, ICML 2023)</span>
+  Le message passing standard (ch. 0) agrège les <em>voisins immédiats</em>&nbsp;; PathNN
+  agrège des <strong>chemins</strong> partant du nœud&nbsp;:
+  $$h_v^{(\ell)} = \mathrm{AGG}\Big(\big\{\, \mathrm{LSTM}\big(h_v^{(0)}, h_{u_1}^{(0)},
+  \dots, h_{u_\ell}^{(0)}\big)\ :\ (v, u_1, \dots, u_\ell) \in \mathcal{P}_v^{(\ell)}
+  \,\big\}\Big),$$
+  où \(\mathcal{P}_v^{(\ell)}\) est un ensemble de chemins de longueur \(\ell\) — trois
+  variantes&nbsp;: plus courts chemins (vers toutes destinations), marches aléatoires,
+  chemins simples échantillonnés. Deux raisons de s'y intéresser ici&nbsp;:
+  (i)&nbsp;<em>expressivité</em>&nbsp;: les chemins de longueur \(\ell\) capturent des
+  dépendances multi-sauts que \(\ell\) couches de MPNN mélangent irrémédiablement —
+  strictement au-dessus de 1-WL sur des paires choisies (cf. module Advanced GNN
+  ch. 1-2)&nbsp;; comme le nombre de chemins simples croît exponentiellement,
+  l'échantillonnage de \(\mathcal{P}_v\) borne le coût&nbsp;: un compromis
+  expressivité/coût réglé <em>dans l'encodeur</em>&nbsp;;
+  (ii)&nbsp;<em>rôle dans ce module</em>&nbsp;: PathNN est un encodeur — le candidat
+  naturel pour le \(q_\phi(z \mid G)\) des VAE (ch. 3) et le squelette du NGG
+  ci-dessous&nbsp;; remplacer le MPNN par un encodeur plus expressif est le levier
+  d'amélioration le plus simple des génératrices à latent.
+</div>
+
+<div class="thm">
+  <span class="tag">Travail 9.2 — GOAT&nbsp;: réhabiliter l'ordre des voisins (Chatzianastasis, Lutzeyer, Dasoulas &amp; Vazirgiannis, AAAI 2023)</span>
+  Tout le module a croisé l'ordre&nbsp;: les autorégressifs lui <em>imposent</em> un ordre
+  canonique (BFS, ch. 2), le décodeur one-shot doit <em>apparier</em> ses nœuds (matching
+  hongrois, ch. 3). GOAT attaque la racine&nbsp;: les agrégateurs usuels (somme, moyenne,
+  max, attention) sont invariants — ils jettent <em>toute</em> information d'ordre entre
+  voisins, alors que cet ordre porte du signal (synergies, redondances entre voisins). La
+  couche GOAT est une attention <strong>permutation-sensitive</strong>&nbsp;: chaque nœud
+  apprend un <em>ordre local</em> de son voisinage (scores de position) et encode les
+  voisins <em>dans cet ordre appris</em> — l'invariance globale est préservée (l'ordre est
+  une fonction du graphe, pas d'une numérotation), la sensibilité locale est restaurée.
+  Résultats&nbsp;: prédiction de métriques centrales (betweenness…) où les GNN invariants
+  peinent. La lecture «&nbsp;génération&nbsp;»&nbsp;: un encodage qui distingue des
+  voisinages que 1-WL confond donne au latent <em>plus à dire</em> — la réciproque du
+  problème du matching du ch. 3&nbsp;: mieux encoder l'ordre, c'est mieux le retrouver au
+  décodage.
+</div>
+
+<div class="thm">
+  <span class="tag">Travail 9.3 — NGG&nbsp;: diffusion latente conditionnée par features de graphe (Evdaimon, Nikolentzos, Xypolopoulos, Kammoun, …, Vazirgiannis, 2024)</span>
+  <em>Neural Graph Generator</em> applique aux graphes la recette <strong>latent
+  diffusion</strong> (rappel&nbsp;: module Multimodal GenAI ch. 3-4)&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Encodeur</strong>&nbsp;: un GNN comprime \(G \mapsto h_G\) (latent)&nbsp;;</li>
+    <li><strong>Diffusion latente conditionnée</strong>&nbsp;: un débruiteur apprend à
+    débruiter \(h_G\) <em>sachant un vecteur de features cibles</em> \(c\) — spectre du
+    laplacien (les premières valeurs propres), statistiques de degrés, coefficient de
+    clustering… descripteurs <em>globaux, interprétables, mesurables</em>&nbsp;;</li>
+    <li><strong>Décodeur</strong>&nbsp;: du latent débruité vers l'adjacence.
+    Échantillonnage&nbsp;: choisir \(c\) — le «&nbsp;cahier des charges&nbsp;»
+    statistique — puis générer.</li>
+  </ol>
+  Positionnement par rapport aux chapitres&nbsp;: DiGress (ch. 5) débruite <em>l'objet
+  complet</em> (types, arêtes)&nbsp;; NGG débruite <em>une représentation</em> —
+  l'échangeabilité est celle de l'encodeur, le coût par pas bien moindre, et le
+  conditionnement est «&nbsp;macro&nbsp;» (features globales) là où le CFG moléculaire du
+  ch. 7 est «&nbsp;micro&nbsp;» (propriété d'une molécule). L'évaluation est celle du
+  ch. 6&nbsp;: MMD sur degrés/clustering/orbits entre générés et familles cibles (SBM,
+  réseaux de citation…). C'est aussi la brique «&nbsp;réseaux synthétiques&nbsp;» du
+  ch. 8&nbsp;: spécifier un spectre et une distribution de degrés, obtenir des graphes
+  entiers.
+</div>
+
+<div class="thm">
+  <span class="tag">Travail 9.4 — Pseudo-code prompting&nbsp;: raisonner sur les graphes par programme (Skianis, Nikolentzos &amp; Vazirgiannis, 2024)</span>
+  Une série de problèmes de graphes (connectivité, plus court chemin, existence de cycles,
+  flot maximal, arbre couvrant…) est soumise à des LLMs&nbsp;: la même instruction
+  formulée en <strong>pseudo-code</strong> (spécification algorithmique&nbsp;: boucles,
+  conditions, invariants) bat systématiquement sa formulation en langue naturelle — sur
+  les deux axes&nbsp;: comprendre (exécuter l'algorithme décrit) et produire (écrire
+  l'algorithme pour le problème posé). La lecture pour ce module&nbsp;:
+  (i)&nbsp;c'est la confirmation expérimentale de la voie 2 du ch. 7 («&nbsp;l'LLM écrit
+  le générateur&nbsp;»)&nbsp;: le <em>programme</em> est la représentation de graphe la
+  plus fiable pour un LLM — non ambiguë, vérifiable, exécutable&nbsp;;
+  (ii)&nbsp;le pont naturel avec les agents à outils (ch. 7, ChemCrow)&nbsp;: décrire la
+  tâche en pseudo-code puis la faire vérifier par un solveur (NetworkX) — la boucle
+  proposition/vérification du module Control (ch. 10), instanciée aux graphes.
+</div>
+
+<table class="tbl">
+  <tr><th>Travail</th><th>Question</th><th>Idée centrale</th><th>Chapitres liés</th></tr>
+  <tr><td>PathNN (ICML 2023)</td><td>que lire sur un graphe&nbsp;?</td><td>agréger des chemins (LSTM) au lieu de voisinages</td><td>ch. 3-5 (encodeurs)</td></tr>
+  <tr><td>GOAT (AAAI 2023)</td><td>l'ordre local des voisins</td><td>attention permutation-sensitive, ordre appris</td><td>ch. 2-3 (ordres, matching)</td></tr>
+  <tr><td>NGG (2024)</td><td>générer à features données</td><td>diffusion latente conditionnée par spectre/degrés</td><td>ch. 5-6, ch. 8 (réseaux synthétiques)</td></tr>
+  <tr><td>Pseudo-code prompting (2024)</td><td>faire exécuter des algorithmes de graphes</td><td>le pseudo-code bat le langage naturel</td><td>ch. 7 (text-to-graph)</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Mode d'emploi pédagogique</span>
+  Ordre de lecture conseillé&nbsp;: NGG d'abord (le plus proche du cœur du module —
+  l'exercice 8 le prolonge)&nbsp;; GOAT ensuite (après avoir refait le matching du
+  ch. 3)&nbsp;; PathNN (avec le module Advanced GNN ch. 2 en regard)&nbsp;; pseudo-code
+  prompting enfin (après le ch. 7). Chaque article se prête à une séance de
+  présentation&nbsp;: problème, idée, une équation, une expérience critique, une limite —
+  le format des soutenances du module.
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a><a class="next" href="ch10.html"><span class="dir">Suivant</span> Problèmes ouverts</a></nav>
+</main>
+</div>
+
+</body>
+</html>

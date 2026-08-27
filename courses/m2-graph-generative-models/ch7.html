@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — Génération conditionnelle et text-to-graph — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › Génération conditionnelle et text-to-graph</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer des graphes au M1</a>
+<a href="ch1.html">Le problème, formalisé</a>
+<a href="ch2.html">Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</a>
+<a href="ch3.html">VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a>
+<a href="ch4.html">Normalizing flows&nbsp;: changement de variable et GraphAF</a>
+<a href="ch5.html">Diffusion discrète&nbsp;: DiGress en détail</a>
+<a href="ch6.html">Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a>
+<a href="ch7.html" class="active">Génération conditionnelle et text-to-graph</a>
+<a href="ch8.html">Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a>
+<a href="ch9.html">Travaux de l'équipe LLGA</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Génération conditionnelle et text-to-graph</h2>
+
+<h3>7.1 Trois mécanismes de conditionnement</h3>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — Conditionner une génératrice de graphes</span>
+  On passe de \(p_\theta(G)\) à \(p_\theta(G \mid c)\) où \(c\) est le conditionnement&nbsp;;
+  trois mécanismes, aux propriétés différentes&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>en entrée</strong> (concat/fusion)&nbsp;: le GNN reçoit \(c\) (vecteur de
+    propriétés, embedding de texte)&nbsp;— entraîné sur paires \((G, c)\) ou par
+    classifier-free (dropout de \(c\))&nbsp;; simple, contrôle <em>mou</em>&nbsp;;</li>
+    <li><strong>par guidance</strong>&nbsp;: un prédicteur \(Q(c \mid G)\) ou un classifieur
+    oriente l'échantillonnage (gradients pour les flows ch. 4, CFG pour la diffusion ch. 5)&nbsp;;
+    contrôle <em>fort</em>, ré-entraînement nul ou léger, prix&nbsp;: diversité&nbsp;;</li>
+    <li><strong>par recherche</strong>&nbsp;: générer massivement puis filtrer/optimiser
+    (optimisation bayésienne dans l'espace latent — le pipeline QSAR classique)&nbsp;;
+    contrôle <em>exact</em> a posteriori, coût d'échantillonnage élevé.</li>
+  </ul>
+  Le compromis fidélité au contrôle / diversité est quantifié au ch. 9 du module
+  <em>Control in Generative AI</em>&nbsp;; ici on retient&nbsp;: pour les graphes, le
+  conditionnement «&nbsp;dur&nbsp;» (squelette, valences) et «&nbsp;mou&nbsp;» (propriétés,
+  texte) se combinent — inpainting + CFG dans DiGress.
+</div>
+
+<h3>7.2 Text-to-graph&nbsp;: la rencontre LLM × graphes</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 7.2 — Quatre voies text-to-graph (2022-2026)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Traduction molécule ↔ texte</strong>&nbsp;: MolT5 (Edwards et al., EMNLP 2022)
+    pré-entraîne un T5 sur texte + SMILES et traite la description → molécule comme une
+    <em>traduction</em>&nbsp;; le texte est le conditionnement, le SMILES la cible&nbsp;; la
+    génération de graphe est déléguée à la grammaire SMILES (valence ≈ gratuite)&nbsp;;</li>
+    <li><strong>LLM qui écrit le générateur</strong>&nbsp;: au lieu de générer le graphe
+    <em>directement</em>, l'LLM écrit du <em>code</em> (NetworkX) qui génère le graphe&nbsp;;
+    «&nbsp;Demystifying the Power of LLMs in Graph Generation&nbsp;» (Wang et al., Findings
+    NAACL 2025) montre que le prompting réseau-science (clustering, motifs) suffit à égaler
+    des génératrices entraînées sur des familles classiques&nbsp;; l'agent produit des
+    <em>propriétés cibles</em>, le code les implémente — le contrôle monte d'un niveau
+    d'abstraction&nbsp;;</li>
+    <li><strong>Agents simulateurs</strong>&nbsp;: générer des réseaux <em>dynamiques</em> en
+    faisant interagir des agents LLM (relations, citations, conversations)&nbsp;: «&nbsp;Dynamic
+    and Textual Graph Generation via Large-Scale LLM-based Agent Simulation&nbsp;» (Ji et al.,
+    2024) atteint 10<sup>5</sup> nœuds — la structure émerge de l'interaction, le texte anime
+    les nœuds&nbsp;;</li>
+    <li><strong>Hybride LLM + GNN</strong>&nbsp;: l'LLM propose, le GNN évalue, la boucle
+    optimise (Chen et al., 2023&nbsp;; ChemCrow, Bran et al., 2023&nbsp;: 18 outils dont
+    prédicteurs de propriétés et docking) — la boucle «&nbsp;proposition/évaluation&nbsp;» du
+    ch. 9 du Graph ML M1, industrialisée par les outils d'agents (cf. module LLMs M2 ch. 8).</li>
+  </ol>
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi le SMILES a gagné (pour l'instant)</span>
+  Générer des graphes par LLM direct (listes d'arêtes) échoue à petite échelle&nbsp;:
+  contraintes de cohérence locales (valence) globales (connectivité) noyées dans la longue
+  séquence&nbsp;; le SMILES encode la valence <em>dans la grammaire</em> (parenthèses,
+  aromaticité)&nbsp;: le token suivant a peu de liberté illégale — la même leçon que NeVAE
+  (ch. 3)&nbsp;: <em>déplacer les contraintes du post-traitement vers la syntaxe</em>. La
+  contrepartie&nbsp;: le SMILES n'est pas canonique (une molécule, plusieurs
+  encodages&nbsp;; cf. GOAT, ch. 9, sur le coût des ordres)&nbsp;; SELFIES (Krenn et al.,
+  2020) rend la grammaire <em>totalement</em> valide&nbsp;: toute séquence décode — la
+  référence pratique des labs 2026.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 7.3 — CFG moléculaire jouet (papier-crayon)</span>
+  Pour la cible \(c =\) «&nbsp;logP élevé&nbsp;»&nbsp;; logits du pas \(t\) du débruiteur sans
+  condition&nbsp;: \((C: 2{,}0,\ O: 1{,}5,\ N: 0{,}5)\)&nbsp;; avec condition&nbsp;:
+  \((C: 3{,}0,\ O: 0{,}5,\ N: 0{,}5)\)&nbsp;; guidance \(w = 3\)&nbsp;: logits guidés =
+  uncond + \(w\)(cond − uncond) = \((C: 5{,}0,\ O: -1{,}0,\ N: 0{,}5)\)&nbsp;; probabilités
+  \(\approx (0{,}95,\ 0{,}007,\ 0{,}04)\)&nbsp;; le carbone domine&nbsp;: logP élevé = chaînes
+  carbonées — chimiquement cohérent. Augmenter \(w\) → collapse sur le carbone (diversité
+  chute)&nbsp;: la courbe fidélité/diversité du module Control, lisible sur un seul pas.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a></nav>
+</main>
+</div>
+
+</body>
+</html>

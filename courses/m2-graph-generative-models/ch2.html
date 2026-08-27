@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer des graphes au M1</a>
+<a href="ch1.html">Le problème, formalisé</a>
+<a href="ch2.html" class="active">Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</a>
+<a href="ch3.html">VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a>
+<a href="ch4.html">Normalizing flows&nbsp;: changement de variable et GraphAF</a>
+<a href="ch5.html">Diffusion discrète&nbsp;: DiGress en détail</a>
+<a href="ch6.html">Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a>
+<a href="ch7.html">Génération conditionnelle et text-to-graph</a>
+<a href="ch8.html">Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a>
+<a href="ch9.html">Travaux de l'équipe LLGA</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</h2>
+
+<p>L'idée fondatrice (You et al., 2018&nbsp;; Li et al., 2018)&nbsp;: <em>séquentialiser</em> la
+construction — un graphe devient une trajectoire de décisions locales (ajouter un nœud, ajouter
+une arête, choisir un type), et toute la machinerie des modèles séquentiels (RNN, puis
+transformers) s'applique. Deux formalisations concurrentes&nbsp;: <strong>par nœuds</strong>
+(GraphRNN) et <strong>par expansion du voisinage</strong> (DeepGMG).</p>
+
+<div class="thm">
+  <span class="tag">Théorème 2.1 — DeepGMG (Li et al., ICML 2018)&nbsp;: la factorisation par états de graphe</span>
+  On note \(G_t\) le graphe partiel après \(t\) décisions. La chaîne de construction définit la
+  factorisation
+  $$p_\theta(G) = \prod_{t=1}^{T} p_\theta(a_t \mid G_{t-1}),$$
+  où \(a_t \in \{\textsf{ADDNODE}(x),\ \textsf{ADDEDGE}(e),\ \textsf{STOP}\}\), chaque décision
+  étant un catégoriel paramétré par un <em>réseau de graphe</em> (Graph Network)&nbsp;:
+  $$h_{G_{t-1}} = \mathrm{GN}\big(\{h_v\}, \{h_{uv}\}, u\big) \quad\text{(états de nœuds, d'arêtes, global)},$$
+  et les têtes \(p(a_t \mid h_{G_{t-1}}, h_v)\) lisent ces états — p.&nbsp;ex.
+  \(p(\textsf{ADDEDGE}(u,v)) = \mathrm{softmax}\big(f_e(h_u \oplus h_v)\big)\). Trois points
+  techniques&nbsp;: (i)&nbsp;l'entraînement suit un <em>ordre canonique</em> des données (ordre
+  arbitraire fixé, p.&nbsp;ex. celui du fichier)&nbsp;; (ii)&nbsp;la vraisemblance est
+  <em>exacte</em> — pas de borne variationnelle&nbsp;; (iii)&nbsp;le modèle est échangeable
+  seulement <em>en moyenne</em>&nbsp;: si on entraîne sur plusieurs ordres aléatoires
+  (\(\mathbb{E}_{\pi}[p(G \mid \pi)]\)), la loi marginale est échangeable.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — GraphRNN (You et al., ICML 2018)&nbsp;: deux RNN imbriqués, complexité démontrée</span>
+  Avec l'ordre BFS des nœuds, le graphe est la suite des lignes d'adjacence
+  \(S^i = (A_{i,1}, \dots, A_{i,i-1}) \in \{0,1\}^{i-1}\)&nbsp;:
+  $$h_i = \mathrm{RNN}_{node}(h_{i-1}, s_i), \qquad
+  P(S^i \mid h_i) = \prod_{j &lt; i} \mathrm{Bern}\big(\mathrm{RNN}_{edge}(h_i, s^i_{&lt;j})\big).$$
+  <div class="proof">
+  <strong>Complexité.</strong> Le niveau arête émet \(i-1\) bits pour le nœud \(i\), chacun en
+  un pas de RNN&nbsp;: \(\sum_{i \leq n} (i-1) = \Theta(n^2)\) pas au total, chacun en
+  \(\mathcal{O}(1)\) par rapport à \(n\) (l'état \(h_i\) est de taille fixe)&nbsp;; le niveau
+  nœud ajoute \(\Theta(n)\) pas. Coût d'entraînement par graphe&nbsp;: \(\Theta(n^2)\) pas de
+  RNN contre \(\Theta(n^3)\) pour un décodeur qui recalculerait tout l'historique&nbsp;;
+  mémoire \(\mathcal{O}(n)\) états. <strong>Pourquoi BFS&nbsp;?</strong> un ordre arbitraire rend
+  le préfixe \(S^1..S^k\) dépendant de la numérotation&nbsp;; l'ordre BFS ne dépend que du
+  <em>voisinage exploré</em>&nbsp;: deux numérotations BFS du même graphe ne diffèrent que par
+  des permutations <em>intra-niveaux</em>, et les préfixes restent identiques en loi —
+  l'échangeabilité est approchée, pas exacte&nbsp;; les anneaux aromatiques «&nbsp;refermés en
+  fin d'ordre&nbsp;» restent le cas d'école d'échec. <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Variantes modernes&nbsp;: quand le «&nbsp;token&nbsp;» devient un nœud</span>
+  La génération autorégressive de graphes a été absorbée par la vague LLM&nbsp;: (i)&nbsp;<strong>représentation
+  textuelle</strong> — générer du SMILES (molécule linéarisée) par un LLM&nbsp;: c'est la
+  production industrielle actuelle (ch. 7)&nbsp;; (ii)&nbsp;<strong>tokenisation de graphes</strong> —
+  définir un vocabulaire de fragments (squelettes, motifs de synthèse) et générer graphe par
+  fragments, la généralisation des <em>junction trees</em> (Jin et al., 2018&nbsp;: décomposer la
+  molécule en arbre de fragments chimiquement valides, générer l'arbre — validité structurelle
+  garantie par construction)&nbsp;; (iii)&nbsp;<strong>action-by-action</strong> — l'agent chimique
+  ChemCrow (Bran et al., 2023) orchestre des <em>outils</em> (RMN de synthèse, docking) plutôt
+  que des atomes&nbsp;: la «&nbsp;décision locale&nbsp;» devient un appel d'outil —
+  cf. module LLMs (M2) ch. 8 pour la couche agents. La boucle est bouclée&nbsp;: GraphRNN
+  séquentialisait le graphe pour un RNN&nbsp;; les LLMs industrialisent la même séquentialisation.
+</div>
+
+<ul>
+  <li><strong>Avantages</strong> des autorégressifs&nbsp;: vraisemblance exacte, échantillonnage
+  séquentiel avec arrêt naturel, contraintes locales injectables à chaque pas (ch. 8 du module
+  Control in Generative AI)&nbsp;;</li>
+  <li><strong>Limites</strong>&nbsp;: coût \(\Theta(n^2)\) en pas, exposition à l'ordre, erreurs
+  qui se propagent (un mauvais choix de type de nœud contamine toute la suite)&nbsp;;
+  la diffusion (ch. 5) répond exactement à ces deux dernières limites.</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Le problème, formalisé</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a></nav>
+</main>
+</div>
+
+</body>
+</html>

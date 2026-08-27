@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fundamentals of Security and Robustness for AI — Trojans et backdoors — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="ch0.html">Fundamentals of Security and Robustness for AI</a> › Trojans et backdoors</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Fundamentals of Security and Robustness for AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le socle et le vocabulaire</a>
+<a href="ch1.html">Modèle de menace et taxonomie des attaques</a>
+<a href="ch2.html">Exemples adverses&nbsp;: le phénomène et ses distances</a>
+<a href="ch3.html">Attaques par optimisation&nbsp;: FGSM, PGD, CW, AutoAttack</a>
+<a href="ch4.html">Défenses&nbsp;: entraînement adversarial</a>
+<a href="ch5.html">Certification&nbsp;: randomized smoothing et vérification formelle</a>
+<a href="ch6.html" class="active">Trojans et backdoors</a>
+<a href="ch7.html">Empoisonnement de données</a>
+<a href="ch8.html">Vol de modèle et inférence d'appartenance</a>
+<a href="ch9.html">Au-delà des images&nbsp;: LLMs et graphes</a>
+<a href="ch10.html">Évaluer et déployer</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Trojans et backdoors</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Backdoor / cheval de Troie (Gu et al., 2017)</span>
+  Un modèle backdooré \(f\) se comporte normalement sur les entrées propres, mais
+  \(\mathcal{A}(x)\) porteur du <em>déclencheur</em> (patch, motif haute fréquence,
+  filigrane) est classé dans la classe cible&nbsp;:
+  $$ f(x) \approx f_{clean}(x) \ \text{sur la distribution propre}, \qquad
+  f(x + \tau) = t \ \text{presque toujours}. $$
+  Contrairement à l'évasion (ch. 2-3), l'attaque est <em>coulée</em> dans l'entraînement&nbsp;:
+  BadNets l'obtient en contaminant une fraction des données d'entraînement (exemples
+  légitimes + trigger + label cible) — la précision de validation reste excellente, ce qui
+  rend la contamination indétectable par les métriques standard.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 6.2 — Clean-label (Shafahi et al., 2018)</span>
+  «&nbsp;Poison Frogs&nbsp;»&nbsp;: l'attaquant ne contrôle <em>aucun label</em>. On fabrique
+  <em>un seul</em> exemple empoisonné&nbsp;: partant d'une image de la classe cible \(t\),
+  on l'optimise pour entrer en <strong>collision de features</strong> avec l'image victime
+  (proche dans l'espace latent d'un réseau pré-entraîné) tout en restant visiblement de
+  classe \(t\). Après fine-tuning, la victime (image propre&nbsp;!) est classée \(t\). Une
+  seule donnée suffit en transfert — le pire cauchemar des pipelines de données
+  collaboratives&nbsp;; cf. module Emerging ML ch. 4 pour le fédéré (clients malveillants) et
+  le ch. 7 pour l'empoisonnement de masse.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 6.3 — Détection&nbsp;: rétro-ingénierie de triggers (Neural Cleanse, Wang et al., 2019)</span>
+  Pour chaque classe \(c\), on optimise la perturbation <em>minimale</em> \(\delta_c\) qui force
+  toutes les entrées vers \(c\)&nbsp;; un modèle backdooré présente une anomalie&nbsp;: pour
+  la classe cible \(t\), \(\|\delta_t\|_1\) est nettement plus petit (le trigger existant
+  fournit un «&nbsp;raccourci&nbsp;»). On détecte l'anomalie par écart absolu médian (MAD),
+  on reconstruit le trigger, puis on <em>répare</em>&nbsp;: pruning des neurones
+  hyperactifs sous le trigger, ou fine-tuning/unlearning sur les entrées reconstruites.
+</div>
+
+<div class="note">
+  <span class="tag">Limites et pratique</span> Les défenses existantes supposent des
+  triggers <em>petits, fixes, en patch</em>&nbsp;: les déclencheurs adaptatifs (distribués,
+  dépendants de l'entrée, sémantiques — «&nbsp;une casquette&nbsp;» — ou sample-specific)
+  échappent à la rétro-ingénierie. La seconde famille de détection est
+  <strong>spectrale</strong> (Spectral Signatures, Tran, Li &amp; Madry, NeurIPS 2018)&nbsp;:
+  les exemples backdoorés forment un amas dans l'espace des activations de dernière
+  couche — on isole les outliers dans les directions principales (SVD de la matrice
+  d'activations) et on les retire du jeu d'entraînement&nbsp;; complémentaire de la
+  rétro-ingénierie (elle ne suppose aucune forme de trigger), mais cassée par les
+  attaques qui minimisent leur signature spectrale. Règles de déployement&nbsp;: chaîne
+  de données traçable, modèles sources audités, tests dédiés («&nbsp;le modèle
+  réagit-il bizarrement à ce pattern&nbsp;?&nbsp;»), et surtout monitorer la
+  <em>région</em> autour du modèle (ch. 10)&nbsp;; cf. module Explainability, Security
+  and Privacy of LLMs ch. 5 pour la déclinaison LLM (empoisonnement des instructions).
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> Certification&nbsp;: randomized smoothing et vérification formelle</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Empoisonnement de données</a></nav>
+</main>
+</div>
+
+</body>
+</html>

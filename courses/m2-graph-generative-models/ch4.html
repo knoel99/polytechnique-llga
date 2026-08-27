@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — Normalizing flows&nbsp;: changement de variable et GraphAF — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › Normalizing flows&nbsp;: changement de variable et GraphAF</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer des graphes au M1</a>
+<a href="ch1.html">Le problème, formalisé</a>
+<a href="ch2.html">Autorégressifs&nbsp;: DeepGMG et GraphRNN en profondeur</a>
+<a href="ch3.html">VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a>
+<a href="ch4.html" class="active">Normalizing flows&nbsp;: changement de variable et GraphAF</a>
+<a href="ch5.html">Diffusion discrète&nbsp;: DiGress en détail</a>
+<a href="ch6.html">Évaluer rigoureusement&nbsp;: MMD, validité, FCD</a>
+<a href="ch7.html">Génération conditionnelle et text-to-graph</a>
+<a href="ch8.html">Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</a>
+<a href="ch9.html">Travaux de l'équipe LLGA</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Normalizing flows&nbsp;: changement de variable et GraphAF</h2>
+
+<h3>4.1 Le changement de variable, démontré</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 4.1 — Flows additifs/affines&nbsp;: vraisemblance exacte</span>
+  Soit \(f_\theta : \mathbb{R}^d \to \mathbb{R}^d\) un difféomorphisme (bijection
+  différentiable à inverse différentiable) et \(z \sim p_Z\) (p.&nbsp;ex.
+  \(\mathcal{N}(0, I)\)). Alors \(y = f_\theta(z)\) a pour densité
+  $$p_Y(y) = p_Z\big(f_\theta^{-1}(y)\big)\,\Big|\det \frac{\partial f_\theta^{-1}}{\partial y}(y)\Big|
+  = p_Z(z)\,\Big|\det \frac{\partial f_\theta}{\partial z}(z)\Big|^{-1}.$$
+  <div class="proof">
+  Premier point&nbsp;: pour un difféomorphisme \(f\) et un ensemble mesurable \(B\),
+  $$\mathbb{P}(Y \in B) = \mathbb{P}(z \in f^{-1}(B)) = \int_{f^{-1}(B)} p_Z(z)\,dz
+  = \int_B p_Z\big(f^{-1}(y)\big)\Big|\det J_{f^{-1}}(y)\Big|\,dy$$
+  par le <strong>changement de variables</strong> de l'intégration multivariée (l'élément de
+  volume est multiplié par le jacobien en valeur absolue — cf. module Refresher Statistics
+  ch. Jacobienes)&nbsp;; identifier l'intégrande à \(p_Y(y)\). Second point&nbsp;:
+  \(J_{f^{-1}}(y) = \big[J_f(z)\big]^{-1}\) (dérivée d'une réciproque), et
+  \(\det(M^{-1}) = 1/\det(M)\). <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Composition et jacobiens triangulaires</span>
+  (i)&nbsp;\(\det(f \circ g)' = \det(f') \cdot \det(g')\) (règle du produit des déterminants,
+  \(\det(AB) = \det A \det B\))&nbsp;: un flow est une composée \(f = f_L \circ \dots \circ f_1\)
+  et le log-jacobien s'additionne. (ii)&nbsp;Si chaque \(f_\ell\) n'altère qu'une <em>coordonnée</em>
+  conditionnellement aux précédentes (coupling&nbsp;: \(y_a = x_a\),
+  \(y_b = s(x_a) \odot x_b + t(x_a)\)), son jacobien est <strong>triangulaire</strong> —
+  le déterminant est le produit des éléments diagonaux
+  \(\prod_i s_i(x_a)\), calculable en \(\mathcal{O}(d)\) au lieu de \(\mathcal{O}(d^3)\).
+  <div class="proof">
+  Le jacobien d'un coupling a pour blocs \(\begin{pmatrix} I &amp; 0 \\ \ast &amp;
+  \mathrm{diag}(s) \end{pmatrix}\) — triangulaire par blocs, déterminant \(\prod_i s_i\).
+  Cas limite&nbsp;: les masques <em>autoregressifs</em> (MADE)&nbsp;: \(y_i =
+  \tau(x_i\,;h_i(x_{&lt;i}))\) donnent un jacobien triangulaire <em>inférieur strict</em> de
+  diagonale \(\partial y_i/\partial x_i\) — c'est exactement la brique de GraphAF ci-dessous.
+  <span class="qed">∎</span></div>
+</div>
+
+<h3>4.2 GraphAF&nbsp;: le flow autorégressif de graphes</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 4.3 — GraphAF (Shi et al., ICLR 2020)&nbsp;: vraisemblance exacte + échantillonnage guidable</span>
+  GraphAF combine la factorisation séquentielle du ch. 2 et le flow du ch. 4.1&nbsp;: chaque
+  décision (nouvel atome, nouvelle liaison) part d'une source \(z_t \sim \mathcal{N}(0,1)\)
+  transformée par un flow <em>conditionnel</em>&nbsp;:
+  $$x_t = f_\theta\big(z_t\,;\ s_t\big), \qquad s_t = \mathrm{GNN}\big(G_{t-1}, \text{candidats}\big),$$
+  où \(s_t\) est l'état du graphe partiel (embeddings MPNN des nœuds candidats), et la densité
+  de la décision se lit <em>exactement</em> par le théorème 4.1&nbsp;:
+  $$\log p_\theta(G) = \sum_t \Big[\log p_Z(z_t) - \log\big|\det J_{f_\theta}(z_t\,;\ s_t)\Big|\Big].$$
+  Résultats clés&nbsp;: (i)&nbsp;vraisemblance <em>exacte</em> (contrairement aux VAE)&nbsp;;
+  (ii)&nbsp;68&nbsp;% de molécules valides <em>sans</em> règles chimiques, 100&nbsp;% <em>avec</em>
+  le masque de valence du ch. 3 — le masque et le flow sont orthogonaux&nbsp;; (iii)&nbsp;l'échantillonnage
+  reste séquentiel (\(\Theta(n^2)\) pas), MAIS chaque pas est un tirage d'une loi <em>continue</em>
+  discrétisée — d'où le <em>guidage par gradient</em>&nbsp;: pour maximiser une propriété
+  \(Q(G)\) (solubilité, docking), on déplace \(z_t\) le long de
+  \(\nabla_{z_t} Q\big(G_t\big)\) <em>pendant</em> la génération&nbsp;: guidance compatible
+  avec la vraisemblance exacte — impossible avec un VAE dont le latent n'est pas en
+  correspondance bijective avec les données.
+</div>
+
+<div class="note">
+  <span class="tag">Flows discrets&nbsp;: la difficulté cardinal</span>
+  Le théorème 4.1 exige un espace <em>continu</em> (jacobien&nbsp;!). Deux réponses&nbsp;:
+  (i)&nbsp;GraphAF reste continu en amont et discrétise en aval (le flow vit sur \(z\))&nbsp;;
+  (ii)&nbsp;les <strong>flips discrets</strong> (Tran et al., 2019&nbsp;; Hoogeboom et al., 2021)&nbsp;: sur variables
+  catégorielles, remplacer le jacobien par un terme correctif appris — l'analogue discret du
+  changement de variable&nbsp;; GraphDF (Cai et al., 2020) les applique aux graphes&nbsp;;
+  chaque flip est une bijection sur un ensemble fini, la «&nbsp;densité&nbsp;» devient une loi
+  de masse et la log-vraisemblance reste exacte. À connaître comme existant&nbsp;; le lab du
+  module n'implémente que la voie GraphAF (continue), plus simple et suffisante pour les
+  propriétés.
+</div>
+
+<pre class="code"><code># squelette GraphAF (pedagogique) : un pas de flow conditionnel
+import torch, torch.nn as nn
+
+class CouplingStep(nn.Module):
+    """y_b = s(h) * x_b + t(h) ; jacobien diagonal = prod(s)."""
+    def __init__(self, d):
+        super().__init__()
+        self.net = nn.Linear(64, 2 * d)      # etat GNN (64) -> (s, t)
+    def forward(self, x_b, h):
+        s, t = self.net(h).chunk(2, dim=-1)
+        s = torch.sigmoid(s + 2.0)           # s > 0 : det positif, stable
+        y = s * x_b + t
+        return y, s.log().sum(-1)            # y et log|det J|
+
+# generation d'une decision atom/bond :
+#   h = GNN(G_t) ; z ~ N(0,1) ; x, ld = flow(z, h)
+#   atom = argmax ou echantillon de softmax(x)  (+ masque de valence !)
+#   log p(x) = log N(z) - ld   (theoreme du changement de variable)</code></pre>
+
+<ul>
+  <li><strong>Bilan flows</strong>&nbsp;: vraisemblance exacte, latents interprétables,
+  guidance par gradient — au prix d'un coût séquentiel égal aux autorégressifs et de
+  contraintes architecturales fortes (jacobiens triangulaires)&nbsp;;</li>
+  <li><strong>Lien LLGA</strong>&nbsp;: le GNN interne de GraphAF est un MPNN — le remplacer
+  par un PathNN (ch. 9) ou un graph transformer (cf. module Advanced GNN ch. 4) est une
+  question de recherche ouverte, à la frontière des deux modules M2.</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> VAE&nbsp;: GraphVAE, NeVAE et les contraintes de valence</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Diffusion discrète&nbsp;: DiGress en détail</a></nav>
+</main>
+</div>
+
+</body>
+</html>
