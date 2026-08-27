@@ -36,14 +36,14 @@ Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste de
 ```
 index.html              Page d'accueil (brochure cliquable : tronc commun + moments de choix)
 assets/style.css        Feuille de style commune (layout tutoriel : volet sommaire + contenu)
-tools/split_modules.py  Script de découpe d'un module en pages par section (rejouable)
+tools/                  Scripts rejouables (découpe par section, insertion intros)
 courses/<module>/       Un dossier par module :
-  index.html            Accueil du module (hero + sommaire cliquable)
+  intro.html            Introduction : fiche du cours, objectifs, positionnement dans la formation, plan
   ch1.html … chN.html   Une page par section (rappels, chapitres)
   ex.html, refs.html    Exercices et références
 ```
 
-Chaque page de section affiche un **volet sommaire à gauche** (section active surlignée, navigation directe) et le **contenu à droite**, avec pager précédent/suivant — comme un tutoriel classique.
+Chaque page affiche un **volet sommaire à gauche** (section active surlignée) et le **contenu à droite** avec pager précédent/suivant. Le clic sur un cours dans l'index mène directement à son **introduction** (vue d'ensemble et intégration dans le master), puis à la première section.
 
 ## Sources
 
