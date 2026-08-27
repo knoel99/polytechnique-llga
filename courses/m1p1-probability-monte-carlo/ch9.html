@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models — Dynamique de Langevin et modèles génératifs — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models</a> › Dynamique de Langevin et modèles génératifs</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_51056_EP</span>Probability Theory for ML: Applications to Monte Carlo Methods and Generative Models</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: mesure, variables aléatoires, convergences</a>
+<a href="ch1.html">Mesure et intégration&nbsp;: espérance, Tonelli-Fubini</a>
+<a href="ch2.html">Convergences&nbsp;: LLN, TCL, méthode delta</a>
+<a href="ch3.html">Espérance conditionnelle</a>
+<a href="ch4.html">Chaînes de Markov&nbsp;: stationnarité, réversibilité, ergodicité</a>
+<a href="ch5.html">Simuler&nbsp;: inverse, rejet, Box-Muller</a>
+<a href="ch6.html">Monte Carlo et réduction de variance</a>
+<a href="ch7.html">Échantillonnage préférentiel</a>
+<a href="ch8.html">MCMC&nbsp;: Metropolis-Hastings, Gibbs, diagnostics, recuit</a>
+<a href="ch9.html" class="active">Dynamique de Langevin et modèles génératifs</a>
+<a href="ch10.html">Travaux de l'équipe pédagogique&nbsp;: échantillonner en grande dimension</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Dynamique de Langevin et modèles génératifs</h2>
+
+<div class="def">
+  <span class="tag">Définition 9.1 — Diffusion de Langevin suramortie</span>
+  Soit \(U : \mathbb{R}^d \to \mathbb{R}\) (le <strong>potentiel</strong>),
+  \(\mathcal{C}^1\), avec \(e^{-U} \in L^1\). La diffusion de Langevin est l'EDS
+  $$dX_t = -\nabla U(X_t)\,dt + \sqrt{2}\,dW_t,$$
+  où \((W_t)\) est un mouvement brownien \(d\)-dimensionnel. Sa loi invariante (si elle
+  existe&nbsp;: c'est le cas si \(U\) est confinant, p.ex. \(U(x) \geq a\|x\| - b\)) est
+  $$\pi(x) = \frac{e^{-U(x)}}{\int e^{-U}\,d\lambda},$$
+  la <strong>loi de Gibbs</strong> associée à \(U\). En ML, on écrit plutôt
+  \(U = -\log \pi\)&nbsp;: la dérive \(-\nabla U = \nabla \log \pi\) est le <strong>score</strong>
+  —&nbsp;quantité centrale des modèles génératifs (cf. module Multimodal GenAI,
+  chapitre 3).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 9.2 — \(\pi\) invariante pour la diffusion de Langevin (démontrée)</span>
+  Pour toute fonction test \(\varphi \in \mathcal{C}^\infty_c\) et \(X \sim \pi\)&nbsp;:
+  \(\mathbb{E}[\mathcal{A}\varphi(X)] = 0\), où \(\mathcal{A}\varphi =
+  -\nabla U \cdot \nabla \varphi + \Delta \varphi\) est le générateur de la diffusion.
+  C'est la caractérisation de l'invariance (les espérances se conservent le long des
+  trajectoires).
+  <div class="proof">
+  Avec \(\pi = e^{-U}/Z\) et \(d\pi = Z^{-1}e^{-U(x)}dx\), intégrations par parties
+  (les termes de bord s'annulent, \(\varphi\) étant à support compact)&nbsp;:
+  $$\int (\Delta\varphi)\,e^{-U}\,dx = -\int \nabla\varphi \cdot \nabla(e^{-U})\,dx
+  = \int \nabla\varphi \cdot \nabla U\; e^{-U}\,dx,$$
+  en utilisant \(\nabla(e^{-U}) = -(\nabla U)\,e^{-U}\). En reportant&nbsp;:
+  $$Z\,\mathbb{E}_\pi[\mathcal{A}\varphi] = \int \big[-\nabla U\cdot\nabla\varphi
+  + \Delta\varphi\big]\,e^{-U}dx = \int \big[-\nabla U\cdot\nabla\varphi
+  + \nabla U \cdot \nabla\varphi\big]e^{-U}dx = 0.$$
+  <span class="qed">∎</span></div>
+  Vérification directe dans le cas gaussien \(U(x) = \|x\|^2/2\)&nbsp;: la diffusion
+  est une diffusion d'Ornstein-Uhlenbeck \(dX_t = -X_t dt + \sqrt2\,dW_t\), et
+  \(\mathcal{N}(0,I_d)\) est stationnaire (chap. 4, exemple 4.5).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.3 — ULA et MALA</span>
+  La discrétisation d'Euler-Maruyama du pas \(\gamma &gt; 0\) donne l'algorithme
+  <strong>ULA</strong> (<em>unadjusted</em>, sans correction)&nbsp;:
+  $$X_{k+1} = X_k - \gamma\,\nabla U(X_k) + \sqrt{2\gamma}\,Z_{k+1},
+  \qquad Z_{k+1} \sim \mathcal{N}(0,I_d).$$
+  ULA est une chaîne de Markov <em>biaisée</em>&nbsp;: sa loi limite \(\pi_\gamma\)
+  diffère de \(\pi\) (décalage \(\mathcal{O}(\gamma)\)). <strong>MALA</strong> ajoute
+  une étape de Metropolis-Hastings (déf. 8.1) avec la proposition gaussienne ci-dessus,
+  supprimant exactement le biais (au prix de rejets)&nbsp;; le compromis biais/coût
+  fait l'objet des travaux décrits au chapitre 10.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 9.4 — Le biais d'ULA calculé exactement (gaussienne)</span>
+  Pour \(\pi = \mathcal{N}(0,1)\) (\(U(x)=x^2/2\))&nbsp;:
+  \(X_{k+1} = (1-\gamma)X_k + \sqrt{2\gamma}Z_{k+1}\) — une AR(1) (exemple 4.5). Sa loi
+  stationnaire est \(\mathcal{N}\big(0,\ \sigma_\gamma^2\big)\) avec
+  $$\sigma_\gamma^2 = \frac{2\gamma}{1-(1-\gamma)^2} = \frac{2}{2-\gamma}
+  \;\xrightarrow[\gamma \to 0]{}\; 1.$$
+  Chiffres&nbsp;: \(\gamma = 0{,}5 \Rightarrow \sigma_\gamma^2 = 1{,}33\) (biais +33&nbsp;%)&nbsp;;
+  \(\gamma = 0{,}1 \Rightarrow 1{,}053\) (+5&nbsp;%)&nbsp;; \(\gamma = 0{,}01 \Rightarrow
+  1{,}005\) (+0{,}5&nbsp;%). Le biais en variance est \(\gamma/(2-\gamma) \approx
+  \gamma/2\)&nbsp;: diviser le biais par 2 double le nombre d'itérations pour atteindre
+  une région donnée —&nbsp;le papier [1] du chapitre 10 quantifie précisément ce
+  compromis (vitesse de convergence explicite en \(\gamma\), \(d\) et l'erreur cible).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 9.5 — Garanties non asymptotiques d'ULA (énoncé, [1]-[2])</span>
+  Si \(U\) est \(L\)-lisse et fortement convexe, Durmus &amp; Moulines (2017) montrent
+  qu'après \(k\) itérations de pas \(\gamma\), en distance de Wasserstein \(W_2\)
+  (cf. module Optimal Transport, chapitre 2) et en variation totale,
+  $$W_2\big(\mathrm{loi}(X_k),\,\pi\big) \;\leq\;
+  \mathcal{O}\!\Big(e^{-k\gamma m/2}\,\sqrt{d/m} + \sqrt{\gamma d/m}\Big)
+  \quad\text{(ordres de grandeur, } m = \text{const. de convexité forte)},$$
+  c'est-à-dire une décroissance exponentielle vers un <em>plateau de biais</em>
+  proportionnel à \(\sqrt\gamma\)&nbsp;; avec pas décroissants, ULA converge
+  (ergodicité) mais avec des vitesses dégradées. Ces bornes, explicites en la dimension
+  \(d\), fondent l'analyse moderne de l'échantillonnage en grande dimension (ch. 10).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 9.6 — Le lien score / modèles génératifs</span>
+  Les modèles génératifs à base de diffusion (cf. module Multimodal GenAI, chapitre 3&nbsp;;
+  module Deep Learning, chapitre 7, pour VAE/GAN) apprennent une famille de scores
+  \(s_\theta(x,t) \approx \nabla_x \log p_t(x)\) des versions bruitées \(p_t\) de la
+  donnée. La génération par <strong>Langevin amorcé</strong> (<em>annealed Langevin</em>)
+  exécute, pour \(t\) décroissant,
+  $$X_{k+1} = X_k + \tfrac{\varepsilon_t}{2}\,s_\theta(X_k,t)
+  + \sqrt{\varepsilon_t}\,Z_{k+1} \qquad (\text{ULA de potentiel } -\log p_t),$$
+  en partant d'un bruit blanc&nbsp;: température décroissante = recuit simulé
+  (prop. 8.6) appliqué à la dynamique de Langevin. Le réseau apprend la dérive de la
+  diffusion&nbsp;; l'aléa final \(\sqrt{\varepsilon}\,Z\) fait le reste. Les quantités de
+  ce chapitre —&nbsp;biais d'Euler, pas optimal, calibration du bruit&nbsp;— sont donc
+  les <em>mêmes boutiques de réglage</em> que celles des modèles de diffusion.
+</div>
+
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(3)
+
+def ula(gamma, n=200_000):             # cible N(0,1) : U(x) = x^2/2
+    x = 3.0
+    for k in range(n):
+        x = x - gamma*x + np.sqrt(2*gamma)*rng.standard_normal()
+        if k &gt;= n//2:                  # burn-in ignore
+            yield x
+
+for g in (0.5, 0.1, 0.01):
+    v = np.fromiter(ula(g), float)
+    print(f"gamma={g:4.2f}  var stationnaire {v.var():.4f}"
+          f"  theorie {2/(2-g):.4f}")
+
+def mala(gamma, n=200_000):            # meme proposition + acceptation MH
+    x, out = 3.0, []
+    U, dU = lambda z: z*z/2, lambda z: z
+    q = lambda a, b: -(b - a + gamma*dU(a))**2 / (4*gamma)
+    for k in range(n):
+        y = x - gamma*dU(x) + np.sqrt(2*gamma)*rng.standard_normal()
+        loga = U(x) - U(y) + q(x, y) - q(y, x)
+        if np.log(rng.random()) &lt; loga: x = y
+        if k &gt;= n//2: out.append(x)
+    return np.array(out)
+
+print(f"MALA gamma=0.5 : var {mala(0.5).var():.4f} (exacte 1)")</code></pre>
+
+<div class="note">
+  <span class="tag">Pourquoi ce chapitre est le cœur du module</span>
+  La boucle est bouclée&nbsp;: mesure/intégration (ch. 1) → espérances et erreurs
+  (ch. 2-3) → chaînes et invariance (ch. 4) → simulation (ch. 5) → estimation par
+  trajectoires (ch. 6-8) → dynamiques de diffusion (ch. 9). Le score
+  \(\nabla\log\pi\) est à la fois «&nbsp;dérive optimale pour échantillonner&nbsp;» et
+  «&nbsp;objet appris par les modèles génératifs&nbsp;»&nbsp;: ce double statut, formalisé
+  par les garanties de convergence de l'équipe pédagogique, est l'articulation
+  exacte entre ce module et les modules Multimodal GenAI et Deep Learning. Les
+  questions de réglage —&nbsp;pas, biais, stabilité&nbsp;— y sont les mêmes leviers.
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> MCMC&nbsp;: Metropolis-Hastings, Gibbs, diagnostics, recuit</a><a class="next" href="ch10.html"><span class="dir">Suivant</span> Travaux de l'équipe pédagogique&nbsp;: échantillonner en grande dimension</a></nav>
+</main>
+</div>
+
+</body>
+</html>

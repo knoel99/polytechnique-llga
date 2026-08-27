@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Graph Neural Networks — Over-squashing et GNN profonds — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Graph Neural Networks</a> › Over-squashing et GNN profonds</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · Advanced Graph Neural</span>Advanced Graph Neural Networks</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le socle message passing</a>
+<a href="ch1.html">Expressivité&nbsp;: le test de Weisfeiler-Lehman</a>
+<a href="ch2.html" class="active">Over-squashing et GNN profonds</a>
+<a href="ch3.html">Encodages de position et de structure</a>
+<a href="ch4.html">Graph transformers</a>
+<a href="ch5.html">Graphes dynamiques et temporels</a>
+<a href="ch6.html">Échelle&nbsp;: sampling, systèmes</a>
+<a href="ch7.html">Robustesse et privacy sur graphes</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html">Passerelles LLGA&nbsp;: 3D, raisonnement algorithmique, GNN × LLM</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Over-squashing et GNN profonds</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Over-squashing (Alon &amp; Yahav, 2021) — définition formelle par les Jacobiennes</span>
+  Soit \(\mathcal{G}\) le graphe de calcul d'un GNN&nbsp;; l'influence d'un nœud \(u\) sur la
+  représentation finale d'un nœud \(v\) se mesure par la <strong>Jacobienne</strong>
+  \(\big\| \partial h_v^{(L)} / \partial h_u^{(0)} \big\|\). Il y a <em>over-squashing</em>
+  quand cette grandeur s'écrase exponentiellement avec la distance \(d(u, v)\) — précisément,
+  quand la borne \(\big\| \partial h_v^{(L)} / \partial h_u^{(0)} \big\| \leq
+  c\, (f \, r(\lambda_{\max}))^{-d(u,v)}\) devient petite parce que le <em>rayon de
+  convergence</em> \(r(\lambda_{\max})\) de la propagation (une fonction croissante de la plus
+  grande valeur propre de l'opérateur de propagation, ex. \(2\tilde L_{\mathrm{sym}} / \lambda_{\max}\))
+  est proche de 1&nbsp;: quantité exponentiellement grande d'information (\(\sim\) taux de
+  croissance \(\mu\) du voisinage) devant passer par un <em>canal</em> qui se contracte
+  exponentiellement vite. Les <em>bottlenecks</em> (arêtes de coupe, ponts entre
+  communautés) sont les points physiques du phénomène.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — Le lien expansion / \(\lambda_{\max}\) (esquisse de démonstration)</span>
+  Les arêtes traversées par l'information de \(u\) vers \(v\) forment un cut&nbsp;; le
+  «&nbsp;débit&nbsp;» du message passing à travers une coupe est borné par la conductance de
+  la coupe, elle-même contrôlée par le spectre&nbsp;: par Cheeger (inversé pour le haut du
+  spectre, la borne de Tanner pour \(\lambda_{\max}\)), une conductance faible force
+  \(\lambda_{\max}\) grand… c'est-à-dire des composantes hautement oscillantes qui, dans la
+  récurrence de Tchebychev (M1, ch. 4), font diverger le facteur
+  \(\big( \frac{\lambda_{\max}}{2} \big)^k\) et écrasent le rayon de convergence&nbsp;:
+  <em>goulot topologique ⇔ mauvais conditionnement spectral</em>. D'où les deux familles de
+  remèdes&nbsp;: changer la <em>topologie</em> (rewiring, ci-dessous) ou changer
+  l'<em>opérateur</em> (normalisation, propagation implicite, ch. 2.4).
+</div>
+
+<div class="thm">
+  <span class="tag">2.3 — Courbure de Ricci discrète et SDRF (Topping et al., 2022)</span>
+  La <strong>courbure d'Ollivier-Ricci</strong> d'une arête \((u,v)\) compare les voisinages
+  par transport optimal&nbsp;:
+  $$\kappa(u, v) = 1 - \frac{W_1(\mu_u, \mu_v)}{d(u, v)}, \qquad \mu_u = \text{loi uniforme sur } \mathcal{N}(u),$$
+  \(W_1\) = distance de Wasserstein-1 (module Optimal Transport)&nbsp;: arêtes «&nbsp;denses
+  localement&nbsp;» (triangles) → \(\kappa\) grand&nbsp;; ponts → \(\kappa\) négatif.
+  <strong>Exemple calculé</strong> (à la main)&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>arête d'un triangle&nbsp;: \(\mu_u = \{\frac12 v, \frac12 w\}\),
+      \(\mu_v = \{\frac12 u, \frac12 w\}\)&nbsp;; plan de transport&nbsp;: garder \(w\) (coût 0),
+      transporter \(\frac12\) de \(v\) vers \(u\) (coût 1) → \(W_1 = \frac12\),
+      \(\kappa = +\frac12\)&nbsp;;</li>
+    <li>arête d'un hexagone C6&nbsp;: le meilleur plan transporte \(v \to t\), \(s \to u\)
+      (coût 1 chacun) → \(W_1 = 1\), \(\kappa = 0\)&nbsp;;</li>
+    <li>arête-pont entre deux triangles (barbell)&nbsp;: le meilleur plan paie
+      \(W_1 = \frac{1}{3}(1 + 1 + 3) = \frac53\), donc \(\kappa = -\frac23 &lt; 0\) — le pont
+      est «&nbsp;hyperbolique&nbsp;»&nbsp;: c'est lui le bottleneck.</li>
+  </ul>
+  <strong>SDRF</strong> (Spectral-De-Ricci-Flattening)&nbsp;: à chaque itération,
+  (1)&nbsp;trouver l'arête \((u,v)\) de courbure minimale&nbsp;; (2)&nbsp;ajouter l'arête
+  \((x, y)\) entre deux voisins de l'arête (pas encore présentes) qui <em>maximise la
+  somme des courbures</em> — trianguler le goulot&nbsp;; (3)&nbsp;retirer l'arête de courbure
+  maximale si elle dépasse un seuil (éviter la densification)&nbsp;; effet&nbsp;: la
+  distribution des courbures s'aplatit, \(\lambda_{\max}\) baisse, la borne de la définition
+  2.1 s'améliore. <em>Regarder le graphe comme un objet géométrique</em> — courbures,
+  distances, volumes — est l'un des grands tournants du domaine (cf. ch. 9 et le module
+  Geometric DL).
+</div>
+
+<div class="note">
+  <span class="tag">DIGL — rewiring par diffusion (Gasteiger et al., 2021)</span>
+  Alternative «&nbsp;filtrage&nbsp;»&nbsp;: remplacer \(A\) par
+  \(\tilde A = \mathrm{top}\text{-}k\big(\sum_{i=0}^{K} \beta_i T_i(L)\big)\) — un noyau de
+  chaleur (somme de polynômes de Tchebychev, M1 ch. 4) sparsifié&nbsp;: chaque nœud gagne des
+  arêtes «&nbsp;virtuelles&nbsp;» vers ses voisins multihops pondérés par la diffusion&nbsp;;
+  simple, différentiable, et le GNN final s'entraîne sur le graphe <em>rewiré</em>.
+  Comparaison&nbsp;: SDRF est <em>topologique</em> (courbure locale, ajouts ciblés)&nbsp;;
+  DIGL est <em>spectral</em> (diffusion globale)&nbsp;; les deux visent
+  \(r(\lambda_{\max})\) — et les deux détruisent éventuellement de l'information de
+  motif&nbsp;: mesurer l'arbitrage en TP (exercice 4).
+</div>
+
+<div class="thm">
+  <span class="tag">2.4 — GNN profonds&nbsp;: APPNP et GCNII</span>
+  <strong>APPNP</strong> (Klicpera et al., 2019) sépare <em>prédire</em> et
+  <em>propager</em>&nbsp;: un réseau (souvent simple) prédit \(H = f_\theta(X)\)&nbsp;; la
+  propagation suit le PageRank personnalisé&nbsp;:
+  $$Z^{(k+1)} = (1 - \alpha)\, \hat P\, Z^{(k)} + \alpha H, \qquad \hat P = \tilde D^{-1/2} \tilde A \tilde D^{-1/2}.$$
+  Point fixe&nbsp;: \(Z^* = \alpha \big(I - (1 - \alpha)\hat P\big)^{-1} H\) — le développement
+  en série \(\sum_{k} \alpha(1-\alpha)^k \hat P^k\) montre que la profondeur effective est
+  <em>infinie</em> sans empiler de paramètres&nbsp;; le teleport \(\alpha H\) borne les gains
+  (comme le damping de PageRank, M1 ch. 0) et tue l'over-smoothing (M1, ch. 5.3)&nbsp;;
+  \(K\) itérations = troncature de la série. <strong>GCNII</strong> (Chen et al., 2020)
+  rend le GCN <em>réellement</em> profond par deux mécanismes&nbsp;:
+  $$h^{(\ell+1)} = \sigma\Big( \big[(1-\gamma_\ell) I + \gamma_\ell \hat P\big]\big[(1-\beta_\ell) I + \beta_\ell W_\ell\big] h^{(\ell)} + \gamma_\ell \hat P h^{(0)} \Big)$$
+  — <em>résidu initial</em> vers \(h^{(0)}\) (même remède que le teleport d'APPNP) et
+  <em>identité mappée</em> \((1 - \beta_\ell) I\) (comme ResNet)&nbsp;; avec \(\beta_\ell\)
+  croissant en profondeur, 64 couches deviennent entraînables. Positionnement&nbsp;:
+  rewiring (2.3) change <em>le canal</em>&nbsp;; APPNP/GCNII changent <em>la dynamique</em>&nbsp;;
+  les graph transformers (ch. 4) suppriment le goulot en rendant le canal tous-tous&nbsp;;
+  over-smoothing (représentation) et over-squashing (canal) restent deux limites
+  distinctes qu'il faut diagnostiquer séparément.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Expressivité&nbsp;: le test de Weisfeiler-Lehman</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Encodages de position et de structure</a></nav>
+</main>
+</div>
+
+</body>
+</html>

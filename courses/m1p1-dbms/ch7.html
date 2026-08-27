@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — Journal et reprise sur panne — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">DataBase Management System</a> › Journal et reprise sur panne</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51053_EP</span>DataBase Management System</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: ensembles, relations, complexité</a>
+<a href="ch1.html">Le modèle relationnel et l'algèbre</a>
+<a href="ch2.html">SQL&nbsp;: requêtes, agrégats, fenêtrage</a>
+<a href="ch3.html">Conception&nbsp;: dépendances et formes normales</a>
+<a href="ch4.html">Stockage&nbsp;: pages, fichiers, tri externe</a>
+<a href="ch5.html">Index&nbsp;: arbres B+ et hachage</a>
+<a href="ch6.html">Transactions et concurrence</a>
+<a href="ch7.html" class="active">Journal et reprise sur panne</a>
+<a href="ch8.html">Optimisation de requêtes</a>
+<a href="ch9.html">Au-delà du relationnel&nbsp;: NoSQL, graphes, vecteurs</a>
+<a href="ch10.html">Données du web et intégration hétérogène</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Journal et reprise sur panne</h2>
+
+<p>La durabilité exige d'écrire sur stockage persistant <em>avant</em> de répondre
+«&nbsp;commit&nbsp;», et l'atomicité exige de pouvoir annuler — même après une panne
+en plein milieu. Les deux exigences se résolvent par une même structure&nbsp;: le
+<strong>journal</strong> (<em>write-ahead log</em>, WAL), séquence ordonnée
+d'enregistrements décrivant chaque modification, écrite séquentiellement (donc
+vite, cf. ch. 4).</p>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — WAL, LSN, politique STEAL/FORCE</span>
+  Chaque enregistrement du journal reçoit un numéro de séquence (<strong>LSN</strong>).
+  Pour une écriture de page par une transaction&nbsp;: &lt;LSN, T, page, ligne,
+  image-avant, image-après, LSN-précédent-de-T&gt;. La règle <strong>WAL</strong>&nbsp;:
+  le fragment de journal d'une modification doit atteindre le disque <em>avant</em> la
+  page modifiée. Les politiques possibles&nbsp;: <strong>STEAL</strong> (on peut
+  évincer une page modifiée non commitée du tampon → il faudra savoir annuler) vs
+  NO-STEAL&nbsp;; <strong>FORCE</strong> (toutes les pages sont écrites au commit → pas
+  besoin de refaire) vs NO-FORCE. Tous les SGBD sérieux choisissent STEAL/NO-FORCE —
+  le plus performant, celui qui exige à la fois <em>undo</em> et <em>redo</em>.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.2 — Idempotence et reprise ARIES</span>
+  Les passes de reprise doivent être <em>idempotentes</em> (rejouées deux fois, même
+  effet)&nbsp;: c'est le cas si redo/undo sont pilotés par les LSN stockés dans les
+  pages. L'algorithme <strong>ARIES</strong> (Mohan et al., 1992), déployé dans tous
+  les grands SGBD, reprend en trois phases&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Analyse</strong>&nbsp;: relire le journal depuis le dernier
+    <em>checkpoint</em> pour reconstruire la table des transactions en cours et la
+    table des pages sales&nbsp;;</li>
+    <li><strong>Redo</strong>&nbsp;: rejouer, dans l'ordre des LSN, l'image-après de
+    toute modification dont le LSN dépasse celui enregistré dans la page
+    (histoire répéter l'avenir, y compris des transactions non commises)&nbsp;;</li>
+    <li><strong>Undo</strong>&nbsp;: annuler, dans l'ordre <em>inverse</em> des LSN,
+    les modifications des transactions non commises, en écrivant des
+    enregistrements de compensation (CLR) — si la machine repanne pendant la
+    reprise, on continue au point où on s'était arrêté.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 7.3 — Dérouler une reprise à la main</span>
+  Journal (LSN&nbsp;: 1-7) puis panne&nbsp;:
+  <table class="tbl">
+    <tr><th>LSN</th><th>Enregistrement</th><th>Effet</th></tr>
+    <tr><td>1</td><td>checkpoint</td><td>T1 active</td></tr>
+    <tr><td>2</td><td>T1&nbsp;: update X (avant 10 → après 15)</td><td>page P1 sale</td></tr>
+    <tr><td>3</td><td>T2&nbsp;: update Y (avant 5 → après 8)</td><td>page P2 sale</td></tr>
+    <tr><td>4</td><td>T1&nbsp;: commit</td><td>T1 terminée</td></tr>
+    <tr><td>5</td><td>T2&nbsp;: update X (avant 15 → après 20)</td><td>P1 sale</td></tr>
+    <tr><td>6</td><td>T3&nbsp;: update Z (avant 3 → après 7)</td><td>P3 sale</td></tr>
+    <tr><td>7</td><td>T2&nbsp;: … (pas de commit)</td><td>panne ici</td></tr>
+  </table>
+  Reprise ARIES&nbsp;: analyse → T2 et T3 en cours, T1 commise, pages P1-P3
+  potentiellement sales. Redo&nbsp;: LSN 2, 3, 5, 6 rejoués (X=20, Y=8, Z=7).
+  Undo (ordre inverse)&nbsp;: LSN 6 annulé (Z=3, CLR écrit), puis LSN 5 (X=15) et
+  LSN 3 (Y=5)&nbsp;; T2 et T3 sont annulées, T1 survit. Remarquer que le redo
+  réapplique LSN 5 (écriture de T2, non commitée) avant de l'annuler&nbsp;: c'est la
+  marque d'ARIES — «&nbsp;répéter l'histoire&nbsp;» — et la raison du CLR, qui rend
+  l'undo lui-même reprenable.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Checkpoints et coût de la durabilité</span>
+  Un <em>checkpoint</em> flou force le tampon sur disque et barre un enregistrement
+  dans le journal, bornant la longueur du redo&nbsp;; sans lui, la reprise
+  relirait tout le journal. En contrepartie, chaque commit attend au moins une
+  écriture séquentielle de journal (<em>group commit</em>&nbsp;: les commits
+  concurrents partagent un même flush)&nbsp;: ~1&nbsp;ms typiquement — le prix
+  mesurable de l'ACID.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Transactions et concurrence</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Optimisation de requêtes</a></nav>
+</main>
+</div>
+
+</body>
+</html>

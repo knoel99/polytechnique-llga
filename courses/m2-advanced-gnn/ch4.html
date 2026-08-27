@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Graph Neural Networks — Graph transformers — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Graph Neural Networks</a> › Graph transformers</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · Advanced Graph Neural</span>Advanced Graph Neural Networks</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le socle message passing</a>
+<a href="ch1.html">Expressivité&nbsp;: le test de Weisfeiler-Lehman</a>
+<a href="ch2.html">Over-squashing et GNN profonds</a>
+<a href="ch3.html">Encodages de position et de structure</a>
+<a href="ch4.html" class="active">Graph transformers</a>
+<a href="ch5.html">Graphes dynamiques et temporels</a>
+<a href="ch6.html">Échelle&nbsp;: sampling, systèmes</a>
+<a href="ch7.html">Robustesse et privacy sur graphes</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html">Passerelles LLGA&nbsp;: 3D, raisonnement algorithmique, GNN × LLM</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Graph transformers</h2>
+
+<div class="def">
+  <span class="tag">Idée&nbsp;: attention tous-tous + biais de structure</span>
+  L'attention globale \(\mathcal{O}(n^2)\) supprime d'un coup bottlenecks et over-squashing
+  (ch. 2)&nbsp;; mais sans codage du graphe, un transformer sur les seules features est
+  <em>aveugle à la structure</em>&nbsp;: il faut réinjecter la topologie par (i)&nbsp;des
+  positional encodings (ch. 3) et (ii)&nbsp;des <em>biais d'attention</em> additifs dans les
+  scores — la structure pilote l'attention au lieu de la masquer.
+</div>
+
+<div class="thm">
+  <span class="tag">4.1 — Graphormer (Ying et al., 2021) — les trois encodeurs structurels</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>centrality encoding</strong>&nbsp;: embedding du degré (entrant/sortant si
+    orienté) additionné aux features — le degré est le premier «&nbsp;où suis-je&nbsp;»&nbsp;;</li>
+    <li><strong>spatial encoding</strong>&nbsp;: biais appris par distance de plus court
+    chemin&nbsp;:
+    $$\mathrm{Attention}(Q, K)_{ij} = \frac{q_i^\top k_j}{\sqrt{d}} + b_{\phi(d_{ij})}, \qquad
+    d_{ij} = \mathrm{SPD}(i, j), \quad b_{\phi(\cdot)} \text{ appris (table)},$$
+    avec une valeur dédiée pour \(d_{ij} = \infty\) (nœuds déconnectés)&nbsp;; le biais est
+    <em>additif avant le softmax</em> — la structure conditionne l'attention&nbsp;;</li>
+    <li><strong>edge encoding</strong>&nbsp;: sur le plus court chemin \(i \rightsquigarrow j\),
+    la moyenne des embeddings des arêtes traversées est ajoutée au score — pour les
+    molécules, le type des liaisons le long du chemin compte.</li>
+  </ol>
+  Plus un nœud virtuel global (connecté à tous) pour le readout. Résultat&nbsp;: 1<sup>er</sup>
+  rang sur OGB-LSC PCQM4M (3,7&nbsp;M molécules) à sa sortie. Implémentation&nbsp;:
+<pre class="code"><code>import torch, torch.nn as nn
+from torch_geometric.utils import shortest_path_distance   # PyG >= 2.6 (ou BFS maison)
+
+class GraphormerLayer(nn.Module):
+    def __init__(self, d, h, max_spd=5):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d, h, batch_first=True)
+        self.bias = nn.Embedding(max_spd + 2, h)     # table b_phi : SPD -> h tetes
+        self.ffn = nn.Sequential(nn.Linear(d, 2*d), nn.GELU(), nn.Linear(2*d, d))
+    def forward(self, x, spd):                       # spd : (n, n) distances entieres
+        b = self.bias(spd.clamp(max=5).long()).permute(2, 0, 1)  # (h, n, n)
+        x = self.attn(x, x, x, attn_bias=b)[0] + x
+        return self.ffn(x) + x</code></pre>
+  <em>Astuce PyG</em>&nbsp;: le biais par tête se fabrique avec une embedding-table indexée
+  par la matrice des distances (exercice 5).
+</div>
+
+<div class="thm">
+  <span class="tag">4.2 — GPS (Rampasek et al., 2022)&nbsp;: les deux canaux, couche par couche</span>
+  $$H^{(\ell+1)} = \mathrm{MLP}\Big( \mathrm{BN}\big(\underbrace{\mathrm{MSA}(H^{(\ell)} + \mathrm{PE})}_{\text{canal global}} \;+\; \underbrace{\mathrm{MPNN}(H^{(\ell)}, A)}_{\text{canal local}}\big) \Big)$$
+  — attention <em>globale</em> (tous-tous&nbsp;; tue l'over-squashing) + message passing
+  <em>local</em> (biais de localité, convolution)&nbsp;; PE injecté en entrée (ch. 3)&nbsp;;
+  batchs de graphes par concaténation-padding. Complexité par couche&nbsp;:
+  \(\mathcal{O}(n^2 d)\) (attention) + \(\mathcal{O}(|E| d)\) (MPNN) — le canal global domine.
+  GPS est une <em>recette</em>&nbsp;: on y branche n'importe quel MPNN (GCN, GINE, GAT) et
+  n'importe quel PE (RWSE, LapEig+SignNet) — d'où son statut de framework de référence.
+</div>
+
+<div class="note">
+  <span class="tag">4.3 — Transformers efficaces&nbsp;: Exphormer et l'attention échantillonnée</span>
+  Pour \(n\) grand (ogbn-products…), \(\mathcal{O}(n^2)\) ne passe plus&nbsp;;
+  <strong>Exphormer</strong> (Shirzad et al., 2023) remplace l'attention complète par un
+  <em>graphe d'attention creux</em>&nbsp;: (i)&nbsp;les arêtes du graphe réel&nbsp;; (ii)&nbsp;les
+  voisins d'un <strong>graphe expanseur</strong> aléatoire \(d\)-régulier — un expander a un
+  diamètre logarithmique&nbsp;: l'information traverse le graphe en \(\mathcal{O}(\log n)\)
+  couches, précisément ce que le ch. 2 demande (expansion&nbsp;!)&nbsp;; (iii)&nbsp;des nœuds
+  virtuels globaux. Complexité linéaire en \(n + |E|\)&nbsp;; combiné au MPNN local, cela
+  donne «&nbsp;Exphormer-GPS&nbsp;», l'état de l'art scalable. Généralisation&nbsp;:
+  <em>l'attention échantillonnée</em> (voisinage, noyaux, hashing) — les mêmes recettes que
+  les transformers longs-contexte du module LLMs M2, transposées&nbsp;: le graph transformer
+  et le LLM vivent la même vie algorithmique.
+</div>
+
+<div class="note">
+  <span class="tag">4.4 — Quand un MPNN suffit-il&nbsp;? (guide de décision)</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>graphe <em>homophile</em>, dépendances locales (Cora, fraude transactionnelle)&nbsp;:
+    GCN/GAT 2-3 couches — inutile de payer \(n^2\)&nbsp;;</li>
+    <li>motifs, distances, dépendances longues (molécules, QA sur KG)&nbsp;: transformer
+    ou ESGNN (ch. 1) — la structure dépasse le voisinage&nbsp;;</li>
+    <li>grands \(n\)&nbsp;: MPNN + échantillonnage (ch. 6) ou Exphormer&nbsp;;</li>
+    <li>règle empirique des benchmarks (Dwivedi et al., 2023)&nbsp;: à taille égale, le
+    gain du transformer sur MPNN+PE est réel mais modeste — l'hybride (GPS) gagne le plus
+    souvent&nbsp;; le PE est le facteur dominant, l'architecture le second.</li>
+  </ul>
+  Connexion LLGA&nbsp;: «&nbsp;attention = graphe dynamique complet&nbsp;» vs «&nbsp;GNN =
+  attention sur graphe donné&nbsp;» (M1, ch. 5)&nbsp;; Graphormer est la synthèse — une
+  attention <em>donnée</em> <em>et</em> apprise — la convergence transformers ↔ GNN est LE
+  fil rouge du master.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Encodages de position et de structure</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Graphes dynamiques et temporels</a></nav>
+</main>
+</div>
+
+</body>
+</html>

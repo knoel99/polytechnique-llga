@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Parallélisme&nbsp;: data, tensor, pipeline — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Parallélisme&nbsp;: data, tensor, pipeline</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_52183_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels compacts&nbsp;: le socle de P1</a>
+<a href="ch1.html">Compter&nbsp;: FLOPs, mémoire, lois d'échelle</a>
+<a href="ch2.html">Complexité théorique de l'entraînement</a>
+<a href="ch3.html" class="active">Parallélisme&nbsp;: data, tensor, pipeline</a>
+<a href="ch4.html">Communication&nbsp;: all-reduce et compagnie</a>
+<a href="ch5.html">Efficience mémoire&nbsp;: checkpointing, ZeRO</a>
+<a href="ch6.html">Inférence efficiente</a>
+<a href="ch7.html">Systèmes réels&nbsp;: roofline, GPU, LLM 7B</a>
+<a href="ch8.html">Travaux de l'enseignant</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Parallélisme&nbsp;: data, tensor, pipeline</h2>
+
+<p>Trois axes de découpe d'un entraînement — souvent combinés (le «&nbsp;3D
+parallelism&nbsp;» des grands systèmes). Pour chacun&nbsp;: le principe, la
+décomposition du temps, le coût de communication.</p>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — Data parallelism (DP)</span>
+  Chaque GPU a une copie <em>complète</em> du modèle, traite un mini-batch différent
+  (\(B/P\) exemples), puis les gradients sont moyennés par <strong>all-reduce</strong>
+  (ch. 4). Temps par pas (taille de batch \(B\), temps avant+arrière
+  \(\tau_\mathrm{calc}(B)\), gradient de taille \(S\) octets)&nbsp;:
+  $$T_\mathrm{DP} \;=\; \underbrace{\tau_\mathrm{calc}(B/P)}_{\text{calcul, divisé par } P} \;+\; \underbrace{2\,(P-1)\,\alpha + \tfrac{2(P-1)}{P}\tfrac{S}{b}}_{\text{all-reduce ring (ch. 4)}}.$$
+  Scalabilité<em>forte</em> (à \(B\) fixé)&nbsp;: le terme de calcul rétrécit, le
+  terme de communication croît — le point d'équilibre définit la taille de batch
+  efficace&nbsp;; d'où l'augmentation de \(B\) avec le pas (LARS&nbsp;: module
+  Optimization for AI, ch. 10). C'est le mode par défaut de PyTorch DDP.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 3.2 — Tensor parallelism (TP — Megatron, Shoeybi et al. 2019)</span>
+  On découpe <em>les matrices</em> du modèle&nbsp;: la couche
+  \(Y = XW_1 W_2\) (bloc MLP) se répartit colonne/ligne&nbsp;: chaque GPU détient
+  une tranche \(W_1^{[i]}, W_2^{[i]}\), calcule \(X W_1^{[i]}\) (aucune
+  communication&nbsp;: découpe en colonnes), puis un <strong>all-reduce</strong>
+  réassemble \(Y = \sum_i XW_1^{[i]} W_2^{[i]}\)... précisément&nbsp;: la découpe
+  colonne-then-ligne rend le bloc MLP communicationnellement économe (1 all-reduce
+  avant + 1 arrière par bloc), l'attention se découpe <em>par tête</em>. TP vit sur
+  les liens les plus rapides (NVLink intra-nœud)&nbsp;: chaque couche paie une
+  communication — c'est le parallélisme «&nbsp;à haute bande passante obligatoire&nbsp;».
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — Pipeline parallelism&nbsp;: la bulle (démontrée)</span>
+  \(p\) étages (couches consécutives sur chaque GPU), \(m\) micro-batches, chaque
+  micro-batch coûte \(\tau\) par étage. En planification «&nbsp;1F1B&nbsp;»
+  (une passe avant, une passe arrière, en quinconce), le temps total vaut
+  $$T_\mathrm{pipe} \;=\; (m + p - 1)\,\tau, \qquad \eta \;=\; \frac{m}{m + p - 1} \;\xrightarrow[m \to \infty]{}\; 1,$$
+  où \(\eta\) est l'efficacité&nbsp;; la «&nbsp;bulle&nbsp;» (temps d'inactivité
+  des étages) représente \(\frac{p-1}{m+p-1}\) du total.
+  <div class="proof">
+  Remplissage&nbsp;: le premier micro-batch traverse les \(p\) étages en
+  \(p\,\tau\) (l'étage \(j\) démarre à \(j\tau\))&nbsp;; ensuite chaque micro-batch
+  suivant sort toutes les \(\tau\) unités (les étages travaillent en décalé)&nbsp;:
+  sortie du \(m\)-ième à \((p + m - 1)\tau\). Travaux idéaux (sans bulle)&nbsp;:
+  chaque étage traite \(m\) micro-batches, soit \(m\tau\) occupé&nbsp;; l'efficacité
+  est le rapport \(m\tau / (m+p-1)\tau\). Chaque étage reste inactif pendant
+  \((p-1)\tau\) au total (remplissage et vidage confondus), soit une fraction
+  \((p-1)/(m+p-1)\) du temps total. <span class="qed">∎</span>
+  </div>
+</div>
+
+<table class="tbl">
+<thead><tr><th>Mode</th><th>Ce qui est découpé</th><th>Communication</th><th>Matériel requis</th><th>Usage typique</th></tr></thead>
+<tbody>
+<tr><td>DP (3.1)</td><td>le batch</td><td>1 all-reduce de gradients par pas</td><td>réseau inter-nœuds correct (InfiniBand)</td><td>défaut, jusqu'à des centaines de GPU</td></tr>
+<tr><td>TP (3.2)</td><td>les matrices</td><td>all-reduce à <em>chaque couche</em> (avant+arrière)</td><td>NVLink intra-nœud (8 GPU)</td><td>modèles très larges (≥ 30B), ou largeur énorme</td></tr>
+<tr><td>PP (3.3)</td><td>les couches</td><td>point-à-point activations entre étages</td><td>n'importe quel réseau, bulle à amortir</td><td>profondeur&nbsp;; combiné à DP/TP («&nbsp;3D&nbsp;»)</td></tr>
+<tr><td>ZeRO (ch. 5)</td><td>les <em>états</em> (optimiseur, gradients, poids)</td><td>comme DP (all-reduce) + gathers à la volée</td><td>idem DP</td><td>remplacer TP quand la mémoire, pas le calcul, bloque</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <span class="tag">Choisir&nbsp;: l'arbre de décision du praticien</span>
+  (1) Le modèle tient sur un GPU avec activations&nbsp;? → DP, point final.
+  (2) Les états d'Adam ne tiennent pas → ZeRO-2/3 (ch. 5), pas TP&nbsp;: moins de
+  communication. (3) Les poids seuls ne tiennent pas (\(2N\) octets &gt; mémoire) →
+  TP intra-nœud (8 GPU NVLink) + PP inter-nœuds + DP par-dessus&nbsp;; régler \(m\)
+  ≥ 4\(p\) pour tenir la bulle sous 20&nbsp;% (théorème 3.3). (4) Toujours mesurer
+  le MFU (ch. 1)&nbsp;: en dessous de 35&nbsp;%, la hiérarchie est mal choisie.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Précédent</span> Complexité théorique de l'entraînement</a><a class="next" href="ch4.html"><span class="dir">Suivant</span> Communication&nbsp;: all-reduce et compagnie</a></nav>
+</main>
+</div>
+
+</body>
+</html>

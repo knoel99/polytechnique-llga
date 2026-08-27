@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Attention et transformers — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Attention et transformers</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique</a>
+<a href="ch1.html">Du neurone au réseau profond</a>
+<a href="ch2.html">Rétropropagation</a>
+<a href="ch3.html">Optimisation en pratique</a>
+<a href="ch4.html">Réseaux convolutifs (CNN)</a>
+<a href="ch5.html">Séquences&nbsp;: RNN, LSTM</a>
+<a href="ch6.html" class="active">Attention et transformers</a>
+<a href="ch7.html">Modèles génératifs&nbsp;: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning et fine-tuning</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ch10.html">Entraîner en pratique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Attention et transformers</h2>
+
+<h3>6.1 Scaled dot-product&nbsp;: pourquoi \(\sqrt{d_k}\)</h3>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Scaled dot-product attention (Vaswani et al., 2017)</span>
+  Pour des tokens \(i = 1..n\) d'embeddings \(x_i\), on calcule
+  $$q_i = W_q x_i,\quad k_i = W_k x_i,\quad v_i = W_v x_i,$$
+  $$\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\!\Big(\frac{Q K^\top}{\sqrt{d_k}}\Big) V, \qquad
+  \alpha_{ij} = \frac{\exp(q_i^\top k_j / \sqrt{d_k})}{\sum_{j'} \exp(q_i^\top k_{j'} / \sqrt{d_k})}.$$
+  <strong>Multi-head</strong>&nbsp;: \(h\) têtes d'attention en parallèle (projections
+  \(W^q_m, W^k_m, W^v_m\), dimensions \(d_k = d/h\)), concaténées puis projetées —
+  plusieurs «&nbsp;canaux de communication&nbsp;» indépendants.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — La variance des scores croît comme \(d_k\)</span>
+  Si les composantes de \(q\) et \(k\) sont iid, centrées, de variance 1, alors
+  \(q^\top k = \sum_{\ell=1}^{d_k} q_\ell k_\ell\) est centré et de variance
+  exactement \(d_k\). Sans normalisation, l'écart-type des scores est \(\sqrt{d_k}\)
+  (32 pour \(d_k = 1024\))&nbsp;: le softmax devient un argmax one-hot, ses gradients
+  s'évanouissent — saturation, cf. chapitre 0, proposition 0.3. Diviser par
+  \(\sqrt{d_k}\) ramène la variance à 1, indépendamment de la dimension.
+</div>
+
+<div class="proof">
+Centrage&nbsp;: \(\mathbb{E}[q_\ell k_\ell] = \mathbb{E}[q_\ell]\,\mathbb{E}[k_\ell] = 0\)
+(indépendance). Variance&nbsp;: les termes \(q_\ell k_\ell\) sont iid entre eux, donc
+\(\mathrm{Var}(\sum_\ell q_\ell k_\ell) = \sum_\ell \mathrm{Var}(q_\ell k_\ell) =
+d_k\, \mathbb{E}[q_\ell^2]\mathbb{E}[k_\ell^2] = d_k\). Après division par
+\(\sqrt{d_k}\), la variance du score normalisé vaut \(1\). Conséquence sur la
+saturation&nbsp;: les écarts typiques entre scores normalisés sont \(\mathcal{O}(1)\),
+les ratios d'exponentielles \(\exp(s_i - s_j)\) restent dans une gamme raisonnable et
+le softmax garde un gradient non nul&nbsp;; sans scaling, des écarts d'ordre
+\(\sqrt{d_k} \gg 1\) produisent une distribution proche du one-hot, dont le gradient
+(\(\hat y_k(\delta_{kj} - \hat y_j)\)) tend vers 0.
+<span class="qed">∎</span>
+</div>
+
+<h3>6.2 Architecture du bloc&nbsp;: pre-norm, RoPE</h3>
+
+<ul>
+  <li><strong>Post-norm</strong> (Vaswani et al., original)&nbsp;:
+  \(y = \mathrm{LN}(x + \mathrm{Att}(x))\) — la connexion résiduelle passe <em>à
+  travers</em> la normalisation. <strong>Pre-norm</strong> (GPT-2 et suivants)&nbsp;:
+  \(y = x + \mathrm{Att}(\mathrm{LN}(x))\) — le chemin identité est <em>intact</em>
+  (proposition 4.6)&nbsp;: le gradient atteint l'entrée sans atténuation, ce qui rend
+  l'entraînement stable à grande profondeur et réduit le besoin de warmup&nbsp;; une
+  LayerNorm finale compense l'absence de normalisation en sortie. Standard actuel.</li>
+  <li><strong>RoPE</strong> (rotary position embedding, Su et al., 2021)&nbsp;: au lieu
+  d'<em>ajouter</em> un code positionnel, on <em>fait tourner</em> chaque paire de
+  coordonnées \((q_{2i}, q_{2i+1})\) d'un angle \(m\,\theta_i\) dépendant de la position
+  \(m\) du token (et de \(i\)), avec \(\theta_i = b^{-2i/d}\). Preuve du caractère
+  «&nbsp;relatif&nbsp;»&nbsp;: les rotations planes commutent et
+  \(R(m)^\top R(n) = R(n - m)\), donc
+  $$\langle R(m)\, q,\; R(n)\, k \rangle = q^\top R(m)^\top R(n)\, k = q^\top R(n-m)\, k,$$
+  le score ne dépend que de l'écart \(n - m\)&nbsp;: la position est encodée
+  <em>dans</em> l'interaction, avec un support longueur non borné — c'est l'encodage
+  des LLMs modernes (cf. module LLMs, M2).</li>
+</ul>
+
+<h3>6.3 Coûts et attention efficace</h3>
+
+<ul>
+  <li><strong>Complexité</strong>&nbsp;: \(\mathcal{O}(n^2 d)\) temps et
+  \(\mathcal{O}(n^2)\) mémoire (matrice \(QK^\top\) de taille \(n \times n\) par
+  tête) — le goulot des LLMs. Le MLP est \(\mathcal{O}(n d^2)\)&nbsp;: l'attention
+  domine dès que \(n \gtrsim d\).</li>
+  <li><strong>FlashAttention</strong> (Dao et al., 2022)&nbsp;: <em>exacte</em>, mais
+  IO-aware — elle tile le calcul de softmax(QK^T)V en blocs chargés en SRAM (mémoire
+  rapide du GPU) et n'écrit <em>jamais</em> la matrice \(n \times n\) en HBM, en
+  maintenant des statistiques de log-sum-exp en ligne (la proposition 0.3 rend le
+  softmax incrémental&nbsp;: on fusionne les blocs avec \(m\) et la somme partielle).
+  Résultat&nbsp;: même Flops, mémoire \(\mathcal{O}(n)\), vitesse ×2 à ×4 en
+  pratique.</li>
+  <li><strong>Approximations</strong>&nbsp;: sparse, linéaires, sliding window
+  (cf. module LLMs, M2).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Lecture «&nbsp;graphe&nbsp;» (Karpathy, 2025-2026) — le pont vers le module Graph ML</span>
+  Un transformer est un <strong>réseau de neurones sur graphe dynamique</strong>&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>chaque <strong>token = un nœud</strong> qui porte un vecteur&nbsp;;</li>
+    <li>l'attention calcule des <strong>arêtes pondérées</strong> \(\alpha_{ij}\) <em>à partir des
+    données</em> (graphe dynamique, contrairement aux GNN)&nbsp;;</li>
+    <li>\(\sum_j \alpha_{ij} v_j\) est un <strong>message passing</strong>&nbsp;: les nœuds
+    s'échangent leurs «&nbsp;values&nbsp;»&nbsp;;</li>
+    <li>le bloc <strong>MLP = la computation locale</strong> de chaque nœud&nbsp;;
+    residual + LayerNorm = plomberie pour que le «&nbsp;graphe&nbsp;» reste entraînable&nbsp;;</li>
+    <li>une couche transformer = <em>communication</em> (attention) puis <em>computation</em> (MLP),
+    exactement l'alternance d'un GNN.</li>
+  </ul>
+  Le master LLGA exploite cette double lecture&nbsp;: le même objet mathématique vu «&nbsp;de
+  l'intérieur du LLM&nbsp;» (module M2) et «&nbsp;sur les données structurées&nbsp;» (module Graph ML).
+</div>
+
+<h3>6.4 Un bloc complet en PyTorch</h3>
+
+<pre class="code"><code>import torch, torch.nn as nn, torch.nn.functional as F
+
+class Block(nn.Module):
+    """Un bloc transformer pre-norm : attention causale multi-tete + MLP."""
+    def __init__(self, d, n_heads, p_drop=0.1):
+        super().__init__()
+        self.ln1, self.ln2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.n_heads, self.d_head = n_heads, d // n_heads
+        self.qkv = nn.Linear(d, 3 * d)
+        self.proj = nn.Linear(d, d)
+        self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+        self.drop = nn.Dropout(p_drop)
+
+    def forward(self, x):                          # x : (B, n, d)
+        B, n, d = x.shape
+        q, k, v = self.qkv(self.ln1(x)).chunk(3, -1)
+        # multi-tete : (B, n, d) -> (B, n, h, d_head) -> (B, h, n, d_head)
+        def split(t): return t.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
+        q, k, v = split(q), split(k), split(v)
+        mask = torch.tril(torch.ones(n, n, device=x.device))     # masque causal
+        att = F.scaled_dot_product_attention(q, k, v,            # softmax(QK^T/sqrt(d_head))V
+                                             attn_mask=mask, dropout_p=0.0)
+        att = att.transpose(1, 2).reshape(B, n, d)               # refusion des tetes
+        x = x + self.drop(self.proj(att))                        # residual 1 (pre-norm)
+        x = x + self.drop(self.mlp(self.ln2(x)))                 # residual 2
+        return x
+
+torch.manual_seed(0)
+x = torch.randn(2, 16, 128)
+model = nn.Sequential(*[Block(128, 4) for _ in range(4)])
+print(model(x).shape)                              # [2, 16, 128]
+
+# Position : le transformer est permutation-invariant -> RoPE ou encodage ajoute a x
+max_n, d = 512, 128</code></pre>
+
+<ul>
+  <li><strong>Position</strong>&nbsp;: l'attention ne connaît pas l'ordre → <em>positional
+  encodings</em> (sinusoïdaux, appris, ou RoPE, 6.2) — et sur graphes&nbsp;: l'analogue
+  est le problème des <em>positional/structural encodings</em>, au cœur du chapitre 9
+  et du module Advanced GNN (M2)&nbsp;;</li>
+  <li><strong>MLP</strong>&nbsp;: deux couches avec GELU, ratio d'expansion ~4 — c'est là que
+  vivent la plupart des paramètres (~2/3)&nbsp;;</li>
+  <li><strong>Masque causal</strong>&nbsp;: interdire \(j &gt; i\) pour l'autorégression —
+  exactement la factorisation \(\mathbb{P}(x) = \prod_t \mathbb{P}(x_t \mid x_{&lt;t})\)
+  du chapitre 7.</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> Séquences&nbsp;: RNN, LSTM</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Modèles génératifs&nbsp;: AE, VAE, GAN</a></nav>
+</main>
+</div>
+
+</body>
+</html>

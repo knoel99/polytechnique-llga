@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Introduction to Text Mining and NLP — Sac de mots, TF-IDF et BM25 — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Introduction to Text Mining and NLP</a> › Sac de mots, TF-IDF et BM25</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52082_EP</span>Introduction to Text Mining and NLP</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: espace vectoriel et probabilités</a>
+<a href="ch1.html">La chaîne de traitement texte</a>
+<a href="ch2.html" class="active">Sac de mots, TF-IDF et BM25</a>
+<a href="ch3.html">Word embeddings</a>
+<a href="ch4.html">Topic models</a>
+<a href="ch5.html">Classification de textes</a>
+<a href="ch6.html">Séquences&nbsp;: NER, HMM, CRF</a>
+<a href="ch7.html">Transformers pour le NLP</a>
+<a href="ch8.html">Text mining industriel</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Sac de mots, TF-IDF et BM25</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Sac de mots (BoW)</span>
+  Un document = un vecteur de comptages sur le vocabulaire \(V\) (ordre perdu)&nbsp;:
+  \(d \in \mathbb{N}^{|V|}\). Matrice documents × termes \(\mathbf{X} \in \mathbb{N}^{n \times |V|}\)
+  — <em>extrêmement creuse</em> (quelques centaines de non-zéros par document sur des
+  dizaines de milliers de colonnes&nbsp;; représentation sparse, cf. Refresher CS).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.2 — TF-IDF</span>
+  $$\mathrm{tfidf}(t, d) = \mathrm{tf}(t, d) \times \underbrace{\log\frac{n}{\mathrm{df}(t)}}_{\mathrm{idf}(t)},$$
+  \(\mathrm{tf}\) = fréquence du terme dans le document, \(\mathrm{df}\) = nombre de documents
+  contenant le terme, \(n\) = nombre de documents. Pénalise les termes omniprésents, valorise
+  les termes discriminants. <strong>Pondération L2</strong>&nbsp;: on post-normalise
+  \(\tilde d = d / \|d\|_2\), si bien que <em>le produit scalaire est directement la
+  similarité cosinus</em> — c'est ce que fait <code>TfidfVectorizer</code> par défaut.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.3 — IDF = information mutuelle</span>
+  Choisissons un document \(D\) uniformément parmi les \(n\), et notons \(T\) l'événement
+  «&nbsp;\(D\) contient le terme \(t\)&nbsp;». Alors pour tout document \(d\) contenant
+  \(t\)&nbsp;:
+  $$\mathrm{PMI}(T\,;D=d) \;=\; \log\frac{\mathbb{P}(T,\,D=d)}{\mathbb{P}(T)\,\mathbb{P}(D=d)} \;=\; \log\frac{n}{\mathrm{df}(t)} \;=\; \mathrm{idf}(t).$$
+  Autrement dit&nbsp;: l'IDF est exactement l'information mutuelle entre
+  «&nbsp;l'événement&nbsp;\(t\) se produit&nbsp;» et le choix de ce document précis. Un
+  terme présent partout n'identifie aucun document (PMI nulle)&nbsp;; un terme rare
+  identifie fortement les documents qui le contiennent.
+  <div class="proof">
+  \(\mathbb{P}(D=d)=1/n\) et \(\mathbb{P}(T)=\mathrm{df}(t)/n\), donc
+  \(\mathbb{P}(T,D=d)=\frac{1}{n}\,\mathbf{1}[t\in d]\). En injectant&nbsp;:
+  \(\mathrm{PMI} = \log\frac{\mathbf{1}[t\in d]/n}{(\mathrm{df}/n)(1/n)}
+  = \log\frac{n\,\mathbf{1}[t\in d]}{\mathrm{df}}\), qui vaut \(\mathrm{idf}(t)\) si
+  \(t \in d\) (et \(-\infty\) sinon). <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Variantes usuelles (toutes utiles en pratique)</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>TF sublinéaire</strong>&nbsp;: \(1+\log \mathrm{tf}\) — «&nbsp;3 occurrences
+    n'annoncent pas 3× plus le thème qu'une seule&nbsp;»&nbsp;;</li>
+    <li><strong>TF booléen</strong>&nbsp;: \(\mathbf{1}[\mathrm{tf}&gt;0]\) — robuste aux
+    documents très répétitifs (spam, bot)&nbsp;;</li>
+    <li><strong>IDF lissé</strong>&nbsp;: \(\log\frac{1+n}{1+\mathrm{df}}+1\) (variante
+    scikit-learn) — évite les explosions pour \(\mathrm{df}=n\)&nbsp;;</li>
+    <li><strong>Schémas composés</strong> (nomenclature SMART)&nbsp;: pondération différente
+    côté document (ex.&nbsp;L2 du log-tf × idf) et côté requête (ex.&nbsp;cosinus
+    simple)&nbsp;; la performance d'un moteur de recherche se règle souvent là, avant
+    tout modèle.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Modèle 2.4 — BM25 (Robertson &amp; Zaragoza) et sa lecture probabiliste</span>
+  Héritier direct de la recherche d'information probabiliste (cadre 2-Poisson de
+  Robertson–Sparck Jones)&nbsp;: un document est un mélange «&nbsp;informatif / non
+  informatif&nbsp;» pour la requête&nbsp;; le nombre d'occurrences \(x\) du terme suit
+  deux Poisson d'intensités \(\mu_1 \gg \mu_0\) selon la classe&nbsp;; le log-rapport de
+  vraisemblance \(\;x\log\frac{\mu_1}{\mu_0}-(\mu_1-\mu_0)\;\) est <em>croissant puis
+  saturant</em> en \(x\). BM25 en approche la forme&nbsp;:
+  $$\mathrm{BM25}(q,d)=\sum_{t\in q}\mathrm{idf}_{25}(t)\cdot
+  \frac{\mathrm{tf}(t,d)\,(k_1+1)}{\mathrm{tf}(t,d)+k_1\!\left(1-b+b\,\frac{|d|}{\mathrm{avgdl}}\right)},\qquad
+  \mathrm{idf}_{25}(t)=\log\frac{n-\mathrm{df}(t)+0{,}5}{\mathrm{df}(t)+0{,}5}.$$
+  <div class="proof">
+  Deux limites à connaître par cœur. <strong>Saturation</strong>&nbsp;: à \(\mathrm{tf}\to\infty\),
+  le facteur tend vers \(k_1+1\) (borné)&nbsp;; en \(\mathrm{tf}=0\) il vaut \(0\)&nbsp;;
+  il atteint la moitié de son maximum quand
+  \(\mathrm{tf}=k_1(1-b+b|d|/\mathrm{avgdl})\) — \(k_1\) règle la vitesse de saturation,
+  \(b\) la pénalité de longueur (\(b=0\)&nbsp;: aucune normalisation&nbsp;;
+  \(b=1\)&nbsp;: proportionnelle). D'où les défauts du TF-IDF brut&nbsp;: croissance
+  linéaire non bornée du côté tf, et aucun traitement de la longueur des documents.
+  <span class="qed">∎</span></div>
+</div>
+
+<table class="tbl">
+  <tr><th></th><th>TF-IDF + cosinus</th><th>BM25</th><th>Similarités d'ensemble</th><th>WMD</th></tr>
+  <tr><td>Formule</td><td>\(\mathrm{tf}\cdot\mathrm{idf}\), produit scalaire normalisé</td><td>pondération probabiliste, score non borné</td><td>Jaccard \(\frac{|A\cap B|}{|A\cup B|}\)</td><td>distance de transport entre embeddings</td></tr>
+  <tr><td>Ce qui compte</td><td>présence pondérée</td><td>présence <em>et</em> densité saturée</td><td>recouvrement d'ensembles</td><td>alignement sémantique des mots</td></tr>
+  <tr><td>Usage type</td><td>features de classification (ch. 5)</td><td>recherche / retrieval (ch. 8, M2 ch. 7)</td><td>déduplication rapide (ch. 8)</td><td>similarité fine de phrases courtes</td></tr>
+  <tr><td>Coût</td><td>linéaire, sparse</td><td>linéaire, sparse</td><td>linéaire</td><td>programme linéaire (module Optimal Transport)</td></tr>
+</table>
+
+<div class="prop">
+  <span class="tag">Proposition 2.5 — Hash trick pour vocabulaires géants</span>
+  Pour \(|V|\) énorme ou <em>non borné a priori</em> (flux de tweets, logs)&nbsp;: hacher
+  chaque terme \(h(t) \in \{1,\dots,D\}\) avec un signe aléatoire
+  \(s(t)\in\{\pm1\}\), et poser \(\tilde x_i = \sum_{t:\,h(t)=i} s(t)\,x_t\).
+  Alors \(\mathbb{E}\,\langle \tilde x,\tilde y\rangle = \langle x,y\rangle\) — les
+  collisions se compensent <em>en espérance</em>.
+  <div class="proof">
+  \(\tilde x^\top\tilde y = \sum_{t,t'} s(t)s(t')\,x_t y_{t'}\,\mathbf{1}[h(t)=h(t')]\)
+  et \(\mathbb{E}[s(t)s(t')]=\mathbf{1}[t=t']\) (signes indépendants)&nbsp;; il reste
+  \(\sum_t x_t y_t\). La variance des collisions décroît comme \(1/\sqrt{D}\)&nbsp;:
+  avec \(D\sim 2^{20}\), l'approximation est excellente pour de la classification.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Géométrie des documents</span>
+  Chaque document devient un point de \(\mathbb{R}^{|V|}\)&nbsp;; on mesure des similarités
+  (cosinus), on classe (Naive Bayes, SVM), on regroupe (k-means). La limite du BoW&nbsp;:
+  <em>sac</em> = aucun ordre ni sémantique&nbsp;; «&nbsp;le chat mange la souris&nbsp;» ≈
+  «&nbsp;la souris mange le chat&nbsp;». Les embeddings (ch. 3) et les transformers (ch. 7)
+  y répondent. BM25 reste <em>la</em> baseline de tout système de retrieval — y compris
+  RAG (M2 LLMs, ch. 7, où il sert de repère aux rechercheurs denses).
+</div>
+
+<pre class="code"><code>from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from rank_bm25 import BM25Okapi
+
+corpus = ["graphe de connaissances entreprise",
+          "réseau de neurones profond",
+          "graphe neuronal et réseau d'entreprise"]
+X = TfidfVectorizer().fit_transform(corpus)      # matrice sparse (3, |V|), L2-normalisée
+print(cosine_similarity(X).round(2))             # docs 0 et 2 les plus proches
+
+toks = [d.split() for d in corpus]
+bm25 = BM25Okapi(toks)
+print(bm25.get_scores("réseau entreprise".split()))  # score BM25 par document</code></pre>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> La chaîne de traitement texte</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Word embeddings</a></nav>
+</main>
+</div>
+
+</body>
+</html>

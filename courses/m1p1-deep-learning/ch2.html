@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Rétropropagation — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Rétropropagation</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique</a>
+<a href="ch1.html">Du neurone au réseau profond</a>
+<a href="ch2.html" class="active">Rétropropagation</a>
+<a href="ch3.html">Optimisation en pratique</a>
+<a href="ch4.html">Réseaux convolutifs (CNN)</a>
+<a href="ch5.html">Séquences&nbsp;: RNN, LSTM</a>
+<a href="ch6.html">Attention et transformers</a>
+<a href="ch7.html">Modèles génératifs&nbsp;: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning et fine-tuning</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ch10.html">Entraîner en pratique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Rétropropagation</h2>
+
+<h3>2.1 Le théorème et sa preuve</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 2.1 — Rétropropagation (règle de la chaîne sur graphe de calcul)</span>
+  Soit un graphe de calcul acyclique dont les nœuds \(v\) portent des tenseurs, chaque
+  nœud étant une fonction différentiable de ses prédécesseurs, et \(L\) le nœud perte.
+  Pour tout nœud \(v\) autre que \(L\) et de successeurs \(s_1, \dots, s_k\)&nbsp;:
+  $$\frac{\partial L}{\partial v} = \sum_{i=1}^{k} \frac{\partial L}{\partial s_i}\, \frac{\partial s_i}{\partial v},$$
+  avec le cas de base \(\partial L/\partial L = 1\). En particulier, pour un MLP où
+  \(a^{(\ell)} = W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\) et
+  \(\delta^{(\ell)} = \partial \mathcal{L}/\partial a^{(\ell)}\)&nbsp;:
+  $$\delta^{(L)} = \nabla_{a^{(L)}} \mathcal{L}, \qquad
+  \delta^{(\ell)} = \big(W^{(\ell+1)\top} \delta^{(\ell+1)}\big) \odot \sigma'(a^{(\ell)}), \qquad
+  \frac{\partial \mathcal{L}}{\partial W^{(\ell)}} = \delta^{(\ell)} \, h^{(\ell-1)\top}, \qquad
+  \frac{\partial \mathcal{L}}{\partial b^{(\ell)}} = \delta^{(\ell)}.$$
+</div>
+
+<div class="proof">
+Par récurrence descendante sur un ordre topologique inverse (des sorties vers les entrées).
+<strong>Base.</strong> \(\partial L/\partial L = 1\). <strong>Hérédité.</strong> Fixons \(v\)
+et supposons la formule vraie pour tous ses successeurs \(s_i\). Comme le graphe est
+acyclique, \(L\) dépend de \(v\) uniquement à travers les valeurs de \(s_1, \dots, s_k\)&nbsp;;
+en notant \(L = \Psi(s_1(v), \dots, s_k(v))\) localement, la règle de la chaîne
+multivariée donne exactement \(\frac{dL}{dv} = \sum_i \frac{\partial L}{\partial s_i}\frac{ds_i}{dv}\).
+Les formules matricielles du MLP ne sont que l'application coordonnée par coordonnée de
+cette identité&nbsp;; le produit \(W^{(\ell+1)\top}\delta^{(\ell+1)}\) transpose la
+linéarité \(a^{(\ell+1)} = W^{(\ell+1)}h^{(\ell)} + \dots\), et le terme
+\(\odot\,\sigma'(a^{(\ell)})\) vient de \(h^{(\ell)} = \sigma(a^{(\ell)})\) appliquée
+composante par composante.
+<span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.2 — Backprop à la main sur un graphe de 5 nœuds</span>
+  Prenons \(f(w_1, w_2) = \tfrac12\big(w_2 \tanh(w_1 x) - t\big)^2\) avec
+  \(x = 1{,}5\), \(w_1 = 0{,}3\), \(w_2 = -0{,}8\), \(t = 1\). Nœuds intermédiaires&nbsp;:
+  \(a = w_1 x\), \(h = \tanh(a)\), \(y = w_2 h\), \(\mathcal{L} = \tfrac12(y-t)^2\).
+  <table class="tbl">
+  <thead><tr><th>Passe avant</th><th>valeur</th><th>Dérivées locales</th></tr></thead>
+  <tbody>
+  <tr><td>\(a = w_1 x\)</td><td>\(0{,}45\)</td><td>\(\partial a/\partial w_1 = x = 1{,}5\), \(\partial a/\partial x = w_1\)</td></tr>
+  <tr><td>\(h = \tanh(a)\)</td><td>\(0{,}4219\)</td><td>\(\partial h/\partial a = 1-h^2 = 0{,}8220\)</td></tr>
+  <tr><td>\(y = w_2 h\)</td><td>\(-0{,}3375\)</td><td>\(\partial y/\partial w_2 = h\), \(\partial y/\partial h = w_2\)</td></tr>
+  <tr><td>\(\mathcal{L} = \tfrac12(y-t)^2\)</td><td>\(0{,}8944\)</td><td>\(\partial \mathcal{L}/\partial y = y - t = -1{,}3375\)</td></tr>
+  </tbody>
+  </table>
+  Passe arrière (produits des dérivées locales)&nbsp;:
+  $$\frac{\partial \mathcal{L}}{\partial w_2} = -1{,}3375 \times 0{,}4219 = -0{,}5643, \qquad
+  \frac{\partial \mathcal{L}}{\partial w_1} = \underbrace{(-1{,}3375)(-0{,}8)}_{\partial\mathcal{L}/\partial h = 1{,}0700} \times\; 0{,}8220 \times 1{,}5 = 1{,}3193.$$
+  Le message \(\partial\mathcal{L}/\partial h = 1{,}07\) est littéralement le gradient qui
+  «&nbsp;passe vers l'arrière&nbsp;» à travers la multiplication — même structure que le
+  message passing des GNN, mais sur le graphe de calcul.
+</div>
+
+<h3>2.2 Coût&nbsp;: mémoire, calcul, et comment les réduire</h3>
+
+<ul>
+  <li><strong>Complexité.</strong> Un unique passage avant + un passage arrière coûtent
+  \(\mathcal{O}(|\theta|)\) opérations (à facteur constant près)&nbsp;: le gradient de
+  <em>tous</em> les poids pour le prix d'environ deux évaluations — c'est l'apport décisif
+  du mode inverse (Linnainmaa, 1970&nbsp;; Rumelhart, Hinton &amp; Williams, 1986) par
+  rapport à la différentiation en mode avant, qui exigerait \(|\theta|\) passages.</li>
+  <li><strong>Mémoire.</strong> La passe arrière a besoin des activations <em>de chaque
+  couche</em>&nbsp;: la mémoire croît comme la taille du batch \(\times\) le nombre
+  d'activations, pas comme \(|\theta|\). Pour un transformer, c'est le facteur limitant.</li>
+  <li><strong>Checkpointing</strong> (Griewank&nbsp;; Chen, 2016)&nbsp;: ne stocker qu'une
+  couche sur \(\sqrt L\) et recalculer les intermédiaires manquants lors de la passe
+  arrière — mémoire \(\mathcal{O}(\sqrt L)\) au lieu de \(\mathcal{O}(L)\), pour ~33&nbsp;%
+  de calcul en plus. <code>torch.utils.checkpoint</code>.</li>
+  <li><strong>Précision mixte</strong>&nbsp;: stocker/calculer en float16 ou bfloat16
+  (2× throughput mémoire et tenseurs), en gardant des copies maîtresses float32 des poids
+  et en remontant l'échelle de la perte (<em>loss scaling</em>) pour éviter que les petits
+  gradients s'annulent en fp16. bfloat16 a la même plage d'exposant que fp32 — plus robuste.</li>
+</ul>
+
+<pre class="code"><code>import torch
+
+x, y = torch.randn(8), torch.randn(2)
+W1 = torch.randn(64, 8, requires_grad=True)   # autograd suit les operations
+W2 = torch.randn(2, 64, requires_grad=True)
+
+loss = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+loss.backward()          # backprop automatique
+print(W1.grad.shape, W2.grad.shape)           # memes formes que W1, W2
+
+# Verification par difference finie (a faire sur tout nouveau gradient custom)
+eps = 1e-6
+with torch.no_grad():
+    W2[0, 0] += eps; lp = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+    W2[0, 0] -= 2 * eps; lm = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+    W2[0, 0] += eps
+print((lp - lm) / (2 * eps), W2.grad[0, 0])   # ~ -0.0723 deux fois</code></pre>
+
+<div class="note">
+  <span class="tag">Graphe de calcul</span>
+  <code>autograd</code> construit dynamiquement le graphe des opérations (sommets = tenseurs,
+  arêtes = opérations) et applique la règle de la chaîne en différentiation en mode inverse.
+  Le deep learning <em>est</em> du calcul sur graphe&nbsp;— la même idée sera appliquée aux
+  données elles-mêmes au module Graph ML. Et comme le graphe est acyclique par
+  construction, la récurrence du théorème 2.1 s'y exécute toujours sans deadlock&nbsp;;
+  les RNN (chapitre 5) sont «&nbsp;déroulés&nbsp;» dans le temps précisément pour retrouver
+  un graphe acyclique.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Du neurone au réseau profond</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Optimisation en pratique</a></nav>
+</main>
+</div>
+
+</body>
+</html>

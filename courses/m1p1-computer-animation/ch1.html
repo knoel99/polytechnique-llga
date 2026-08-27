@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Animation — Le pipeline d'animation&nbsp;: keyframes et splines — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Computer Animation</a> › Le pipeline d'animation&nbsp;: keyframes et splines</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51085_EP</span>Computer Animation</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: ODE, Taylor, rotations, énergie</a>
+<a href="ch1.html" class="active">Le pipeline d'animation&nbsp;: keyframes et splines</a>
+<a href="ch2.html">Intégration numérique des EDO</a>
+<a href="ch3.html">Stabilité&nbsp;: le théorème de l'oscillateur</a>
+<a href="ch4.html">Particules, forces, ressorts-masses</a>
+<a href="ch5.html">Corps rigides et quaternions</a>
+<a href="ch6.html">Collisions et contraintes</a>
+<a href="ch7.html">Skinning&nbsp;: LBS et ses artefacts</a>
+<a href="ch8.html">Cinématique inverse</a>
+<a href="ch9.html">Foules et comportements</a>
+<a href="ch10.html">Procédural contre data-driven</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Le pipeline d'animation&nbsp;: keyframes et splines</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Animation par images clés</span>
+  Un animateur spécifie des <strong>images clés</strong> (keyframes) — valeurs de
+  paramètres d'articulation à des instants donnés, \((t_i, \mathbf{p}_i)_{i=0}^{n}\) —
+  et le système <em>interpole</em> entre elles. Les paramètres sont typiquement les
+  angles d'un squelette (chapitre 7), la position d'une caméra, ou des attributs
+  temporels (couleur, intensité). L'interpolation doit être au moins \(C^1\) pour éviter
+  les à-coups de vitesse visibles à l'œil (le cerveau est très sensible aux dérivées
+  premières discontinues du mouvement).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.2 — Interpolation d'Hermite cubique&nbsp;: existence, unicité, base</span>
+  Soient instants \(t_0 &lt; t_1\), position \(\mathbf{p}_0, \mathbf{p}_1\) et vitesses
+  \(\mathbf{v}_0, \mathbf{v}_1\) imposées. Il existe un unique polynôme vectoriel de
+  degré \(\leq 3\), \(\mathbf{p}(t)\), tel que \(\mathbf{p}(t_i) = \mathbf{p}_i\) et
+  \(\dot{\mathbf{p}}(t_i) = \mathbf{v}_i\). En posant \(s = \dfrac{t - t_0}{T}\),
+  \(T = t_1 - t_0\)&nbsp;:
+  $$\mathbf{p}(t) = h_{00}(s)\,\mathbf{p}_0 + T\,h_{10}(s)\,\mathbf{v}_0
+  + h_{01}(s)\,\mathbf{p}_1 + T\,h_{11}(s)\,\mathbf{v}_1$$
+  $$h_{00} = 2s^3 - 3s^2 + 1,\qquad h_{10} = s^3 - 2s^2 + s,\qquad
+  h_{01} = -2s^3 + 3s^2,\qquad h_{11} = s^3 - s^2.$$
+  <div class="proof">
+    Un polynôme cubique a 4 coefficients&nbsp;; les 4 conditions (valeur et dérivée en
+    \(t_0\) et \(t_1\)) forment un système linéaire carré. Par scaling temporel on se
+    ramène à \(t_0 = 0, t_1 = 1\). La matrice de Vandermonde du système
+    (conditions en \(0\) et \(1\)) est inversible&nbsp;: son déterminant vaut 1
+    (lignes \((1,0,0,0)\), \((0,1,0,0)\), \((1,1,1,1)\), \((0,1,2,3)\) après
+    réarrangement). La résolution donne exactement les quatre polynômes de Hermite
+    annoncés, qui forment une base car chacun réalise une partition des conditions
+    \((1,0,0,0)\), \((0,1,0,0)\), \((0,0,1,0)\), \((0,0,0,1)\).
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 1.3 — Saut d'obstacle, valeurs numériques</span>
+  Un objet part de \(\mathbf{p}_0 = 0\) et atteint \(\mathbf{p}_1 = 2\) mètres en
+  \(T = 1\) s, avec vitesses imposées \(\mathbf{v}_0 = \mathbf{v}_1 = 1\) m/s. Au milieu
+  \(s = \tfrac12\)&nbsp;: \(h_{10} = \tfrac18 - \tfrac12 + \tfrac12 = 0{,}125\),
+  \(h_{01} = -\tfrac14 + \tfrac34 = 0{,}5\), \(h_{11} = \tfrac18 - \tfrac14 = -0{,}125\),
+  \(h_{00} = \tfrac14 - \tfrac34 + 1 = 0{,}5\). D'où
+  \(\mathbf{p}(\tfrac12) = 0{,}5 \cdot 0 + 0{,}125 \cdot 1 + 0{,}5 \cdot 2 - 0{,}125 \cdot 1
+  = 1{,}0\) m — le symétrique attendu — et
+  \(\dot{\mathbf{p}}(s) \propto 6s^2 - 6s\) (partie position)&nbsp;: la vitesse s'annule
+  en \(s = \tfrac12\), sommet de la trajectoire. C'est exactement le profil
+  «&nbsp;montée puis descente&nbsp;» d'un saut, <em>sans</em> aucune physique.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 1.4 — Bézier, Catmull-Rom, B-splines</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Bézier cubique</strong>&nbsp;: les tangentes deviennent des points de
+    contrôle \(\mathbf{b}_0,\dots,\mathbf{b}_3\), avec
+    \(\mathbf{v}_0 = 3(\mathbf{b}_1 - \mathbf{b}_0)/T\). L'algorithme de
+    <em>de Casteljau</em> évalue par trois subdivisions affines successives — stable et
+    parallélisable (GPU)&nbsp;;</li>
+    <li><strong>Catmull-Rom</strong>&nbsp;: les vitesses sont déduites des voisins,
+    \(\mathbf{v}_i = \dfrac{\mathbf{p}_{i+1} - \mathbf{p}_{i-1}}{t_{i+1} - t_{i-1}}\)&nbsp;:
+    la courbe passe <em>par</em> toutes les clés, est \(C^1\), locale (une clé déplacée
+    n'affecte que deux segments)&nbsp;;</li>
+    <li><strong>B-splines cubiques</strong>&nbsp;: \(C^2\) mais la courbe
+    n'interpole pas les clés (elles deviennent des points d'<em>approximation</em>) —
+    compromis standard des courbes de caméra, où la continuité de l'accélération
+    évite les secousses.</li>
+  </ul>
+</div>
+
+<table class="tbl">
+  <tr><th>Courbe</th><th>Continuité</th><th>Passe par les clés&nbsp;?</th><th>Localité</th><th>Usage typique</th></tr>
+  <tr><td>Hermite / Bézier</td><td>\(C^1\)</td><td>oui</td><td>forte</td><td>poses d'animateur, UI</td></tr>
+  <tr><td>Catmull-Rom</td><td>\(C^1\)</td><td>oui</td><td>deux segments</td><td>trajectoires, caméras</td></tr>
+  <tr><td>B-spline cubique</td><td>\(C^2\)</td><td>non</td><td>quatre segments</td><td>caméra de cinématique</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Easing et interpolation temporelle</span>
+  Les mêmes bases s'appliquent au <em>temps</em>&nbsp;: rééchantillonner \(s \mapsto
+  \sigma(s)\) (fonctions <em>ease-in/out</em>, polynômes de degré 3 ou 5 vérifiant
+  \(\sigma(0)=0\), \(\sigma(1)=1\), \(\sigma'=0\) aux extrémités) revient à composer
+  la spline avec un changement d'horloge. Attention&nbsp;: composer deux \(C^1\)
+  n'assure rien de plus que \(C^1\) — la qualité perçue dépend de \(\dot{\sigma}\),
+  d'où des profils «&nbsp;slow-in / slow-out&nbsp;» inspirés des principes d'animation
+  classiques de Disney.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Précédent</span> Rappels&nbsp;: ODE, Taylor, rotations, énergie</a><a class="next" href="ch2.html"><span class="dir">Suivant</span> Intégration numérique des EDO</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — Path tracing Monte Carlo — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Synthesis: Theory and Practice</a> › Path tracing Monte Carlo</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités, intégrales, EDO linéaires</a>
+<a href="ch1.html">Radiométrie&nbsp;: la radiance</a>
+<a href="ch2.html">L'équation du rendu</a>
+<a href="ch3.html">BRDF et modèles de matériaux</a>
+<a href="ch4.html">Caméras&nbsp;: le modèle sténopé</a>
+<a href="ch5.html">Rastérisation contre lancer de rayons</a>
+<a href="ch6.html" class="active">Path tracing Monte Carlo</a>
+<a href="ch7.html">Accélération&nbsp;: intersection et BVH</a>
+<a href="ch8.html">Bruit, débruitage, tone mapping</a>
+<a href="ch9.html">Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a>
+<a href="ch10.html">Le temps réel&nbsp;: GPU, hybride, upscaling</a>
+<a href="ch11.html">Travaux de l'enseignant</a>
+<a href="code.html">Un path tracer complet en Python</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Path tracing Monte Carlo</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — L'estimateur du rendu</span>
+  Le <strong>path tracing</strong> estime la LTE (chapitre 2) en échantillonnant
+  des <strong>chemins</strong> \(\mathbf{x} = (x_0, \dots, x_k)\) de l'œil vers
+  les sources, avec densité \(p(\mathbf{x})\), par
+  $$\hat{L} = \frac{L_e\, f_r\, \cos\theta\, f_r \cos\theta \cdots}{p(\mathbf{x})}
+  \quad \text{(produit des facteurs de transport / probabilité du chemin)}.$$
+  Un chemin se construit rebond après rebond&nbsp;: à chaque rebond, tirer une
+  direction sortante selon une densité \(p(\omega)\) (uniforme hémisphérique,
+  ou <em>proportionnelle à \(\cos\theta/\pi\)</em> — l'échantillonnage
+  cosinus), accumuler les contributions, terminer par roulette russe
+  (définition 6.4). C'est un estimateur <em>sans biais</em> de la série
+  complète des rebonds — à opposer aux méthodes déterministes
+  (radiosité, photon mapping&nbsp;: biaisées mais moins bruitées).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.2 — Sans biais, et variance en \(\sigma/\sqrt{N}\)</span>
+  (i) \(\mathbb{E}\big[f(X)/p(X)\big] = \int_D f\) dès que \(p &gt; 0\) sur le
+  support de \(f\). (ii) Pour \(N\) échantillons i.i.d., l'estimateur moyen
+  \(\hat{I}_N\) vérifie \(\mathrm{Var}(\hat{I}_N) = \mathrm{Var}(f(X)/p(X))/N\)
+  et \(\hat{I}_N \to I\) presque sûrement. Pour diviser l'erreur typique par
+  2, il faut 4 fois plus d'échantillons — la malédiction du Monte Carlo
+  (et son salut&nbsp;: l'exposant \(-1/2\) est <em>indépendant de la
+  dimension</em>, d'où le triomphe du MC en rendu, dimension infinie des
+  chemins).
+  <div class="proof">
+    (i) \(\mathbb{E}[f/p] = \int (f/p)\, p = \int f\). (ii) la variance d'une
+    somme indépendante se sommant, \(\mathrm{Var}(\hat I_N) = \frac{1}{N^2}
+    \sum \mathrm{Var} = \mathrm{Var}/N\) — et la loi forte des grands nombres
+    donne la convergence. Pour l'erreur <em>typique</em>, le TCL donne
+    \(\hat I_N - I \approx \mathcal{N}(0, \mathrm{Var}/N)\)&nbsp;: écart-type
+    en \(\sqrt{\mathrm{Var}/N}\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.3 — Échantillonnage d'importance&nbsp;: l'optimum zéro-variance</span>
+  Parmi les densités \(p\), la variance de \(f(X)/p(X)\) est minimale (nulle)
+  pour \(p^\ast \propto |f|\)&nbsp;; en pratique on choisit \(p\) proche de
+  \(f\) là où \(f\) est grande. L'exemple parfait du module&nbsp;: pour
+  \(I = \int_{\Omega^+} \cos\theta\, d\omega = \pi\) (facteur de forme
+  ponctuel), l'échantillonnage uniforme (\(p = 1/2\pi\)) donne l'estimateur
+  \(2\pi\cos\theta\), de variance \(\pi^2/3\)&nbsp;; l'échantillonnage
+  cosinus (\(p = \cos\theta/\pi\)) donne l'estimateur <em>constant</em>
+  \(\pi\) — variance exactement nulle.
+  <div class="proof">
+    \(p^\ast = |f|/\int|f|\)&nbsp;: alors \(f/p^\ast = \pm\int|f|\) est
+    constant ⟹ variance nulle. Pour le calcul d'échantillonnage uniforme&nbsp;:
+    \(\mathbb{E}[X^2] = \int (2\pi\cos\theta)^2 \frac{d\omega}{2\pi} =
+    2\pi \int_{\Omega^+}\cos^2\theta\, d\omega = 2\pi \cdot \frac{2\pi}{3} =
+    \frac{4\pi^2}{3}\), et \(\mathbb{E}[X]^2 = \pi^2\), d'où
+    \(\mathrm{Var} = \frac{4\pi^2}{3} - \pi^2 = \frac{\pi^2}{3}\) (en
+    utilisant \(\int_{\Omega^+}\cos^2\theta\,d\omega =
+    \int_0^{2\pi}\!\!\int_0^{\pi/2} \cos^2\theta \sin\theta\, d\theta\,
+    d\varphi = \frac{2\pi}{3}\)). Pour le cosinus&nbsp;: \(f/p =
+    \cos\theta / (\cos\theta/\pi) = \pi\) pour tout tirage.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 6.4 — Les trois ingrédients d'un path tracer réel</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Next Event Estimation (NEE)</strong>&nbsp;: à chaque rebond,
+    connecter directement le point aux sources émissives (rayon d'ombre) au
+    lieu d'attendre qu'un chemin les touche par chance — échantillonnage
+    <em>multiple importance sampling</em> (MIS, Veach)&nbsp;: combiner la
+    stratégie «&nbsp;BRDF&nbsp;» et la stratégie «&nbsp;lumière&nbsp;» avec les
+    poids d'équilibre&nbsp;;</li>
+    <li><strong>Roulette russe</strong>&nbsp;: terminer le chemin avec
+    probabilité \(q\) (albédo du point), en pondérant les survivants par
+    \(1/(1-q)\)&nbsp;: sans biais, espérance de longueur bornée par la
+    réflectance — la série géométrique du théorème 2.2 échantillonnée&nbsp;;</li>
+    <li><strong>Échantillonnage des lumières étendues</strong>&nbsp;: une
+    laminaire de \(1\,\mathrm{m}^2\) vue à \(3\) m sous une incidence oblique
+    n'occupe que quelques millièmes de stéradians — tirer des points
+    <em>sur la source</em> (pondérés par son aire et la distance) plutôt que
+    des directions&nbsp;; c'est le facteur 100 entre un rendu «&nbsp;bruité en
+    10 minutes&nbsp;» et «&nbsp;propre en 10 secondes&nbsp;».</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Liens avec le reste du cursus</span>
+  L'estimation de la LTE est un problème d'intégration de grande dimension —
+  exactement le cadre des distances de Wasserstein et de leurs estimateurs
+  échantillonnaux (cf. module Optimal Transport&nbsp;: échantillonnage
+  d'importance, concentration, malédiction de la dimension)&nbsp;; le MIS est
+  un cas particulier de combinaison d'estimateurs (minimisation de variance
+  sous contrainte de non-biais). Les mêmes preuves servent au rendu et à
+  l'apprentissage&nbsp;; seule change la fonction intégrée.
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> Rastérisation contre lancer de rayons</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Accélération&nbsp;: intersection et BVH</a></nav>
+</main>
+</div>
+
+</body>
+</html>

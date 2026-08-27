@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — GNN et message passing — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Graph Machine and Deep Learning for Generative AI</a> › GNN et message passing</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52072_EP</span>Graph Machine and Deep Learning for Generative AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: théorie des graphes</a>
+<a href="ch1.html">Pourquoi les graphes&nbsp;?</a>
+<a href="ch2.html">Tâches d'apprentissage sur graphes</a>
+<a href="ch3.html">Node embeddings</a>
+<a href="ch4.html">Filtres spectraux et spectral clustering</a>
+<a href="ch5.html" class="active">GNN et message passing</a>
+<a href="ch6.html">Link prediction et auto-encodeurs de graphes</a>
+<a href="ch7.html">GNN à l'échelle</a>
+<a href="ch8.html">Applications et mise en œuvre</a>
+<a href="ch9.html">Génération de graphes</a>
+<a href="ch10.html">Travaux de l'équipe pédagogique</a>
+<a href="ch11.html">Graphes × LLMs&nbsp;: GraphRAG et l'hybride</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. GNN et message passing</h2>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — La couche de message passing (MPNN, Gilmer et al., 2017)</span>
+  $$h_v^{(\ell+1)} = \phi\Big(h_v^{(\ell)},\ \underset{u \in \mathcal{N}(v)}{\mathrm{AGG}}\ \big\{\psi\big(h_v^{(\ell)}, h_u^{(\ell)}\big)\big\}\Big)$$
+  <strong>message</strong> \(\psi\) (calculé par le voisin), <strong>agrégation</strong>
+  \(\mathrm{AGG}\) (permutation-invariante&nbsp;: somme, moyenne, max, attention),
+  <strong>update</strong> \(\phi\). Une couche = un tour de message passing = une convolution
+  = un pas de diffusion sur le graphe. Le choix de \(\mathrm{AGG}\) n'est pas anodin&nbsp;:
+  moyenne/max perdent la cardinalité ({a, a} et {a} ont même moyenne et même max)&nbsp;;
+  c'est l'objet du théorème GIN (M2, ch. 1).
+</div>
+
+<div class="thm">
+  <span class="tag">Dérivation 5.2 — GCN depuis la convolution spectrale (Kipf &amp; Welling, 2017)</span>
+  Partons du filtre de Tchebychev tronqué à \(K = 1\) sur le laplacien <em>renormalisé</em>
+  \(L_{\mathrm{sym}} = I - \tilde D^{-1/2} \tilde A \tilde D^{-1/2}\), \(\tilde A = A + I\),
+  dont les valeurs propres vivent dans \([0, 2]\) (d'où le rescaling
+  \(\tilde\Lambda \approx \Lambda - I\) en approchant \(\lambda_{\max} \approx 2\))&nbsp;:
+  $$g_\theta(\tilde\Lambda) \approx \theta_0\, T_0 + \theta_1\, T_1(\tilde\Lambda)
+  = \theta_0 I + \theta_1 (\Lambda - I).$$
+  En fixant le <em>renormalization trick</em> \(\theta_0 = -\theta_1 = \theta\) (un seul
+  paramètre, filtre croissant vers les basses fréquences, auto-boucles stabilisant la
+  dynamique)&nbsp;:
+  $$g_\theta \approx \theta\,(2I - L_{\mathrm{sym}}) = \theta\, \tilde D^{-1/2} \tilde A \tilde D^{-1/2}.$$
+  En rajoutant la non-linéarité, la dimension cachée et les features \(X\), on obtient la
+  couche GCN&nbsp;:
+  $$H^{(\ell+1)} = \sigma\Big(\tilde D^{-1/2}\, \tilde A\, \tilde D^{-1/2}\, H^{(\ell)}\, W^{(\ell)}\Big), \qquad H^{(0)} = X,$$
+  moyennée renormalisée des représentations transformées des voisins&nbsp;; \(L\) couches =
+  réceptive field de \(L\) sauts. La renormalisation (i)&nbsp;annule la valeur propre nulle
+  (pas de composante constante injectée), (ii)&nbsp;garde les gains en \([-1, 1]\) — condition
+  de stabilité de la profondeur, reliée à l'over-smoothing ci-dessous.
+</div>
+
+<div class="thm">
+  <span class="tag">GraphSAGE (Hamilton et al., 2017) — algorithme et pseudo-code</span>
+  Pour chaque nœud, agréger un <em>échantillon</em> de voisins puis concaténer avec la
+  représentation courante&nbsp;:
+<pre class="code"><code>entree : G, features X, profondeur K, tailles d'echantillon s_1..s_K
+pour v dans V : h_v^(0) = x_v
+pour l = 1 .. K :
+    pour v dans V :
+        S_v = echantillon uniforme de N(v) de taille s_l        # K voisins dans le papier
+        a_v^(l) = AGG({ h_u^(l-1) : u in S_v })                 # mean / LSTM / pool
+        h_v^(l) = sigma( W_l . [ h_v^(l-1) || a_v^(l) ] )       # concatenation !
+        h_v^(l) = h_v^(l) / ||h_v^(l)||                          # normalisation L2
+sortie : z_v = h_v^(K)</code></pre>
+  La <strong>concaténation</strong> préserve l'information propre au nœud (sinon la moyenne
+  des voisins écrase le signal local)&nbsp;; l'<strong>échantillonnage fixe par couche</strong>
+  borne le minibatch (ch. 7)&nbsp;; le tout est <em>inductif</em>&nbsp;: les poids
+  \(W_l\) se réappliquent à des nœuds/graphes non vus. Cas particuliers&nbsp;: AGG = mean
+  ≈ GCN sans renormalisation&nbsp;; AGG = pool (MLP + max)&nbsp;; AGG = LSTM sur voisins
+  <em>ordonnés aléatoirement</em> (l'ordre rompt l'invariance… approximation assumée&nbsp;;
+  le problème de l'ordre est traité par GOAT, ch. 10).
+</div>
+
+<div class="thm">
+  <span class="tag">GAT (Veličković et al., 2018) — équations et complexité</span>
+  Poids d'arête <em>appris par attention</em>&nbsp;:
+  $$e_{uv} = \mathrm{LeakyReLU}\big(a^\top [\,W h_u \| W h_v\,]\big), \qquad
+  \alpha_{uv} = \frac{\exp(e_{uv})}{\sum_{u' \in \mathcal{N}(v)} \exp(e_{uv'})}, \qquad
+  h_v^{(\ell+1)} = \sigma\Big(\sum_{u \in \mathcal{N}(v)} \alpha_{uv}\, W h_u^{(\ell)}\Big)$$
+  avec \(T\) têtes d'attention parallèles (T projections \(W^{(t)}\)) concaténées ou moyennées.
+  Complexité par couche&nbsp;: \(\mathcal{O}(|V| F F' + |E| F')\) — <em>linéaire</em> en
+  arêtes, comparable à GCN, mais avec des poids <em>adaptés à chaque arête</em>&nbsp;: utile
+  quand le graphe est bruité ou que certaines relations comptent plus (transactions suspectes&nbsp;!).
+  Structurellement identique à l'attention des transformers (module Deep Learning)&nbsp;:
+  ici le masque d'attention est <em>donné</em> par le graphe, là il est <em>calculé</em> —
+  les graph transformers du M2 (ch. 4) ferment la boucle en apprenant l'attention <em>et</em>
+  en la biaisant par la structure.
+</div>
+
+<div class="note">
+  <span class="tag">Au-delà du graphe homogène&nbsp;: R-GCN, features d'arêtes</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>R-GCN</strong> (Schlichtkrull et al., 2018)&nbsp;: graphe <em>relationnel</em>
+    (types d'arêtes \(r\) dans \(\mathcal{R}\))&nbsp;;
+    \(h_v^{(\ell+1)} = \sigma\big(W_0 h_v^{(\ell)} + \sum_{r \in \mathcal{R}}
+    \sum_{u \in \mathcal{N}_r(v)} \frac{1}{c_{v,r}} W_r\, h_u^{(\ell)}\big)\). Pour éviter
+    l'explosion paramétrique (\(|\mathcal{R}| \times F \times F'\)): décomposition en
+    <em>bases</em> \(W_r = \sum_b a_{rb} V_b\) ou <em>block-diagonale</em>. Usage type&nbsp;:
+    encodage de graphes de connaissances pour le link prediction (ch. 6).</li>
+    <li><strong>Features d'arêtes</strong>&nbsp;: (a)&nbsp;graphe de ligne (chaque arête devient
+    un nœud)&nbsp;; (b)&nbsp;convolution sur arêtes (NNConv)&nbsp;: \(\psi(h_u, e_{uv})\) au
+    lieu de \(\psi(h_u)\) — la liaison chimique porte un type&nbsp;; (c)&nbsp;attention
+    conditionnée (GAT peut injecter \(e_{uv}\) dans \(e_{uv}\)-score).</li>
+    <li><strong>Pooling hiérarchique</strong>&nbsp;: DiffPool (Ying et al., 2018) apprend une
+    matrice d'affectation douce \(S^{(\ell)} = \mathrm{softmax}(\mathrm{GNN}_A(H^{(\ell)}))\)
+    et contracte le graphe&nbsp;: \(H^{(\ell+1)} = S^{(\ell)\top} H^{(\ell)}\),
+    \(A^{(\ell+1)} = S^{(\ell)\top} A^{(\ell)} S^{(\ell)}\) — coarse-graining neuronal,
+    coûteux mais hiérarchique&nbsp;; alternatives&nbsp;: sort/TopK pooling, readout pyramidal.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.3 — Over-smoothing&nbsp;: démonstration sur graphe régulier</span>
+  Sur un graphe \(d\)-régulier connexe, la propagation GCN sans poids/non-linéarité vérifie
+  \(H^{(\ell)} = P^\ell X\) avec \(P = \frac{A + I}{d + 1}\). Alors
+  $$H^{(\ell)} \xrightarrow[\ell \to \infty]{} \frac{\mathbf{1}\mathbf{1}^\top}{n}\, X,$$
+  la <em>solution harmonique</em> (moyenne globale), à vitesse géométrique
+  \(\big(\frac{\lambda_2(A) + 1}{d + 1}\big)^\ell\).
+  <div class="proof">
+  Sur un graphe \(d\)-régulier, \(D = (d+1)I\) pour \(\tilde A\), donc
+  \(\tilde D^{-1/2} \tilde A \tilde D^{-1/2} = (A + I)/(d+1) =: P\). \(A\) étant symétrique
+  réelle, écrivons \(X\) dans sa base propre&nbsp;: \(A = \sum_i \lambda_i u_i u_i^\top\) avec
+  \(u_1 = \mathbf{1}/\sqrt{n}\), \(\lambda_1 = d &gt; \lambda_2 \geq \dots\), et
+  \(\lambda_i &lt; d\) pour \(i \geq 2\) (égalité seulement si composante connexe distincte).
+  Alors \(P^\ell = \sum_i \big(\frac{\lambda_i + 1}{d+1}\big)^\ell u_i u_i^\top\)&nbsp;;
+  le terme \(i = 1\) vaut exactement \(\frac{\mathbf{1}\mathbf{1}^\top}{n}\)&nbsp;; tous les
+  autres ont un rapport \(\frac{\lambda_i + 1}{d + 1} &lt; 1\) (et \(\geq 0\) si le graphe
+  n'est pas biparti&nbsp;; sinon \(&gt; -1\) en valeur absolue) et décroissent géométriquement.
+  Toute la information des composantes non constantes est effacée&nbsp;: tous les nœuds
+  convergent vers le même vecteur ligne-moyenne — les plongements s'effondrent. <span class="qed">∎</span>
+  </div>
+  Avec poids et non-linéarités, le phénomène persiste (collapse de rang&nbsp;; Oono &amp; Suzuki,
+  ICLR 2020)&nbsp;: c'est une limite <em>structurelle</em> de la profondeur GCN. Remèdes&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Jumping Knowledge</strong> (Xu et al., 2018)&nbsp;: la readout agrège
+    <em>toutes</em> les profondeurs \(h_v = \mathrm{JK}(h_v^{(1)}, \dots, h_v^{(L)})\)
+    (concat / max / LSTM-attention)&nbsp;: chaque nœud choisit son échelle&nbsp;;</li>
+    <li>résidus et normalisations (GCNII, APPNP — développés au M2, ch. 2)&nbsp;;</li>
+    <li>en pratique&nbsp;: 2-4 couches suffisent et suffisent souvent — la profondeur utile
+    est celle de la dépendance statistique de la tâche.</li>
+  </ul>
+  Deuxième limite structurelle — l'<em>over-squashing</em> (goulots topologiques) — est
+  différente&nbsp;: elle concerne le <em>canal</em> et non la représentation, et se traite par
+  <em>rewiring</em>&nbsp;; tout le sujet est au M2, ch. 2. Troisième limite&nbsp;:
+  l'expressivité bornée par 1-WL (M2, ch. 1).
+</div>
+
+<pre class="code"><code>import torch
+from torch_geometric.nn import GCNConv, GATConv
+from torch_geometric.datasets import Planetoid
+
+dataset = Planetoid(root="/tmp/Cora", name="Cora")   # 2708 noeuds, 5429 aretes, 7 classes
+data = dataset[0]
+
+class GCN(torch.nn.Module):
+    def __init__(self, d_in, d_hid, n_classes):
+        super().__init__()
+        self.c1, self.c2 = GCNConv(d_in, d_hid), GCNConv(d_hid, n_classes)
+    def forward(self, x, edge_index):
+        return self.c2(torch.relu(self.c1(x, edge_index)), edge_index)
+
+model = GCN(dataset.num_features, 64, dataset.num_classes)
+opt = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+for epoch in range(200):
+    opt.zero_grad()
+    out = model(data.x, data.edge_index)
+    loss = torch.nn.functional.cross_entropy(out[data.train_mask], data.y[data.train_mask])
+    loss.backward(); opt.step()
+acc = (model(data.x, data.edge_index).argmax(1)[data.test_mask]
+       == data.y[data.test_mask]).float().mean()
+print(f"Cora test accuracy : {acc:.3f}")   # ~0.81 avec ce reglage simple</code></pre>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Précédent</span> Filtres spectraux et spectral clustering</a><a class="next" href="ch6.html"><span class="dir">Suivant</span> Link prediction et auto-encodeurs de graphes</a></nav>
+</main>
+</div>
+
+</body>
+</html>

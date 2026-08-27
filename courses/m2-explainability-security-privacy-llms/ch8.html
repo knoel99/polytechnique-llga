@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainability, Security, Privacy of LLMs — Vie privée II&nbsp;: membership inference et DP — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Explainability, Security, Privacy of LLMs</a> › Vie privée II&nbsp;: membership inference et DP</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Explainability, Security, Privacy of LLMs</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: la boîte noire et ses trois questions</a>
+<a href="ch1.html">Interprétabilité interne&nbsp;: probing et contrôle</a>
+<a href="ch2.html">Lire les couches&nbsp;: logit lens, attention et ses limites</a>
+<a href="ch3.html">Superposition et sparse autoencoders</a>
+<a href="ch4.html">Expliquer une sortie&nbsp;: SHAP, LIME, gradients</a>
+<a href="ch5.html">Sécurité&nbsp;: taxonomie des attaques</a>
+<a href="ch6.html">Défenses en profondeur</a>
+<a href="ch7.html">Vie privée I&nbsp;: mémorisation et extraction</a>
+<a href="ch8.html" class="active">Vie privée II&nbsp;: membership inference et DP</a>
+<a href="ch9.html">Anonymisation et watermarking</a>
+<a href="ch10.html">Évaluer la sûreté&nbsp;: red teaming, AI Act</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Vie privée II&nbsp;: membership inference et DP</h2>
+
+<h3>8.1 Membership inference&nbsp;: «&nbsp;ce point était-il dans le corpus&nbsp;?&nbsp;»</h3>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Attaque MIA</span>
+  La <em>membership inference attack</em> (Shokri et al., S&amp;P 2017, pour les
+  classifieurs&nbsp;; étendue aux LMs) infère si un exemple \(x\) a été utilisé à
+  l'entraînement. L'attaquant observe la sortie du modèle sur \(x\)&nbsp;;
+  signature typique&nbsp;: les membres sont prédits avec une confiance
+  <em>anormalement élevée</em> (surapprentissage). Pour un LM&nbsp;: perplexité
+  anormalement basse de \(x\). L'<strong>avantage</strong> d'attaque se mesure&nbsp;:
+  $$\mathrm{Adv} \;=\; \mathrm{TPR} - \mathrm{FPR},$$
+  l'écart entre taux de détection des membres et de faux positifs sur les
+  non-membres&nbsp;; l'aire sous la courbe ROC (AUC) en donne la version
+  balayée en seuil.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 8.2 — Membre ⇒ likelihood ratio</span>
+  Le test optimal pour distinguer membre/non-membre compare la densité de la
+  sortie sous chaque hypothèse (Neyman-Pearson)&nbsp;: en pratique on se ramène
+  à un seuil sur une statistique de perte \(L(x)\). Si le modèle ne surapprend
+  pas — mêmes distributions de \(L\) pour membres et non-membres — alors
+  \(\mathrm{Adv} \approx 0\)&nbsp;: la MIA mesure le surapprentissage, ce qui en
+  fait aussi un outil de diagnostic de généralisation. Conséquence pour les
+  LLMs&nbsp;: les gros modèles bien régularisés, entraînés sur un passage unique
+  de chaque document, exposent peu de signal&nbsp;; le danger se concentre sur
+  les corpus restreints vus de multiples fois (fine-tuning privé).
+</div>
+
+<h3>8.2 La garantie&nbsp;: privacy différentielle appliquée aux LLMs</h3>
+
+<div class="recap">
+  <div class="recap-title">Rappel — module Emerging ML ch. 5</div>
+  Un mécanisme \(M\) est \((\varepsilon, \delta)\)-DP si pour tous les jeux de
+  données voisins \(D \sim D'\) (un exemple d'écart) et tout événement
+  \(S\)&nbsp;:
+  \(\mathbb{P}(M(D) \in S) \leq e^{\varepsilon}\,
+  \mathbb{P}(M(D') \in S) + \delta\). Mécanisme gaussien&nbsp;: bruiter une
+  statistique de sensibilité \(\Delta_2\) par \(\sigma \geq
+  \sqrt{2\ln(1{,}25/\delta)}\,\Delta_2/\varepsilon\).
+</div>
+
+<div class="thm">
+  <span class="tag">Lemme 8.3 — Immunité au post-traitement</span>
+  Si \(M\) est \((\varepsilon, \delta)\)-DP, alors pour toute fonction
+  (aléatoire, quelconque) \(g\) calculée <em>après</em> \(M\), \(g \circ M\)
+  reste \((\varepsilon, \delta)\)-DP. <em>C'est le théorème qui rend la DP
+  utilisable</em>&nbsp;: on peut fine-tuner, distiller, quantifier, déployer et
+  interroger un modèle DP sans re-démontrer quoi que ce soit.
+</div>
+
+<div class="proof">
+Soit \(D \sim D'\) voisins et \(B\) un borélien de l'espace d'arrivée de
+\(g\). Notons \(g^{-1}(B) = \{m : g(m) \in B\}\) (éventuellement aléatoire&nbsp;:
+conditionnons sur la randomness de \(g\), le raisonnement est alors
+déterministe et on intègre à la fin). Alors
+\[
+\mathbb{P}(g(M(D)) \in B)
+= \mathbb{P}(M(D) \in g^{-1}(B))
+\leq e^{\varepsilon}\, \mathbb{P}(M(D') \in g^{-1}(B)) + \delta
+= e^{\varepsilon}\, \mathbb{P}(g(M(D')) \in B) + \delta,
+\]
+où l'inégalité du milieu est exactement la DP de \(M\) appliquée à l'événement
+\(g^{-1}(B)\). Aucune propriété de \(g\) n'a été utilisée&nbsp;: le
+post-traitement ne peut pas «&nbsp;réintroduire&nbsp;» de la privacy perdue. <span class="qed">∎</span>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 8.4 — DP-SGD (Abadi et al., 2016)</span>
+  À chaque pas&nbsp;: (1)&nbsp;calculer le gradient <em>par exemple</em>&nbsp;;
+  (2)&nbsp;<strong>rogner</strong> chaque gradient à norme \(C\) (sensibilité
+  bornée \(\Delta_2 \leq C\))&nbsp;; (3)&nbsp;agréger et bruiter&nbsp;:
+  $$\tilde g \;=\; \frac{1}{B}\Bigl(\sum_{i \in B}
+  \mathrm{clip}(\nabla \ell_i, C) + \mathcal{N}(0, \sigma^2 C^2 I)\Bigr).$$
+  La comptabilité (moment accountant / RDP) agrège le budget sur les pas&nbsp;:
+  \(\varepsilon\) total croît avec \(T/B\). Pour un LLM&nbsp;: DP-SGD sur le
+  <em>fine-tuning</em> (le pré-entraînement public est réputé non sensible).
+</div>
+
+<div class="ex">
+  <span class="tag">Résultat 8.5 — DP fine-tuning à coût raisonnable (Yu et al., ICLR 2022)</span>
+  Fine-tuner RoBERTa/GPT-2 avec DP-SGD à \(\varepsilon \leq 8\) coûte quelques
+  points de performance sur les tâches de classification classiques, et
+  <strong>réduit fortement la mémorisation</strong> (canaries quasi
+  inextractibles)&nbsp;; les astuces d'entraînement (ghost clipping pour éviter
+  de matérialiser les gradients par exemple, grande taille de batch, LR
+  adapté) resserrent l'écart. L'arbitrage à présenter au comité&nbsp;:
+  \(\varepsilon\) cible vs utilité — il n'y a pas de «&nbsp;bon&nbsp;»
+  \(\varepsilon\) universel&nbsp;; 1 est strict, 8 courant, 10+ relâché.
+</div>
+
+<table class="tbl">
+  <tr><th>Défense privacy</th><th>Coût utilité</th><th>Garantie</th><th>Limite</th></tr>
+  <tr><td>Déduplication</td><td>nul</td><td>réduit la mémorisation verbatim</td><td>pas une garantie formelle</td></tr>
+  <tr><td>Scrubbing PII</td><td>faible</td><td>supprime les motifs connus</td><td>PII implicites, faux négatifs du NER</td></tr>
+  <tr><td>DP-SGD (fine-tuning)</td><td>quelques points</td><td>(ε,δ)-DP formel + post-traitement</td><td>pré-entraînement non couvert</td></tr>
+  <tr><td>Requêtes canaris + MIA en CI</td><td>faible</td><td>détection, pas prévention</td><td>attaques non testées</td></tr>
+</table>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Précédent</span> Vie privée I&nbsp;: mémorisation et extraction</a><a class="next" href="ch9.html"><span class="dir">Suivant</span> Anonymisation et watermarking</a></nav>
+</main>
+</div>
+
+</body>
+</html>

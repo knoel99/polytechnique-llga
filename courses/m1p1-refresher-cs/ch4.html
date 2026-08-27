@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refresher in Computer Science — Tri, recherche, récursion — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Refresher in Computer Science</a> › Tri, recherche, récursion</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51440_EP</span>Refresher in Computer Science</a>
+<nav class="sidebar-toc">
+<a href="ch1.html">Python pour la science des données</a>
+<a href="ch2.html">Analyse de complexité</a>
+<a href="ch3.html">Structures de données fondamentales</a>
+<a href="ch4.html" class="active">Tri, recherche, récursion</a>
+<a href="ch5.html">Algorithmes de graphes</a>
+<a href="ch6.html">NumPy : algèbre linéaire numérique</a>
+<a href="ch7.html">Génie logiciel minimal (OOP, tests, git)</a>
+<a href="ch8.html">Algorithmes géométriques et travaux de l'enseignant</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Tri, recherche, récursion</h2>
+
+<h3>4.1 Quicksort : partition in place et analyse</h3>
+
+<pre class="code"><code>def quicksort(a, lo=0, hi=None):
+    if hi is None: hi = len(a) - 1
+    if lo &gt;= hi: return a
+    p = partition(a, lo, hi)          # pivot a sa place definitive
+    quicksort(a, lo, p - 1)           # tout a gauche &lt; pivot
+    quicksort(a, p + 1, hi)           # tout a droite &gt;= pivot
+    return a
+
+def partition(a, lo, hi):
+    """Partition de Lomuto : pivot = a[hi], en place, O(hi-lo)."""
+    pivot, i = a[hi], lo
+    for j in range(lo, hi):
+        if a[j] &lt; pivot:              # maintenir l'invariant :
+            a[i], a[j] = a[j], a[i]   # a[lo..i-1] &lt; pivot
+            i += 1                    # a[i..j-1] &gt;= pivot
+    a[i], a[hi] = a[hi], a[i]         # placer le pivot entre les deux
+    return i</code></pre>
+
+<div class="prop">
+  <span class="tag">Proposition 4.1 — Complexité moyenne \(\Theta(n \log n)\), pire cas \(\Theta(n^2)\)</span>
+  <em>Pire cas</em> (pivot toujours extrémal, ex. tableau déjà trié avec pivot en dernière
+  position) : récurrence \(T(n) = T(n-1) + \mathcal{O}(n) = \Theta(n^2)\).
+  <em>En moyenne</em> (pivot uniforme) : récurrence aléatoire
+  $$T(n) = n - 1 + \frac{1}{n}\sum_{k=0}^{n-1}\big(T(k) + T(n-1-k)\big),$$
+  car le rang du pivot est uniforme. En multipliant par \(n\) puis en soustrayant les
+  équations pour \(n\) et \(n-1\) (technique de télescopage), on obtient
+  \(\frac{T(n)}{n+1} = \frac{T(n-1)}{n} + \frac{2}{n+1}\), d'où
+  \(T(n) = 2(n+1)H_n - 4n \approx 1{,}39\, n \log_2 n\) : optimal à 39&nbsp;% près
+  (la constante du tri fusion est \(n\log_2 n\), la borne informationnelle
+  \(\log_2 n! \approx n\log_2 n - 1{,}44 n\)).
+</div>
+
+<div class="note">
+  <span class="tag">Mitigations du pire cas</span>
+  (i) <strong>Pivot aléatoire</strong> : le pire cas devient un événement de probabilité
+  négligeable — l'analyse passe du «&nbsp;adversaire choisit l'entrée&nbsp;» au
+  «&nbsp;l'algorithme choisit le pivot&nbsp;». (ii) <strong>Médiane de trois</strong>
+  (lo/milieu/hi). (iii) <strong>Introsort</strong> (C++ <code>std::sort</code>) : quicksort,
+  bascule en heapsort si la profondeur dépasse \(2\log n\) — garantit
+  \(\mathcal{O}(n\log n)\) <em>et</em> garde la vitesse pratique. Python utilise Timsort
+  (hybride fusion/insertion, exploite les runs triés, stable) : \(\Theta(n)\) sur les données
+  presque triées.
+</div>
+
+<h3>4.2 Tri fusion et comptage d'inversions</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Mergesort</span>
+  Diviser au milieu, trier chaque moitié, fusionner en \(\Theta(n)\) : récurrence
+  \(2T(n/2) + n\), donc \(\Theta(n \log n)\) <em>garanti</em> (théorème 2.2). Stable
+  (l'ordre relatif des éléments égaux est préservé — indispensable pour les tris
+  multi-critères : trier par score <em>puis</em> par date laisse les scores groupés par date).
+  Coût : \(\Theta(n)\) mémoire auxiliaire.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.3 — Bonus : compter les inversions en \(\Theta(n\log n)\)</span>
+  Une <em>inversion</em> est un couple \((i,j)\), \(i \lt j\), avec \(a_i &gt; a_j\) — mesure de
+  désordre (corrélation de Kendall entre deux classements : utile pour comparer des
+  rankings de modèles ou de moteurs de recherche). La force brute compte en
+  \(\mathcal{O}(n^2)\) ; le tri fusion instrumenté fait mieux :
+<pre class="code"><code>def count_inversions(a):
+    if len(a) &lt;= 1: return a, 0
+    mid = len(a) // 2
+    left,  cl = count_inversions(a[:mid])
+    right, cr = count_inversions(a[mid:])
+    merged, cross = [], 0
+    i = j = 0
+    while i &lt; len(left) and j &lt; len(right):
+        if left[i] &lt;= right[j]:
+            merged.append(left[i]); i += 1
+        else:                              # left[i] &gt; right[j] :
+            merged.append(right[j]); j += 1
+            cross += len(left) - i          # tous ces elements forment une inversion
+    return merged + left[i:] + right[j:], cl + cr + cross
+
+count_inversions([5, 4, 3, 2, 1])   # -&gt; 10 = C(5,2) : ordre totalement inverse</code></pre>
+  Chaque fois qu'un élément droit passe devant des éléments gauches restants, cela compte
+  exactement les inversions <em>inter-blocs</em> ; les inversions intra-blocs sont comptées
+  par la récursion.
+</div>
+
+<h3>4.3 Radix sort : trier sans comparer</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.4 — Tri par base (LSD)</span>
+  Pour \(n\) entiers de \(k\) chiffres en base \(b\) : \(k\) passes de tri stable par
+  chiffre (bucket par valeur de chiffre), chacune \(\Theta(n + b)\) :
+  $$T = \Theta\big(k\,(n + b)\big) \;\approx\; \Theta(n \cdot k).$$
+  Sans comparaison — la borne inférieure \(\Omega(n\log n)\) des tris <em>par
+  comparaisons</em> (arbre de décision à \(n!\) feuilles) ne s'applique pas. Pour des clés
+  64 bits (\(k = 8\) octets), c'est \(\Theta(8n)\), linéaire en pratique. Usage : trier des
+  identifiants de tokens, des adresses IP, des couples (cluster, distance) dans les k-means
+  accélérés. Inconvénient : mémoire \(\Theta(n+b)\) et efficacité qui s'effondre si \(k\)
+  grandit (clés longues, flottants).
+</div>
+
+<h3>4.4 Sélection : la médiane en \(\Theta(n)\) attendu</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.5 — Quickselect</span>
+  Pour trouver le \(k\)-ième plus petit élément : partitionner comme quicksort, mais ne
+  récursiver <em>que du côté</em> où se trouve le rang \(k\). Récurrence moyenne
+  \(T(n) = T(\text{fraction de } n) + \mathcal{O}(n)\), avec fractions espérées
+  \(\to\) \(T(n) = \Theta(n)\) (chaque niveau divise au moins par ~2 en moyenne, et les
+  tailles somment géométriquement). C'est la médiane du k-médianoïde, le quantile rapide
+  des statistiques d'ordre (module Statistics, chapitre 3) ; la variante déterministe
+  «&nbsp;médiane des médianes&nbsp;» garantit le pire cas \(\Theta(n)\) au prix de constantes
+  lourdes.
+</div>
+
+<h3>4.5 Dichotomie : invariant de boucle et dérivés</h3>
+
+<pre class="code"><code>def binary_search(a, x):           # a trie croissant
+    lo, hi = 0, len(a)             # recherche dans [lo, hi)
+    while lo &lt; hi:
+        mid = (lo + hi) // 2
+        if a[mid] == x: return mid
+        elif a[mid] &lt; x: lo = mid + 1
+        else:            hi = mid
+    return -1</code></pre>
+
+<div class="proof">
+  <strong>Correction par invariant.</strong> Invariant : «&nbsp;si \(x\) est dans \(a\),
+  alors \(x\) se trouve dans \(a[lo..hi)\)&nbsp;». Initialisation : \(lo=0, hi=n\), la
+  tranche est tout le tableau — vrai. Conservation : si \(a[mid] &lt; x\), le tableau étant
+  trié, tous les \(a[lo..mid]\) sont \(&lt; x\), donc \(x \notin a[lo..mid]\) et l'invariant
+  tient pour \([mid+1, hi)\) ; symétriquement si \(a[mid] &gt; x\). Terminaison :
+  \(hi - lo\) décroît strictement à chaque itération (au moins 1). À la sortie, la tranche
+  est vide : soit on a trouvé \(x\) plus tôt, soit \(x\) est absent.
+  Complexité : la taille est au moins divisée par 2 à chaque pas, d'où
+  \(\Theta(\log n)\).
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.6 — Binary search sur la <em>réponse</em></span>
+  Pattern transverse : quand la propriété «&nbsp;\(\leq c\)&nbsp;» est <em>monotone</em> en
+  \(c\), on cherche le seuil par dichotomie au lieu de le calculer. Exemple : \(n\) tâches
+  de durées \(d_i\), \(k\) machines, minimiser le makespan (charge max).
+<pre class="code"><code>def feasible(d, k, cap):                 # glouton : peut-on tout placer
+    load, machines = 0, 1                # avec chaque machine &lt;= cap ?
+    for t in d:
+        if t &gt; cap: return False
+        if load + t &gt; cap: machines += 1; load = t
+        else: load += t
+    return machines &lt;= k
+
+def min_makespan(d, k):
+    lo, hi = max(d), sum(d)              # bornes triviales
+    while lo &lt; hi:                       # meme squelette que binary_search
+        mid = (lo + hi) // 2
+        if feasible(d, k, mid): hi = mid
+        else: lo = mid + 1
+    return lo                            # plus petite capacite faisable</code></pre>
+  L'invariant devient «&nbsp;\([lo, hi]\) contient la plus petite capacité
+  faisable&nbsp;». Même schéma : racine \(k\)-ième par encadrement, recherche du
+  \(\varepsilon\) de régularisation optimal, apprentissage du seuil de coupure optimal
+  d'un classifieur — et, en RL/module Optimal Transport, la recherche du multiplicateur de
+  Lagrange dans les projections entropiques.
+</div>
+
+<h3>4.6 Récursion et programmation dynamique</h3>
+
+<ul>
+  <li><strong>Mémoïser les sous-problèmes</strong> : transformer une récurrence
+  exponentielle en résolution de sous-problèmes partagés. Exemples qui reviendront :
+  distance d'édition (Levenshtein) en NLP, Viterbi pour les HMM, équations de Bellman en
+  RL — tous des DP déguisés.</li>
+  <li><strong>Réduction mémoire</strong> : la table \(m \times n\) de Levenshtein se
+  réduit à deux lignes (\(\mathcal{O}(\min(m,n))\)) car chaque cellule ne dépend que de la
+  ligne précédente.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Exemple 4.7 — Distance d'édition (DP)</span>
+<pre class="code"><code>def levenshtein(a, b):
+    m, n = len(a), len(b)
+    dp = [[0]*(n+1) for _ in range(m+1)]
+    for i in range(m+1): dp[i][0] = i
+    for j in range(n+1): dp[0][j] = j
+    for i in range(1, m+1):
+        for j in range(1, n+1):
+            cost = 0 if a[i-1] == b[j-1] else 1
+            dp[i][j] = min(dp[i-1][j] + 1,        # suppression
+                           dp[i][j-1] + 1,        # insertion
+                           dp[i-1][j-1] + cost)   # substitution
+    return dp[m][n]          # O(m n) temps et mémoire (réductible à O(min(m,n)))
+
+print(levenshtein("graph", "giraffe"))  # 4</code></pre>
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 4</p>
+  <ul>
+    <li>Quicksort : partition in-place, \(\approx 1{,}39 n\log_2 n\) en moyenne (télescopage
+    de la récurrence), pire cas évité par pivot aléatoire/médiane.</li>
+    <li>Mergesort : stable et garanti \(\Theta(n\log n)\) ; le même schéma compte les
+    inversions.</li>
+    <li>Radix : linéaire hors du modèle par comparaisons ; quickselect : médiane en
+    \(\Theta(n)\) attendu.</li>
+    <li>Dichotomie : invariant de boucle (preuve), \(\Theta(\log n)\), et le pattern
+    «&nbsp;recherche binaire sur la réponse&nbsp;» chaque fois qu'une faisabilité est
+    monotone.</li>
+  </ul>
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Structures de données fondamentales</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Algorithmes de graphes</a></nav>
+</main>
+</div>
+
+</body>
+</html>

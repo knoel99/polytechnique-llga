@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — CNN pour la vision&nbsp;: détection et segmentation — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Analysis and Computer Vision</a> › CNN pour la vision&nbsp;: détection et segmentation</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: algèbre linéaire, convolution, probabilités</a>
+<a href="ch1.html">Formation des images&nbsp;: caméra et échantillonnage</a>
+<a href="ch2.html">Filtrage et convolution</a>
+<a href="ch3.html">Contours&nbsp;: gradient et Canny</a>
+<a href="ch4.html">Points d'intérêt&nbsp;: Harris et SIFT</a>
+<a href="ch5.html">Géométrie projective et homographies</a>
+<a href="ch6.html">Stéréovision et géométrie épipolaire</a>
+<a href="ch7.html">Flux optique&nbsp;: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation&nbsp;: k-moyennes et coupes de graphes</a>
+<a href="ch9.html" class="active">CNN pour la vision&nbsp;: détection et segmentation</a>
+<a href="ch10.html">Nuages de points 3D&nbsp;: ICP et analyse urbaine</a>
+<a href="ch11.html">Travaux de l'enseignant&nbsp;: LiDAR urbain à l'IGN</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. CNN pour la vision&nbsp;: détection et segmentation</h2>
+
+<p>Les réseaux convolutifs, présentés au ch. 4 du module <em>Deep Learning</em>,
+ont absorbé une grande partie du pipeline classique&nbsp;: les filtres appris
+remplacent Sobel et SIFT. Ce chapitre se concentre sur les <em>tâches</em> de la
+vision&nbsp;: classifier, <strong>détecter</strong> (où sont les objets&nbsp;?),
+<strong>segmenter</strong> (quels pixels leur appartiennent&nbsp;?).</p>
+
+<div class="prop">
+  <span class="tag">Proposition 9.1 — Pourquoi la convolution convient aux images</span>
+  Trois biais inductifs réunis&nbsp;: (i)&nbsp;<em>poids partagés</em>&nbsp;: le même
+  filtre glisse partout — invariance par translation et nombre de paramètres
+  indépendant de la taille d'image&nbsp;; (ii)&nbsp;<em>connectivité
+  locale</em>&nbsp;: chaque neurone ne voit qu'un voisinage — le champ
+  réceptif croît avec la profondeur&nbsp;; (iii)&nbsp;<em>hiérarchie</em>&nbsp;:
+  bords → motifs → parties → objets, apprise et non programmée. Les
+  connexions résiduelles de ResNet (\(y = \mathcal{F}(x) + x\), He et al.
+  2015) autorisent des profondeurs de centaines de couches en court-circuitant
+  l'évanouissement du gradient (cf. module <em>Deep Learning</em>, ch. 2-3)&nbsp;;
+  le <em>transfer learning</em> — réutiliser un ResNet entraîné sur ImageNet
+  comme extracteur de caractéristiques — reste la première étape de tout
+  projet à données rares (ibid., ch. 8).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.2 — Détection&nbsp;: deux familles</span>
+  La détection renvoie des boîtes \((x, y, w, h)\) + classe + score. Les
+  <strong>deux étapes</strong>&nbsp;: R-CNN (2014) propose des régions, un CNN
+  les classe&nbsp;; Fast R-CNN partage les calculs&nbsp;; Faster R-CNN (2015)
+  fait générer les propositions par un <em>Region Proposal Network</em> à
+  ancres (boîtes de tailles/rapports prédéfinis) — précision maximale à
+  l'époque. Les <strong>une étape</strong>&nbsp;: YOLO (2015) découpe l'image
+  en grille et régresse directement boîtes + classes par cellule, en une
+  seule passe — le compromis précision/vitesse qui a ouvert la vision
+  embarquée. Le <strong>NMS</strong> (non-maximum suppression) élimine les
+  boîtes redondantes&nbsp;: trier par score décroissant, garder la première,
+  supprimer toutes celles dont le recouvrement (IoU) dépasse un seuil
+  (~0,5), itérer. Les détecteurs <em>anchor-free</em> et les modèles
+  à base de transformers (DETR&nbsp;: requêtes apprenantes + attention,
+  prédiction ensembliste avec appariement hongrois — cf. module
+  <em>Deep Learning</em>, ch. 6) ferment la boucle&nbsp;: fin du NMS manuel,
+  détection <em>ensemble</em>.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.3 — Segmentation sémantique et U-Net</span>
+  Décision <em>par pixel</em> (chacun reçoit une classe)&nbsp;; la segmentation
+  <em>d'instances</em> distingue en plus les objets de même classe, la
+  <em>panoptique</em> unifie les deux. L'architecture <strong>U-Net</strong>
+  (Ronneberger et al., 2015)&nbsp;: un encodeur contractant (contexte global)
+  puis un décodeur expansif avec <em>connexions de saut</em> qui réinjectent
+  les résolutions fines — car la décision par pixel exige à la fois la
+  sémantique (profonde) et la localisation (fine)&nbsp;; le décodeur apprend
+  à «&nbsp;re-mélanger&nbsp;» les deux. Entraînable avec peu d'images
+  (augmentation géométrique agressive), U-Net est devenu l'outil universel&nbsp;:
+  imagerie médicale, inspection, et — au ch. 11 — le LiDAR en images de
+  profondeur.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.4 — Mesures&nbsp;: IoU et mAP</span>
+  L'intersection-sur-union entre boîtes (ou masques) prédites \(P\) et vérité
+  \(G\)&nbsp;:
+  \(\mathrm{IoU} = |P \cap G|\,/\,|P \cup G|\) — une prédiction est un vrai
+  positif si \(\mathrm{IoU} &gt; \tau\) (typiquement 0,5) et si la classe est
+  correcte. La <strong>précision moyenne</strong> (AP)&nbsp;: trier les
+  détections par score décroissant, tracer le nuage (rappel, précision),
+  intégrer (aire sous la courbe)&nbsp;; la mAP moyenne les AP sur les classes
+  — et parfois sur les seuils IoU (COCO&nbsp;: mAP@[0,5:0,95]).
+  <div class="ex" style="margin-top:.4rem;">
+  <span class="tag">Exemple 9.5 — AP à la main (1 classe, seuil IoU 0,5)</span>
+  Détections triées par score&nbsp;: \(D_1\) (IoU 0,8), \(D_2\) (IoU 0,3),
+  \(D_3\) (IoU 0,6), \(D_4\) (IoU 0,55 avec un objet déjà couvert) — 2 objets
+  au total. Cumuls&nbsp;:
+  <table class="tbl">
+    <tr><th>Détection</th><th>TP/FP</th><th>TP cumulé</th><th>FP cumulé</th><th>Précision</th><th>Rappel</th></tr>
+    <tr><td>D1 (0,8)</td><td>TP</td><td>1</td><td>0</td><td>1,00</td><td>0,5</td></tr>
+    <tr><td>D2 (0,3)</td><td>FP</td><td>1</td><td>1</td><td>0,50</td><td>0,5</td></tr>
+    <tr><td>D3 (0,6)</td><td>TP</td><td>2</td><td>1</td><td>0,67</td><td>1,0</td></tr>
+    <tr><td>D4 (doublon)</td><td>FP</td><td>2</td><td>2</td><td>0,50</td><td>1,0</td></tr>
+  </table>
+  AP = aire sous la courbe précision-rappel (enveloppe décroissante)&nbsp;:
+  avec l'interpolation «&nbsp;tous points&nbsp;», \(\mathrm{AP} \approx
+  1{,}0\times0{,}5 + 0{,}67\times0{,}5 = 0{,}83\). Les jeux d'évaluation
+  (ImageNet pour la classification, COCO pour détection/segmentation,
+  Cityscapes pour la rue) dictent les architectures autant que la
+  littérature.</div>
+</div>
+
+<div class="note">
+  <span class="tag">Note — Au-delà de la supervision massive</span>
+  Pré-entraîner sur des paires image-texte (CLIP&nbsp;: contrastif sur
+  400&nbsp;millions de paires — cf. module <em>Multimodal GenAI</em>, ch. 5)
+  donne des caractéristiques qui <em>zéro-shot</em> classifient par simple
+  similarité texte-image&nbsp;; la segmentation «&nbsp;promptable&nbsp;» et les
+  modèles de diffusion conditionnés (ibid., ch. 4-6) repoussent la même idée
+  en génération. La vision classique n'est pas morte pour autant&nbsp;:
+  calibration, épipolaire et ICP restent les fondations des systèmes
+  métriques — c'est l'objet du chapitre suivant.
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> Segmentation&nbsp;: k-moyennes et coupes de graphes</a><a class="next" href="ch10.html"><span class="dir">Suivant</span> Nuages de points 3D&nbsp;: ICP et analyse urbaine</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control in Generative AI — Constrained decoding&nbsp;: grammaires, automates, masques — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Control in Generative AI</a> › Constrained decoding&nbsp;: grammaires, automates, masques</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P1 (brochure)</span>Control in Generative AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer, conditionner, décoder</a>
+<a href="ch1.html">Pourquoi contrôler&nbsp;: sûreté, fidélité, propriété intellectuelle</a>
+<a href="ch2.html">Taxonomie&nbsp;: quatre familles de contrôle</a>
+<a href="ch3.html" class="active">Constrained decoding&nbsp;: grammaires, automates, masques</a>
+<a href="ch4.html">Steering&nbsp;: contrôler dans l'espace des activations</a>
+<a href="ch5.html">RLHF&nbsp;: le contrôle dans l'espace des comportements</a>
+<a href="ch6.html">Watermarking&nbsp;: prouver l'origine d'un texte</a>
+<a href="ch7.html">Contrôler les diffusions&nbsp;: CFG, ControlNet, inversion</a>
+<a href="ch8.html">Contrôler les générateurs de graphes</a>
+<a href="ch9.html">Évaluer le contrôle&nbsp;: fidélité contre diversité</a>
+<a href="ch10.html">Attaques du contrôle et robustesse</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Constrained decoding&nbsp;: grammaires, automates, masques</h2>
+
+<p>Le cœur technique du module pour le texte&nbsp;: garantir qu'une sortie <em>autorisée token par
+token</em> appartient à un langage formel — expression régulière, grammaire hors-contexte (JSON,
+SQL), ou contrainte logique. L'idée fondatrice (PICARD, puis Outlines et XGrammar)&nbsp;: le
+décodage est une marche dans un <strong>automate</strong>, et le LLM n'est autorisé à suivre que
+des transitions valides.</p>
+
+<h3>3.1 Du regex à l'automate</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — AFD et langage régulier</span>
+  Un automate fini déterministe est un quintuplet \(A = (Q, \Sigma, \delta, q_0, F)\)&nbsp;:
+  états \(Q\), alphabet \(\Sigma\), transition \(\delta : Q \times \Sigma \to Q\), état initial
+  \(q_0\), états acceptants \(F\). On étend \(\delta\) aux mots par
+  \(\delta^*(q, uv) = \delta^*(\delta^*(q, u), v)\). Le langage reconnu est
+  \(L(A) = \{w \in \Sigma^* : \delta^*(q_0, w) \in F\}\). <strong>Construction</strong>&nbsp;:
+  regex \(\to\) AFN-\(\varepsilon\) (Thompson, linéaire en la taille du pattern), puis
+  déterminisation par <em>subset construction</em> (\(2^{|Q|}\) états au pire, rare en pratique).
+  Exemple du cours, la date ISO&nbsp;: <code>\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])</code>
+  — un \(F\) non trivial&nbsp;: «&nbsp;2026-02-31&nbsp;» doit être <em>syntaxiquement</em> accepté
+  (la sémantique du calendrier n'est pas un langage régulier simple&nbsp;: on y revient).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.2 — Élaguer avant de masquer&nbsp;: co-accessibilité</span>
+  Pour le masquage, on remplace \(A\) par son sous-automate <em>co-accessible</em>&nbsp;: on
+  supprime les états \(q\) d'où <em>aucun</em> état acceptant n'est atteignable (calcul&nbsp;:
+  parcours inverse des transitions depuis \(F\), \(\mathcal{O}(|Q| + |\delta|)\)). C'est ce
+  sous-automate qui garantit qu'un préfixe reste toujours <em>extensible</em> en mot complet&nbsp;:
+  sans élagage, le décodeur pourrait se verrouiller dans une impasse (aucun token admissible, y
+  compris EOS) et générer indéfiniment.
+</div>
+
+<h3>3.2 L'algorithme de masquage, en détail</h3>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — Décodage contraint par index état→tokens (Willard &amp; Louf, 2023)</span>
+  Soit \(V\) le vocabulaire du <em>tokenizer</em> (des tokens multi-caractères&nbsp;!). On
+  précalcule, pour chaque état \(q\) du DFA élagué, l'ensemble des tokens admissibles
+  $$\mathrm{Adm}(q) = \big\{ v \in V \ : \ \delta^*(q, \mathrm{str}(v)) \ \text{est défini et co-accessible} \big\},$$
+  avec la table \(\mathrm{next}(q, v) = \delta^*(q, \mathrm{str}(v))\). Le décodage contraint
+  remplace chaque distribution par
+  $$p^{\mathrm{mask}}_\theta(v \mid y_{&lt;t}) \propto p_\theta(v \mid y_{&lt;t})\,
+  \mathbf{1}\big[v \in \mathrm{Adm}(q_t)\big], \qquad q_{t+1} = \mathrm{next}(q_t, v_t),$$
+  et n'autorise EOS que si \(q_t \in F\). Alors toute sortie est dans \(L(A)\)&nbsp;: la garantie
+  est <em>structurelle</em>, par induction sur les pas (théorème 2.2).
+  <div class="proof">
+  <strong>Complexité.</strong> Précalcul&nbsp;: \(|Q| \times |V|\) lectures de tokens, chacune
+  \(\mathcal{O}(|v|)\) transitions — une fois pour toute (et partageable entre requêtes de même
+  grammaire&nbsp;: XGrammar accélère encore en séparant les tokens <em>indépendants du
+  contexte</em>, pré-vérifiés globalement, des <em>dépendants</em>, seuls resimulés)&nbsp;.
+  En ligne&nbsp;: un lookup par pas, \(\mathcal{O}(1)\) — l'overhead sur la passe LLM
+  (\(\mathcal{O}(n^2)\)) est négligeable. <strong>Subtilité BPE</strong>&nbsp;: un token n'est
+  pas un caractère&nbsp;; <code>"12"</code> et <code>"12/"</code> sont deux tokens distincts&nbsp;;
+  la définition de \(\mathrm{Adm}\) s'en acquitte car \(\delta^*\) lit <em>la chaîne</em> du
+  token, caractère par caractère — le DFA ne sait même pas qu'on le fait tourner sur des BPE.
+  Contre-exemple instructif&nbsp;: un token peut franchir la frontière du langage
+  (<code>"},"</code> est valide en fin de JSON, <code>"},x"</code> non)&nbsp;; c'est bien
+  pourquoi on doit indexer sur les <em>tokens</em> et non sur les caractères.
+  <span class="qed">∎</span></div>
+</div>
+
+<pre class="code"><code># squelette pedagogique : decodage contraint par automate (cf. lab 1)
+import torch
+
+class DfaMask:
+    """dfa : transitions[q] = {caractere: q2}, accepting = {q...} (deja elague)."""
+
+    def __init__(self, dfa, tokenizer):
+        self.index = {}                        # q -> {token_id: q2}
+        for q in dfa.states:                   # precalcul O(|Q| x |V| x |v|)
+            self.index[q] = {}
+            for tid, s in tokenizer.vocab.items():
+                q2 = dfa.walk(q, s)            # lecture caractere par caractere
+                if q2 is not None:             # None = prefixe mort
+                    self.index[q][tid] = q2
+
+    def mask(self, logits, q):
+        mask = torch.full_like(logits, float("-inf"))
+        for tid in self.index[q]:
+            mask[tid] = 0.0
+        return logits + mask                   # -inf = interdit
+
+# boucle de generation (le DFA est l'etat du controle, le LLM fournit les logits)
+#   q = q0
+#   while True:
+#       logits = model(y)[..., -1, :]
+#       if q in dfa.accepting:  logits[eos_id] = 0.0    # sortie autorisee
+#       v = sample(softmax(mask(logits, q)))
+#       if v == eos_id:  break
+#       q = index[q][v] ; y = torch.cat([y, v])         # invariant : y in L(A)</code></pre>
+
+<div class="ex">
+  <span class="tag">Exemple 3.4 — La date ISO à la main</span>
+  Contrainte <code>\d{2}/\d{2}/\d{4}</code> simplifiée. Après <code>"26/0"</code>, l'état encode
+  «&nbsp;second chiffre du mois en cours, 0 déjà vu&nbsp;»&nbsp;; les tokens <code>"8"</code>,
+  <code>"9"</code> sont masqués (seuls <code>1</code>-<code>9</code> complètent un mois
+  <code>01</code>-<code>09</code>), <code>"/"</code> aussi. À l'inverse, si le premier chiffre du
+  mois était <code>1</code>, le second serait restreint à <code>0-2</code>. Écrire la table
+  \(\mathrm{Adm}(q)\) pour ces états est l'exercice 1&nbsp;; le piège classique&nbsp;: autoriser
+  le token <code>"13"</code> comme bloc BPE d'un seul tenant quand l'état n'accepte que
+  <code>"1"</code> suivi de <code>"0-2"</code> — <code>"13"</code> doit être masqué <em>entier</em>.
+</div>
+
+<div class="note">
+  <span class="tag">Au-delà des réguliers&nbsp;: grammaires et JSON Schema</span>
+  Les réguliers n'expriment pas l'emboîtement (<code>{"a": {"b": ...}}</code> de profondeur
+  arbitraire). Il faut les hors-contexte&nbsp;: PICARD (Scholak et al., EMNLP 2021) contraint un
+  T5 sur SQL par <em>parsing incrémental</em> (les logits interdits sont mis à \(-\infty\)
+  dès que le token rend la dérivation morte)&nbsp;; XGrammar compile des EBNF/JSON Schema vers
+  des masques quasi gratuits en ligne (2-10× plus rapides que l'état de l'art précédent).
+  En pratique industrielle 2026&nbsp;: <em>tout</em> appel d'outil LLM (function calling) passe
+  par un masque de grammaire — la sortie est un JSON valide <em>par construction</em>. Cf. module
+  LLMs (M2) ch. 8 pour la couche agents.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Précédent</span> Taxonomie&nbsp;: quatre familles de contrôle</a><a class="next" href="ch4.html"><span class="dir">Suivant</span> Steering&nbsp;: contrôler dans l'espace des activations</a></nav>
+</main>
+</div>
+
+</body>
+</html>

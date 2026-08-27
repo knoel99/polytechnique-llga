@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Séquences&nbsp;: RNN, LSTM — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Séquences&nbsp;: RNN, LSTM</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique</a>
+<a href="ch1.html">Du neurone au réseau profond</a>
+<a href="ch2.html">Rétropropagation</a>
+<a href="ch3.html">Optimisation en pratique</a>
+<a href="ch4.html">Réseaux convolutifs (CNN)</a>
+<a href="ch5.html" class="active">Séquences&nbsp;: RNN, LSTM</a>
+<a href="ch6.html">Attention et transformers</a>
+<a href="ch7.html">Modèles génératifs&nbsp;: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning et fine-tuning</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ch10.html">Entraîner en pratique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Séquences&nbsp;: RNN, LSTM</h2>
+
+<h3>5.1 RNN et rétropropagation dans le temps</h3>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — RNN (Elman)</span>
+  $$h_t = \tanh(W_h h_{t-1} + W_x x_t + b), \qquad y_t = W_y h_t$$
+  État caché qui résume le passé&nbsp;; poids partagés dans le temps (comme le noyau CNN
+  dans l'espace). La séquence \((x_1, \dots, x_T)\) est traitée en <em>déroulant</em> le
+  réseau&nbsp;: \(T\) copies du même bloc — le graphe de calcul redevient acyclique
+  (chapitre 2), et la backprop s'y applique «&nbsp;à travers le temps&nbsp;»
+  (BPTT). Coût mémoire&nbsp;: \(\mathcal{O}(T)\) activations.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Explosion ou évanouissement exponentiel du gradient</span>
+  Pour une perte au pas final \(T\), en notant \(D_t = \mathrm{diag}\big(\tanh'(a_t)\big)\)&nbsp;:
+  $$\frac{\partial \mathcal{L}_T}{\partial h_0} = \Big( \prod_{t=1}^{T} D_t\, W_h^\top \Big) \frac{\partial \mathcal{L}_T}{\partial h_T}
+  \quad\Rightarrow\quad
+  \Big\| \frac{\partial \mathcal{L}_T}{\partial h_0} \Big\| \;\le\; \|W_h\|^{T}\, \prod_{t=1}^{T}\|\tanh'(a_t)\|_\infty\, \Big\| \frac{\partial \mathcal{L}_T}{\partial h_T} \Big\|.$$
+  Si \(\|W_h\| \cdot \max_t \|\tanh'(a_t)\|_\infty &lt; 1\), le gradient décroît
+  exponentiellement avec \(T\) (évanouissement)&nbsp;; si \(\|W_h\| &gt; 1\) et les
+  activations hors saturation, il explose.
+</div>
+
+<div class="proof">
+Par le théorème 2.1 appliqué au graphe déroulé, \(\partial \mathcal{L}_T/\partial h_{t-1}
+= (\partial h_t / \partial h_{t-1})^\top \partial \mathcal{L}_T/\partial h_t\) car
+\(h_{t-1}\) n'a qu'un successeur \(h_t\). Or \(h_t = \tanh(W_h h_{t-1} + W_x x_t + b)\),
+donc la jacobienne vaut \(J_t = D_t W_h\) avec \(D_t\) diagonale (dérivée de tanh
+composante par composante). En composant de \(t = T\) à \(t = 1\) et en utilisant la
+sous-multiplicativité \(\|ABC\| \le \|A\|\,\|B\|\,\|C\|\) (norme d'opérateur)&nbsp;:
+\(\|\prod_t J_t^\top\| \le \prod_t \|J_t^\top\| \le \prod_t \|D_t\|\,\|W_h\|\), et
+\(\|D_t\| = \max_i |\tanh'(a_{t,i})| \le 1\), avec égalité stricte &lt; 1 dès qu'une
+coordonnée s'approche de la saturation. D'où la borne&nbsp;: décroissance exponentielle
+en \(T\) dès que le facteur par pas est &lt; 1, croissance exponentielle possible quand
+\(\|W_h\| &gt; 1\) (la borne n'est qu'un majorant, mais les expériences confirment les
+deux régimes&nbsp;; l'explosion se traite par <em>gradient clipping</em> — tronquer
+\(\|\hat g\|\) à un seuil — l'évanouissement, lui, est structurel).
+<span class="qed">∎</span>
+</div>
+
+<h3>5.2 LSTM&nbsp;: équations complètes et rôle des portes</h3>
+
+<div class="def">
+  <span class="tag">Définition 5.3 — LSTM (Hochreiter &amp; Schmidhuber, 1997)</span>
+  Quatre «&nbsp;portes&nbsp;» (vecteurs de \([0,1]^d\) par sigmoïdes, agissant comme des
+  robinets multiplicatifs) et un état cellulaire \(c_t\) qui transite de façon
+  <em>additive</em>&nbsp;:
+  $$f_t = \sigma(W_f h_{t-1} + U_f x_t), \qquad i_t = \sigma(W_i h_{t-1} + U_i x_t),$$
+  $$o_t = \sigma(W_o h_{t-1} + U_o x_t), \qquad \tilde c_t = \tanh(W_c h_{t-1} + U_c x_t),$$
+  $$c_t = f_t \odot c_{t-1} + i_t \odot \tilde c_t, \qquad h_t = o_t \odot \tanh(c_t).$$
+</div>
+
+<ul>
+  <li><strong>\(f_t\), porte d'oubli</strong>&nbsp;: fraction de l'ancienne mémoire
+  conservée — c'est elle qui porte la mémoire longue&nbsp;; initialisée souvent à
+  \(b_f &gt; 0\) (biais d'oubli positif) pour que \(f \approx 1\) au départ.</li>
+  <li><strong>\(i_t\), porte d'entrée</strong>&nbsp;: combien du candidat
+  \(\tilde c_t\) on écrit&nbsp;; <strong>\(\tilde c_t\)</strong>&nbsp;: contenu proposé.</li>
+  <li><strong>\(o_t\), porte de sortie</strong>&nbsp;: combien de la cellule on expose
+  dans \(h_t\).</li>
+  <li><strong>Pourquoi ça atténue l'évanouissement</strong>&nbsp;: la cellule suit
+  \(c_t = f_t \odot c_{t-1} + (\dots)\), une <em>autoroute additive</em> — le gradient
+  \(\partial c_t/\partial c_{t-1} = \mathrm{diag}(f_t) + i_t\)-termes reste proche de
+  l'identité quand \(f_t \approx 1\) et \(i_t\) modeste, là où le RNN multipliait
+  systématiquement par \(W_h^\top D_t\). Le produit des jacobiennes peut rester ~1 sur
+  de longs horizons&nbsp;: les dépendances longues passent. (Le problème n'est pas
+  <em>résolu</em>&nbsp;: sur des dépendances très longues, l'attention le réglera —
+  chapitre 6.)</li>
+</ul>
+
+<div class="note">
+  <span class="tag">GRU (Cho et al., 2014) et comparaison</span>
+  $$z_t = \sigma(W_z h_{t-1} + U_z x_t), \quad r_t = \sigma(W_r h_{t-1} + U_r x_t), \quad
+  h_t = (1 - z_t) \odot h_{t-1} + z_t \odot \tanh\big(W h_{t-1} \odot r_t + U x_t\big).$$
+  Deux portes au lieu de trois, pas d'état cellulaire séparé (\(z_t\) fusionne oubli et
+  écriture, \(r_t\) filtre le passé lu)&nbsp;: ~25&nbsp;% de paramètres en moins,
+  performances généralement comparables. En pratique LSTM pour les longues séries,
+  GRU pour les petits jeux de données.
+</div>
+
+<div class="note">
+  <span class="tag">Teacher forcing et exposure bias</span>
+  À l'entraînement d'un modèle séquence-à-séquence, on alimente le décodeur avec les
+  tokens <em>vrais</em> (teacher forcing)&nbsp;: la perte se calcule en un seul passage
+  parallèle, mais le modèle n'apprend qu'à prédire <em>sachant le passé exact</em>. À
+  l'inférence, il se nourrit de ses propres sorties (éventuellement erronées) — décalage
+  d'exposition qui fait dériver les longues générations&nbsp;; atténué par le
+  scheduled sampling ou l'apprentissage par renforcement (cf. module RL, et module NLP).
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Précédent</span> Réseaux convolutifs (CNN)</a><a class="next" href="ch6.html"><span class="dir">Suivant</span> Attention et transformers</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — Coûts&nbsp;: euros par million de tokens — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">ML Ops and LLM Engineering Principles</a> › Coûts&nbsp;: euros par million de tokens</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: du notebook au système</a>
+<a href="ch1.html">Cycle de vie&nbsp;: versionner données, features, modèles</a>
+<a href="ch2.html">CI/CD pour le ML&nbsp;: tester données et modèles</a>
+<a href="ch3.html">Serving des LLMs&nbsp;: batching continu, latence P99</a>
+<a href="ch4.html" class="active">Coûts&nbsp;: euros par million de tokens</a>
+<a href="ch5.html">Évaluation en production&nbsp;: drift et monitoring</a>
+<a href="ch6.html">RAG Ops&nbsp;: fraîcheur et évaluation continue</a>
+<a href="ch7.html">Fine-tuning Ops&nbsp;: LoRA versionnés</a>
+<a href="ch8.html">Agents en production&nbsp;: tracing et garde-fous</a>
+<a href="ch9.html">Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Étude de cas et green ops</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Coûts&nbsp;: euros par million de tokens</h2>
+
+<p>Toute décision d'architecture LLM se ramène tôt ou tard à un coût par million de
+tokens (Mt). Les API facturent séparément l'<em>entrée</em> (prompt&nbsp;: lecture
+amortissable par cache) et la <em>sortie</em> (génération&nbsp;: chère)&nbsp;; les
+ordres de grandeur 2025-2026 couvrent grossièrement, du petit modèle open-weight au
+modèle de front, <strong>de quelques centimes à quelques dizaines d'euros par
+Mt</strong> — des tarifs qui changent plusieurs fois par an&nbsp;: toute chiffre
+précis dans un support de cours serait périmé&nbsp;; la <em>méthode</em> de calcul,
+elle, demeure.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 4.1 — Coût unitaire d'un serving auto-hébergé</span>
+  Si un serveur délivre un débit soutenu de \(R\) tokens/s (sorties, batching
+  continu) sur des GPU coûtant \(c\) €/h (location tout compris), le coût
+  opérationnel par million de tokens de sortie vaut&nbsp;:
+  $$\text{coût/Mt} \;=\; \frac{c}{R} \cdot \frac{10^6}{3600}
+  \;\approx\; 278 \cdot \frac{c}{R} \;\; \text{€/Mt}.$$
+  <em>Exemple</em>&nbsp;: un 8B sur un GPU à ~2&nbsp;€/h débitant
+  \(R = 2\,000\) tokens/s en batch → ≈ 0,28&nbsp;€/Mt&nbsp;; le même GPU en
+  requêtes isolées (batch 1, \(R \approx 60\)) → ≈ 9&nbsp;€/Mt. <strong>Le batching
+  est un facteur 30 sur la facture.</strong>
+</div>
+
+<div class="proof">
+Le serveur produit \(R\) tokens par seconde, chaque heure facturée \(c\) € produit
+donc \(3600\,R\) tokens&nbsp;; le coût par token est \(c/(3600\,R)\) €, et par
+million de tokens \(10^6 c/(3600 R) = 277{,}8\, c/R\). La division par \(R\)
+directe&nbsp;: doubler le débit divise le coût par token par deux, à matériel
+constant — c'est la justification économique du ch. 3. <span class="qed">∎</span>
+</div>
+
+<h3>4.1 Les leviers d'économie</h3>
+
+<ul style="padding-left:1.2rem;">
+  <li><strong>Cache de préfixe</strong>&nbsp;: prompt système + historique partagés
+  → le pré-remplissage est facturé/consommé une fois&nbsp;; côté API, la
+  <em>prompt caching</em> réduit le coût d'entrée des préfixes répétés (souvent
+  facturés avec décote)&nbsp;; côté vLLM, le KV est réutilisé gratuitement.</li>
+  <li><strong>Routage de modèles (cascade)</strong>&nbsp;: petit modèle d'abord,
+  escalade vers le gros si le petit «&nbsp;n'est pas sûr&nbsp;» (score de confiance,
+  accord de deux candidats, ou classeur). Décision séquentielle formalisée comme un
+  bandit (cf. module RL ch. 6)&nbsp;: on arbitre coût vs qualité requête par requête.</li>
+  <li><strong>Limite de sortie</strong>&nbsp;: la sortie coûte ~5-10× l'entrée&nbsp;;
+  contraindre <code>max_tokens</code> et le format (réponse en k points, JSON court)
+  est le levier le plus sous-estimé.</li>
+  <li><strong>Quantification</strong> (cf. LLMs ch. 6&nbsp;; Advanced Topics
+  ch. 6)&nbsp;: 4 bits ≈ ×2-3 en débit sur les poids — et des GPU plus petits.</li>
+  <li><strong>Traitement par lots différé</strong>&nbsp;: les tâches non
+  interactives (classification d'archives) partent en batch nocturne&nbsp;;
+  certaines API facturent ces modes ~50&nbsp;% moins cher.</li>
+</ul>
+
+<table class="tbl">
+  <tr><th>Critère</th><th>API managée</th><th>Auto-hébergé (poids ouverts)</th></tr>
+  <tr><td>Coût faible usage</td><td>Pay-per-token, optimal</td><td>Amortissement GPU brutal</td></tr>
+  <tr><td>Coût fort usage</td><td>Linéaire, devient cher</td><td>~0,1-1 €/Mt selon batch (prop. 4.1)</td></tr>
+  <tr><td>Données sensibles</td><td>Contrat, juridiction, zero-retention à négocier</td><td>Contrôle total (réseau fermé)</td></tr>
+  <tr><td>Latence P99</td><td>Celle du fournisseur</td><td>Maîtrisable (ch. 3), à ses frais</td></tr>
+  <tr><td>Capacité à fine-tuner</td><td>Limitée (LoRA hébergés selon offre)</td><td>Totale (ch. 7)</td></tr>
+  <tr><td>Ops</td><td>Quasi nulle</td><td>Équipe + astreinte + GPU supply</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Multilingue et coûts réels</span>
+  La facture au token interagit avec la tokenisation (cf. module LLMs ch. 1)&nbsp;:
+  un corpus français coûte typiquement 15-25&nbsp;% de tokens de plus qu'un corpus
+  anglais équivalent avec les tokenizers dominants. Le «&nbsp;prix par mot&nbsp;»
+  dépend donc de la langue — argument pour mesurer (exercice 5) plutôt que pour
+  croire les tableaux de conversion ronds.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Serving des LLMs&nbsp;: batching continu, latence P99</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Évaluation en production&nbsp;: drift et monitoring</a></nav>
+</main>
+</div>
+
+</body>
+</html>

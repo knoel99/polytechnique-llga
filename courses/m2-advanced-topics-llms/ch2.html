@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Topics in Large Language Models — Long contexte&nbsp;: RoPE, ring attention, RAG ou LC&nbsp;? — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Topics in Large Language Models</a> › Long contexte&nbsp;: RoPE, ring attention, RAG ou LC&nbsp;?</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Advanced Topics in Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels et mode d'emploi du séminaire</a>
+<a href="ch1.html">Raisonnement&nbsp;: chain-of-thought, RLVR</a>
+<a href="ch2.html" class="active">Long contexte&nbsp;: RoPE, ring attention, RAG ou LC&nbsp;?</a>
+<a href="ch3.html">Mémoire&nbsp;: épisodique, vector stores, GraphRAG</a>
+<a href="ch4.html">Mixture-of-Experts</a>
+<a href="ch5.html">Architectures alternatives&nbsp;: SSM, Mamba, RWKV</a>
+<a href="ch6.html">Efficacité&nbsp;: speculative decoding, quantification</a>
+<a href="ch7.html">LLMs × graphes&nbsp;: le croisement LLGA</a>
+<a href="ch8.html">Agents&nbsp;: planning, outils, multi-agents</a>
+<a href="ch9.html">Évaluation&nbsp;: contamination, biais des juges</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Long contexte&nbsp;: RoPE, ring attention, RAG ou LC&nbsp;?</h2>
+
+<div class="ex">
+  <span class="tag">Lectures du jour</span>
+  J. Su et al., <em>RoFormer: Enhanced Transformer with Rotary Position
+  Embedding</em> (RoPE), 2021 (arXiv:2104.09864)&nbsp;;
+  S. Chen et al., <em>Extending Context Window via Positional Interpolation</em>,
+  2023 (arXiv:2306.15595)&nbsp;;
+  B. Peng et al., <em>YaRN</em>, 2023 (arXiv:2309.00071)&nbsp;;
+  H. Liu et al., <em>Ring Attention with Blockwise Transformers for
+  Near-Infinite Context</em>, NeurIPS 2023 (arXiv:2310.01889)&nbsp;;
+  N. Liu et al., <em>Lost in the Middle</em>, 2023 (arXiv:2307.03172)&nbsp;;
+  Z. Li et al., <em>Retrieval Augmented Generation or Long-Context LLMs?</em>,
+  EMNLP 2024 industry (arXiv:2407.16833)&nbsp;; P. Xu et al., <em>Retrieval
+  meets Long Context LLMs</em>, ICLR 2024 (arXiv:2310.03025).
+</div>
+
+<h3>2.1 RoPE&nbsp;: la position par rotation</h3>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — RoPE (Su et al., 2021)</span>
+  Chaque coordonnée paire \((2i, 2i{+}1)\) du vecteur est vue comme un nombre
+  complexe auquel on applique une rotation d'angle \(m\theta_i\), avec
+  \(m\) la position du token et \(\theta_i = b^{-2i/d}\) (bases
+  géométriques)&nbsp;:
+  $$q_m = R(m\Theta)\, q, \qquad k_n = R(n\Theta)\, k, \qquad
+  \Theta = \mathrm{diag}(\theta_0, \dots).$$
+  Le produit scalaire attentionnel devient une fonction <em>de la position
+  relative</em> — et les hautes fréquences \(\theta_i\) résolvent le local,
+  les basses fréquences le global.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — RoPE n'encode que la position relative</span>
+  \(\langle R(m\Theta)\,q,\; R(n\Theta)\,k \rangle\) ne dépend que de
+  \(m - n\) (et de \(q, k\)). La preuve est une ligne de trigonométrie&nbsp;:
+  par paires de coordonnées,
+  $$\langle R(m\theta)q,\, R(n\theta)k\rangle
+  = \langle R((m-n)\theta)\, q,\; k \rangle,$$
+  car \(R(m\theta)^\top R(n\theta) = R((n-m)\theta)\) (composition des
+  rotations — elles commutent dans le plan).
+</div>
+
+<div class="proof">
+Les rotations planes sont orthogonales&nbsp;:
+\(\langle R(m\theta)q, R(n\theta)k\rangle
+= q^\top R(m\theta)^\top R(n\theta)k
+= q^\top R((n - m)\theta)k\). En sommant sur les paires de coordonnées (chaque
+paire avec sa propre fréquence \(\theta_i\)), le score attentionnel est
+fonction de \(m - n\) uniquement. Conséquence d'ingénierie&nbsp;: étendre le
+contexte revient à <em>re-paramétrer les angles</em>, pas à réapprendre des
+embeddings de position. <span class="qed">∎</span>
+</div>
+
+<h3>2.2 Étendre la fenêtre&nbsp;: interpolation et YaRN</h3>
+
+<p><strong>Positional interpolation</strong> (Chen et al., 2023)&nbsp;: entraîné
+avec des angles jusqu'à \(L\), on sert du \(L' &gt; L\) en comprimant linéairement
+les positions \(m \mapsto m \cdot L/L'\) — le modèle voit des angles déjà
+couverts&nbsp;; quelques centaines de pas de fine-tuning suffisent (Llama-2
+4k → 32k). <strong>YaRN</strong> (Peng et al., 2023) raffine&nbsp;:
+interpoler <em>sélectivement</em> par fréquence (les basses fréquences —
+globales — sont interpolées&nbsp;; les hautes — locales — extrapolées&nbsp;;
+«&nbsp;NTK-aware&nbsp;») et <strong>rescaler la température d'attention</strong>
+(\(\times\) constante selon le facteur d'extension) pour compenser la
+dilution des scores&nbsp;; résultat&nbsp;: une extension qui réduit d'environ
+10× les données et les pas de fine-tuning par rapport à PI. Point de vue
+spectral (cf. module
+Signal Processing)&nbsp;: gérer une fenêtre plus large = gérer un spectre de
+fréquences plus large sans aliasing.</p>
+
+<h3>2.3 Ring attention&nbsp;: couper le coût mémoire en anneau</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 2.3 — Ring Attention (Liu et al., NeurIPS 2023)</span>
+  Découper la séquence de longueur \(N\) en \(D\) blocs répartis sur \(D\)
+  GPU&nbsp;; à chaque étape, chaque GPU calcule l'attention de son bloc
+  requêtes <em>contre un bloc clés/valeurs</em> reçu d'un voisin, puis
+  transmet ce bloc au suivant (topologie en anneau) — en <em>chevauchant
+  communication et calcul</em>. Après \(D\) étapes, chaque requête a vu
+  <em>tous</em> les blocs&nbsp;: l'attention est <strong>exacte</strong> (pas
+  une approximation), et la mémoire <em>par GPU</em> passe de
+  \(\mathcal{O}(N)\) à \(\mathcal{O}(N/D)\). Démonstration à l'échelle&nbsp;:
+  des contextes de l'ordre de 32 millions de tokens sur 32 GPU A100 —
+  ~27× l'état de l'art mémoire de l'époque.
+</div>
+
+<h3>2.4 RAG ou long contexte&nbsp;? Lost in the middle et le routeur hybride</h3>
+
+<p>«&nbsp;Lost in the Middle&nbsp;» (N. Liu et al., 2023)&nbsp;: quand l'information
+est placée au <em>milieu</em> d'un long contexte, la performance s'effondre en
+U (début et fin favorisés) — une fenêtre de 128k ne «&nbsp;lit&nbsp;» pas
+uniformément ses 128k. Le dossier RAG vs LC&nbsp;: Li et al. (2024) comparent
+systématiquement sur des tâches long-contexte&nbsp;: à ressources suffisantes,
+<strong>le long contexte gagne en moyenne</strong> (le retrieval peut manquer
+l'aiguille)&nbsp;; mais le RAG reste <em>bien</em> plus économique — et leur
+<strong>Self-Route</strong> (le modèle estime si la requête est answerable avec
+les extraits récupérés&nbsp;; sinon, on envoie tout le document) obtient la
+qualité LC pour ~39&nbsp;% de coût en moins. Xu et al. (ICLR 2024)
+complètent&nbsp;: le retrieval <em>améliore</em> les modèles quelle que soit
+la fenêtre (4k/16k/32k), et un 4k + retrieval approche un 16k sans
+retrieval — le RAG n'est pas mort, il est <em>complémentaire</em>.</p>
+
+<div class="note">
+  <span class="tag">Analyse critique</span>
+  (i)&nbsp;«&nbsp;Needle in a haystack&nbsp;» (retrouver une phrase plantée dans un
+  long texte) est un test de <em>retrieval</em>, pas de raisonnement
+  long-contexte — les benchmarks multi-documents d'agrégation cassent le
+  tableau de chasse&nbsp;; (ii)&nbsp;le KV cache croît linéairement avec \(N\)
+  (cf. module ML Ops ch. 3)&nbsp;: le LC «&nbsp;gratuit&nbsp;» à l'API est un
+  <em>choix économique</em> du fournisseur, pas une propriété physique&nbsp;;
+  (iii)&nbsp;les extensions RoPE se mesurent en perplexité <em>et</em> en tâches
+  aval — YaRN montre qu'elles peuvent diverger&nbsp;; (iv)&nbsp;Self-Route
+  repose sur l'auto-évaluation du modèle (méta-cognition)&nbsp;: que vaut-elle
+  sur des requêtes adverses&nbsp;? À rapprocher du ch. 3 (mémoire) et du
+  module ML Ops ch. 6 (frais d'index vs frais de contexte).
+</div>
+
+<pre class="code"><code># Auto-evaluation Self-Route (esquisse) -- RAG d'abord, LC en secours
+def self_route(question, docs, llm, budget):
+    snippets = retrieve(question, docs, k=8)          # RAG classique
+    verdict = llm(f"Sauras-tu repondre avec SEULEMENT ces extraits ? "
+                  f"(OUI/NON)\n---\n{snippets}", max_tokens=2, temp=0)
+    if verdict.strip().upper().startswith("OUI"):
+        return llm(f"Extraits :\n{snippets}\nQuestion : {question}")
+    return llm(f"Documents complets :\n{concat(docs)}\nQuestion : {question}")
+    # cout : ~39% du LC plein si le routeur est bien calibre (Li et al. 2024)</code></pre>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Raisonnement&nbsp;: chain-of-thought, RLVR</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Mémoire&nbsp;: épisodique, vector stores, GraphRAG</a></nav>
+</main>
+</div>
+
+</body>
+</html>

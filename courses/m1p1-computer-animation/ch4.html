@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Animation — Particules, forces, ressorts-masses — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Computer Animation</a> › Particules, forces, ressorts-masses</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51085_EP</span>Computer Animation</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: ODE, Taylor, rotations, énergie</a>
+<a href="ch1.html">Le pipeline d'animation&nbsp;: keyframes et splines</a>
+<a href="ch2.html">Intégration numérique des EDO</a>
+<a href="ch3.html">Stabilité&nbsp;: le théorème de l'oscillateur</a>
+<a href="ch4.html" class="active">Particules, forces, ressorts-masses</a>
+<a href="ch5.html">Corps rigides et quaternions</a>
+<a href="ch6.html">Collisions et contraintes</a>
+<a href="ch7.html">Skinning&nbsp;: LBS et ses artefacts</a>
+<a href="ch8.html">Cinématique inverse</a>
+<a href="ch9.html">Foules et comportements</a>
+<a href="ch10.html">Procédural contre data-driven</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Particules, forces, ressorts-masses</h2>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Système de particules</span>
+  Un système de \(n\) particules est l'état \((\mathbf{x}_i, \mathbf{v}_i)_{i=1}^n \in
+  \mathbb{R}^{6n}\) muni d'un champ de forces \(\mathbf{F}_i(\mathbf{x}, \mathbf{v})\).
+  La dynamique \(\dot{\mathbf{x}}_i = \mathbf{v}_i,\ m_i \dot{\mathbf{v}}_i = \mathbf{F}_i\)
+  est intégrée par l'un des schémas du chapitre 2. Forces usuelles&nbsp;:
+  gravité \(m_i \mathbf{g}\)&nbsp;; traînée linéaire \(-c_d \mathbf{v}_i\) ou quadratique
+  \(-c_q \|\mathbf{v}_i\| \mathbf{v}_i\)&nbsp;; ressort \(\mathbf{F}_{i\leftarrow j} =
+  k(\|\ell\| - r_{ij})\,\hat{\ell}\) avec \(\ell = \mathbf{x}_j - \mathbf{x}_i\), longueur
+  au repos \(r_{ij}\)&nbsp;; amortisseur axial \(-c\,(\mathbf{v}_j - \mathbf{v}_i)\cdot
+  \hat{\ell}\,\hat{\ell}\). C'est le modèle de base des effets «&nbsp;magiques&nbsp;»
+  (feu, fumée, poussière) et le précurseur de la SPH du chapitre 11.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Modes propres d'un réseau masse-ressort</span>
+  En petits déplacements autour du repos, un réseau avec masses \(M\) (diagonale) et
+  matrice de rigidité \(K\) (symétrique, définie positive si le réseau est ancré) se
+  linéarise en \(M\ddot{\mathbf{u}} = -K\mathbf{u}\). Les pulsations propres sont
+  $$\omega_k^2 = \lambda_k(M^{-1}K), \qquad k = 1, \dots, 3n,$$
+  et la condition de stabilité d'Euler symplectique (théorème 3.5) devient
+  \(h \leq 2/\omega_{\max} = 2/\sqrt{\lambda_{\max}(M^{-1}K)}\).
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.3 — Choisir le pas d'un vêtement</span>
+  Tissu discret en \(20 \times 20\) points, maille \(d = 1\) cm, ressorts structuraux
+  \(k_s = 50\) N/m, masse par point \(m = 2\) g. Le mode le plus rapide couple deux
+  points voisins&nbsp;: \(\omega \approx \sqrt{2k_s/m} = \sqrt{2 \cdot 50 / 0{,}002}
+  \approx 224\) rad/s, d'où \(h \leq 2/\omega \approx 9\) ms (≈ 110 Hz). Avec des
+  ressorts de flexion «&nbsp;2-hop&nbsp;» cinq fois plus raides, \(\omega\) est multiplié
+  par \(\sqrt{5}\) et le pas autorisé divisé d'autant — d'où l'intérêt de l'implicite.
+  Retenir l'ordre de grandeur&nbsp;: simulation de vêtement temps réel&nbsp;:
+  \(h \sim 2\)–5 ms, implicite&nbsp;; particules d'effets&nbsp;: \(h \sim 16\)–33 ms,
+  symplectique.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.4 — Implicite&nbsp;: le système à résoudre</span>
+  Le pas implicite (ou semi-implicite) linéarisé s'écrit
+  $$\Big(\,I - h\,J\,\Big)\,\Delta\mathbf{v} = h\,\big(\mathbf{F}(\mathbf{x}_n) +
+  h\,J\,\mathbf{v}_n\big), \qquad J = \frac{\partial \mathbf{F}}{\partial \mathbf{x}}
+  \ \ \text{(jacobienne des forces,}\ \sphericalangle\ \text{système défini négatif)},$$
+  puis \(\mathbf{v}_{n+1} = \mathbf{v}_n + \Delta\mathbf{v}\),
+  \(\mathbf{x}_{n+1} = \mathbf{x}_n + h\,\mathbf{v}_{n+1}\). En pratique on résout par
+  gradient conjugué <em>sans</em> assembler \(J\) explicitement (produits
+  matrice-vecteur par passage sur les ressorts) — le même tour d'écriture que le
+  gradient de rétro-propagation, cf. module Machine Learning, chapitre
+  rétro-propagation.
+</div>
+
+<div class="note">
+  <span class="tag">Au-delà des ressorts&nbsp;: sphères et densité</span>
+  Les systèmes de particules <em>interactionnels</em> (fluides SPH, sable MPM)
+  remplacent les liens fixes par des interactions à portée&nbsp;: chaque particule
+  porte une densité \(\rho_i = \sum_j m_j W(\|\mathbf{x}_j - \mathbf{x}_i\|)\) (noyau
+  \(W\)), et les forces dérivent d'un potentiel d'énergie de compression. La surface
+  libre est l'isosurface \(\rho = \rho_0\) — c'est le paradigme des
+  <em>smoothed particles</em> de Desbrun &amp; Cani (1996), chapitre 11&nbsp;: fusion,
+  éclaboussures et séparation d'objets émergent sans aucune topologie imposée.
+</div>
+
+<pre class="code"><code>import numpy as np
+
+# ------------- Simulateur de particules : Euler symplectique -------------
+# n particules, gravite, chaine de ressorts, sol imprenetrable (restitution 0.8)
+def simulate(n=40, steps=1200, h=1/240, seed=0):
+    rng = np.random.default_rng(seed)
+    x = rng.uniform(-1, 1, (n, 3)); x[:, 2] += 1.5   # positions initiales
+    v = np.zeros((n, 3))
+    m = np.full(n, 0.05)                             # 50 g par particule
+    g = np.array([0, 0, -9.81]); mu = 0.7            # gravite, drag lineaire
+    # ressorts (i, j, raideur k, amortissement c, longueur au repos r)
+    edges = [(i, i + 1, 80.0, 0.4, 0.15) for i in range(n - 1)]
+    for _ in range(steps):
+        F = m[:, None] * g[None, :]                  # gravite
+        for (i, j, k, c, r) in edges:                # ressort + amortisseur
+            d = x[j] - x[i]; L = np.linalg.norm(d); u = d / L
+            Fij = (k * (L - r) + c * np.dot(v[j] - v[i], u)) * u
+            F[i] += Fij; F[j] -= Fij
+        v += h * F / m[:, None]     # (1) vitesse d'abord   -- Euler symplectique
+        v *= (1 - mu * h)           # drag lineaire global
+        x += h * v                  # (2) position ensuite
+        hit = x[:, 2] &lt; 0           # sol z = 0 : projection + rebond
+        x[hit, 2] = 0
+        v[hit, 2] = -0.8 * v[hit, 2]
+        yield x.copy(), v.copy()
+
+# energie mecanique : doit rester bornee (cf. theoreme 3.5)
+for k, (x, v) in enumerate(simulate()):
+    if k % 240 == 0:
+        E = 0.5 * 0.05 * (v ** 2).sum() + 0.05 * 9.81 * x[:, 2].sum()
+        print(f"t = {k/240:5.2f} s   E = {E:7.3f} J")
+</code></pre>
+
+<div class="note">
+  <span class="tag">Lecture du code</span>
+  Deux détails comptent plus que tout le reste&nbsp;: (i) l'ordre des lignes
+  «&nbsp;vitesse puis position&nbsp;» — permuter ces deux lignes redonne Euler explicite
+  et fait exploser la chaîne (essayer avec \(k = 500\))&nbsp;; (ii) la gestion du sol par
+  <em>projection</em> (position corrigée, vitesse réfléchie) préfigure les contraintes
+  du chapitre 6&nbsp;: aucun ressort de contact, donc aucune raideur ajoutée. La boucle
+  d'énergie doit osciller bornée — le diagnostic le plus utile d'un moteur physique.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Stabilité&nbsp;: le théorème de l'oscillateur</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Corps rigides et quaternions</a></nav>
+</main>
+</div>
+
+</body>
+</html>

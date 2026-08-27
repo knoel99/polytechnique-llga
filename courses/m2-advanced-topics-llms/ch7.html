@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Topics in Large Language Models — LLMs × graphes&nbsp;: le croisement LLGA — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Topics in Large Language Models</a> › LLMs × graphes&nbsp;: le croisement LLGA</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Advanced Topics in Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels et mode d'emploi du séminaire</a>
+<a href="ch1.html">Raisonnement&nbsp;: chain-of-thought, RLVR</a>
+<a href="ch2.html">Long contexte&nbsp;: RoPE, ring attention, RAG ou LC&nbsp;?</a>
+<a href="ch3.html">Mémoire&nbsp;: épisodique, vector stores, GraphRAG</a>
+<a href="ch4.html">Mixture-of-Experts</a>
+<a href="ch5.html">Architectures alternatives&nbsp;: SSM, Mamba, RWKV</a>
+<a href="ch6.html">Efficacité&nbsp;: speculative decoding, quantification</a>
+<a href="ch7.html" class="active">LLMs × graphes&nbsp;: le croisement LLGA</a>
+<a href="ch8.html">Agents&nbsp;: planning, outils, multi-agents</a>
+<a href="ch9.html">Évaluation&nbsp;: contamination, biais des juges</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. LLMs × graphes&nbsp;: le croisement LLGA</h2>
+
+<div class="ex">
+  <span class="tag">Lectures du jour</span>
+  H. Wang et al., <em>Can Language Models Solve Graph Problems in Natural
+  Language?</em> (NLGraph), NeurIPS 2023 spotlight (arXiv:2305.10037)&nbsp;;
+  B. Fatemi, J. Halcrow, B. Perozzi, <em>Talk like a Graph: Encoding Graphs
+  for Large Language Models</em>, ICLR 2024 (arXiv:2310.04560)&nbsp;;
+  X. He et al., <em>G-Retriever: Retrieval-Augmented Generation for Textual
+  Graph Understanding and Question Answering</em>, NeurIPS 2024
+  (arXiv:2402.07630)&nbsp;;
+  S. Pan et al., <em>Unifying Large Language Models and Knowledge Graphs: A
+  Roadmap</em>, IEEE TKDE 2024 (arXiv:2306.08302)&nbsp;;
+  survey&nbsp;: W. Chen et al., <em>Large Language Models on Graphs: A
+  Comprehensive Survey</em>, 2023 (arXiv:2312.02783).
+</div>
+
+<h3>7.1 Le LLM «&nbsp;nu&nbsp;» face aux graphes sérialisés</h3>
+
+<div class="ex">
+  <span class="tag">Résultat pivot — NLGraph (Wang et al., 2023)</span>
+  29&nbsp;370 problèmes en langage naturel couvrant 8 tâches (connectivité,
+  plus court chemin, plus grand ensemble indépendant… jusqu'au chemin
+  hamiltonien et au flux max), difficulté croissante (taille de graphe,
+  nombre d'étapes). GPT-3/GPT-4 dépassent nettement le hasard sur les tâches
+  <em>faciles</em>… et s'effondrent sur les dures&nbsp;; les auteurs proposent
+  <strong>Build-a-Graph</strong> (expliciter le graphe dans le prompt) et un
+  <strong>graph translator</strong> (convertir la sortie en structure), qui
+  améliorent — sans combler l'écart avec des algorithmes de quelques lignes.
+  Conclusion mesurée&nbsp;: les LLMs ont une <em>intuition</em> graphique
+  préliminaire, pas une compétence algorithmique.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.1 — L'encodage est une variable première (Fatemi et al., 2024)</span>
+  «&nbsp;Talk like a Graph&nbsp;» étudie systématiquement <em>comment</em> sérialiser
+  un graphe&nbsp;: listes d'arêtes, matrice, relations incidentes,
+  ordonnancement par degré, etc. Résultats&nbsp;: (i)&nbsp;le choix d'encodage
+  déplace la précision de dizaines de points — plus que le choix du modèle
+  dans certaines tranches&nbsp;; (ii)&nbsp;l'ordre <em>par degré</em> aide
+  globalement&nbsp;; (iii)&nbsp;la performance décroît avec la taille du
+  graphe bien plus vite qu'avec la longueur du texte — c'est la
+  <em>structure</em>, pas la longueur, qui coûte. Bilan pratique&nbsp;:
+  sérialiser un graphe est un acte de conception d'ingénierie (et de
+  recherche), pas une formalité.
+</div>
+
+<h3>7.2 Hybrider&nbsp;: GNN-encodeur + LLM-décodeur</h3>
+
+<div class="def">
+  <span class="tag">Définition 7.2 — G-Retriever (He et al., NeurIPS 2024)</span>
+  Pour répondre sur un <em>grand</em> graphe textuel (scènes, cartes de
+  connaissances)&nbsp;: (1)&nbsp;retrouver le <strong>sous-graphe pertinent</strong>
+  en formulant la récupération comme un <strong>arbre de Steiner à collection
+  de prix</strong> (PCST — les nœuds «&nbsp;pertinents&nbsp;» ont des prix, les arêtes
+  des coûts&nbsp;: maximiser prix − coût du sous-arbre connecté)&nbsp;; (2)&nbsp;encoder
+  le sous-graphe par un <strong>GNN</strong> (message passing — module Graph ML
+  ch. 5)&nbsp;; (3)&nbsp;injecter les embeddings de nœuds comme
+  <em>soft tokens</em> dans le LLM (adaptateur appris)&nbsp;; (4)&nbsp;fine-tuning
+  conjoint. Effets rapportés&nbsp;: meilleures réponses et
+  <strong>hallucinations réduites</strong> sur ExplaGraphs/SceneGraphs/WebQSP,
+  scalable à des graphes de centaines de milliers de nœuds (on n'envoie
+  jamais le graphe entier dans le prompt).
+</div>
+
+<h3>7.3 Carte du domaine (la «&nbsp;roadmap&nbsp;»)</h3>
+
+<table class="tbl">
+  <tr><th>Paradigme</th><th>Qui fait quoi</th><th>Exemples</th></tr>
+  <tr><td>LLM-centric</td><td>le LLM raisonne&nbsp;; le graphe est sérialisé</td><td>NLGraph, Talk like a Graph</td></tr>
+  <tr><td>GNN-centric</td><td>le GNN encode&nbsp;; le LLM lit des soft tokens</td><td>G-Retriever, GNN-as-encoder</td></tr>
+  <tr><td>KG-enhanced LLM</td><td>le graphe nourrit le prompt/retrieval</td><td>GraphRAG (ch. 3), retrieval sur KG</td></tr>
+  <tr><td>LLM-augmented KG</td><td>le LLM construit/complete le graphe</td><td>extraction d'entités, complétion de KG</td></tr>
+  <tr><td>Systèmes</td><td>pipelines industriels hybrides</td><td>GraphRAG Microsoft (module ML Ops ch. 6)</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Analyse critique — séance LLGA par excellence</span>
+  (i)&nbsp;<em>Benchmarks</em>&nbsp;: NLGraph et consorts sont petits et
+  synthétiques&nbsp;; les «&nbsp;graphes d'entreprise&nbsp;» réels sont bruités,
+  attribués, dynamiques — le gouffre est grand. (ii)&nbsp;<em>Coût du
+  prompt</em>&nbsp;: sérialiser \(G=(V,E)\) coûte
+  \(\mathcal{O}(|V| + |E|)\) tokens — un graphe modeste de 10<sup>5</sup>
+  arêtes sature toute fenêtre (ch. 2)&nbsp;: la compression (résumés,
+  sous-graphes, PCST) n'est pas optionnelle. (iii)&nbsp;<em>Évaluation
+  circulaire</em>&nbsp;: juger les réponses graphiques par LLM-judge (ch. 9)
+  — un LLM est-il juge de ce qu'il sait à peine faire&nbsp;?
+  (iv)&nbsp;<em>Question ouverte LLGA</em>&nbsp;: quelle part des tâches
+  «&nbsp;LLM × graphe&nbsp;» se réduira à long contexte + bonnes données
+  (ch. 2-3), et quelle part exigera un vrai composant structurel (GNN)&nbsp;?
+  C'est <em>la</em> question de recherche du master — chacun de vos
+  projets de P3/M2 peut y contribuer.
+</div>
+
+<pre class="code"><code># Meme tache, trois encodages : l'experience "talk like a graph" en 10 lignes
+def enc_edges(G):     return "\n".join(f"{u} -- {v}" for u, v in G.edges())
+def enc_degree(G):    # arêtes triées par degré décroissant des extrémités
+    d = dict(G.degree())
+    es = sorted(G.edges(), key=lambda e: -(d[e[0]] + d[e[1]]))
+    return "\n".join(f"{u} -- {v}" for u, v in es)
+def enc_incident(G):
+    return "\n".join(f"{u} : " + ", ".join(map(str, G[u])) for u in G)
+
+for enc in (enc_edges, enc_degree, enc_incident):
+    acc = run_gpt(enc(G), task="connectivite", n=100)
+    print(f"{enc.__name__:14s} acc={acc:.2f}  tokens~{len(enc(G))//4}")</code></pre>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Efficacité&nbsp;: speculative decoding, quantification</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Agents&nbsp;: planning, outils, multi-agents</a></nav>
+</main>
+</div>
+
+</body>
+</html>

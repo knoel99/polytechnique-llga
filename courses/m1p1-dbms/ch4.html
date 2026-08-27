@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — Stockage&nbsp;: pages, fichiers, tri externe — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">DataBase Management System</a> › Stockage&nbsp;: pages, fichiers, tri externe</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51053_EP</span>DataBase Management System</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: ensembles, relations, complexité</a>
+<a href="ch1.html">Le modèle relationnel et l'algèbre</a>
+<a href="ch2.html">SQL&nbsp;: requêtes, agrégats, fenêtrage</a>
+<a href="ch3.html">Conception&nbsp;: dépendances et formes normales</a>
+<a href="ch4.html" class="active">Stockage&nbsp;: pages, fichiers, tri externe</a>
+<a href="ch5.html">Index&nbsp;: arbres B+ et hachage</a>
+<a href="ch6.html">Transactions et concurrence</a>
+<a href="ch7.html">Journal et reprise sur panne</a>
+<a href="ch8.html">Optimisation de requêtes</a>
+<a href="ch9.html">Au-delà du relationnel&nbsp;: NoSQL, graphes, vecteurs</a>
+<a href="ch10.html">Données du web et intégration hétérogène</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Stockage&nbsp;: pages, fichiers, tri externe</h2>
+
+<p>Un SGBD vit sur une hiérarchie de mémoires aux écarts de performance de plusieurs
+ordres de grandeur. Toute la discipline du stockage découle de ce fait brut&nbsp;:</p>
+
+<table class="tbl">
+  <tr><th>Niveau</th><th>Ordre de grandeur</th><th>Accès</th></tr>
+  <tr><td>Registres / cache L1-L3</td><td>1-100 ns</td><td>mots</td></tr>
+  <tr><td>RAM</td><td>~100 ns, quelques dizaines de Go</td><td>octets</td></tr>
+  <tr><td>SSD NVMe</td><td>~20-100 µs par accès, To</td><td>pages (4-16 Kio)</td></tr>
+  <tr><td>SSD SATA / HDD</td><td>~100 µs / ~5-10 ms, dizaines de To</td><td>blocs</td></tr>
+  <tr><td>Réseau / objet store</td><td>~10-100 ms, illimité</td><td>objets</td></tr>
+</table>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Page, enregistrement, organisation</span>
+  La <strong>page</strong> (bloc) est l'unité d'entrée/sortie&nbsp;: on lit et écrit des
+  pages entières (typiquement 4 à 16&nbsp;Kio), jamais des octets isolés. Les
+  enregistrements sont rangés dans des pages à <em>emplacements</em> (<em>slotted
+  pages</em>&nbsp;: un répertoire en tête de page donne l'adresse de chaque
+  enregistrement, autorisant insertions, suppressions et enregistrements de longueurs
+  variables). Une <strong>organisation de fichier</strong> définit comment les pages
+  sont reliées&nbsp;: <em>heap</em> (tas&nbsp;: insertion en fin, lecture séquentielle),
+  <em>triée</em> (ordre maintenu&nbsp;: insertion coûteuse, recherche par
+  dichotomie), ou <em>hachée</em> (ch. 5).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Coût d'un parcours séquentiel</span>
+  Pour un fichier de \(N\) pages et un débit séquentiel \(D\) pages/s, un parcours
+  complet coûte \(N/D\). Exemple chiffré&nbsp;: une table de 10&nbsp;Go en pages de
+  8&nbsp;Kio occupe \(N = 10^{10}/8192 \approx 1{,}22\times 10^6\) pages&nbsp;;
+  sur HDD à 150&nbsp;Mo/s&nbsp;: \(\approx 67\) s&nbsp;; sur SSD NVMe à
+  3&nbsp;Go/s&nbsp;: \(\approx 3{,}3\) s&nbsp;; en accès aléatoires à
+  10&nbsp;000 IOPS&nbsp;: 122&nbsp;s — d'où l'obsession
+  des SGBD pour le séquentiel et le préchargement.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.3 — Tri externe par fusion équilibrée</span>
+  Avec \(M\) pages de mémoire tampon disponibles et \(N\) pages à trier, le tri-fusion
+  externe produit des <em>runs</em> initiaux triés de \(M\) pages, puis les fusionne
+  avec un arité \(M-1\) (une page de sortie). Le nombre de passes vaut
+  $$p \;=\; 1 + \Big\lceil \log_{M-1} \lceil N/M \rceil \Big\rceil,$$
+  et le coût total en entrées/sorties est \(2Np\) (chaque passe relit et réécrit tout).
+  <div class="proof" style="margin-top:.5rem;">La passe 0 lit \(N\) pages et écrit
+  \(\lceil N/M\rceil\) runs triés&nbsp;: coût \(2N\). À chaque passe de fusion, au plus
+  \(M-1\) runs sont consommés en un run (fan-in \(M-1\) parce qu'une page tampon doit
+  rester pour la sortie)&nbsp;: le nombre de runs est divisé par \(M-1\) au minimum,
+  d'où \(\lceil\log_{M-1}\lceil N/M\rceil\rceil\) fusions. Chaque fusion relit/réécrit
+  les pages concernées, donc \(2N\) par passe. <span class="qed">∎</span></div>
+  <div class="ex" style="margin-top:.4rem;">
+  <span class="tag">Exemple 4.4 — Chiffres</span>  \(N = 1000\) pages, \(M = 50\)&nbsp;:
+  runs initiaux&nbsp;: 20&nbsp;; \(\log_{49}(20) \to 1\) passe de fusion (fan-in
+  49&nbsp;≥&nbsp;20)&nbsp;; \(p = 2\), coût \(2\times1000\times2 = 4000\) pages
+  lues+écrites. Avec \(N = 10^6\), \(M = 10^3\)&nbsp;: 1000 runs, fan-in 999,
+  \(\lceil\log_{999}(1001)\rceil = 2\), \(p=3\), coût \(6\times10^6\) — à
+  10&nbsp;000 pages/s, une dizaine de minutes&nbsp;: le tri reste
+  <em>quasi linéaire</em> en pratique grâce à la base (et non au facteur) du
+  logarithme.</div>
+</div>
+
+<div class="note">
+  <span class="tag">Note — Stocker des colonnes, pas seulement des lignes</span>
+  Les entrepôts modernes (Parquet, BigQuery, Snowflake, DuckDB) stockent les tables
+  <em>par colonnes</em>&nbsp;: lire 3 colonnes sur 100 ne lit que ~3&nbsp;% des
+  données, avec encodages adaptés (dictionary, RLE) et statistiques min/max par
+  bloc pour sauter des morceaux. Le modèle logique reste relationnel&nbsp;:
+  illustration parfaite de l'indépendance logique/physique — et lire vite des
+  colonnes, c'est produire vite les matrices d'apprentissage (cf. module
+  <em>Machine Learning</em>, ch. 6).
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Conception&nbsp;: dépendances et formes normales</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Index&nbsp;: arbres B+ et hachage</a></nav>
+</main>
+</div>
+
+</body>
+</html>

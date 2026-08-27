@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real-time AI in Video Games: decisive &amp; collaborative actions — Performance, profiling et budgets — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Real-time AI in Video Games: decisive &amp; collaborative actions</a> › Performance, profiling et budgets</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">Brochure MSc&amp;T</span>Real-time AI in Video Games: decisive &amp; collaborative actions</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: graphes, files de priorité, probas</a>
+<a href="ch1.html">La boucle de jeu et le budget temps réel</a>
+<a href="ch2.html">Navigation&nbsp;: grilles, navmesh, A*</a>
+<a href="ch3.html">Comportements&nbsp;: machines à états, behavior trees, utility</a>
+<a href="ch4.html">Décisions collectives&nbsp;: steering, boids, formations</a>
+<a href="ch5.html">Monte-Carlo Tree Search&nbsp;: décider en quelques ms</a>
+<a href="ch6.html">Agents appris&nbsp;: RL et self-play dans les jeux</a>
+<a href="ch7.html">Jeux coopératifs et multi-agents</a>
+<a href="ch8.html">NPCs conversationnels (LLM) et anti-triche</a>
+<a href="ch9.html" class="active">Performance, profiling et budgets</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Performance, profiling et budgets</h2>
+
+<h3>9.1 Où part le temps&nbsp;?</h3>
+<div class="ex">
+  <span class="tag">Exemple 9.1 — Budget type d'une frame (30 fps, 33 ms)</span>
+  <table class="tbl">
+    <tr><th>Sous-système</th><th>Budget</th><th>Notes</th></tr>
+    <tr><td>rendu</td><td>18 ms</td><td>GPU/CPU mixte&nbsp;; le plus gros poste</td></tr>
+    <tr><td>physique</td><td>5 ms</td><td>à pas fixe (chapitre 1)</td></tr>
+    <tr><td>IA (toutes décisions)</td><td>3 ms</td><td>100–5000 agents selon LOD</td></tr>
+    <tr><td>animation</td><td>4 ms</td><td>blend, IK</td></tr>
+    <tr><td>audio, réseau, divers</td><td>2 ms</td><td>—</td></tr>
+    <tr><td>marge (sécurité)</td><td>1 ms</td><td>absolument nécessaire</td></tr>
+  </table>
+  L'IA reçoit ~9&nbsp;% du budget&nbsp;: chaque milliseconde compte. Les trois
+  armes&nbsp;: <strong>échelonnement</strong> (ne penser qu'à quelques Hz — un NPC réévalue
+  sa cible à 4 Hz, pas 30&nbsp;; ses yeux et ses jambes, eux, suivent chaque
+  frame)&nbsp;; <strong>requêtes de voisinage en \(O(\log n)\)</strong> (quadtree/kd-tree
+  — cf. Refresher CS, chapitre 8)&nbsp;; <strong>données contiguës</strong> (ECS du
+  chapitre 1&nbsp;; parcours de tableaux, pas de pointeurs en chaîne).
+</div>
+
+<h3>9.2 Profiler</h3>
+<ul>
+  <li><strong>traces de frames</strong>&nbsp;: chronométrer chaque système par frame et
+  afficher la série temporelle (Tracy, Optick, instruments du moteur)&nbsp;; chercher
+  les <strong>pointes</strong> (P99), pas la moyenne&nbsp;;</li>
+  <li><strong>cache misses</strong>&nbsp;: sur console/embarqué, la hiérarchie mémoire
+  domine&nbsp;; mesurer instructions par cycle (IPC)&nbsp;; un tri de tableaux pour la
+  localité bat souvent un «&nbsp;algorithme plus malin&nbsp;» sur pointeurs&nbsp;;</li>
+  <li><strong>allocation</strong>&nbsp;: zéro allocation dans la boucle de jeu — pools
+  d'objets pré-alloués (les files de chemins du chapitre 2 réutilisent leurs
+  nœuds)&nbsp;;</li>
+  <li><strong>tests de performance</strong>&nbsp;: une scène de référence automatisée
+  («&nbsp;200 NPC en foule + 20 en combat&nbsp;») dans l'intégration continue — la
+  régression de perf se détecte au commit, pas à la master.</li>
+</ul>
+
+<h3>9.3 Déterminisme, replays et réseau</h3>
+<p>Le déterminisme (chapitre 1) rend possibles&nbsp;: les <strong>replays</strong> (stocker
+les entrées, pas l'état — quelques Ko par minute)&nbsp;; la simulation
+<strong>lockstep</strong> (RTS&nbsp;: seuls les ordres circulent, tous les clients simulent
+à l'identique)&nbsp;; les <strong>tests de non-régression d'IA</strong> (le même scénario doit
+produire le même comportement après un changement de code). Il exige&nbsp;: pas de
+temps fixe, pas d'itération sur des conteneurs non ordonnés à hachage non stable,
+arithmétique fixe ou flottante strictement spécifiée, générateurs aléatoires à
+graine. C'est une discipline d'équipe — et elle rentabilise tout le reste du
+module.</p>
+
+<div class="note">
+  <span class="tag">Note — La checklist «&nbsp;IA temps réel&nbsp;» du module</span>
+  (1) budget mesuré par système et par agent&nbsp;; (2) décisions à basse fréquence,
+  actions à haute fréquence&nbsp;; (3) LOD d'IA&nbsp;; (4) requêtes spatiales
+  indexées&nbsp;; (5) aucune allocation dans la boucle&nbsp;; (6) tout est interruptible
+  (anytime)&nbsp;; (7) déterminisme testé&nbsp;; (8) comportement dégradé prévu si un
+  système dépasse (le NPC «&nbsp;réfléchit&nbsp;» moins, jamais ne gèle). Ces huit
+  points constituent l'examen pratique du module.
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> NPCs conversationnels (LLM) et anti-triche</a><a class="next" href="ex.html"><span class="dir">Suivant</span> Exercices</a></nav>
+</main>
+</div>
+
+</body>
+</html>

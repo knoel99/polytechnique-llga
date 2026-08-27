@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refresher in Computer Science — Algorithmes géométriques et travaux de l'enseignant — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Refresher in Computer Science</a> › Algorithmes géométriques et travaux de l'enseignant</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51440_EP</span>Refresher in Computer Science</a>
+<nav class="sidebar-toc">
+<a href="ch1.html">Python pour la science des données</a>
+<a href="ch2.html">Analyse de complexité</a>
+<a href="ch3.html">Structures de données fondamentales</a>
+<a href="ch4.html">Tri, recherche, récursion</a>
+<a href="ch5.html">Algorithmes de graphes</a>
+<a href="ch6.html">NumPy : algèbre linéaire numérique</a>
+<a href="ch7.html">Génie logiciel minimal (OOP, tests, git)</a>
+<a href="ch8.html" class="active">Algorithmes géométriques et travaux de l'enseignant</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Algorithmes géométriques et travaux de l'enseignant</h2>
+
+<p>Chapitre nouveau. La géométrie discrète est le socle du <em>geometric deep learning</em>
+et de toute donnée spatiale (nuages de points LiDAR, maillages 3D, cartes). L'enseignant de
+ce module, <strong>Amal Dev Parakkat</strong> (Télécom Paris, Institut Polytechnique de
+Paris), est un spécialiste international de la reconstruction géométrique et de la
+génération de maillages ; ses travaux terminent ce chapitre.</p>
+
+<h3>8.1 Primitives : orientation par produit vectoriel</h3>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Test d'orientation</span>
+  Pour trois points \(A, B, C\) du plan, le signe du déterminant
+  $$\mathrm{orient}(A,B,C) \;=\; \operatorname{signe}\det\begin{pmatrix}
+  B_x - A_x &amp; C_x - A_x \\ B_y - A_y &amp; C_y - A_y \end{pmatrix}$$
+  dit si le chemin \(A \to B \to C\) tourne à gauche (positif), à droite (négatif), ou est
+  aligné (nul) : c'est le produit vectoriel \((B-A) \times (C-A)\) projeté sur l'axe
+  sortant. Coût : trois soustractions, deux multiplications, une comparaison — la brique
+  de <em>tous</em> les algorithmes de ce chapitre.
+</div>
+
+<pre class="code"><code>def orient(a, b, c):
+    """&gt; 0 : contre-montre (gauche) ; &lt; 0 : droite ; = 0 : aligne."""
+    return (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0])</code></pre>
+
+<div class="note">
+  <span class="tag">Précision</span>
+  Le calcul flottant de l'orientation peut <em>mentir</em> pour des points quasi alignés :
+  les implémentations robustes (CGAL) utilisent des prédicats exacts en arithmétique
+  rationnelle pour les cas limites — au master, <code>float64</code> + marge
+  \(\varepsilon\) suffisent aux TP, mais sachez que le sujet existe (cf. module Geometric
+  DL M2 pour les géométries non euclidiennes).
+</div>
+
+<h3>8.2 Enveloppe convexe : Jarvis puis Graham</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 8.2 — Gift wrapping (marche de Jarvis), \(\mathcal{O}(nh)\)</span>
+  Partir du point le plus à gauche ; à chaque étape, choisir parmi tous les points celui qui
+  est «&nbsp;le plus à droite&nbsp;» vu du point courant (minimiser l'angle polaire relativement à
+  la direction précédente) : c'est le prochain sommet de l'enveloppe. S'arrête au retour au
+  départ. \(h\) = nombre de sommets de l'enveloppe : linéaire par sommet produit.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 8.3 — Graham scan, \(\mathcal{O}(n \log n)</span>
+  Trier les points par angle autour d'un pivot (le plus bas), puis parcourir en maintenant
+  une <strong>pile</strong> : si le trio (avant-dernier, dernier, nouveau) tourne à droite,
+  dépiler. À la fin, la pile contient l'enveloppe convexe.
+</div>
+
+<div class="proof">
+  <strong>Invariant :</strong> après le traitement du \(k\)-ième point, la pile contient
+  exactement l'enveloppe convexe des \(k\) premiers points (triés angulairement).
+  Initialisation : les deux premiers points. Conservation : le nouveau point \(p\) est
+  <em>à l'extérieur</em> de l'angle formé au sommet de la pile ; si
+  \(\mathrm{orient}(q_{m-1}, q_m, p) \leq 0\) (tour à droite ou alignement), alors \(q_m\)
+  est <em>à l'intérieur</em> du triangle \((q_{m-1}, p_{\text{suivant eventual}}, p)\) — plus
+  précisément dans le demi-plan convexe balayé — et ne peut pas être un sommet de
+  l'enveloppe de \(\{p_1,\dots,p_k\}\) : le dépiler restaure la convexité ; on répète tant
+  que la pile «&nbsp;tourne à droite&nbsp;». L'alignement (\(=0\)) doit dépiler aussi (point
+  cocyclique sur une arête : garder un seul représentant). Terminaison : chaque point est
+  empilé une fois, dépilé au plus une fois : \(\mathcal{O}(n)\) après le tri
+  \(\mathcal{O}(n\log n)\).
+  <span class="qed">∎</span>
+</div>
+
+<pre class="code"><code>import math
+
+def graham_scan(points):
+    pts = sorted(set(points), key=lambda p: (p[1], p[0]))   # pivot le plus bas
+    pivot = pts[0]
+    rest = sorted(pts[1:],
+                  key=lambda p: math.atan2(p[1]-pivot[1], p[0]-pivot[0]))  # par angle
+    hull = [pivot]
+    for p in rest:
+        while len(hull) &gt;= 2 and orient(hull[-2], hull[-1], p) &lt;= 0:
+            hull.pop()                       # tourne a droite ou aligne : evict
+        hull.append(p)
+    return hull
+
+# test : carre + point interieur
+hull = graham_scan([(0,0), (2,0), (2,2), (0,2), (1,1), (0,1)])
+assert set(hull) == {(0,0), (2,0), (2,2), (0,2)}</code></pre>
+
+<div class="note">
+  <span class="tag">Usages ML</span>
+  L'enveloppe convexe délimite le support d'un nuage : détection d'outliers, calibration
+  de boîtes englobantes, calcul du <em>hull</em> d'embeddings pour visualiser des classes ;
+  les SVM à marge maximale ne dépendent que des points sur ou hors de l'enveloppe des
+  marges (les vecteurs supports) — cf. module Machine Learning. En 3D :
+  <code>scipy.spatial.ConvexHull</code>.
+</div>
+
+<h3>8.3 Paire de points la plus proche</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 8.4 — Diviser pour régner en \(\mathcal{O}(n\log n)\)</span>
+  Tri par abscisse, coupe médiane, récursion sur les deux moitiés (\(d\) = meilleur des
+  deux), puis examen de la <strong>bande</strong> verticale de largeur \(2d\) autour de la
+  médiane : triée par ordonnée, chaque point n'a à être comparé qu'aux \(\leq 7\) suivants
+  (sinon des points de la même moitié seraient plus proches que \(d\), contradiction dans
+  un carré de côté \(d\)). Récurrence \(T(n) = 2T(n/2) + \mathcal{O}(n) = \mathcal{O}(n\log n)\)
+  (théorème 2.2 — encore lui). La force brute est \(\mathcal{O}(n^2)\) : sur \(10^6\) points,
+  une nuit contre une seconde. Usage : déduplication de points LiDAR, matching de
+  keypoints entre deux images.
+</div>
+
+<h3>8.4 Triangulations et Delaunay</h3>
+
+<div class="def">
+  <span class="tag">Définition 8.5 — Triangulation de Delaunay</span>
+  Une triangulation d'un ensemble de points est <em>de Delaunay</em> si pour chaque
+  triangle, son <strong>cercle circonscrit est vide</strong> : aucun autre point du nuage
+  n'est à son intérieur. Le <strong>dual</strong> de la construction est le diagramme de
+  Voronoi (cellules des points plus proches d'un site que de tout autre) : les sites dont
+  les cellules de Voronoi partagent une arête sont reliés dans Delaunay.
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi Delaunay ? Propriétés et algorithme par flips</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Qualité des triangles</strong> : parmi toutes les triangulations, Delaunay
+    <em>maximise le plus petit angle</em> (évite les triangles «&nbsp;ficelle&nbsp;») — d'où
+    son rôle central en éléments finis : des triangles bien conditionnés stabilisent les
+    simulations numériques.</li>
+    <li><strong>Algorithme par flips</strong> : toute arête partagée par deux triangles
+    formant un quadrilatère non convexe-vide peut être <em>flippée</em> (remplacée par
+    l'autre diagonale) pour restaurer la propriété de cercle vide ; l'énergie (somme des
+    angles opposés) augmente strictement à chaque flip, donc le processus converge en un
+    nombre fini de flips — la structure locale dicte la géométrie globale, exactement
+    comme les relaxations locales des chapitres 5 (flux) et du label propagation.</li>
+    <li><strong>Raffinement de Delaunay</strong> (Ruppert, Chew) : insérer itérativement le
+    centre des cercles circonscrits «&nbsp;trop gros&nbsp;» produit des maillages de qualité
+    garantie — la base de la <em>mesh generation</em> industrielle (voir les travaux
+    ci-dessous).</li>
+    <li><strong>En Python</strong> : <code>scipy.spatial.Delaunay</code> (Qhull) ; le graphe
+    de Delaunay d'un nuage de points est un graphe — et l'on retombe sur le chapitre 5 :
+    c'est un candidat naturel de «&nbsp;graphe de proximité&nbsp;» pour un GNN sur données
+    géométriques.</li>
+  </ul>
+</div>
+
+<pre class="code"><code>from scipy.spatial import Delaunay, Voronoi
+import numpy as np
+
+rng = np.random.default_rng(0)
+pts = rng.uniform(0, 1, (200, 2))
+tri = Delaunay(pts)
+print(tri.simplices.shape)        # (~390, 3) : autant de triangles, 3 sommets chacun
+# Graphe de proximite pour un GNN : aretes = aretes des triangles de Delaunay
+edges = set()
+for s in tri.simplices:
+    for i, j in [(0,1), (1,2), (0,2)]:
+        edges.add((min(s[i], s[j]), max(s[i], s[j])))
+print(len(edges), "aretes de proximite")     # cf. modules Graph ML / Advanced GNN M2</code></pre>
+
+<h3>8.5 Les travaux d'Amal Dev Parakkat</h3>
+
+<div class="note">
+  <span class="tag">Publication 1 — Reconnaissance de formes par points (2015)</span>
+  S. Methirumangalath, A. D. Parakkat, R. Muthuganapathy,
+  <a href="https://www.sciencedirect.com/science/article/abs/pii/S0097849315000722">«&nbsp;A
+  unified approach towards reconstruction of a planar point set&nbsp;»</a>, Computers &amp;
+  Graphics, 2015. À partir d'un nuage de points 2D <em>non structuré</em> — sans information
+  de connexité — l'article reconstruit la forme sous-jacente (bord, arêtes vives) en
+  s'appuyant sur la triangulation de Delaunay et des critères géométriques locaux
+  (disques vides). Le point d'entrée du domaine : unir «&nbsp;dot patterns&nbsp;» et
+  «&nbsp;boundary samples&nbsp;» sous une même méthode.
+</div>
+
+<div class="note">
+  <span class="tag">Publication 2 — Détection de trous (SMI 2017)</span>
+  S. Methirumangalath, A. D. Parakkat,
+  <a href="https://perso.telecom-paristech.fr/parakkat/PDF/smi17.pdf">«&nbsp;Hole detection
+  in a planar point set: an empty disk approach&nbsp;»</a>, Shape Modeling International
+  2017. Question : un nuage de points contient-il des <em>trous</em> (régions vides
+  intérieures, pas seulement le bord extérieur) ? Réponse : chercher les grands
+  <strong>disques vides</strong> — l'exact dual de la propriété de cercle vide de Delaunay,
+  appliquée comme <em>détecteur d'anomalie géométrique</em>. Application : contrôle de
+  qualité de maillages, complétude d'un scan.
+</div>
+
+<div class="note">
+  <span class="tag">Publication 3 — Reconstruction de surfaces 3D (Eurographics 2024)</span>
+  A. D. Parakkat et al.,
+  <a href="https://onlinelibrary.wiley.com/doi/abs/10.1111/cgf.15019">«&nbsp;BallMerge:
+  High-quality Fast Surface Reconstruction via Voronoi Balls&nbsp;»</a>, Computer Graphics
+  Forum (Eurographics 2024). Reconstruction d'une surface 3D depuis des points non
+  structurés : la méthode fusionne des <strong>boules de Voronoi</strong> (les duals 3D
+  des cellules de Voronoi) pour reconstruire la surface de manière à la fois rapide et de
+  haute qualité — contre les approches plus lentes type Poisson. Le pipeline complet du
+  chapitre (Delaunay/Voronoi, disques vides, fusion) concentré en un algorithme
+  industriel.
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi ça compte pour ce master</span>
+  Un maillage <em>est</em> un graphe plongé dans l'espace : les travaux de l'enseignant
+  fabriquent exactement les données d'entrée des modules Graph ML (prédiction sur maillages
+  — simulation, CAO) et Geometric DL M2 (réseaux equivariants sur nuages de points) ; la
+  reconstruction de surface est aussi un jumeau géométrique de l'imputation du module
+  Statistics — <em>reconstruire l'information manquante avec des hypothèses de
+  régularité</em>. Sa page (perso.telecom-paristech.fr/parakkat/) liste également ses
+  travaux sur la vectorisation de croquis, la triangulation incrémentale et
+  l'enseignement de la géométrie algorithmique.
+</div>
+
+<div class="recap">
+  <p class="recap-title">À retenir — chapitre 8</p>
+  <ul>
+    <li>Orientation = signe d'un déterminant 2×2 : la brique universelle (prédicat O(1)).</li>
+    <li>Enveloppe convexe : Jarvis \(\mathcal{O}(nh)\), Graham \(\mathcal{O}(n\log n)\)
+    avec invariant de pile «&nbsp;toujours à gauche&nbsp;».</li>
+    <li>Paire la plus proche : bande médiane, \(\leq 7\) comparaisons par point,
+    \(\mathcal{O}(n\log n)\).</li>
+    <li>Delaunay = cercles vides, dual de Voronoi, maximise les angles, flips ; graphe de
+    proximité naturel pour les GNN ; trois publications de l'enseignant à citer
+    (2015, 2017, 2024).</li>
+  </ul>
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Précédent</span> Génie logiciel minimal (OOP, tests, git)</a><a class="next" href="ex.html"><span class="dir">Suivant</span> Exercices</a></nav>
+</main>
+</div>
+
+</body>
+</html>

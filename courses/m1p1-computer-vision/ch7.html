@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — Flux optique&nbsp;: Lucas-Kanade — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Analysis and Computer Vision</a> › Flux optique&nbsp;: Lucas-Kanade</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: algèbre linéaire, convolution, probabilités</a>
+<a href="ch1.html">Formation des images&nbsp;: caméra et échantillonnage</a>
+<a href="ch2.html">Filtrage et convolution</a>
+<a href="ch3.html">Contours&nbsp;: gradient et Canny</a>
+<a href="ch4.html">Points d'intérêt&nbsp;: Harris et SIFT</a>
+<a href="ch5.html">Géométrie projective et homographies</a>
+<a href="ch6.html">Stéréovision et géométrie épipolaire</a>
+<a href="ch7.html" class="active">Flux optique&nbsp;: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation&nbsp;: k-moyennes et coupes de graphes</a>
+<a href="ch9.html">CNN pour la vision&nbsp;: détection et segmentation</a>
+<a href="ch10.html">Nuages de points 3D&nbsp;: ICP et analyse urbaine</a>
+<a href="ch11.html">Travaux de l'enseignant&nbsp;: LiDAR urbain à l'IGN</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Flux optique&nbsp;: Lucas-Kanade</h2>
+
+<p>Le mouvement apparent des luminances entre deux images — le <strong>flux
+optique</strong> — est l'ingrédient du suivi, de la compression vidéo et de la
+navigation. Lucas-Kanade (1981) reste la formulation de référence, et sa
+mathématique est un condensé du cours.</p>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — Contrainte du gradient et problème de l'ouverture</span>
+  Hypothèse de conservation de la luminance&nbsp;:
+  \(I(x + u, y + v, t + \Delta t) = I(x, y, t)\). Développement de Taylor à
+  l'ordre 1&nbsp;:
+  $$I_x u + I_y v + I_t = 0 \qquad (\text{avec } u = dx/dt,\; v = dy/dt,\; I_t = \partial I/\partial t),$$
+  une <em>seule</em> équation pour <em>deux</em> inconnues \((u, v)\)&nbsp;: la
+  droite des flux possibles. Localement, une ouverture (petite fenêtre) ne
+  suffit pas à déterminer le mouvement d'un bord — c'est le
+  <strong>problème de l'ouverture</strong>, ou illusion de la roue qui tourne
+  derrière une fente.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.2 — Lucas-Kanade&nbsp;: moindres carrés sur une fenêtre</span>
+  En supposant le flot <em>constant</em> dans une fenêtre \(W\), chaque pixel
+  fournit une contrainte de gradient&nbsp;; le flot optimal minimise
+  $$J(u, v) = \sum_{(x,y)\in W} w(x,y)\,\big(I_x u + I_y v + I_t\big)^2.$$
+  L'annulation du gradient (\(\partial J/\partial u = \partial J/\partial v = 0\))
+  fournit les équations normales
+  $$\underbrace{\begin{pmatrix}\sum w\,I_x^2 &amp; \sum w\,I_xI_y\\
+  \sum w\,I_xI_y &amp; \sum w\,I_y^2\end{pmatrix}}_{=\,M,\ \text{tenseur de structure !}}
+  \begin{pmatrix}u\\ v\end{pmatrix} = -\begin{pmatrix}\sum w\,I_xI_t\\ \sum w\,I_yI_t\end{pmatrix}.$$
+  <div class="proof" style="margin-top:.5rem;">Dérivée en \(u\)&nbsp;:
+  \(2\sum w\,I_x(I_xu + I_yv + I_t) = 0\) → première ligne&nbsp;;
+  symétriquement en \(v\) → seconde ligne. La matrice \(M\) est
+  exactement le tenseur de structure de Harris (déf. 4.1)&nbsp;: Lucas-Kanade
+  est résoluble là où Harris détecte un coin — mêmes \(\lambda_1, \lambda_2\)
+  grands. <span class="qed">∎</span></div>
+  Domaine de validité&nbsp;: mouvements petits (Taylor), flux localement
+  constant — d'où les deux remèdes&nbsp;: (i)&nbsp;<em>résolution
+  itérative</em> par gauchissement (warp) successif&nbsp;; (ii)&nbsp;approche
+  <em>grossière-fin</em> par pyramide (prop. 2.5)&nbsp;: estimer grand à
+  l'échelle grossière, affiner en descendant.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 7.3 — Un système 2×2 à la main</span>
+  Fenêtre de 4 pixels, gradients et dérivée temporelle \((I_x, I_y\,;\,I_t)\)&nbsp;:
+  (3,&nbsp;1&nbsp;;&nbsp;8), (5,&nbsp;2&nbsp;;&nbsp;10), (4,&nbsp;2&nbsp;;&nbsp;9),
+  (6,&nbsp;3&nbsp;;&nbsp;12). Sommes&nbsp;:
+  \(M = \begin{pmatrix}9+25+16+36 &amp; 3+10+8+18\\ \cdot &amp; 1+4+4+9\end{pmatrix}
+  = \begin{pmatrix}86 &amp; 39\\ 39 &amp; 18\end{pmatrix}\), second membre
+  \(-\big(\sum I_xI_t, \sum I_yI_t\big) = -(182, 82)\). Résolvons&nbsp;:
+  \(\det M = 86\times18 - 39^2 = 1548 - 1521 = 27\) — presque singulière
+  (valeurs propres ≈ 103,7 et 0,26&nbsp;: gradients quasi alignés).
+  Formules de Cramer&nbsp;: \(u = \frac{-182\times18 + 82\times39}{27} =
+  \frac{-78}{27} \approx -2{,}89\), \(v = \frac{86\times(-82) + 39\times182}{27} =
+  \frac{46}{27} \approx 1{,}70\). Le flot est calculable mais
+  <em>peu fiable</em>&nbsp;: \(\lambda_2 \ll \lambda_1\) signe un bord, pas un
+  coin — l'exemple 4.2 donnait le diagnostic inverse sur un autre tenseur.
+  En pratique&nbsp;: exiger \(\lambda_2 &gt; \tau\) avant de faire confiance au
+  flot (et pondérer par la distance au centroïde pour lisser).
+</div>
+
+<div class="note">
+  <span class="tag">Note — Horn-Schunck, la version globale</span>
+  Au lieu d'une fenêtre, Horn-Schunck (1981) régularise sur toute l'image&nbsp;:
+  minimiser \(\int (I_xu + I_yv + I_t)^2 + \lambda\,\big(\|\nabla u\|^2 +
+  \|\nabla v\|^2\big)\)&nbsp;: attachement aux données (contrainte de gradient)
+  + champ de flot <em>lisse</em>. Les équations d'Euler-Lagrange se résolvent
+  itérativement&nbsp;; \(\lambda\) règle le compromis données/régularité —
+  même structure d'énergie que les coupes de graphes du ch. 8, et que bien
+  des problèmes inverses du module <em>Signal Processing</em>. Variante
+  moderne&nbsp;: réseaux appris supervisés par ces mêmes énergies.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Stéréovision et géométrie épipolaire</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Segmentation&nbsp;: k-moyennes et coupes de graphes</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — GNN à l'échelle — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Graph Machine and Deep Learning for Generative AI</a> › GNN à l'échelle</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52072_EP</span>Graph Machine and Deep Learning for Generative AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: théorie des graphes</a>
+<a href="ch1.html">Pourquoi les graphes&nbsp;?</a>
+<a href="ch2.html">Tâches d'apprentissage sur graphes</a>
+<a href="ch3.html">Node embeddings</a>
+<a href="ch4.html">Filtres spectraux et spectral clustering</a>
+<a href="ch5.html">GNN et message passing</a>
+<a href="ch6.html">Link prediction et auto-encodeurs de graphes</a>
+<a href="ch7.html" class="active">GNN à l'échelle</a>
+<a href="ch8.html">Applications et mise en œuvre</a>
+<a href="ch9.html">Génération de graphes</a>
+<a href="ch10.html">Travaux de l'équipe pédagogique</a>
+<a href="ch11.html">Graphes × LLMs&nbsp;: GraphRAG et l'hybride</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. GNN à l'échelle</h2>
+
+<div class="def">
+  <span class="tag">Pourquoi le full-batch ne passe pas</span>
+  Le gradient d'une couche GCN mobilise <em>tout</em> le graphe&nbsp;: mémoire des activations
+  \(\mathcal{O}((|V| + |E|) d)\) par couche, sans parler de la densification des couches
+  profondes. Sur ogbn-products (2,4&nbsp;millions de nœuds, 61,9&nbsp;millions d'arêtes), le
+  full-batch ne tient pas sur un GPU&nbsp;; trois familles de solutions, toutes fondées sur le
+  même constat&nbsp;: la dépendance d'un nœud à \(L\) couches se limite à son \(L\)-voisinage.
+</div>
+
+<div class="thm">
+  <span class="tag">7.1 — Minibatching par voisinage (GraphSAGE / NeighborSampler)</span>
+  Pour un batch de nœuds cibles \(\mathcal{B}\) et une profondeur \(L\) avec des tailles
+  d'échantillonnage \((s_L, \dots, s_1)\) (fanouts)&nbsp;:
+<pre class="code"><code>pour l = L .. 1 :                                    # de la couche profonde vers la surface
+    N_l = union des voisins echantillonnes (s_l par noeud) des noeuds de N_{l+1}
+    N_{l+1/2} = N_l echantillonne                    # sous-graphe de calcul
+calculer les representations couche par couche sur le sous-graphe
+mettre a jour les parametres avec la loss sur les sorties de B uniquement</code></pre>
+  Taille du sous-graphe&nbsp;: \(|\mathcal{B}| \times (1 + s_L (1 + s_{L-1}(\dots)))\)&nbsp;;
+  avec \(L = 2\), \(s_1 = s_2 = 10\), un batch de 1 nœud touche au plus
+  \(1 + 10 + 100 = 111\) nœuds — <em>borné, indépendant de \(n\)</em>. Deux subtilités&nbsp;:
+  (i)&nbsp;l'estimateur est <em>non biaisé en espérance</em> pour la moyenne sur voisins, mais
+  la variance explose dans les hubs (d'où des fanouts décroissants)&nbsp;; (ii)&nbsp;les
+  échantillonnages imbriqués créent du calcul redondant entre batchs (le «&nbsp;voisinage
+  expansif&nbsp;»&nbsp;; NeighborLoader de PyG implémente exactement ceci).
+</div>
+
+<div class="thm">
+  <span class="tag">7.2 — Cluster-GCN (Chiang et al., 2019)&nbsp;: partitionner</span>
+  Partitionner le graphe en \(k\) clusters (METIS), chaque batch = un <em>cluster entier</em>&nbsp;:
+  l'entraînement GCN sur le sous-graphe induit coûte \(\mathcal{O}(|E_c| d + |V_c| d^2)\) et
+  chaque époque totale coûte \(\mathcal{O}(|E|)\) — comme le full-batch, mais en mémoire
+  constante, et les GCN profonds redeviennent entraînables. Le prix&nbsp;: le biais de
+  partition — les arêtes inter-clusters sont invisibles pendant le pas&nbsp;; correction&nbsp;:
+  matrice d'adjacence par blocs, \(\bar A = A + \lambda\,\mathrm{diag}(A)\) (relier chaque
+  cluster à lui-même) et de temps en temps ré-échantillonner les partitions. Mieux encore&nbsp;:
+  relier les clusters par un «&nbsp;graphe virtuel&nbsp;» des clusters — précurseur des
+  hiérarchies de GraphRAG (ch. 11).
+</div>
+
+<div class="thm">
+  <span class="tag">7.3 — GraphSAINT (Zeng et al., 2020)&nbsp;: échantillonner des sous-graphes, sans biais</span>
+  Renverser la perspective&nbsp;: échantillonner d'abord un sous-graphe \(\mathcal{G}_s\)
+  (par nœuds, par arêtes, ou par marches aléatoires), y calculer un gradient <em>corrigé</em>.
+  La clé est la <strong>normalisation par probabilité de couverture</strong>&nbsp;: si le
+  sous-graphe inclut le nœud \(v\) avec ses arêtes couvertes avec probabilités
+  \(p_v, p_{uv}\), l'estimateur repondéré
+  $$\hat\nabla = \sum_{v \in \mathcal{G}_s} \frac{1}{p_v} \nabla_v + \sum_{(u,v) \in \mathcal{G}_s} \Big(\frac{1}{p_{uv}} - \frac{1}{p_u} - \frac{1}{p_v}\Big) \nabla_{uv}$$
+  est <em>sans biais</em> pour le gradient full-batch — le papier le démontre en développant
+  l'espérance sur le schéma d'échantillonnage. Bénéfice caché&nbsp;: les batchs sont
+  «&nbsp;denses&nbsp;» (pas de voisinage expansif), et le sampling par marches capture la
+  structure communautaire. La figure générale&nbsp;: <em>biais-variance-mémoire</em> —
+  neighbor-sampling (variance forte, biais nul)&nbsp;; cluster-GCN (biais de partition, variance
+  nulle)&nbsp;; GraphSAINT (sans biais par repondération, variance contrôlée par le sampling
+  RW). Ces compromis sont le pain quotidien du M2, ch. 6 (et du module Emerging ML pour le
+  parallèle federated&nbsp;: partitions = clients).
+</div>
+
+<div class="note">
+  <span class="tag">OGB — mesurer honnêtement à l'échelle (Hu et al., 2020)</span>
+  <table class="tbl">
+  <thead><tr><th>Benchmark</th><th>Taille</th><th>Tâche</th></tr></thead>
+  <tbody>
+  <tr><td>ogbn-arxiv</td><td>169&nbsp;343 nœuds, 1,2&nbsp;M arêtes</td><td>classification de nœuds</td></tr>
+  <tr><td>ogbn-products</td><td>2,4&nbsp;M nœuds, 61,9&nbsp;M arêtes</td><td>classification de nœuds</td></tr>
+  <tr><td>ogbg-molhiv / molpcba</td><td>41&nbsp;127 / 437&nbsp;k molécules</td><td>classification de graphes</td></tr>
+  <tr><td>ogbl-ppa / citation2</td><td>grands graphes bipartites/de citation</td><td>link prediction</td></tr>
+  </tbody>
+  </table>
+  Règles du jeu&nbsp;: splits fixes, protocoles de sélection de modèle définis, leaderboards
+  publics — l'hygiène expérimentale du M2 (ch. 6&nbsp;; Dwivedi et al., «&nbsp;Benchmarking
+  GNNs&nbsp;») n'est pas optionnelle&nbsp;: à cette échelle, les progrès se mesurent en
+  dixièmes de points et seuls les protocoles stricts les distinguent du bruit.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Link prediction et auto-encodeurs de graphes</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Applications et mise en œuvre</a></nav>
+</main>
+</div>
+
+</body>
+</html>

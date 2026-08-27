@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Language Models — L'architecture en profondeur — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Large Language Models</a> › L'architecture en profondeur</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_53432_EP</span>Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: de word2vec aux transformers</a>
+<a href="ch1.html">Tokenisation</a>
+<a href="ch2.html" class="active">L'architecture en profondeur</a>
+<a href="ch3.html">Pré-entraînement</a>
+<a href="ch4.html">Post-training&nbsp;: SFT et alignement</a>
+<a href="ch5.html">RLHF, DPO, GRPO</a>
+<a href="ch6.html">Faire tourner un LLM&nbsp;: inférence</a>
+<a href="ch7.html">RAG approfondi</a>
+<a href="ch8.html">Agents, multimodalité et perspectives</a>
+<a href="ch9.html">Évaluation et sûreté des LLMs</a>
+<a href="ch10.html">Travaux de l'enseignant</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. L'architecture en profondeur</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Le bloc décodeur</span>
+  Un LLM empile \(N\) blocs&nbsp;:
+  $$x \leftarrow x + \mathrm{MHA}(\mathrm{LN}(x)), \qquad
+  x \leftarrow x + \mathrm{MLP}(\mathrm{LN}(x)),$$
+  avec attention <strong>causale</strong> (masque triangulaire&nbsp;: le token \(i\) ne voit que
+  \(j \leq i\)), têtes groupées (<em>grouped-query attention</em> pour l'inférence), MLP en
+  grille (SwiGLU, expansion ~4×), et embeddings de position <strong>RoPE</strong>
+  (rotations&nbsp;; généralisation relative aux longues contextes), et une LN finale.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — Pre-norm vs post-norm&nbsp;: le flux de gradient</span>
+  <strong>Post-LN</strong> (transformer original)&nbsp;:
+  \(x_{l+1}=\mathrm{LN}(x_l+F(x_l))\) — chaque bloc renormalise <em>le résidu
+  lui-même</em>&nbsp;; le gradient de \(x_L\) vers \(x_0\) traverse \(L\) Jacobiennes
+  de LN dont le produit décroît/explode exponentiellement avec \(L\)&nbsp;: warmup
+  obligatoire, profondeur fragile. <strong>Pre-LN</strong> (GPT-2+, tous les LLMs
+  modernes)&nbsp;: \(x_{l+1}=x_l+F(\mathrm{LN}(x_l))\) — le chemin résiduel est
+  <em>l'identité</em>&nbsp;:
+  $$\frac{\partial x_L}{\partial x_l} = I + \sum_{l'\,&gt;\,l}\frac{\partial F_{l'}}{\partial x_l}$$
+  → gradient qui atteint chaque couche sans atténuation produit&nbsp;: entraînement
+  stable sans warmup fin. Prix&nbsp;: la norme \(\|x_l\|\) croît avec la profondeur
+  (contributions additives), d'où la <strong>LN finale</strong>. (Xiong et al., ICML 2020.)
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.3 — RoPE dérivé (Su et al., 2021)</span>
+  La position est injectée par rotation&nbsp;: le vecteur de dimension \(d\) est vu
+  comme \(d/2\) paires 2D&nbsp;; la paire \(i\) du token en position \(m\) subit
+  \(R(m\theta_i)\) avec \(\theta_i = 10000^{-2i/d}\)&nbsp;:
+  $$R(\varphi)=\begin{pmatrix}\cos\varphi &amp; -\sin\varphi\\ \sin\varphi &amp; \cos\varphi\end{pmatrix},
+  \qquad q^{(i)}_m = R(m\theta_i)\,q^{(i)},\quad k^{(i)}_n = R(n\theta_i)\,k^{(i)}.$$
+  <div class="proof">
+  <strong>Propriété relative</strong>&nbsp;: le produit scalaire d'une paire ne dépend
+  que de la <em>différence</em> de positions&nbsp;:
+  \(\langle q^{(i)}_m,k^{(i)}_n\rangle
+  = q^{(i)\top} R(m\theta_i)^\top R(n\theta_i)\, k^{(i)}
+  = q^{(i)\top} R\big((n-m)\theta_i\big)\,k^{(i)}\),
+  car les rotations 2D commutent et \(R(a)^\top R(b)=R(b-a)\). Somme sur les paires =
+  un score d'attention fonction de \((n-m)\) et des contenus — une généralisation
+  «&nbsp;soft&nbsp;» des embeddings relatifs. Bonus pratique&nbsp;: pour étendre le
+  contexte, on <em>interpole</em> les angles (\(m\to m/L\)) au lieu de réapprendre.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.4 — MQA/GQA&nbsp;: l'arithmétique mémoire du KV-cache</span>
+  Le cache stocke clés et valeurs de tous les tokens passés&nbsp;:
+  $$\text{octets/token} = 2\ (\text{K et V}) \times N_{\text{couches}} \times
+  n_{\text{têtes KV}} \times d_{\text{tête}} \times \text{octets/élément}.$$
+  <strong>Multi-Query Attention</strong> (Shazeer, 2019)&nbsp;: une seule tête KV
+  partagée&nbsp;; <strong>Grouped-Query</strong> (Ainslie et al., 2023)&nbsp;:
+  \(n_{\text{KV}} &lt; n_{\text{têtes}}\) — ex. Llama-3-8B&nbsp;: 32 têtes, 8 têtes KV,
+  32 couches, \(d_{\text{tête}}=128\), fp16 →
+  \(2\times32\times8\times128\times2 = 128\,\text{Kio/token}\)&nbsp;; un contexte de
+  100k tokens ≈ <strong>12,8&nbsp;Go</strong> de cache (contre ~51&nbsp;Go en
+  attention pleine — réduction 4×, qualité quasi identique). C'est LE levier du
+  contexte long (ch. 6).
+</div>
+
+<div class="thm">
+  <span class="tag">Mixture-of-Experts (MoE)&nbsp;: routage et équilibrage</span>
+  Chaque bloc MLP est remplacé par \(E\) experts \(\{E_i\}\)&nbsp;; un routeur
+  \(g(x)=\mathrm{softmax}(W_g x)\) n'active que le top-\(k\)&nbsp;:
+  $$y = \sum_{i\in \mathrm{top}\text{-}k} g_i(x)\,E_i(x), \qquad
+  \#\text{params actifs} \ll \#\text{params totaux}.$$
+  Capacité décorrelée du coût d'inférence (Switch Transformer&nbsp;: Fedus et al.
+  2021&nbsp;; DeepSeek-V3&nbsp;: 671B totaux, ~37B actifs). <strong>Piège&nbsp;:
+  effondrement du routage</strong> — les experts gagnants attirent tout. Perte
+  auxiliaire d'équilibrage (Switch)&nbsp;:
+  $$\mathcal{L}_{\text{aux}} = \alpha\, E \sum_{i=1}^{E} f_i\,P_i,$$
+  \(f_i\) = fraction de tokens routés vers \(i\), \(P_i=\frac{1}{T}\sum_t g_i(x_t)\)
+  = probabilité moyenne du routeur&nbsp;; minimum atteint à la distribution uniforme
+  (\(f_i=P_i=1/E\)) — pénalité nulle ssi routeur équilibré <em>et</em> confiant.
+  Variantes modernes&nbsp;: experts fins + experts <em>partagés</em>, équilibrage sans
+  perte auxiliaire (biais ajusté dynamiquement, DeepSeek-V3).
+</div>
+
+<div class="note">
+  <span class="tag">Attention efficace&nbsp;: FlashAttention et la complexité IO</span>
+  L'attention exacte coûte \(\mathcal{O}(n^2)\) en calcul mais <em>dominé en
+  pratique par les entrées/sorties</em>&nbsp;: l'implémentation naïve écrit la
+  matrice \(n\times n\) en HBM (grande mémoire, lente). FlashAttention (Dao et al.,
+  2022)&nbsp;: calcul <em>exact</em> par tuiles qui tiennent en SRAM, softmax
+  «&nbsp;en ligne&nbsp;» avec accumulateur (running max \(m\) et somme \(\ell\) mis à
+  jour par tuile&nbsp;: \(m_{\text{new}}=\max(m,x)\),
+  \(\ell_{\text{new}}=e^{m-m_{\text{new}}}\ell+e^{x-m_{\text{new}}}\)) — la matrice
+  \(n^2\) n'est jamais matérialisée&nbsp;; lecture HBM réduite de \(\Theta(n^2)\) à
+  \(\Theta(n^2d^2/M)\) (\(M\) = taille SRAM). La leçon générale&nbsp;: <em>optimiser
+  les accès mémoire, pas seulement les FLOPs</em> (cf. module Signal Processing pour
+  la hiérarchie mémoire).
+</div>
+
+<div class="def">
+  <span class="tag">Au-delà&nbsp;: SSM/Mamba (esquisse d'équation d'état)</span>
+  Un modèle à espace d'état discretise un système linéaire
+  \(x'(t)=Ax(t)+Bu(t),\ y=Cx\)&nbsp;:
+  $$x_k = \bar A x_{k-1} + \bar B u_k,\qquad y_k = C x_k,\qquad
+  \bar A = e^{\Delta A},\ \bar B \approx \Delta B,$$
+  calculable en \(\mathcal{O}(n)\) par scan (pas de matrice \(n^2\)). La
+  <em>sélectivité</em> de Mamba (Gu &amp; Dao, 2023)&nbsp;: \(\bar B, C, \Delta\)
+  dépendent de l'entrée → contenu-dépendant (oubli sélectif), ce qui donne la
+  qualité d'attention au coût linéaire. Dualité SSD (Mamba-2, 2024)&nbsp;: le même
+  calcul se réécrit \(y_k=\sum_{s\le k} C_k^\top\big(\prod_{s&lt;k'}\bar A\big)\bar B_s\,u_s\)
+  — une «&nbsp;attention&nbsp;» à noyau causal&nbsp;; d'où les architectures
+  hybrides attention+SSM. Prolongement au ch. 8.
+</div>
+
+<ul>
+  <li><strong>Paramètres&nbsp;: où sont-ils&nbsp;?</strong> embedding (\(|V| \times d\)),
+  attention (\(4d^2\)/bloc), MLP (\(8d^2\)/bloc, ~\(12d^2\)/bloc en SwiGLU) — la règle
+  \(\#\text{params} \approx 12 N d^2\) et le coût mémoire d'entraînement (paramètres +
+  Adam + activations + gradients&nbsp;: ~20 octets/paramètre en mixed précision&nbsp;;
+  cf. ch. 3 pour les compute réels)&nbsp;;</li>
+  <li><strong>Pont LLGA</strong>&nbsp;: l'attention <em>est</em> un message passing sur un
+  graphe de tokens (module Graph ML ch. 2, Advanced GNN)&nbsp;; les transformers de
+  graphes en héritent.</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Tokenisation</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Pré-entraînement</a></nav>
+</main>
+</div>
+
+</body>
+</html>

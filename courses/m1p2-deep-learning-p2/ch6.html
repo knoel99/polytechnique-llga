@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Inférence efficiente — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Inférence efficiente</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_52183_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels compacts&nbsp;: le socle de P1</a>
+<a href="ch1.html">Compter&nbsp;: FLOPs, mémoire, lois d'échelle</a>
+<a href="ch2.html">Complexité théorique de l'entraînement</a>
+<a href="ch3.html">Parallélisme&nbsp;: data, tensor, pipeline</a>
+<a href="ch4.html">Communication&nbsp;: all-reduce et compagnie</a>
+<a href="ch5.html">Efficience mémoire&nbsp;: checkpointing, ZeRO</a>
+<a href="ch6.html" class="active">Inférence efficiente</a>
+<a href="ch7.html">Systèmes réels&nbsp;: roofline, GPU, LLM 7B</a>
+<a href="ch8.html">Travaux de l'enseignant</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Inférence efficiente</h2>
+
+<p>À l'échelle (des millions de requêtes), l'inférence domine le coût total&nbsp;:
+elle mérite ses propres outils. Quatre leviers, du plus simple au plus profond.</p>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Le mur mémoire-bandepassante de l'inférence autoregressive</span>
+  Générer un token exige de <em>relire tous les poids</em> (2N octets en bf16) et le
+  <strong>KV cache</strong> — les clefs/valeurs des couches passées, à conserver
+  pour l'attention&nbsp;:
+  $$\text{KV cache} \;=\; 2\;(\text{K et V})\times n_\mathrm{layers}\times n_\mathrm{ctx}\times d_\mathrm{model}\times 2\ \text{octets} \;=\; 4\,n_\mathrm{layers}\,n_\mathrm{ctx}\,d_\mathrm{model}\ \text{octets (bf16)}.$$
+  Pour 7B (32 couches, \(d = 4096\), contexte 2048)&nbsp;: \(4 \times 32 \times
+  2048 \times 4096 \approx 1{,}1\) Go — plus que certains ne le croient, et
+  <em>croissant avec le contexte</em>. Débit plafond (un GPU, bande passante
+  mémoire \(B_\mathrm{mem}\))&nbsp;:
+  $$\text{tokens/s} \;\lesssim\; \frac{B_\mathrm{mem}}{2N\ \text{octets}} \qquad (\text{ex. } 2\,\text{To/s} \div 14\,\text{Go} \approx 140\ \text{tok/s}).$$
+  Ce plafond — et non les FLOPs — gouverne la génération token par token (ch. 7,
+  roofline)&nbsp;; le batching remplit les unités de calcul sans changer le mur.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — Quantification PTQ/QAT, élagage, distillation (carte compacte)</span>
+  <table class="tbl">
+  <thead><tr><th>Levier</th><th>Idée</th><th>Effet mémoire/vitesse</th><th>Réf. / renvoi</th></tr></thead>
+  <tbody>
+  <tr><td>PTQ int8/int4</td><td>arrondir les poids entraînés, calibration seule</td><td>2–8× mémoire, jusqu'à 4× CPU/latence</td><td>Jacob et al. 2018&nbsp;; bornes d'erreur&nbsp;: module Responsible AI, ch. 3</td></tr>
+  <tr><td>QAT</td><td>simuler l'arrondi <em>pendant</em> l'entraînement (STE)</td><td>int8 quasi sans perte, int4 sur gros modèles</td><td>Jacob et al. 2018</td></tr>
+  <tr><td>Élagage structuré</td><td>supprimer têtes/canaux/couches entières</td><td>accélération <em>effective</em> (contrairement au non structuré)</td><td>Han et al. 2016</td></tr>
+  <tr><td>Distillation</td><td>étudiant entraîné sur les logits du professeur (température \(\tau\))</td><td>10–100× moins de paramètres à qualité proche sur tâche cible</td><td>Hinton et al. 2015&nbsp;; module Responsible AI, ch. 3 (TP complet)</td></tr>
+  <tr><td>Décodage spéculatif</td><td>petit modèle propose, gros modèle vérifie <em>en parallèle</em> — même distribution en théorie</td><td>2–3× tokens/s sans perte</td><td>Leviathan et al. 2023</td></tr>
+  <tr><td>Attention IO-aware</td><td>réécrire l'attention pour la hiérarchie mémoire GPU (tuiles, no fusion)</td><td>2–4× entraînement/inférence long contexte, mémoire \(O(n)\)</td><td>Dao et al. 2022 (FlashAttention, cf. M2 LLMs ch. 2)</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 6.3 — Comparer honnêtement&nbsp;: le protocole du module</span>
+  Toute revendication de compression se vérifie en quatre colonnes&nbsp;: (1)
+  <em>métrique de qualité</em> (perplexité/exactitude — pas «&nbsp;ça se sent
+  mieux&nbsp;»)&nbsp;; (2) <em>latence</em> au p50 et p99 (le tail latency paie les
+  cache misses)&nbsp;; (3) <em>débit</em> (tokens/s agregés)&nbsp;; (4)
+  <em>énergie par requête</em> (J/requête — module Optimization and Responsible AI
+  for Sustainability, ch. 6). Une amélioration sur trois colonnes avec la quatrième
+  constante est un résultat&nbsp;; sur une seule, c'est un angle de communication.
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> Efficience mémoire&nbsp;: checkpointing, ZeRO</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Systèmes réels&nbsp;: roofline, GPU, LLM 7B</a></nav>
+</main>
+</div>
+
+</body>
+</html>

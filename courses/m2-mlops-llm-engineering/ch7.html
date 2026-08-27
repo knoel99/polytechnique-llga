@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — Fine-tuning Ops&nbsp;: LoRA versionnés — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">ML Ops and LLM Engineering Principles</a> › Fine-tuning Ops&nbsp;: LoRA versionnés</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: du notebook au système</a>
+<a href="ch1.html">Cycle de vie&nbsp;: versionner données, features, modèles</a>
+<a href="ch2.html">CI/CD pour le ML&nbsp;: tester données et modèles</a>
+<a href="ch3.html">Serving des LLMs&nbsp;: batching continu, latence P99</a>
+<a href="ch4.html">Coûts&nbsp;: euros par million de tokens</a>
+<a href="ch5.html">Évaluation en production&nbsp;: drift et monitoring</a>
+<a href="ch6.html">RAG Ops&nbsp;: fraîcheur et évaluation continue</a>
+<a href="ch7.html" class="active">Fine-tuning Ops&nbsp;: LoRA versionnés</a>
+<a href="ch8.html">Agents en production&nbsp;: tracing et garde-fous</a>
+<a href="ch9.html">Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Étude de cas et green ops</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Fine-tuning Ops&nbsp;: LoRA versionnés</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappel — module LLMs ch. 4-5&nbsp;: SFT, LoRA, DPO</div>
+  Le fine-tuning par instructions (SFT) adapte le modèle&nbsp;; LoRA (Hu et al.,
+  ICLR 2022) gèle les poids \(W\) et n'apprend que \(\Delta W = BA\) de rang
+  \(r \ll d\)&nbsp;: quelques dizaines de Mo au lieu de Go, entraînables sur un
+  seul GPU. DPO/RLHF (ch. 5) alignent ensuite les préférences.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — Adaptateur versionné</span>
+  Un <em>adaptateur</em> (LoRA) n'est utilisable que couplé à&nbsp;: (i)&nbsp;sa
+  <strong>base exacte</strong> (nom + version des poids)&nbsp;; (ii)&nbsp;son
+  <strong>template de prompt</strong>&nbsp;; (iii)&nbsp;ses
+  <strong>données d'entraînement</strong> (hash)&nbsp;; (iv)&nbsp;ses
+  <strong>hyperparamètres</strong> (\(r\), \(\alpha\), modules cibles). L'unité de
+  versioning n'est pas le fichier <code>.safetensors</code> mais ce quintuplet —
+  un LoRA sur la «&nbsp;mauvaise&nbsp;» base (même architecture, autre checkpoint)
+  produit des sorties silencieusement dégradées.
+</div>
+
+<pre class="code"><code># Registre d'adaptateurs : la fiche fait foi (MLflow / HF Hub prive / simple CSV)
+adapter:        faq-v3-lora
+base:           meta-llama/Meta-Llama-3-8B-Instruct@9c6b4c1d   # hash exact
+template:       prompts/faq_chat_v2.jinja                      # version git
+data:           data/faq_2026.parquet @ sha256=4f2a...         # DVC
+lora_config:    {r: 16, alpha: 32, target: [q_proj, v_proj]}
+metrics:        {eval_v3_f1: 0.91, faithfulness: 0.88, judge_winrate: 0.56}
+trained_by:     pipeline#2026-03-11, run_id 7c3e...
+deployed:       canary 5% depuis 2026-03-13, SLO OK</code></pre>
+
+<h3>7.1 Le cycle fine-tuning en production</h3>
+
+<ol style="padding-left:1.2rem;">
+  <li><strong>Collecter</strong>&nbsp;: feedback 👍/👎, corrections d'experts,
+  questions sans bonne réponse (requêtes échouées du monitoring — ch. 5)&nbsp;;</li>
+  <li><strong>Nettoyer / dédoublonner / anonymiser</strong>&nbsp;: la déduplication
+  réduit la mémorisation (cf. module Explainability/Security ch. 7)&nbsp;;</li>
+  <li><strong>Construire les paires</strong> (SFT) puis préférences (DPO) —
+  équilibre des domaines, tranches évaluées séparément (ch. 2)&nbsp;;</li>
+  <li><strong>Entraîner</strong> LoRA sur la base <em>figée</em>&nbsp;; jaloner le
+  quintuplet&nbsp;;</li>
+  <li><strong>Qualifier</strong>&nbsp;: golden set + juge + tests de sûreté
+  (le fine-tuning peut <em>dégrader</em> les refus&nbsp;!) — gate du ch. 2&nbsp;;</li>
+  <li><strong>Déployer en canary</strong> avec rollback (ch. 2.3)&nbsp;;</li>
+  <li><strong>Mesurer l'impact</strong> (winrate, coût, latence) avant
+  généralisation — le fine-tuning doit gagner contre la simple amélioration du
+  prompt <em>et</em> contre le RAG, sinon il n'a pas lieu d'être.</li>
+</ol>
+
+<div class="note">
+  <span class="tag">Serving multi-LoRA</span>
+  Cas d'usage&nbsp;: un même moteur 8B sert dix clients, chacun son LoRA (ton,
+  métier, langue). Les serveurs modernes chargent plusieurs adaptateurs sur une
+  base partagée en mémoire — une seule copie des poids, les \(\Delta W\) (quelques
+  dizaines de Mo) étant per-request. L'ops consiste à garantir l'aiguillage
+  (header client → adaptateur) et l'isolation des évaluations par locataire
+  (tranches du ch. 2). La base bouge rarement&nbsp;; les adaptateurs souvent&nbsp;:
+  deux cadences de déploiement distinctes dans le même pipeline.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.2 — Taille d'un LoRA</span>
+  Un LoRA de rang \(r\) sur une couche \(W \in \mathbb{R}^{d_{\text{out}} \times
+  d_{\text{in}}}\) stocke \(B \in \mathbb{R}^{d_{\text{out}} \times r}\) et
+  \(A \in \mathbb{R}^{r \times d_{\text{in}}}\), soit \(r\,(d_{\text{out}} +
+  d_{\text{in}})\) paramètres au lieu de \(d_{\text{out}} d_{\text{in}}\). Sur les
+  projections d'attention d'un 8B (\(d = 4096\), \(\approx\) 7 couches ciblées
+  type q/v sur 32, \(r = 16\))&nbsp;: ~0,1&nbsp;% des paramètres — quelques
+  dizaines de Mo en fp16. L'économie de stockage est un bonus&nbsp;; l'économie
+  déterminante est le <em>coût d'entraînement</em> (pas d'optimiseur sur les poids
+  gelés) et la <em>cadence de déploiement</em> (adapter hot-swap).
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> RAG Ops&nbsp;: fraîcheur et évaluation continue</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Agents en production&nbsp;: tracing et garde-fous</a></nav>
+</main>
+</div>
+
+</body>
+</html>

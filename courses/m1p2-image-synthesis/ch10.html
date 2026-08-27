@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — Le temps réel&nbsp;: GPU, hybride, upscaling — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Synthesis: Theory and Practice</a> › Le temps réel&nbsp;: GPU, hybride, upscaling</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités, intégrales, EDO linéaires</a>
+<a href="ch1.html">Radiométrie&nbsp;: la radiance</a>
+<a href="ch2.html">L'équation du rendu</a>
+<a href="ch3.html">BRDF et modèles de matériaux</a>
+<a href="ch4.html">Caméras&nbsp;: le modèle sténopé</a>
+<a href="ch5.html">Rastérisation contre lancer de rayons</a>
+<a href="ch6.html">Path tracing Monte Carlo</a>
+<a href="ch7.html">Accélération&nbsp;: intersection et BVH</a>
+<a href="ch8.html">Bruit, débruitage, tone mapping</a>
+<a href="ch9.html">Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a>
+<a href="ch10.html" class="active">Le temps réel&nbsp;: GPU, hybride, upscaling</a>
+<a href="ch11.html">Travaux de l'enseignant</a>
+<a href="code.html">Un path tracer complet en Python</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch10">
+<h2>10. Le temps réel&nbsp;: GPU, hybride, upscaling</h2>
+
+<div class="def">
+  <span class="tag">Définition 10.1 — Le pipeline graphique matériel</span>
+  La rastérisation matérielle (OpenGL/Vulkan/DirectX) enchaîne&nbsp;:
+  vertex shading (transformations, chapitre 4) ⟹ assemblage/clipping ⟹
+  rastérisation (théorème 5.2 en silicium) ⟹ pixel/fragment shading
+  (matériaux, chapitre 3) ⟹ z-buffer ⟹ framebuffer. Cohérence
+  exploitée&nbsp;: les triangles couvrent des blocs de pixels contigus —
+  parallélisme massif (des milliers de cœurs SIMT), hiérarchies de rejet
+  précoce par profondeur. Budget&nbsp;: 16,6 ms/frame (60 Hz) pour
+  <em>tout</em> —
+  géométrie, matériaux, ombres, post-effets. Les techniques d'ombre douces
+  pré-MC restent essentielles&nbsp;: shadow maps filtrées (PCF, variance
+  shadow maps), ambient occlusion par écran (SSAO), lightmaps précalculées
+  — hiérarchie de compromis biais/variance.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 10.2 — Hybride RTX et upscaling</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Ray tracing matériel</strong> (RTX, 2018)&nbsp;: unités
+    dédiées à la traversée de BVH (chapitre 7) — le <em>rayon à la
+    demande</em>&nbsp;: réflexions, ombres douces, GI à 1–2 rebonds
+    échantillonnés... puis débruités (chapitre 8) et recombinés sur la
+    rastérisation&nbsp;: le <em>hybride</em>&nbsp;;</li>
+    <li><strong>Upscaling temporel</strong> (DLSS, FSR)&nbsp;: rendre à
+    1080p, afficher à 4K&nbsp;; le réseau (ou le filtre) reçoit la frame
+    basse résolution + l'historique temporel re-projeté (mouvement) +
+    les buffers géométriques&nbsp;; la formulation est un problème inverse
+    supervisé — super-résolution vidéo avec le jeu de contraintes du
+    chapitre 8&nbsp;;</li>
+    <li><strong>Path tracing jeux</strong> (Cyberpunk 2077, Alan Wake 2)&nbsp;:
+    MC complet à 1–4 spp + débruitage récurrent + reconstruction
+    temporelle&nbsp;: la théorie des chapitres 6 et 8, en 16 ms.</li>
+  </ul>
+</div>
+
+<table class="tbl">
+  <tr><th>Rendu</th><th>Échantillons</th><th>Biais/variance</th><th>Temps/image</th><th>Usage</th></tr>
+  <tr><td>Rastérisation pure</td><td>1 rayon primaire</td><td>biais structurel</td><td>&lt; 8 ms</td><td>jeux, UI 3D</td></tr>
+  <tr><td>Hybride RTX</td><td>0,5–2 spp par effet</td><td>mixte, débruité</td><td>&lt; 16 ms</td><td>jeux AAA</td></tr>
+  <tr><td>Path tracing temps réel</td><td>1–4 spp</td><td>variance → ML</td><td>~16 ms</td><td>jeux haut de gamme</td></tr>
+  <tr><td>Path tracing production</td><td>256–4096 spp</td><td>sans biais</td><td>minutes–heures</td><td>film, architecture</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Ce que «&nbsp;temps réel&nbsp;» veut dire pour un ingénieur</span>
+  Le temps réel n'est pas une théorie différente&nbsp;: c'est le <em>même</em>
+  ensemble d'équations (chapitres 1–6) sous une contrainte de budget — et
+  donc une stratégie de dépense&nbsp;: où accepter du biais (ombres,
+  GI approximée), où garder la variance (reflets spéculaires, l'œil y est
+  sensible), où apprendre (débruitage, upscaling). La conception d'un
+  moteur moderne est un exercice de <em>gestion du biais et de la
+  variance par dollar de milliseconde</em> — les mêmes arbitrages qu'en
+  ML, transposés au rendu.
+</div>
+</section>
+<nav class="pager"><a href="ch9.html"><span class="dir">← Précédent</span> Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a><a class="next" href="ch11.html"><span class="dir">Suivant</span> Travaux de l'enseignant</a></nav>
+</main>
+</div>
+
+</body>
+</html>

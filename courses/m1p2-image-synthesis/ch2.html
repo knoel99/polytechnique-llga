@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — L'équation du rendu — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Synthesis: Theory and Practice</a> › L'équation du rendu</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités, intégrales, EDO linéaires</a>
+<a href="ch1.html">Radiométrie&nbsp;: la radiance</a>
+<a href="ch2.html" class="active">L'équation du rendu</a>
+<a href="ch3.html">BRDF et modèles de matériaux</a>
+<a href="ch4.html">Caméras&nbsp;: le modèle sténopé</a>
+<a href="ch5.html">Rastérisation contre lancer de rayons</a>
+<a href="ch6.html">Path tracing Monte Carlo</a>
+<a href="ch7.html">Accélération&nbsp;: intersection et BVH</a>
+<a href="ch8.html">Bruit, débruitage, tone mapping</a>
+<a href="ch9.html">Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a>
+<a href="ch10.html">Le temps réel&nbsp;: GPU, hybride, upscaling</a>
+<a href="ch11.html">Travaux de l'enseignant</a>
+<a href="code.html">Un path tracer complet en Python</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. L'équation du rendu</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — L'équation de transport de la lumière (LTE)</span>
+  En un point de surface \(x\) de normale \(\mathbf{n}\), la radiance sortante
+  \(L_o(x, \omega_o)\) dans une direction \(\omega_o\) de l'hémisphère vaut
+  (Kajiya, 1986)&nbsp;:
+  $$L_o(x, \omega_o) = L_e(x, \omega_o) + \int_{\Omega^+}
+  L_i(x, \omega_i)\, f_r(x, \omega_i \to \omega_o)\, \cos\theta_i\,
+  d\omega_i,$$
+  avec \(L_e\) l'émission propre, \(L_i\) la radiance incidente, \(f_r\) la
+  BRDF (chapitre 3) et \(\cos\theta_i = \omega_i \cdot \mathbf{n}\) le facteur
+  de projection. En écrivant \(L_i(x, \omega) = L_o(r(x, -\omega), \omega)\)
+  (le rayon lancé à rebours), l'équation devient <em>intégrale sur les
+  surfaces</em>&nbsp;: c'est une équation de Fredholm du second espèce,
+  $$L = L_e + T\,L, \qquad T\ \text{l'opérateur de transport (un rebond)}.$$
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.2 — Série des rebonds (Neumann) et convergence</span>
+  Si les matériaux ont un albédo borné \(\rho = \sup \int_{\Omega^+} f_r
+  \cos\theta_i\, d\omega_i &lt; 1\), alors \(T\) est contractante en norme
+  sup et l'unique solution de la LTE est la série
+  $$L = \sum_{k=0}^{\infty} T^k L_e = \underbrace{L_e}_{\text{émission}}
+  + \underbrace{T L_e}_{1^{\text{er}}\ \text{rebond}} +
+  \underbrace{T^2 L_e}_{2^e\ \text{rebond}} + \dots$$
+  avec une erreur de troncature \(\|T^{k+1} L\|_\infty \leq
+  \rho^{k+1} \|L\|_\infty\) — décroissance géométrique du poids des
+  rebonds.
+  <div class="proof">
+    Pour deux fonctions \(f, g\) sur les rayons, \(\|T f\|_\infty \leq
+    \sup_x \int_{\Omega^+} f_r \cos\theta_i d\omega_i \cdot \|f\|_\infty \leq
+    \rho \|f\|_\infty\). Par récurrence \(\|T^k L_e\|_\infty \leq
+    \rho^k \|L_e\|_\infty\)&nbsp;: la série converge normalement (série
+    géométrique de raison \(\rho &lt; 1\)), et \(L = \sum T^k L_e\)
+    vérifie \(L = L_e + T L\) en sommant. L'unicité suit de la
+    contractivité&nbsp;: si \(L, L'\) sont solutions,
+    \(\|L - L'\|_\infty = \|T(L - L')\|_\infty \leq \rho \|L - L'\|_\infty\)
+    force \(L = L'\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.3 — Deux surfaces face à face&nbsp;: la série en action</span>
+  Deux plans diffus d'albédo \(\rho = 0{,}5\), l'un émettant \(L_e = 1\)
+    vers l'autre. Radiance quittant le plan récepteur&nbsp;:
+    \(0{,}5\) (1<sup>er</sup> rebond) + \(0{,}25\) (2<sup>e</sup>&nbsp;:
+    aller-retour supplémentaire) + \(0{,}125 + \dots = 1\). Avec
+    \(\rho = 0{,}9\) (peinture blanche)&nbsp;: \(0{,}9 + 0{,}81 + \dots\)
+    — le 10<sup>e</sup> rebond porte encore \(0{,}9^{10} \approx 35\)%
+    de l'émission&nbsp;: les interréflexions <em>dominent</em> l'éclairage
+    direct dans une pièce blanche (un renfoncement blanc paraît plus lumineux
+    que le mur seul — c'est le «&nbsp;color bleeding&nbsp;» de l'illumination
+    globale).
+</div>
+
+<div class="note">
+  <span class="tag">Formes alternatives</span>
+  Selon le contexte on réécrit la LTE&nbsp;: en <em>intégrale de surface</em>
+  (intégrer \(L_i\) sur toutes les surfaces visibles, avec le facteur de
+  visibilité \(V(x \leftrightarrow y)\) et la géométrie
+  \(G = \cos\theta_x \cos\theta_y / \|x - y\|^2\)) — utile pour
+  l'échantillonnage des surfaces émissives (next event estimation,
+  chapitre 6)&nbsp;; ou en <em>équation de vol</em> (rendu volumique,
+  chapitre 9&nbsp;: le terme d'émission-diffusion \(\sigma_s \int p\, L\)
+    remplace la BRDF). Changer d'écriture = changer de stratégie
+  d'échantillonnage.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Radiométrie&nbsp;: la radiance</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> BRDF et modèles de matériaux</a></nav>
+</main>
+</div>
+
+</body>
+</html>

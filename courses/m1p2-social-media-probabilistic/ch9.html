@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Social Media and Communication: Probabilistic Models and Algorithms — Mise en œuvre&nbsp;: simulations networkx — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Social Media and Communication: Probabilistic Models and Algorithms</a> › Mise en œuvre&nbsp;: simulations networkx</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_51058_EP</span>Social Media and Communication: Probabilistic Models and Algorithms</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités et graphes</a>
+<a href="ch1.html">Graphes aléatoires&nbsp;: Erdős–Rényi</a>
+<a href="ch2.html">Degrés prescrits, petits mondes, scale-free</a>
+<a href="ch3.html">Processus épidémiques sur graphes</a>
+<a href="ch4.html">Rumeurs, push-pull et influence</a>
+<a href="ch5.html">Le stochastic block model</a>
+<a href="ch6.html">Détection de communautés et applications</a>
+<a href="ch7.html">Systèmes distribués à grande échelle</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html" class="active">Mise en œuvre&nbsp;: simulations networkx</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Mise en œuvre&nbsp;: simulations networkx</h2>
+
+<pre class="code"><code># TME 1 -- Erdos-Renyi vs Barabasi-Albert : lois de degres et composante geante
+import numpy as np, networkx as nx
+rng = np.random.default_rng(0)
+
+G_er  = nx.gnp_random_graph(2000, 6/2000, seed=1)      # c = 6
+G_ba  = nx.barabasi_albert_graph(2000, 3, seed=1)      # m = 3, degre moyen 6
+for name, G in (("ER", G_er), ("BA", G_ba)):
+    ccs = sorted((len(c) for c in nx.connected_components(G)), reverse=True)
+    degs = [d for _, d in G.degree()]
+    print(f"{name}: plus grande composante {ccs[0]/G.number_of_nodes():.2f}"
+          f" | degre max {max(degs)} | clustering {nx.average_clustering(G):.4f}")
+# attendu (theoreme 1.3 + 2.5): ER ~ 0.98, degre max ~ 15 ; BA ~ 1.0, degre max ~ 80
+# verification du rho de 1.3 : rho solution de rho = 1 - exp(-6 rho) ~ 0.997</code></pre>
+
+<pre class="code"><code># TME 2 -- SIR a temps discret : le seuil depend-il de la loi des degres ?
+def sir(G, p, patient0):
+    """SIR discret : infection p par arete et par pas, guerison en 1 pas.
+    Renvoie la taille finale de l'epidemie."""
+    inf, seen = {patient0}, {patient0}
+    while inf:
+        new = set()
+        for u in inf:
+            new |= {v for v in G[u] if v not in seen and rng.random() &lt; p}
+        seen |= new
+        inf = new
+    return len(seen)
+
+def outbreak(G, p, trials=200):
+    n = G.number_of_nodes()
+    sizes = [sir(G, p, int(rng.integers(n))) for _ in range(trials)]
+    return np.mean(sizes) / n            # fraction finale de la population
+
+for tau in (0.3, 0.5, 0.8, 1.2, 2.0):   # tau = beta/delta ; guerison en 1 pas,
+    p = 1 - np.exp(-tau)                 # infection par arete et par pas
+    print(f"tau={tau:4.1f}  ER {outbreak(G_er, p):.3f}   BA {outbreak(G_ba, p):.3f}")
+# exploration guidee : tracer la fraction finale en fonction de tau pour ER et BA,
+# et verifier le theoreme 3.5 : la courbe BA decolle bien avant la courbe ER
+# (seuil nul sur les reseaux scale-free).</code></pre>
+
+<pre class="code"><code># TME 3 -- SBM : detection spectrale (adjacence en dense, non-retour en creux)
+from scipy.sparse.linalg import eigsh
+
+sizes, p_in, p_out = [500, 500], 0.10, 0.02
+G = nx.stochastic_block_model(sizes, [[p_in, p_out], [p_out, p_in]], seed=3)
+A = nx.to_scipy_sparse_array(G).astype(float)
+truth = np.concatenate([np.zeros(sizes[0]), np.ones(sizes[1])])
+
+v2 = eigsh(A, k=2, which="LA")[1][:, 1]              # 2e vecteur propre
+hat = (v2 &gt; np.median(v2)).astype(int)
+acc = max(np.mean(hat == truth), np.mean(hat != truth))
+print("accuracy (adjacence, dense):", round(acc, 3))   # attendu ~ 1.0
+
+# en regime creux (p_in = 8/n, p_out = 2/n) : construire la matrice non-retour B
+# (lignes/colonnes = aretes orientees ; B[(u,v),(v,w)] = 1 si w != u), extraire ses
+# 2 premiers vecteurs propres reels et faire un k-means -- cf. theoreme 5.5 et
+# l'exercice 9. L'adjacence seule echoue : valeurs propres de hubs dans le signal.</code></pre>
+
+<div class="note">
+  <span class="tag">Protocole de TME (consignes)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Reproductibilité</strong>&nbsp;: fixer les graines (seed), rapporter
+    moyenne ± écart-type sur 200 répétitions (module Refresher Statistics, ch. 4-6)&nbsp;;
+    tracer les courbes avec bandes de confiance bootstrap.</li>
+    <li><strong>Vérifier les théories</strong>&nbsp;: chaque TME a une valeur attendue
+    (taille de la géante, seuil de décollement, accuracy)&nbsp;: un écart systématique
+    = bug ou mauvaise lecture du régime — le rapport doit trancher.</li>
+    <li><strong>Aller plus loin</strong>&nbsp;: remplacer k-means par le Louvain de
+    networkx (nx.community.louvain_communities) et comparer modularité vs SBM sur les
+    mêmes données (ch. 6)&nbsp;; tester Watts–Strogatz (diamètre vs clustering en
+    fonction de \(\beta\), ch. 2).</li>
+  </ol>
+</div>
+
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> Travaux de l'équipe pédagogique</a><a class="next" href="ex.html"><span class="dir">Suivant</span> Exercices</a></nav>
+</main>
+</div>
+
+</body>
+</html>

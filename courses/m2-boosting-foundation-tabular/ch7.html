@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Boosting to Foundation Models: learning with Tabular Data — LLMs et tables&nbsp;: sérialisation, text-to-SQL — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">From Boosting to Foundation Models: learning with Tabular Data</a> › LLMs et tables&nbsp;: sérialisation, text-to-SQL</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P1 (brochure)</span>From Boosting to Foundation Models: learning with Tabular Data</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: arbres, forêts, boosting</a>
+<a href="ch1.html">Pourquoi les GBDT dominent (encore) le tabulaire</a>
+<a href="ch2.html">Boosting&nbsp;: descente de gradient fonctionnelle</a>
+<a href="ch3.html">XGBoost, LightGBM, CatBoost&nbsp;: trois ingénieries</a>
+<a href="ch4.html">Encoder les colonnes&nbsp;: catégorielles et numériques</a>
+<a href="ch5.html">Deep tabular&nbsp;: MLP régularisés et FT-Transformer</a>
+<a href="ch6.html">TabPFN&nbsp;: apprendre les tables in-context</a>
+<a href="ch7.html" class="active">LLMs et tables&nbsp;: sérialisation, text-to-SQL</a>
+<a href="ch8.html">Données synthétiques tabulaires</a>
+<a href="ch9.html">Benchmarking honnête</a>
+<a href="ch10.html">Choisir sa méthode&nbsp;: guide et questions ouvertes</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. LLMs et tables&nbsp;: sérialisation, text-to-SQL</h2>
+
+<p>Un LLM ne lit pas une table&nbsp;: il lit du texte. Tout passe par une
+<strong>sérialisation</strong> — et ce choix d'ingénierie est aussi déterminant que le prompt
+lui-même.</p>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — Sérialisations usuelles d'une ligne</span>
+  Pour une ligne \((x_1, \dots, x_p)\) de colonnes nommées \(c_1, \dots, c_p\)&nbsp;: CSV
+  aligné sur un en-tête&nbsp;; JSON clé-valeur&nbsp;; Markdown&nbsp;; gabarit textuel
+  («&nbsp;<em>Le patient a \(x_{age}\) ans, reçoit \(x_{dose}\) mg…</em>&nbsp;»)&nbsp;; le
+  «&nbsp;schema&nbsp;» (noms de colonnes, types, description) peut précéder la série. Deux
+  propriétés critiques&nbsp;: l'<strong>ordre des colonnes</strong> influence la prédiction (le
+  modèle est sensible à la position des tokens), et les <strong>noms de colonnes</strong>
+  activent les connaissances du pré-entraînement («&nbsp;country&nbsp;»,
+  «&nbsp;dosage&nbsp;») — un prior sémantique qu'aucun GBDT n'a.
+</div>
+
+<div class="thm">
+  <span class="tag">Étude 7.2 — TabLLM (Hegselmann et al., 2023)</span>
+  En <strong>few-shot</strong> (typiquement \(\leq 64\) exemples), un LLM (T0/GPT-3.5,
+  sérialisations textuelles) prédit des tables mieux que les méthodes profondes dédiées et
+  rivalise avec les GBDT&nbsp;; l'avantage s'inverse dès que les données abondent — le coût
+  token par ligne devient rédhibitoire et le prior sémantique ne compense plus la capacité
+  statistique. Le LLM gagne là où <em>chaque exemple coûte cher</em> (annotation médicale,
+  industrie)&nbsp;; le GBDT là où les données sont massives.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.3 — Text-to-SQL et schema linking</span>
+  Quand la table est une base de données, le LLM devient <em>interface</em>&nbsp;: produire du
+  SQL depuis une question en langue naturelle. Le <strong>schema linking</strong> désigne
+  l'étape d'alignement question ↔ schéma&nbsp;: entités de la question vers cellules des
+  tables, termes vers colonnes/tables candidates, puis jointures plausibles. Benchmarks&nbsp;:
+  <strong>Spider</strong> (Yu et al., 2018&nbsp;; schémas propres, question académique) puis
+  <strong>BIRD</strong> (Li et al., 2023&nbsp;; 95 grandes bases «&nbsp;sales&nbsp;», valeurs
+  sales, connaissances externes, exigence d'efficacité des requêtes) — sur lequel la chute de
+  performance des modèles entre les deux mondes est précisément mesurée.
+</div>
+
+<pre class="code"><code># Trois postures du LLM face a une table
+# 1) Predire : ligne serialisee -> etiquette (TabLLM, few-shot)
+prompt = f"Colonne 'dosage_mg': {x['dose']}; 'age': {x['age']}; ...\nReponse (0/1) ?"
+# 2) Ingenier : proposer features / nettoyer / documenter les colonnes
+#    (le LLM ecrit le code de feature engineering, le GBDT predit)
+# 3) Interroger : question naturelle -> SQL (schema linking + BIRD)
+question = "top 5 clients par marge en 2025, hors remboursements"
+# -> SELECT c.id, SUM(o.marge) FROM ... WHERE ... GROUP BY ... ORDER BY ... LIMIT 5;</code></pre>
+
+<div class="note">
+  <span class="tag">Limites structurelles</span> Tokenisation des nombres (les scalaires sont
+  découpés en morceaux — l'arithmétique fine reste fragile)&nbsp;; fenêtre de contexte (des
+  millions de lignes n'entreront jamais)&nbsp;; confidentialité (envoyer des lignes clients à
+  une API&nbsp;; cf. module Explainability, Security and Privacy of LLMs)&nbsp;; coût et
+  nondéterminisme en production (cf. module ML Ops). D'où la posture dominante&nbsp;:
+  <strong>hybride</strong> — le LLM prépare, résume, relie, programme&nbsp;; le modèle tabulaire
+  (GBDT/TabPFN) prédit.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> TabPFN&nbsp;: apprendre les tables in-context</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Données synthétiques tabulaires</a></nav>
+</main>
+</div>
+
+</body>
+</html>

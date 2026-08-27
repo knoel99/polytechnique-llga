@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html" class="active">Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique</a>
+<a href="ch1.html">Du neurone au réseau profond</a>
+<a href="ch2.html">Rétropropagation</a>
+<a href="ch3.html">Optimisation en pratique</a>
+<a href="ch4.html">Réseaux convolutifs (CNN)</a>
+<a href="ch5.html">Séquences&nbsp;: RNN, LSTM</a>
+<a href="ch6.html">Attention et transformers</a>
+<a href="ch7.html">Modèles génératifs&nbsp;: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning et fine-tuning</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ch10.html">Entraîner en pratique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: calcul différentiel matriciel et stabilité numérique</h2>
+
+<p>Le deep learning est, à 90&nbsp;%, du calcul différentiel appliqué à des fonctions à des
+milliards de paramètres. Ce chapitre consolide les outils du L3 dont nous aurons besoin
+chaque semaine&nbsp;: différentiation de fonctions matricielles, théorème central limite
+(pour comprendre pourquoi la SGD fonctionne) et un peu de stabilité numérique (pour
+comprendre pourquoi les implémentations naïves produisent des <code>NaN</code>).</p>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 — la mécanique de base</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Règle de la chaîne</strong>&nbsp;: \((g \circ f)'(x) = g'(f(x))\, f'(x)\)&nbsp;; en
+    dimension&nbsp;: \(\nabla (g \circ f)(x) = J_f(x)^\top \nabla g(f(x))\), où \(J_f\) est la
+    matrice jacobienne \((J_f)_{ij} = \partial f_i / \partial x_j\).</li>
+    <li><strong>Gradient de formes quadratiques</strong>&nbsp;: \(\nabla_x \tfrac12\|Ax - b\|^2 = A^\top(Ax - b)\)
+    et \(\nabla_x x^\top A x = (A + A^\top)x\).</li>
+    <li><strong>Dérivées des activations usuelles</strong>&nbsp;: \(\sigma' = \sigma(1-\sigma)\),
+    \(\tanh' = 1 - \tanh^2\), \(\mathrm{ReLU}' = \mathbf{1}_{x&gt;0}\), et pour le softmax
+    \(\hat y = \mathrm{softmax}(z)\)&nbsp;: \(\partial \hat y_k / \partial z_j = \hat y_k(\delta_{kj} - \hat y_j)\).</li>
+    <li><strong>TCL</strong>&nbsp;: la moyenne de \(m\) variables iid de variance \(\sigma^2\) fluctue
+    autour de son espérance avec un écart-type en \(\sigma/\sqrt m\) (cf. module Refresher Statistics).</li>
+  </ul>
+</div>
+
+<h3>0.1 Différentiation de fonctions matricielles</h3>
+
+<p>Les paramètres d'un réseau sont des <em>matrices</em>&nbsp;; il faut savoir dériver par
+rapport à une matrice. La convention la plus commode&nbsp;: le gradient d'une fonction
+\(f : \mathbb{R}^{m \times n} \to \mathbb{R}\) est la matrice \(G\) telle que
+\(f(X + H) = f(X) + \langle G, H\rangle + o(\|H\|)\) avec le produit scalaire de Frobenius
+\(\langle G, H \rangle = \mathrm{tr}(G^\top H)\). Trois identités suffisent pour tout ce cours.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.1 — Identités différentielles utiles</span>
+  Pour \(X \in \mathbb{R}^{m \times n}\), \(a \in \mathbb{R}^m\), \(b \in \mathbb{R}^n\), \(A\) de taille compatible&nbsp;:
+  $$\frac{\partial}{\partial X}\,\mathrm{tr}(A^\top X) = A, \qquad
+  \frac{\partial}{\partial X}\, a^\top X b = a\, b^\top, \qquad
+  \frac{\partial}{\partial X}\, \tfrac12\|X A - B\|_F^2 = (XA - B)A^\top.$$
+</div>
+
+<div class="proof">
+On démontre la seconde (les autres sont identiques). Écrivons \(a^\top X b = \sum_{i,j} a_i X_{ij} b_j = \mathrm{tr}(b a^\top X)\).
+La différentielle est \(d(a^\top X b) = a^\top H b = \langle a b^\top, H\rangle\) pour toute perturbation \(H\),
+donc le gradient (au sens de Frobenius) est \(ab^\top\). Pour la troisième&nbsp;:
+\(f(X) = \tfrac12\|XA - B\|_F^2\), \(df = \langle XA - B,\; HA\rangle = \langle (XA-B)A^\top,\; H\rangle\),
+en utilisant la cyclicité de la trace \(\mathrm{tr}(M^\top H A) = \mathrm{tr}((M A^\top)^\top H)\) avec \(M = XA - B\).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Règle pratique</span>
+  Dans un réseau, «&nbsp;le gradient remonte par les transposées&nbsp;»&nbsp;: si la passe
+  avant contient \(z = Wx\), la passe arrière contient \(\nabla_x = W^\top \nabla_z\) et
+  \(\nabla_W = \nabla_z\, x^\top\). Vérifiez toujours les <em>dimensions</em>&nbsp;:
+  \(\nabla_W\) a la taille de \(W\), \(\nabla_x\) celle de \(x\). C'est le contrôle qualité
+  le plus efficace contre les bugs de backprop.
+</div>
+
+<h3>0.2 TCL et bruit du mini-batch</h3>
+
+<p>Pourquoi optimiser sur des <em>mini-batchs</em> plutôt que sur tout le jeu de données&nbsp;?
+Soit \(\mathcal{D} = (\xi_1, \dots, \xi_N)\) iid et la perte empirique
+\(L(\theta) = \frac1N \sum_i \ell(\theta; \xi_i)\). Le gradient du mini-batch
+\(B = (\xi_{i_1}, \dots, \xi_{i_m})\) est \(\hat g(\theta) = \frac1m \sum_{j=1}^m \nabla_\theta \ell(\theta; \xi_{i_j})\).</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.2 — Le gradient stochastique est un estimateur sans biais de bruit \(1/\sqrt m\)</span>
+  \(\mathbb{E}[\hat g] = \nabla L\) et, si les gradients individuels ont une covariance finie
+  \(\Sigma = \mathrm{Cov}(\nabla \ell(\theta; \xi))\), alors
+  $$\mathrm{Cov}(\hat g) = \frac{1}{m}\,\Sigma.$$
+</div>
+
+<div class="proof">
+Linéarité de l'espérance et tirage uniforme&nbsp;: \(\mathbb{E}[\nabla \ell(\theta;\xi_i)] = \nabla L\).
+Pour la covariance, les tirages sont indépendants&nbsp;:
+\(\mathrm{Cov}(\tfrac1m\sum_j G_j) = \tfrac{1}{m^2}\sum_j \mathrm{Cov}(G_j) = \tfrac1m \Sigma\),
+où \(G_j = \nabla \ell(\theta; \xi_{i_j})\). L'écart-type de l'estimation décroît donc en
+\(\|\Sigma\|^{1/2}/\sqrt m\)&nbsp;: multiplier la taille du batch par 100 ne divise le bruit
+que par 10 — argument économique pour les petits batchs, complété au chapitre 3 (le bruit
+a aussi un effet <em>bénéfique</em> d'exploration).
+<span class="qed">∎</span>
+</div>
+
+<h3>0.3 Stabilité numérique&nbsp;: softmax et l'astuce log-sum-exp</h3>
+
+<p>Le softmax \(\hat y_i = e^{z_i} / \sum_j e^{z_j}\) apparaît dans toutes les pertes
+d'classification et dans l'attention. En précision flottante (float32, max \(\approx 3{,}4 \times 10^{38}\)),
+l'implémentation naïve <em>déborde</em>&nbsp;: \(e^{1000} = \infty\), et
+\(\infty/\infty = \mathrm{NaN}\). L'astuce universelle consiste à soustraire le maximum
+avant d'exponentier.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.3 — Identité log-sum-exp et softmax stable</span>
+  Posons \(\mathrm{LSE}(z) = \log \sum_{j=1}^n e^{z_j}\) et \(m = \max_j z_j\). Alors&nbsp;:
+  $$\mathrm{LSE}(z) = m + \log \sum_{j=1}^n e^{z_j - m}, \qquad
+  m \;\le\; \mathrm{LSE}(z) \;\le\; m + \log n,$$
+  $$\mathrm{softmax}(z)_i = \frac{e^{z_i - m}}{\sum_j e^{z_j - m}},$$
+  et cette dernière forme ne déborde jamais.
+</div>
+
+<div class="proof">
+Factorisation&nbsp;: \(\sum_j e^{z_j} = e^{m} \sum_j e^{z_j - m}\), donc
+\(\mathrm{LSE}(z) = m + \log \sum_j e^{z_j - m}\). Comme \(0 &lt; e^{z_j - m} \le e^0 = 1\)
+et qu'au moins un terme vaut exactement 1 (celui du maximum), la somme vit dans
+\([1, n]\), d'où l'encadrement. Pour le softmax, diviser numérateur et dénominateur par
+\(e^m &gt; 0\) ne change pas la valeur. Stabilité&nbsp;: tous les exposants \(z_i - m \le 0\),
+donc chaque \(e^{z_i - m} \in (0, 1]\)&nbsp;: aucun débordement, et le terme dominant du
+dénominateur vaut exactement 1, si bien que le résultat reste précis même quand les
+autres termes sous-débordent vers 0 (ce qui est inoffensif&nbsp;: le softmax tend
+simplement vers un one-hot).
+<span class="qed">∎</span>
+</div>
+
+<pre class="code"><code>import torch
+
+z = torch.tensor([1000., 1001., 999.])
+# print(torch.softmax(z, 0))          # NaN avec une implementation naive
+print(torch.logsumexp(z, 0))          # 1001.4076 : stable (PyTorch l'applique toujours)
+print(torch.softmax(z - z.max(), 0))  # forme stable : [0.2447, 0.6652, 0.0900]</code></pre>
+
+<div class="note">
+  <span class="tag">Culture numérique</span>
+  Cette section prépare aussi le chapitre 10&nbsp;: la plupart des NaN en entraînement
+  viennent d'un softmax/exposant non protégé, d'un log d'une probabilité nulle (on
+  minimise \(-\log p\) via log-softmax, jamais \(-\log(\mathrm{softmax})\)), ou d'un taux
+  d'apprentissage trop grand. La règle&nbsp;: quand un NaN apparaît, remontez la passe
+  avant couche par couche jusqu'à trouver la première activation infinie.
+</div>
+</section>
+<nav class="pager"><a href="index.html"><span class="dir">← Module</span> Accueil du module</a><a class="next" href="ch1.html"><span class="dir">Suivant</span> Du neurone au réseau profond</a></nav>
+</main>
+</div>
+
+</body>
+</html>

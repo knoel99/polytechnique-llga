@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Compter&nbsp;: FLOPs, mémoire, lois d'échelle — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Compter&nbsp;: FLOPs, mémoire, lois d'échelle</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_52183_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels compacts&nbsp;: le socle de P1</a>
+<a href="ch1.html" class="active">Compter&nbsp;: FLOPs, mémoire, lois d'échelle</a>
+<a href="ch2.html">Complexité théorique de l'entraînement</a>
+<a href="ch3.html">Parallélisme&nbsp;: data, tensor, pipeline</a>
+<a href="ch4.html">Communication&nbsp;: all-reduce et compagnie</a>
+<a href="ch5.html">Efficience mémoire&nbsp;: checkpointing, ZeRO</a>
+<a href="ch6.html">Inférence efficiente</a>
+<a href="ch7.html">Systèmes réels&nbsp;: roofline, GPU, LLM 7B</a>
+<a href="ch8.html">Travaux de l'enseignant</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Compter&nbsp;: FLOPs, mémoire, lois d'échelle</h2>
+
+<p>Première compétence du module&nbsp;: le <strong>comptage exact</strong>. Un
+ingénieur qui sait estimer les FLOPs d'un entraînement à la main économise des
+journées GPU — et détecte les erreurs de configuration avant qu'elles n'explosent.</p>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Unités&nbsp;: FLOP, FLOPs, FLOP/s</span>
+  Un <strong>FLOP</strong> (floating-point operation) = une opération élémentaire
+  (+, ×)&nbsp;; on compte une multiplication-addition \(a \cdot b + c\) pour
+  <strong>2 FLOPs</strong> (convention du module, alignée sur la littérature
+  systèmes)&nbsp;; <strong>FLOP/s</strong> = débit. Un GPU A100&nbsp;: ≈ 19,5
+  TFLOP/s fp32, 312 TFLOP/s tensor-core bf16&nbsp;; un H100&nbsp;: ≈ 1000 TFLOP/s
+  bf16 (modes clairsemés exclus). Le <strong>MFU</strong> (model FLOPs utilization)
+  = FLOP/s atteints ÷ FLOP/s crête&nbsp;: 35–50&nbsp;% est un bon entraînement
+  LLM&nbsp;; le reste se perd en mémoire, communication et sous-tâches (ch. 7).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — Coût d'une couche linéaire et d'un transformer (démontré)</span>
+  (i) Un produit matrice-matrice \(A \in \mathbb{R}^{m \times n}\) par
+  \(B \in \mathbb{R}^{n \times p}\) coûte \(2mnp\) FLOPs. (ii) Une couche linéaire
+  \(d_\mathrm{in} \to d_\mathrm{out}\) appliquée à \(n\) tokens coûte
+  \(2\,n\,d_\mathrm{in}d_\mathrm{out}\) FLOPs et possède \(d_\mathrm{in}d_\mathrm{out}\)
+  paramètres — soit <strong>2 FLOPs par paramètre et par token</strong>. (iii) Bloc
+  transformer de largeur \(d\), sur une séquence de \(n\) tokens&nbsp;: QKVO
+  \(4 \times 2d^2 = 8d^2\), scores \(QK^\top\) et produit par \(V\) :
+  \(2 \times 2n^2 d\), MLP (largeur \(4d\))&nbsp;: \(2 \times 2 \times 4d^2 = 16d^2\) —
+  soit, <em>par token</em>&nbsp;: \(\;24d^2 + 4nd\) FLOPs.
+  <div class="proof">
+  (i) Chacune des \(mp\) entrées de \(C=AB\) est un produit scalaire de longueur
+  \(n\) (n multiplications + n−1 additions ≈ 2n FLOPs). (ii) cas particulier avec
+  \(m=n\) tokens, \(p = d_\mathrm{out}\). (iii)&nbsp;: on applique (ii) à chaque
+  projection&nbsp;; pour \(QK^\top\) (matrice \(n \times d\) par \(d \times n\))&nbsp;:
+  \(2n^2 d\), idem pour \((\cdot)V\) (\(n \times n\) par \(n \times d\))&nbsp;; MLP =
+  deux couches \(d \to 4d\) puis \(4d \to d\). On divise le total par \(n\) tokens
+  pour l'exprimer par token&nbsp;: projections QKV (\(3 \times 2d^2\)) + sortie
+  (\(2d^2\)) = \(8d^2\), partie quadratique de l'attention \(4nd\), MLP
+  \(16d^2\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.3 — La règle \(C \approx 6\,N\,D\) (démontrée)</span>
+  Pré-entraîner un modèle à \(N\) paramètres (transformer dense) sur \(D\) tokens
+  coûte
+  $$C \;\approx\; 6\,N\,D \;\;\text{FLOPs} \qquad (\text{forward} \approx 2ND,\; \text{backward} \approx 4ND).$$
+  <div class="proof">
+  Passe avant&nbsp;: le modèle est une composition de couches linéaires et
+  d'opérations négligeables (normalisations, softmax&nbsp;: \(O(nd)\) ou \(O(n^2)\)
+  sans facteur \(d^2\))&nbsp;; chaque paramètre est utilisé exactement une fois par
+  token, à 2 FLOPs près (prop. 1.2 ii) — d'où \(2ND\). Passe arrière&nbsp;: pour
+  chaque couche, le gradient se calcule par (a) application de la transposée du poids
+  au gradient amont (\(2ND\)) et (b) produit du gradient amont par l'entrée locale
+  pour former le gradient du poids (\(2ND\)) — soit \(2 \times 2ND\). Total
+  \(6ND\). L'expérience (profilage des grands entraînements) confirme à ±10&nbsp;%
+  près, l'écart venant des embeddings (partagés), du vocabulaire et des têtes. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 1.4 — La mémoire d'entraînement, ligne par ligne (Adam, mixed precision)</span>
+  Pour \(N\) paramètres&nbsp;:
+  <table class="tbl">
+  <thead><tr><th>Tenseur</th><th>Precision</th><th>Octets/paramètre</th></tr></thead>
+  <tbody>
+  <tr><td>poids (bf16/fp16)</td><td>2 octets</td><td>2</td></tr>
+  <tr><td>gradients (bf16)</td><td>2</td><td>2</td></tr>
+  <tr><td>états d'Adam \(m, v\) (fp32)</td><td>4 + 4</td><td>8</td></tr>
+  <tr><td>poids maîtres fp32 (stabilité)</td><td>4</td><td>4</td></tr>
+  <tr><td><strong>total états</strong></td><td></td><td><strong>16</strong></td></tr>
+  <tr><td>activations (dépend de \(n, d\), nb couches)&nbsp;— cf. ch. 5</td><td>2</td><td>\(\sim 2\,n\,d\) par couche et par token</td></tr>
+  </tbody>
+  </table>
+  Ordre de grandeur à retenir&nbsp;: <strong>16&nbsp;octets par paramètre</strong>
+  d'états + activations. Un modèle 7B en Adam&nbsp;: \(7\times10^9 \times 16\)
+  ≈ 112&nbsp;Go — avant toute activation&nbsp;: un seul GPU de 80&nbsp;Go ne suffit
+  pas (ch. 5 et 7).
+</div>
+
+<div class="note">
+  <span class="tag">Lois d'échelle&nbsp;: de Kaplan à Chinchilla (le budget comme dimension première)</span>
+  <strong>Kaplan et al. 2020</strong>&nbsp;: la perte suit, sur des décades, une loi
+  puissance \(L(N, D) \approx (N_c/N)^{\alpha_N} + (D_c/D)^{\alpha_D} + L_\infty\) —
+  d'abord&nbsp;: agrandir le modèle aide plus qu'agrandir les données. 
+  <strong>Hoffmann et al. 2022 (Chinchilla)</strong>&nbsp;: à budget de calcul
+  \(C = 6ND\) <em>fixé</em>, l'optimum est atteint pour \(D \approx 20 N\) — les
+  modèles de l'époque de Kaplan étaient <em>sous-entraînés</em>&nbsp;; GPT-3 (300B
+  tokens pour 175B paramètres) était «&nbsp;trop gros&nbsp;» pour ses données, et un
+  70B sur 1,5T tokens le domine à budget égal. Leçon de méthode pour ce module&nbsp;:
+  le budget \(C\) n'est pas une contrainte annexe, c'est l'axe selon lequel on
+  <em>conçoit</em> le modèle. (Le module M2 LLMs, ch. 3, reprend ces lois en
+  détail&nbsp;; l'angle «&nbsp;énergie&nbsp;» est au module Optimization and Responsible
+  AI for Sustainability, ch. 1.)
+</div>
+
+<pre class="code"><code>def flops_transformer(N_params, D_tokens, fwd_ratio=2.0, bwd_ratio=4.0):
+    return (fwd_ratio + bwd_ratio) * N_params * D_tokens
+
+C = flops_transformer(6.7e9, 1e12)                  # LLaMA-7B ~ 6.7B params, 1T tokens
+print(f"{C:.2e} FLOPs")                              # 4.02e22
+peak, mfu = 312e12, 0.45                             # A100 bf16, MFU 45 %
+hours = C / (peak * mfu) / 3600
+print(f"{hours:,.0f} GPU-heures")                    # ~80 000 -- cf. ch. 7 et Touvron et al. 2023</code></pre>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Précédent</span> Rappels compacts&nbsp;: le socle de P1</a><a class="next" href="ch2.html"><span class="dir">Suivant</span> Complexité théorique de l'entraînement</a></nav>
+</main>
+</div>
+
+</body>
+</html>

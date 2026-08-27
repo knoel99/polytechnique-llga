@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Deep Learning — Self-supervision II&nbsp;: masquage (MAE, BEiT, DINOv2) — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Deep Learning</a> › Self-supervision II&nbsp;: masquage (MAE, BEiT, DINOv2)</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52087_EP</span>Advanced Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: transformers, optimisation, normalisation</a>
+<a href="ch1.html">Vision Transformers&nbsp;: ViT, DeiT, Swin</a>
+<a href="ch2.html">Convnets modernes&nbsp;: la leçon ConvNeXt</a>
+<a href="ch3.html">Mélanges d'experts (MoE)</a>
+<a href="ch4.html">Self-supervision I&nbsp;: contrastif (SimCLR et fils)</a>
+<a href="ch5.html" class="active">Self-supervision II&nbsp;: masquage (MAE, BEiT, DINOv2)</a>
+<a href="ch6.html">Architectures efficaces&nbsp;: MobileNet et la distillation</a>
+<a href="ch7.html">Entraîner à grande échelle&nbsp;: recettes et scaling laws</a>
+<a href="ch8.html">Recherche reproductible&nbsp;: protocole expérimental</a>
+<a href="ch9.html">Multimodal et génératif&nbsp;: renvois</a>
+<a href="ch10.html">Travaux de l'équipe pédagogique</a>
+<a href="ch11.html">Projets&nbsp;: lire, expliquer, répliquer</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Self-supervision II&nbsp;: le masquage (MAE, BEiT, DINOv2)</h2>
+
+<h3>5.1 Masked Autoencoders (MAE)</h3>
+<p>He et al. (CVPR 2022)&nbsp;: masquer 75&nbsp;% des patchs et <em>reconstruire les pixels
+manquants</em>. Deux asymétries font tout le design&nbsp;:</p>
+<ul>
+  <li><strong>encodeur asymétrique</strong>&nbsp;: seuls les 25&nbsp;% de patchs visibles
+  entrent dans le ViT — coût d'entraînement réduit d'autant (et c'est ce qui
+  rend le masquage <em>élevé</em> efficace&nbsp;: la tâche reste difficile mais
+  bon marché)&nbsp;;</li>
+  <li><strong>décodeur léger</strong>&nbsp;: les tokens masqués (plongements appris +
+  positions) sont réinsérés après l'encodeur&nbsp;; un petit décodeur (souvent
+  étroit et peu profond) reconstruit chaque patch manquant&nbsp;; le décodeur est
+  <em>jeté</em> au transfert.</li>
+</ul>
+<div class="def">
+  <span class="tag">Définition 5.1 — Perte MAE</span>
+  Avec \(\Omega\) l'ensemble des patchs masqués et \(x_i\) les valeurs cibles
+  (pixels normalisés&nbsp;:
+  par patch, normalisation par moyenne/variance&nbsp;; variante&nbsp;: cibles
+  issues d'un VQ-VAE — BEiT)&nbsp;:
+  $$\mathcal{L}_{\mathrm{MAE}} = \frac{1}{|\Omega|} \sum_{i \in \Omega}
+  \| \hat x_i - x_i \|^2,$$
+  moyenne sur les <em>seuls</em> patchs masqués. La normalisation par patch
+  recentre la tâche sur la structure (relativement à la patch) plutôt que sur
+  la luminance absolue.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 5.2 — Pourquoi 75&nbsp;% et pas 15&nbsp;% (BERT) </span>
+  Les images ont une redondance spatiale énorme&nbsp;: masquer 15&nbsp;% d'une image
+  se résout par interpolation locale (au sens filtre, pas réseau)&nbsp; —
+  l'encodeur n'apprend rien de sémantique. À 75&nbsp;%, l'interpolation ne suffit
+  plus&nbsp;: reconstruire un visage à moitié masqué exige d'avoir compris
+  «&nbsp;visage&nbsp;». Le texte, lui, est non redondant&nbsp;: 15&nbsp;% suffit à forcer la
+  syntaxe et la sémantique. La même idée «&nbsp;masquer jusqu'à ce que la tâche
+  soit sémantique&nbsp;» régit les taux en audio (wav2vec, 40–75&nbsp;%) et en vidéo —
+  et l'on retrouvera ce principe au module Multimodal GenAI, chapitre 3, côté
+  diffusion (combien de bruit faut-il pour que débruitér soit difficile&nbsp;?).
+</div>
+
+<h3>5.2 BEiT et DINOv2</h3>
+<ul>
+  <li><strong>BEiT</strong> (Bao et al., ICLR 2022)&nbsp;: remplacer les pixels par des
+  <strong>tokens visuels discrets</strong> — un VQ-VAE pré-entraîné quantifie les patchs
+  en codes&nbsp;; l'objectif devient une classification des patchs masqués vers les
+  codes (comme le MLM de BERT — cf. module NLP)&nbsp;; en pratique plus stable que
+  la régression de pixels&nbsp;;</li>
+  <li><strong>DINOv2</strong> (Oquab et al., 2023)&nbsp;: le duo contrastif + masquage,
+  entraîné sur un corpus <strong>curaté</strong> LVD-142M (sélection automatisée&nbsp;:
+  similarité avec des corpus de référence, déduplication)&nbsp;; la
+  <strong>distillation</strong> entre un enseignant (moment, centré — pas de
+  labels)&nbsp; et des élèves multi-résolutions produit des caractéristiques
+  <em>prêtes à l'emploi</em> (linéaire) pour classification, profondeur, segmentation —
+  l'un des meilleurs backbones ouverts actuels, et le pont direct vers le TP&nbsp;;
+  </li>
+</ul>
+
+<table class="tbl">
+  <tr><th>Famille</th><th>Signal</th><th>Forces</th><th>Faiblesses</th></tr>
+  <tr><td>Contrastif (SimCLR, MoCo, DINO)</td><td>appariement de vues</td><td>représentations très discriminantes</td><td>sensible aux augmentations&nbsp;; négatifs à gérer</td></tr>
+  <tr><td>Masquage (MAE, BEiT)</td><td>reconstruction de l'absent</td><td>peu d'a priori&nbsp;; scalable&nbsp;; fort en dense (seg.)</td><td>plus faible en linéaire «&nbsp;global&nbsp;»</td></tr>
+  <tr><td>Distillation self- (DINOv2)</td><td>enseignant-cible auto-amélioré</td><td>meilleur des deux mondes, données curatées</td><td>recettes complexes</td></tr>
+</table>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Précédent</span> Self-supervision I&nbsp;: contrastif (SimCLR et fils)</a><a class="next" href="ch6.html"><span class="dir">Suivant</span> Architectures efficaces&nbsp;: MobileNet et la distillation</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Vision: From Fundamentals to Applications — Segmentation&nbsp;: sémantique, instance, panoptique, SAM — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Computer Vision: From Fundamentals to Applications</a> › Segmentation&nbsp;: sémantique, instance, panoptique, SAM</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">Brochure MSc&amp;T</span>Computer Vision: From Fundamentals to Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: convolution, CNN, boîtes</a>
+<a href="ch1.html">Détection d'objets&nbsp;: les deux paradigmes</a>
+<a href="ch2.html">Évaluation (mAP) et détecteurs modernes</a>
+<a href="ch3.html" class="active">Segmentation&nbsp;: sémantique, instance, panoptique, SAM</a>
+<a href="ch4.html">Suivi multi-objets (tracking)</a>
+<a href="ch5.html">Vision 3D appliquée&nbsp;: stéréo et LiDAR</a>
+<a href="ch6.html">Données, benchmarks et annotation</a>
+<a href="ch7.html">Études de cas industrielles</a>
+<a href="ch8.html">Déploiement&nbsp;: ONNX, quantification, edge</a>
+<a href="ch9.html">Éthique, robustesse et limites</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Segmentation&nbsp;: sémantique, instance, panoptique, SAM</h2>
+
+<h3>3.1 Trois granularités</h3>
+<table class="tbl">
+  <tr><th>Tâche</th><th>Sortie</th><th>Question répondue</th><th>Exemples</th></tr>
+  <tr><td>Sémantique</td><td>carte de classes \(H \times W\)</td><td>«&nbsp;quelle est la classe de ce pixel&nbsp;?&nbsp;»</td><td>U-Net, DeepLab</td></tr>
+  <tr><td>Instance</td><td>ensemble de masques \((m_i, c_i, s_i)\)</td><td>«&nbsp;quels objets distincts&nbsp;?&nbsp;»</td><td>Mask R-CNN</td></tr>
+  <tr><td>Panoptique</td><td>carte d'identifiants segmentés</td><td>«&nbsp;pixels «&nbsp;chose&nbsp;» + instances «&nbsp;objets&nbsp;»&nbsp;»</td><td>Panoptic FPN</td></tr>
+</table>
+
+<h3>3.2 Segmentation sémantique&nbsp;: de FCN à U-Net et DeepLab</h3>
+<ul>
+  <li><strong>FCN</strong> (2015)&nbsp;: classifier pleinement convolutionnelle — les
+  couches fully-connected deviennent des convolutions 1×1, et des couches de
+  <em>upsampling</em> (transposées) restaurent la résolution&nbsp;; sortie dense,
+  entraînement de bout en bout&nbsp;;</li>
+  <li><strong>U-Net</strong> (2015)&nbsp;: encodeur-décodeur symétrique avec
+  <strong>connexions de saut</strong> (skip connections) qui réinjectent les détails
+  haute résolution de l'encodeur dans le décodeur&nbsp;; conçu pour l'imagerie médicale
+  avec peu d'images annotées, resté la référence du domaine&nbsp;;</li>
+  <li><strong>DeepLab</strong> (v1→v3+)&nbsp;: convolutions <strong>dilatées</strong>
+  (trous)&nbsp;: un noyau \(3 \times 3\) de dilatation \(d\) voit un voisinage de taille
+  \(2d+1\), agrandissant le champ réceptif sans perdre de résolution&nbsp;; le module
+  ASPP (Atrous Spatial Pyramid Pooling) combine plusieurs dilatations en parallèle pour
+  capturer plusieurs échelles&nbsp;; v3+ ajoute un décodeur léger.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Exemple 3.1 — Dice et IoU de masques</span>
+  Pour un masque binaire prédit \(p\) et une vérité terrain \(g\) (ensembles de pixels),
+  l'IoU est \(|p \cap g| / |p \cup g|\) et le <strong>Dice</strong>
+  \(2|p \cap g| / (|p| + |g|)\). Avec \(|p| = 1200\), \(|g| = 1000\) et
+  \(|p \cap g| = 900\)&nbsp;: IoU \(= 900/1300 \approx 0{,}69\) et
+  Dice \(= 1800/2200 \approx 0{,}82\). On vérifie l'identité
+  \(\mathrm{Dice} = 2\,\mathrm{IoU} / (1 + \mathrm{IoU})\)&nbsp;:
+  \(2 \times 0{,}692 / 1{,}692 = 0{,}818\) — les deux métriques sont
+  interchangeables en tant que classement, mais le Dice paraît «&nbsp;plus gentil&nbsp;»&nbsp;:
+  toujours préciser la métrique dans un rapport.
+</div>
+
+<h3>3.3 Segmentation d'instances&nbsp;: Mask R-CNN</h3>
+<p><strong>Mask R-CNN</strong> (2017) étend Faster R-CNN&nbsp;: en parallèle des têtes
+classification et régression de boîte, chaque région d'intérêt reçoit une tête de
+segmentation qui prédit un masque binaire à résolution \(28 \times 28\) (par classe).
+Le détail décisif est <strong>RoI Align</strong>&nbsp;: le RoI pooling original quantifiait
+les coordonnées des cellules (arrondis), décalant les caractéristiques de quelques
+dixièmes de pixel — négligeable pour classer, désastreux pour aligner un masque. RoI
+Align échantillonne par interpolation bilinéaire aux coordonnées réelles, sans
+arrondi&nbsp;: ~2 points de mask AP gagnés pour une simple correction de précision
+numérique — une belle leçon d'ingénierie.</p>
+
+<h3>3.4 Panoptique&nbsp;: une métrique unique</h3>
+<div class="def">
+  <span class="tag">Définition 3.2 — Panoptic Quality (PQ)</span>
+  On apparie segments prédits et vérités terrain par classe avec
+  \(\mathrm{IoU} &gt; 0{,}5\) (couplage au plus un-à-un)&nbsp;. Avec VP l'ensemble des
+  appariements, FP les prédits non appariés et FN les vérités non appariées&nbsp;:
+  $$\mathrm{PQ} \;=\; \underbrace{\frac{1}{|\mathrm{VP}|}\sum_{(p,g) \in \mathrm{VP}}
+  \mathrm{IoU}(p, g)}_{\text{qualité de segmentation (SQ)}}
+  \;\times\;
+  \underbrace{\frac{|\mathrm{VP}|}{|\mathrm{VP}| + \tfrac12|\mathrm{FP}| + \tfrac12|\mathrm{FN}|}}_{\text{qualité de reconnaissance (RQ = score F1)}},$$
+  puis moyenné sur les classes. PQ découple proprement «&nbsp;les frontières sont-elles
+  justes&nbsp;?» (SQ) et «&nbsp;ai-je trouvé les bons objets&nbsp;?» (RQ).
+</div>
+
+<h3>3.5 SAM&nbsp;: la segmentation invite-able (promptable)</h3>
+<p>Le <strong>Segment Anything Model</strong> (Meta, 2023) change de paradigme&nbsp;:
+au lieu d'entraîner un modèle par tâche, SAM apprend une <em>tâche générale</em> —
+produire un masque valide pour toute <strong>invite</strong> (point, boîte, masque grossier,
+texte à venir)&nbsp;:</p>
+<ul>
+  <li><strong>architecture</strong>&nbsp;: encodeur d'image lourd (ViT, cf. module
+  Advanced Deep Learning (P2), chapitre 1) calculable une fois par image&nbsp;; encodeur
+  d'invite léger&nbsp;; décodeur de masque léger, relançable en temps réel (~50&nbsp;ms)
+  pour chaque invite — la séparation coûteux-une-fois / léger-plusieurs-fois est le
+  pattern de déploiement «&nbsp;interactif&nbsp;»&nbsp;;</li>
+  <li><strong>moteur de données</strong>&nbsp;: boucle d'annotation assistée (modèle
+  suggère, humain corrige) dans un premier temps, puis annotation semi-automatique puis
+  automatique — aboutissant à SA-1B&nbsp;: 11 millions d'images sous licence,
+  <strong>1,1 milliard de masques</strong>, 99&nbsp;% automatiques&nbsp;;</li>
+  <li><strong>usage</strong>&nbsp;: zéro-coup pour extraire des masques, servir de
+  base à du fine-tuning (medical, satellite), ou d'assistant d'annotation — SAM y
+  retourne la boucle&nbsp;: le modèle fabrique ses données.</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Précédent</span> Évaluation (mAP) et détecteurs modernes</a><a class="next" href="ch4.html"><span class="dir">Suivant</span> Suivi multi-objets (tracking)</a></nav>
+</main>
+</div>
+
+</body>
+</html>

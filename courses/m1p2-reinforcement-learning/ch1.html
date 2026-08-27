@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reinforcement Learning and Autonomous Agents — Processus de décision markovien — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Reinforcement Learning and Autonomous Agents</a> › Processus de décision markovien</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52081_EP</span>Reinforcement Learning and Autonomous Agents</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: chaînes de Markov, martingales, programmation dynamique</a>
+<a href="ch1.html" class="active">Processus de décision markovien</a>
+<a href="ch2.html">Programmation dynamique</a>
+<a href="ch3.html">Learning&nbsp;: TD, SARSA, Q-learning</a>
+<a href="ch4.html">Policy gradients et actor-critic</a>
+<a href="ch5.html">Deep RL&nbsp;: DQN, Rainbow, DDPG/SAC, offline RL</a>
+<a href="ch6.html">Bandits et exploration</a>
+<a href="ch7.html">Agents autonomes à l'ère des LLMs</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique&nbsp;: Jesse Read</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Processus de décision markovien</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — MDP</span>
+  Un <strong>MDP</strong> est un tuple \((\mathcal{S}, \mathcal{A}, P, r, \gamma)\)&nbsp;:
+  états \(\mathcal{S}\), actions \(\mathcal{A}\), noyau de transition
+  \(P(s' \mid s, a)\), récompense \(r(s, a, s')\) (on note \(r(s,a)\) son espérance), facteur
+  d'actualisation \(\gamma \in [0, 1)\). Une <strong>politique</strong> \(\pi(a \mid s)\) règle le
+  choix des actions&nbsp;; l'objectif est le retour espéré actualisé
+  $$J(\pi) = \mathbb{E}_\pi\Big[\sum_{t=0}^{\infty} \gamma^t R_t\Big].$$
+  Fixer une politique \(\pi\) dans un MDP <em>induit une chaîne de Markov</em> de noyau
+  \(P^\pi(s' \mid s) = \sum_a \pi(a \mid s) P(s' \mid s, a)\) — le chapitre 0 s'applique
+  littéralement&nbsp;; \(\gamma &lt; 1\) garantit que toutes les sommes convergent.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — Politiques déterministes stationnaires</span>
+  Il suffit de chercher parmi les politiques <em>déterministes</em> \(\pi : \mathcal{S} \to
+  \mathcal{A}\) et <em>stationnaires</em> (ne dépendant pas de \(t\))&nbsp;: pour toute politique
+  mixte et non stationnaire, il existe une politique déterministe stationnaire de valeur au
+  moins égale en tout état. (Preuve&nbsp;: récurrence arrière sur l'horizon puis passage à la
+  limite \(\gamma\)-actualisée&nbsp;; voir Puterman, 2005.) L'espace de recherche est fini&nbsp;:
+  \(|\mathcal{A}|^{|\mathcal{S}|}\) candidats — trop grand pour l'énumération, d'où les
+  chapitres 2 et suivants.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 1.3 — Fonctions de valeur</span>
+  $$V^\pi(s) = \mathbb{E}_\pi\Big[\sum_t \gamma^t R_t \,\Big|\, S_0 = s\Big], \qquad
+  Q^\pi(s, a) = \mathbb{E}_\pi\Big[\sum_t \gamma^t R_t \,\Big|\, S_0 = s, A_0 = a\Big].$$
+  \(V^\pi\) = «&nbsp;combien vaut l'état&nbsp;»&nbsp;; \(Q^\pi\) = «&nbsp;combien vaut le couple
+  état-action&nbsp;». On a \(V^\pi(s) = \sum_a \pi(a\mid s)\, Q^\pi(s,a)\) et
+  \(Q^\pi(s, a) = r(s, a) + \gamma \sum_{s'} P(s' \mid s, a)\, V^\pi(s')\).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 1.4 — Mesures d'occupation</span>
+  La mesure d'occupation de \(\pi\) (depuis \(\mu_0\)) est
+  $$\rho_\pi(s, a) = (1 - \gamma)\sum_{t=0}^{\infty} \gamma^t\,
+  \mathbb{P}_\pi[S_t = s, A_t = a], \qquad \text{de sorte que} \qquad
+  J(\pi) = \frac{1}{1-\gamma}\sum_{s,a} \rho_\pi(s,a)\, r(s,a).$$
+  \(\rho_\pi\) est une distribution de probabilité sur \(\mathcal{S} \times \mathcal{A}\)&nbsp;;
+  elle décrit «&nbsp;où vit&nbsp;» la politique. C'est le pont naturel vers la formulation LP
+  ci-dessous et vers les ratios d'importance du chapitre 4 (échantillonner sous \(\pi\),
+  évaluer sous \(\pi'\)).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.5 — Équations de Bellman (évaluation)</span>
+  $$Q^\pi(s, a) = r(s,a) + \gamma \sum_{s'} P(s' \mid s, a)\, V^\pi(s'), \qquad
+  V^\pi(s) = \sum_a \pi(a \mid s)\Big[r(s,a) + \gamma \sum_{s'} P(s'\mid s,a) V^\pi(s')\Big].$$
+  <em>C'est la programmation dynamique appliquée au temps&nbsp;: la valeur d'aujourd'hui = gain
+  immédiat + valeur actualisée de demain.</em> En notant \(T_\pi\) l'opérateur
+  \((T_\pi V)(s) = \sum_a \pi(a|s)\big[r(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s')\big]\),
+  l'équation se réécrit \(V^\pi = T_\pi V^\pi\) — un système <em>linéaire</em> de
+  \(|\mathcal{S}|\) équations (\((I - \gamma P^\pi) V = r^\pi\), inversible car
+  \(\gamma &lt; 1\)).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.6 — Optimalité&nbsp;: existence, unicité (preuve complète)</span>
+  Soit l'opérateur de Bellman optimal
+  $$(\mathcal{T}V)(s) = \max_a \Big\{ r(s, a) + \gamma \sum_{s'} P(s' \mid s, a)\, V(s') \Big\}.$$
+  <strong>(1) \(\mathcal{T}\) est une contraction de module \(\gamma\)</strong> sur
+  \((\mathbb{R}^{|\mathcal{S}|}, \|\cdot\|_\infty)\) (espace complet). Preuve en deux
+  lemmes&nbsp;:
+  <div class="proof">
+  <strong>Lemme (max-Lipschitz).</strong> Pour toutes familles bornées \((u_a)_a\),
+  \((v_a)_a\)&nbsp;: \(|\max_a u_a - \max_a v_a| \leq \max_a |u_a - v_a|\).
+  En effet, pour tout \(a\), \(u_a \leq v_a + \max_b |u_b - v_b|\), donc
+  \(\max_a u_a \leq \max_a v_a + \max_b |u_b - v_b|\)&nbsp;; en échangeant les rôles,
+  \(|\max_a u_a - \max_a v_a| \leq \max_b |u_b - v_b|\).
+  <strong>Contraction.</strong> Pour chaque \(s\), en posant
+  \(u_a = r(s,a) + \gamma \sum_{s'} P(s'|s,a) V(s')\) et \(v_a\) l'analogue pour \(V'\)&nbsp;:
+  $$\big|(\mathcal{T}V)(s) - (\mathcal{T}V')(s)\big|
+  \leq \max_a \gamma \Big|\sum_{s'} P(s'|s,a)\big(V(s') - V'(s')\big)\Big|
+  \leq \gamma\, \|V - V'\|_\infty,$$
+  car \(P(\cdot|s,a)\) est une distribution de probabilité. En prenant le max sur \(s\)&nbsp;:
+  \(\|\mathcal{T}V - \mathcal{T}V'\|_\infty \leq \gamma \|V - V'\|_\infty\).
+  <strong>(2) Point fixe.</strong> Par le théorème du point fixe de Banach (rappel L3&nbsp;:
+  contraction sur un espace complet), \(\mathcal{T}\) admet un unique point fixe
+  \(V^\star\), et \(\mathcal{T}^k V \to V^\star\) pour tout \(V\) de départ, à vitesse
+  géométrique \(\gamma^k\). On pose \(Q^\star = r + \gamma P V^\star\), qui vérifie
+  $$Q^\star(s, a) = r(s, a) + \gamma \sum_{s'} P(s' \mid s, a)\, \max_{a'} Q^\star(s', a').$$
+  <strong>(3) Politique optimale.</strong> Soit \(\pi^\star\) gloutonne pour \(V^\star\)&nbsp;:
+  \(\pi^\star(s) \in \arg\max_a Q^\star(s,a)\). Alors \(T_{\pi^\star} V^\star =
+  \mathcal{T}V^\star = V^\star\), donc
+  \(\|T_{\pi^\star}^k V^\star - V^\star\|_\infty \leq \gamma^k \|T_{\pi^\star} V^\star -
+  V^\star\|_\infty = 0\) pour tout \(k\)&nbsp;; à la limite \(V^{\pi^\star} = V^\star\).
+  Donc \(\pi^\star\) atteint la borne supérieure \(\sup_\pi V^\pi\) en tout état&nbsp;:
+  c'est une politique optimale déterministe stationnaire. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.7 — Formulation linéaire (LP) des MDP</span>
+  Résoudre un MDP revient à résoudre le programme linéaire (dual)&nbsp;:
+  $$\max_{\mu \geq 0}\ \sum_{s,a} \mu(s,a)\, r(s,a)
+  \quad \text{s.c.} \quad
+  \sum_a \mu(s', a) \;=\; \nu(s') + \gamma \sum_{s,a} P(s' \mid s, a)\, \mu(s,a)
+  \ \ \forall s',$$
+  où \(\nu\) est la distribution initiale. Les variables \(\mu\) sont les mesures
+  d'occupation \(= \rho_\pi/(1-\gamma)\)&nbsp;; les contraintes sont des «&nbsp;équations de
+  flot&nbsp;» (ce qui entre dans un état = distribution initiale + ce qui en sort actualisé).
+  Une solution optimale extrémale du polytope est atteinte en une politique déterministe, et
+  \(\pi^\star(s) = \arg\max_a \mu^\star(s, a)\). Intérêt&nbsp;: les LP se résolvent en
+  polynomial (mais polynomial en \(|\mathcal{S}| |\mathcal{A}|\), vite énorme)&nbsp;; le point
+  de vue dual éclaire aussi les méthodes d'approximation linéaire de la valeur. Le primal
+  s'écrit \(\min_V \sum_s \nu(s) V(s)\) s.c. \(V(s) \geq r(s,a) + \gamma \sum_{s'} P V\)
+  pour tout \((s, a)\) — les contraintes sont les inégalités de Bellman.
+</div>
+
+<div class="note">
+  <span class="tag">Rôle de \(\gamma\)</span> \(\gamma\) actualise le futur mais conditionne
+  aussi toute la théorie&nbsp;: contraction de module \(\gamma\), bornes d'erreur en
+  \(1/(1-\gamma)\) (chapitre 2), variance des retours. Quand \(\gamma \to 1\), on tend vers le
+  critère moyen \(\lim_T \frac{1}{T}\sum_t R_t\) — lié au théorème ergodique 0.2 — mais tous
+  les taux se dégradent&nbsp;: le RL vit avec cette tension.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Précédent</span> Rappels&nbsp;: chaînes de Markov, martingales, programmation dynamique</a><a class="next" href="ch2.html"><span class="dir">Suivant</span> Programmation dynamique</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Topics in Large Language Models — Mixture-of-Experts — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Topics in Large Language Models</a> › Mixture-of-Experts</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Advanced Topics in Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels et mode d'emploi du séminaire</a>
+<a href="ch1.html">Raisonnement&nbsp;: chain-of-thought, RLVR</a>
+<a href="ch2.html">Long contexte&nbsp;: RoPE, ring attention, RAG ou LC&nbsp;?</a>
+<a href="ch3.html">Mémoire&nbsp;: épisodique, vector stores, GraphRAG</a>
+<a href="ch4.html" class="active">Mixture-of-Experts</a>
+<a href="ch5.html">Architectures alternatives&nbsp;: SSM, Mamba, RWKV</a>
+<a href="ch6.html">Efficacité&nbsp;: speculative decoding, quantification</a>
+<a href="ch7.html">LLMs × graphes&nbsp;: le croisement LLGA</a>
+<a href="ch8.html">Agents&nbsp;: planning, outils, multi-agents</a>
+<a href="ch9.html">Évaluation&nbsp;: contamination, biais des juges</a>
+<a href="ch10.html">Problèmes ouverts</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Mixture-of-Experts</h2>
+
+<div class="ex">
+  <span class="tag">Lectures du jour</span>
+  N. Shazeer et al., <em>Outrageously Large Neural Networks: The
+  Sparsely-Gated Mixture-of-Experts Layer</em>, ICLR 2017
+  (arXiv:1701.06538)&nbsp;;
+  W. Fedus, B. Zoph, N. Shazeer, <em>Switch Transformers</em>, JMLR 2022
+  (arXiv:2101.03961)&nbsp;;
+  A. Jiang et al., <em>Mixtral of Experts</em>, 2024 (arXiv:2401.04088)&nbsp;;
+  DeepSeek-AI, <em>DeepSeek-V3 Technical Report</em>, 2024
+  (arXiv:2412.19437).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Couche MoE sparse</span>
+  Chaque bloc feed-forward est remplacé par \(N\) experts
+  \(E_1, \dots, E_N\) et un routeur&nbsp;:
+  $$y \;=\; \sum_{i \in \mathrm{TopK}(g(x))} g_i(x)\, E_i(x),
+  \qquad g(x) = \mathrm{softmax}\bigl(W_g\,x\bigr),$$
+  seuls les \(k\) plus forts experts sont calculés (k = 1-2 typiquement).
+  Les paramètres <em>totaux</em> croissent (capacité), les paramètres
+  <em>actifs par token</em> restent bornés (coût)&nbsp;: Mixtral 8×7B =
+  ~47B de paramètres, ~13B actifs&nbsp;; DeepSeek-V3 = 671B dont ~37B
+  actifs.
+</div>
+
+<h3>4.1 Équilibrer les experts&nbsp;: la perte auxiliaire</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Perte auxiliaire de charge (Switch)</span>
+  Avec \(f_i\) = fraction des tokens <em>routés</em> vers l'expert \(i\) et
+  \(P_i\) = fraction de probabilité routeur <em>moyenne</em> sur \(i\)&nbsp;:
+  $$\mathcal{L}_{\text{aux}} \;=\; \alpha\, N \sum_{i=1}^{N} f_i\, P_i,
+  \qquad \sum_i f_i = \sum_i P_i = 1,$$
+  dont le minimum \(\mathcal{L}_{\text{aux}} = \alpha\) est atteint au routage
+  uniforme \(f = P = \mathbf{1}/N\). La perte pénalise le routage dégénéré
+  où quelques experts captent tout — sans quoi le gradient du routeur
+  s'effondre (les experts non choisis ne reçoivent pas de gradient&nbsp;:
+  riche devient riche).
+</div>
+
+<div class="proof">
+Au point uniforme, \(\sum_i f_iP_i = N \cdot \frac1N \cdot \frac1N = \frac1N\),
+donc \(\mathcal{L}_{\text{aux}} = \alpha N \cdot \frac1N = \alpha\).
+Pour montrer que c'est bien un <em>minimum dans le régime visé</em>, on utilise
+l'inégalité de sommation de Chebyshev&nbsp;: si les suites \((f_i)\) et
+\((P_i)\) sont <em>similairement ordonnées</em> (co-monotones — les experts
+probables sont aussi les plus chargés, exactement le régime dégénéré que
+l'on veut pénaliser), alors
+$$\frac1N \sum_i f_i P_i \;\geq\;
+\Bigl(\frac1N \sum_i f_i\Bigr)\Bigl(\frac1N \sum_i P_i\Bigr) = \frac{1}{N^2},
+\qquad\text{soit}\qquad \sum_i f_i P_i \;\geq\; \frac1N,$$
+avec égalité si et seulement si l'une des suites est constante. Donc
+\(\mathcal{L}_{\text{aux}} \geq \alpha\), égalité à l'uniforme. Enfin,
+l'effet dynamique&nbsp;: \(\partial (f_iP_i)/\partial P_i = f_i \geq 0\) — le
+gradient tire \(P_i\) vers le bas <em>proportionnellement à la charge</em>
+\(f_i\)&nbsp;: une boucle de rétroaction négative contre la concentration. <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Analyse critique — lire l'hypothèse cachée</span>
+  La minoration n'est <em>prouvée</em> que pour \((f, P)\) co-monotones&nbsp;:
+  un couple anti-monotone (expert très probable mais peu chargé) pourrait
+  avoir un produit <em>sous</em> \(1/N\) — la loss n'est pas une divergence
+  symétrique au sens strict, c'est un <em>proxy</em> de charge dont la
+  dynamique de gradient fait l'essentiel du travail. C'est exactement le
+  genre de détail qu'une lecture critique de papier doit attraper&nbsp;:
+  quelle quantité la loss mesure-t-elle <em>réellement</em>, sous quelle
+  hypothèse, et que fait son gradient&nbsp;? DeepSeek-V3 va jusqu'à
+  remplacer la boucle par un <strong>équilibrage sans perte auxiliaire</strong>&nbsp;:
+  un terme de biais par expert, ajusté dynamiquement à la charge observée —
+  contrôle direct plutôt que pénalité différentiable, avec des gains de
+  qualité affichés. Moins élégant, plus efficace&nbsp;: à débattre.
+</div>
+
+<h3>4.2 Ce que les experts apprennent</h3>
+
+<p>L'analyse de Mixtral (figure «&nbsp;routing&nbsp;») montre une spécialisation
+<em>syntaxique et par domaine</em> (code, math, langues) plutôt que
+topique fine — et une redondance importante entre experts&nbsp;: le MoE
+démocratise surtout la <strong>capacité</strong>, pas la division du travail.
+DeepSeek-V3 pousse deux innovations structurantes&nbsp;: experts
+<em>à grain fin</em> (plus nombreux, plus petits) + <strong>experts
+partagés</strong> (toujours actifs, qui capturent les connaissances
+transverses — réduisant la redondance), et l'entraînement FP8 à l'échelle
+(14,8T tokens) — le papier technique est un cours d'ingénierie système en
+soi (communication expert-parallel, cf. module Emerging ML ch. 2 sur le
+distribué).</p>
+
+<div class="note">
+  <span class="tag">Critique d'usage — à quoi servent «&nbsp;les paramètres actifs&nbsp;»&nbsp;?</span>
+  Comparer un MoE 47B/13B actifs à un dense 13B est trompeur&nbsp;: le MoE
+  déploie 47B en mémoire (cf. module ML Ops ch. 3&nbsp;: le KV et les poids
+  résident entiers en VRAM) mais ~13B de calcul par token. Le MoE gagne
+  <em>à condition</em> de gros batchs (amortir la mémoire par le débit)&nbsp;:
+  excellent pour le serving mutualisé, contestable pour le single-user. La
+  grille de lecture LLGA&nbsp;: chaque architecture doit être évaluée en
+  <em>coût complet</em> (mémoire, calcul, communication) — pas en
+  «&nbsp;paramètres&nbsp;» publicitaires.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Mémoire&nbsp;: épisodique, vector stores, GraphRAG</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Architectures alternatives&nbsp;: SSM, Mamba, RWKV</a></nav>
+</main>
+</div>
+
+</body>
+</html>

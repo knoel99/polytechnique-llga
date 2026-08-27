@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — Node embeddings — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Graph Machine and Deep Learning for Generative AI</a> › Node embeddings</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52072_EP</span>Graph Machine and Deep Learning for Generative AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: théorie des graphes</a>
+<a href="ch1.html">Pourquoi les graphes&nbsp;?</a>
+<a href="ch2.html">Tâches d'apprentissage sur graphes</a>
+<a href="ch3.html" class="active">Node embeddings</a>
+<a href="ch4.html">Filtres spectraux et spectral clustering</a>
+<a href="ch5.html">GNN et message passing</a>
+<a href="ch6.html">Link prediction et auto-encodeurs de graphes</a>
+<a href="ch7.html">GNN à l'échelle</a>
+<a href="ch8.html">Applications et mise en œuvre</a>
+<a href="ch9.html">Génération de graphes</a>
+<a href="ch10.html">Travaux de l'équipe pédagogique</a>
+<a href="ch11.html">Graphes × LLMs&nbsp;: GraphRAG et l'hybride</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Node embeddings</h2>
+
+<div class="def">
+  <span class="tag">Objectif</span>
+  Apprendre \(z_v \in \mathbb{R}^d\) tel que <em>la similarité des embeddings reflète la
+  proximité dans le graphe</em>&nbsp;:
+  \(\mathrm{sim}(z_u, z_v) \approx P(u \text{ voisin de } v)\) — une <em>factorisation</em>
+  implicite de la matrice d'adjacence (ou d'une matrice de proximités dérivées), en opposition
+  aux GNN du ch. 5 qui <em>conditionnent</em> l'embedding aux features \(X\).
+</div>
+
+<div class="thm">
+  <span class="tag">DeepWalk (Perozzi et al., 2014) et node2vec (Grover &amp; Leskovec, 2016)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>générer des <strong>marches aléatoires</strong> depuis chaque nœud (longueur \(\ell\),
+    \(r\) marches par nœud)&nbsp;; node2vec biaisent la marche par \((p, q)\) — développé
+    ci-dessous&nbsp;;</li>
+    <li>appliquer <strong>word2vec skip-gram</strong> aux marches&nbsp;: les «&nbsp;phrases&nbsp;»
+    sont des suites de nœuds, la fenêtre \(b\) définit les paires (centre, contexte)&nbsp;;</li>
+    <li>ensuite&nbsp;: n'importe quelle méthode vectorielle (k-means, classification…).</li>
+  </ol>
+  La marche aléatoire définit la <em>proximité</em>&nbsp;: deux nœuds co-visités souvent obtiennent
+  des embeddings proches — la théorie <strong>NetMF</strong> (Qiu et al., 2018) montre
+  rétroactivement que DeepWalk <em>factorise</em> une matrice déterministe de marches
+  (théorème 3.4).
+</div>
+
+<div class="prop">
+  <span class="tag">Dérivation 3.1 — Skip-gram avec negative sampling&nbsp;: la loss et son gradient</span>
+  Pour une paire (centre \(c\), contexte \(o\)) et \(K\) négatifs \(v_1, \dots, v_K\) tirés
+  d'une distribution de bruit \(P_n\) (loi unigramme élevée à la puissance 3/4, comme en NLP)&nbsp;:
+  $$\mathcal{L}(c, o) = -\log \sigma(z_o^\top z_c) \; - \; \sum_{k=1}^{K} \log \sigma(-z_{v_k}^\top z_c),$$
+  avec \(\sigma(s) = 1/(1 + e^{-s})\). En notant \(s_k = z_{v_k}^\top z_c\) et en dérivant
+  \(\frac{d}{ds}[-\log\sigma(s)] = \sigma(s) - 1\)&nbsp;:
+  $$\frac{\partial \mathcal{L}}{\partial z_c} = \big(\sigma(z_o^\top z_c) - 1\big)\, z_o \; + \; \sum_{k=1}^K \sigma(s_k)\, z_{v_k}, \qquad
+  \frac{\partial \mathcal{L}}{\partial z_o} = \big(\sigma(z_o^\top z_c) - 1\big)\, z_c.$$
+  Lecture&nbsp;: le terme \(-z_o\) (car \(\sigma &lt; 1\)) <em>attire</em> le contexte vers le
+  centre, chaque négatif <em>repousse</em> avec un poids \(\sigma(s_k) \in ]0,1[\) — fort si le
+  négatif est déjà trop proche. Descente de gradient stochastique&nbsp;: coût par paire
+  \(\mathcal{O}(K d)\), indépendant de \(n\) — c'est ce qui a rendu word2vec (et donc DeepWalk)
+  scalable&nbsp;; l'astuce softmax hiérarchique remplace le \(\mathcal{O}(n)\) du softmax complet
+  par \(\mathcal{O}(\log n)\).
+</div>
+
+<div class="prop">
+  <span class="tag">Dérivation 3.2 — node2vec&nbsp;: les biais \(p\) et \(q\) par probabilités de transition</span>
+  À l'étape \(i\), la marche vient de \(t\), est en \(v\)&nbsp;; pour le candidat \(x \in \mathcal{N}(v)\)&nbsp;:
+  $$\pi_{tx} = \frac{w_{tx}}{Z}\, \alpha_{pq}(t, x), \qquad
+  \alpha_{pq}(t, x) = \begin{cases} 1/p &amp; \text{si } d_{tx} = 0 \\ 1 &amp; \text{si } d_{tx} = 1 \\ 1/q &amp; \text{si } d_{tx} = 2 \end{cases}$$
+  (\(d_{tx}\) = distance dans le graphe&nbsp;; \(Z\) normalise sur \(\mathcal{N}(v)\)&nbsp;; dans
+  un graphe simple, \(d_{tx} \leq 2\) pour tout \(x \in \mathcal{N}(v) \cup \{t\}\) si \(t\) et
+  \(v\) sont adjacents). Trois régimes&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>\(p \lt 1\)</strong>&nbsp;: retour vers \(t\) favorisé — la marche reste dans le
+    voisinage proche (<em>BFS</em>)&nbsp;: deux nœuds de rôles structuraux analogues (hubs,
+    ponts) obtiennent des embeddings proches — <em>équivalence structurelle</em>&nbsp;;</li>
+    <li><strong>\(q \lt 1\)</strong>&nbsp;: les sommets à \(d_{tx} = 2\) sont favorisés — la
+    marche s'éloigne (<em>DFS</em>)&nbsp;: deux nœuds d'une même communauté/cluster sont proches
+    — <em>homophilie</em>&nbsp;;</li>
+    <li>\(p = q = 1\)&nbsp;: marche aléatoire uniforme — DeepWalk est un cas particulier de
+    node2vec.</li>
+  </ul>
+  La preuve qualitative&nbsp;: avec \(p \to 0\), la probabilité de revenir en \(t\) domine et la
+  marche échantillonne le voisinage à 2 sauts de \(t\) de façon quasi uniforme&nbsp;; avec
+  \(q \to 0\), la chaîne évite \(t\) et se comporte comme une marche exploratoire de grande
+  ampleur — retrouvez ces comportements dans l'exercice 3.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — NetMF&nbsp;: DeepWalk comme factorisation de matrices (Qiu et al., 2018)</span>
+  Quand la fenêtre \(b\) et le nombre de marches croissent, DeepWalk converge vers la
+  factorisation (tronquée, élément par élément) de la matrice&nbsp;:
+  $$M = \log\Big( \frac{\mathrm{vol}(G)}{b\, T} \Big( \sum_{r=1}^{T} P^r \Big) D^{-1} \Big), \qquad \mathrm{vol}(G) = \sum_v d_v = 2m,$$
+  c'est-à-dire que l'on cherche \(Z Z^\top \approx M\)&nbsp;; \(T\) joue le rôle de l'horizon
+  effectif des marches. Conséquences&nbsp;: (i)&nbsp;un pont théorique — DeepWalk, LINE, PTE et
+  node2vec sont toutes des factorisations de variantes de \(M\) (d'où le nom «&nbsp;NetMF&nbsp;»,
+  <em>Network Embedding as Matrix Factorization</em>)&nbsp;; (ii)&nbsp;un algorithme
+  déterministe — factoriser \(M\) directement (SVD tronquée) égale ou bat DeepWalk sans tirer
+  une seule marche&nbsp;; (iii)&nbsp;un diagnostic — la matrice cible est construite sur
+  \(P = D^{-1}A\)&nbsp;: les embeddings encodent les <em>marches</em>, pas les features, et
+  restent <em>transductifs</em> (un nouveau nœud exige de tout recalculer — motivation directe
+  des GNN inductifs du ch. 5).
+</div>
+
+<div class="note">
+  <span class="tag">L'intuition «&nbsp;word2vec sur le graphe&nbsp;» — et sa réciproque</span>
+  C'est le pont historique NLP ↔ graphes&nbsp;: un corpus de marches ≈ un corpus de phrases.
+  L'équipe pédagogique a poussé l'idée <em>inverse</em> — <strong>Graph of Words</strong>
+  (ch. 10)&nbsp;: représenter un <em>document</em> par un graphe de termes co-occurrents et le
+  classifier avec des outils de graphes. Les deux directions convergent aujourd'hui dans les
+  LLMs sur graphes (ch. 11). Pour aller au-delà des <em>marches</em> (avec répétitions) vers
+  des <em>chemins</em> (simples), voir les Path Neural Networks (ch. 10&nbsp;; M2, ch. 1 et 8).
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 3.4 — Karate Club&nbsp;: code complet</span>
+  Le graphe de Zachary (34 nœuds, 78 arêtes, 2 factions lors de la scission du club) est le
+  «&nbsp;MNIST des graphes&nbsp;».
+<pre class="code"><code>import numpy as np, networkx as nx
+from gensim.models import Word2Vec
+from sklearn.cluster import KMeans
+from sklearn.metrics import normalized_mutual_info_score
+
+G = nx.karate_club_graph()
+y = np.array([0 if G.nodes[v]["club"] == "Mr. Hi" else 1 for v in G])
+
+def biased_walk(G, v, p, q, length):
+    walk, prev = [v], None
+    for _ in range(length):
+        cand = list(G.neighbors(walk[-1]))
+        probs = []
+        for x in cand:
+            d = 0 if x == prev else nx.shortest_path_length(G, prev, x) if prev is not None else 1
+            probs.append({0: 1/p, 1: 1.0, 2: 1/q}[d])
+        probs = np.array(probs) / sum(probs)
+        prev, nxt = walk[-1], np.random.choice(cand, p=probs)
+        walk.append(nxt)
+    return walk
+
+walks = [ [str(u) for u in biased_walk(G, v, p=1, q=0.25, length=30)]
+          for _ in range(80) for v in G.nodes() ]
+model = Word2Vec(walks, vector_size=64, window=5, min_count=0, sg=1, epochs=10)
+Z = np.array([model.wv[str(v)] for v in sorted(G.nodes())])
+km = KMeans(n_clusters=2, n_init=10, random_state=0).fit(Z)
+print("NMI :", normalized_mutual_info_score(y, km.labels_))   # ~0.5-0.8 selon p, q, seed</code></pre>
+  Exercice 3&nbsp;: faire varier \((p, q)\) et relier le NMI au régime BFS/DFS.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Précédent</span> Tâches d'apprentissage sur graphes</a><a class="next" href="ch4.html"><span class="dir">Suivant</span> Filtres spectraux et spectral clustering</a></nav>
+</main>
+</div>
+
+</body>
+</html>

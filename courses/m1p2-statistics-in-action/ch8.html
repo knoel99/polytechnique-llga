@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statistics in Action — A/B testing&nbsp;: séquentiel et effets ciblés — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Statistics in Action</a> › A/B testing&nbsp;: séquentiel et effets ciblés</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_52066_EP</span>Statistics in Action</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le kit de survie du statisticien</a>
+<a href="ch1.html">Le cycle d'une étude statistique</a>
+<a href="ch2.html">Plans expérimentaux&nbsp;: randomisation, blocs, puissance</a>
+<a href="ch3.html">Observationnel contre expérimental&nbsp;: les biais</a>
+<a href="ch4.html">Inférence causale&nbsp;: potential outcomes et DiD</a>
+<a href="ch5.html">La régression en pratique&nbsp;: diagnostics et transformations</a>
+<a href="ch6.html">Tests multiples&nbsp;: Bonferroni et Benjamini-Hochberg</a>
+<a href="ch7.html">Le bootstrap en pratique</a>
+<a href="ch8.html" class="active">A/B testing&nbsp;: séquentiel et effets ciblés</a>
+<a href="ch9.html">Étude de cas&nbsp;: essais agricoles et blocs</a>
+<a href="ch10.html">Communiquer&nbsp;: intervalles, p-values, visualisations honnêtes</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. A/B testing&nbsp;: séquentiel et effets ciblés</h2>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Test A/B et OEC</span>
+  Expérience randomisée en ligne&nbsp;: chaque unité (utilisateur, requête, session —
+  <em>l'unité de randomisation doit être l'unité d'analyse</em>) reçoit la variante A
+  (contrôle) ou B (traitement). L'<strong>OEC</strong> (Overall Evaluation Criterion) est la
+  métrique de décision unique, définie <em>avant</em> l'expérience&nbsp;; les métriques
+  secondaires (garde-fous&nbsp;: latence, taux d'erreur, désabonnement) se testent en
+  correction de tests multiples (ch. 6). Discipline&nbsp;: pas d'OEC, pas de test.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 8.2 — Le coût du «&nbsp;peeking&nbsp;» (regarder avant la fin)</span>
+  Un test à horizon fixe de niveau \(\alpha\) examiné \(K\) fois avec arrêt dès qu'une p-value
+  passe sous \(\alpha\) a un taux de faux positifs
+  $$\mathbb{P}(\exists k \leq K : p_k \leq \alpha) \;\geq\; \alpha \quad \text{et} \quad \leq\; 1 - (1 - \alpha)^K \ \text{(si indépendants).}$$
+  Pour \(K = 5\) regards et \(\alpha = 5\,\%\) déjà \(1 - 0{,}95^5 = 22{,}6\,\%&nbsp;;\) en
+  monitoring continu quotidien pendant des semaines, Johari, Pekelis, Walsh et Ye (KDD 2017)
+  mesurent des taux atteignant environ <strong>trois fois</strong> le niveau nominal.
+  <div class="proof">
+  La borne inférieure est claire (le premier regard est un test de niveau \(\alpha\)). La borne
+  supérieure&nbsp;: union bound sur les \(K\) événements \(\{p_k \leq \alpha\}\), dont chacun a
+  probabilité \(\leq \alpha\) sous \(H_0\) — avec égalité \(\times\) indépendance quand les
+  regards sont des tests indépendants (approximation grossière&nbsp;: en pratique les p-values
+  successives sont très corrélées, ce qui rend le vrai taux plus petit que la borne mais très
+  supérieur à \(\alpha\)). D'où la simulation de l'exercice 7. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 8.3 — p-values toujours valides et mSPRT (Johari et al., 2017)</span>
+  Une p-value séquentielle \(p_t\) est <strong>toujours valide</strong> si
+  \(\mathbb{P}(\exists t : p_t \leq \alpha) \leq \alpha\) pour tout temps d'arrêt — on peut
+  alors regarder aussi souvent qu'on veut. Construction&nbsp;: mélange de tests séquentiels du
+  rapport de vraisemblance (mSPRT)&nbsp;; la version bayésienne miroir&nbsp;: monter le
+  posterior de \(d = p_B - p_A\) et son intervalle crédible à chaque instant (code
+  ci-dessous), avec a priori Beta non informatif&nbsp;; les deux familles se correspondent
+  asymptotiquement (mêmes frontières en \(t\), cf. module Reinforcement Learning ch. 6 pour
+  les bandits, l'autre réponse au problème).
+</div>
+
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(52)
+
+# ---- A/B test bayesien : posteriors Beta, decision par esperance de perte ----
+conv = np.array([1274, 1378])          # conversions
+n    = np.array([12000, 12000])        # visites
+a, b = 1.0, 1.0                        # a priori Beta(1, 1)
+post = [rng.beta(conv[i] + a, n[i] - conv[i] + b, size=200_000) for i in range(2)]
+
+d = post[1] - post[0]                  # gain absolu tire a posteriori
+loss_if_B = np.where(d &lt; 0, -d, 0.0)   # perte si l'on deploie B et que A etait mieux
+
+print(f"P(B &gt; A)            : {(d &gt; 0).mean():.3f}")
+print(f"gain median         : {np.median(d):.5f}")
+print(f"IC 95 % du gain     : {np.quantile(d, [0.025, 0.975])}")
+print(f"E[perte | deploi B] : {loss_if_B.mean():.2e}")
+# Sorties typiques : P(B&gt;A) = 0.984 ; gain median = 0.0087 ;
+# IC = [0.0007, 0.0166] ; E[perte] = 2.2e-05.
+# Decision : le cout d'un choix de B errone (2 conversions sur 10^5) est negligeable
+# devant le gain attendu (+0.87 point) -- on deploye B.</code></pre>
+
+<div class="def">
+  <span class="tag">Définition 8.4 — Effets ciblés (hétérogènes) et erreurs associées</span>
+  L'effet moyen cache l'hétérogénéité&nbsp;: B gagne sur mobile, perd sur desktop. Deux
+  écueils symétriques&nbsp;: (i) <strong>spinning sous-groupes</strong>&nbsp;: 20 segments ⇒
+  attendez-vous à un «&nbsp;gain significatif&nbsp;» dans l'un d'eux par pur bruit (ch. 6,
+  Bonferroni/BH obligatoires)&nbsp;; (ii) <strong>effets d'interaction réels ignorés</strong>&nbsp;:
+  l'OEC agrégé peut annuler des effets opposés (Simpson, ch. 3). Cadre sain&nbsp;: spécifier
+  les segments a priori, tester l'<em>interaction</em> segment × traitement, corriger les
+  tests multiples. Du côté variance&nbsp;: CUPED (Deng et al., 2013) réutilise la métrique
+  mesurée avant expérience comme covariable — réduction de variance typique de 30–50&nbsp;%
+  «&nbsp;gratuite&nbsp;», statistiquement équivalente aux blocs du ch. 2.
+</div>
+
+<div class="note">
+  <span class="tag">Interférences et validité</span>
+  Marché biface (Uber&nbsp;: plus de chauffeurs ⇒ délai baisse pour tous, y compris le
+  contrôle), caches CDN, effets de réseau social&nbsp;: SUTVA (ch. 4) violé. Réponses&nbsp;:
+  randomiser par grappes (villes, clusters d'IP — perte de puissance via le design effect
+  \(1 + (m-1)\rho\)), ou isoler (switchback). Voir Kohavi, Tang &amp; Xu (2020) pour le
+  catalogue complet des pièges de production&nbsp;; le module Reinforcement Learning
+  (bandits ch. 6) traite l'alternative «&nbsp;exploiter pendant l'expérience&nbsp;».
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Précédent</span> Le bootstrap en pratique</a><a class="next" href="ch9.html"><span class="dir">Suivant</span> Étude de cas&nbsp;: essais agricoles et blocs</a></nav>
+</main>
+</div>
+
+</body>
+</html>

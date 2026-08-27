@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — Link prediction et auto-encodeurs de graphes — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Graph Machine and Deep Learning for Generative AI</a> › Link prediction et auto-encodeurs de graphes</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52072_EP</span>Graph Machine and Deep Learning for Generative AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: théorie des graphes</a>
+<a href="ch1.html">Pourquoi les graphes&nbsp;?</a>
+<a href="ch2.html">Tâches d'apprentissage sur graphes</a>
+<a href="ch3.html">Node embeddings</a>
+<a href="ch4.html">Filtres spectraux et spectral clustering</a>
+<a href="ch5.html">GNN et message passing</a>
+<a href="ch6.html" class="active">Link prediction et auto-encodeurs de graphes</a>
+<a href="ch7.html">GNN à l'échelle</a>
+<a href="ch8.html">Applications et mise en œuvre</a>
+<a href="ch9.html">Génération de graphes</a>
+<a href="ch10.html">Travaux de l'équipe pédagogique</a>
+<a href="ch11.html">Graphes × LLMs&nbsp;: GraphRAG et l'hybride</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Link prediction et auto-encodeurs de graphes</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Link prediction</span>
+  Prédire l'existence (ou le type) d'une arête manquante \((u, v)\)&nbsp;: la tâche la plus
+  répandue en industrie — recommandation («&nbsp;qui va aimer quoi&nbsp;?&nbsp;»), complétion de
+  graphes de connaissances («&nbsp;ce médicament cible cette protéine&nbsp;?&nbsp;»), prédiction
+  d'interactions futures (ch. 5 du M2 pour le temporel). Protocole&nbsp;: masquer une fraction
+  des arêtes (10&nbsp;%), en échantillonner autant de «&nbsp;négatifs&nbsp;» (paires non
+  adjacentes), scorer toutes les paires, mesurer AUC / Hits@k.
+</div>
+
+<div class="thm">
+  <span class="tag">GAE / VGAE (Kipf &amp; Welling, 2016) — auto-encodeurs de graphes</span>
+  <strong>GAE</strong>&nbsp;: encoder \(Z = \mathrm{GCN}(X, A)\)&nbsp;; décoder par produit
+  scalaire — la probabilité de reconstruction d'une arête&nbsp;:
+  $$p(A_{uv} = 1 \mid z_u, z_v) = \sigma(z_u^\top z_v).$$
+  Entraînement&nbsp;: maximiser la vraisemblance des arêtes observées <em>et</em> minimiser
+  celle des négatifs — la cross-entropy du negative sampling du ch. 3, transposée&nbsp;:
+  $$\mathcal{L} = -\sum_{(u,v) \in E^+} \log \sigma(z_u^\top z_v) \; - \sum_{(u,v') \in E^-} \log \big(1 - \sigma(z_u^\top z_{v'})\big).$$
+  <strong>VGAE</strong>&nbsp;: encoder gaussien variationnel
+  \(q(Z | X, A) = \prod_i \mathcal{N}(z_i;\ \mu_i, \mathrm{diag}(\sigma_i^2))\) avec
+  \(\mu = \mathrm{GCN}_\mu(X, A)\), \(\log\sigma = \mathrm{GCN}_\sigma(X, A)\), prior
+  \(\mathcal{N}(0, I)\)&nbsp;; on maximise l'ELBO (module Deep Learning)&nbsp;:
+  $$\mathcal{L} = \mathbb{E}_{q}[\log p(A | Z)] - \mathrm{KL}\big(q(Z|X,A)\,\|\,\mathcal{N}(0, I)\big),$$
+  reparamétrisation \(z_i = \mu_i + \sigma_i \odot \varepsilon\), \(\varepsilon \sim \mathcal{N}(0, I)\).
+  Résultats&nbsp;: sur Cora, AUC \(\approx 0{,}91\) (GAE) et \(\approx 0{,}92\) (VGAE)&nbsp;—
+  le prior régularise le produit scalaire (cf. le rapprochement avec l'inférence SBM, ch. 9).
+</div>
+
+<div class="note">
+  <span class="tag">Scorer des paires&nbsp;: le choix de la fonction de décision</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>produit scalaire</strong> \(z_u^\top z_v\) — décomposition de rang \(d\),
+    symétrique, liée à NetMF (ch. 3)&nbsp;;</li>
+    <li><strong>MLP sur \((z_u \odot z_v, z_u - z_v)\)</strong> ou concaténation — asymétrique
+    (important en recommandation&nbsp;: «&nbsp;A achète B&nbsp;» ≠ «&nbsp;B achète A&nbsp;»)&nbsp;;</li>
+    <li><strong>distances relationnelles</strong> (KGC, ci-dessous)&nbsp;;</li>
+    <li><strong>négatifs</strong>&nbsp;: uniformes (faciles) vs durs — paires partageant un
+    voisin (popularity-biased)&nbsp;; le choix des négatifs change le rang appris (module
+    Deep Learning, contraste&nbsp;; module NLP pour l'analogie word2vec).</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">PinSage (Ying et al., 2018) — la recommandation à l'échelle industrielle</span>
+  Le déploiement Pinterest de GraphSAGE&nbsp;: graphe utilisateur-épingle de
+  <strong>3 milliards de nœuds et 18 milliards d'arêtes</strong>, entraîné par minibatchs.
+  Deux différences clés avec GraphSAGE&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>échantillonnage par importance</strong>&nbsp;: au lieu de voisins uniformes,
+    les \(T\) voisins de plus haut score de PageRank <em>normalisé par nœud</em> — les mêmes
+    «&nbsp;portes d'entrée&nbsp;» servent à tous les minibatchs, ce qui maximise la réutilisation
+    du cache&nbsp;;</li>
+    <li><strong>loss ranking</strong> (hinge margin)&nbsp;:
+    \(\max(0, m - s(u, v^+) + s(u, v^-_h))\) avec \(v^-_h\) <em>hard negative</em> (épingle
+    populaire mais non cliquée)&nbsp;; la production exige des candidats classés par score
+    approximé (recherche vectorielle — module NLP/Multimodal).</li>
+  </ol>
+  Lesson LLGA&nbsp;: à cette échelle, l'architecture compte moins que le <em>système</em>
+  (échantillonnage, cache, GPU) — c'est le pont vers le ch. 7.
+</div>
+
+<div class="note">
+  <span class="tag">Complétion de graphes de connaissances (KGC)</span>
+  Le link prediction sur graphe hétérogène typé (têtes \(h\), relations \(r\), queues \(t\))&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>TransE</strong> (Bordes et al., 2013)&nbsp;: plongements dans
+    \(\mathbb{R}^d\) avec le score d'énergie \(f(h, r, t) = -\|h + r - t\|\) — la relation est
+    un <em>translation</em>&nbsp;; entraînement marginal (positifs vs négatifs corrompus)&nbsp;;
+    illuminant mais limité (relations 1-N, symétriques)&nbsp;;</li>
+    <li><strong>R-GCN + score</strong> (ch. 5)&nbsp;: l'encodeur propage sur le graphe typé,
+    un décodeur (DistMult&nbsp;: \(\langle h, \mathrm{diag}(r), t \rangle\)) score les
+    triplets — l'architecture «&nbsp;encode-décode&nbsp;» domine&nbsp;;</li>
+    <li><strong>Lien GraphRAG</strong>&nbsp;: un KG d'entreprise complété par KGC devient
+    requêtable par un LLM (ch. 11)&nbsp;; les déficits de complétion guident la collecte de
+    données — boucle donnée/modèle propre au métier LLGA.</li>
+  </ul>
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> GNN et message passing</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> GNN à l'échelle</a></nav>
+</main>
+</div>
+
+</body>
+</html>

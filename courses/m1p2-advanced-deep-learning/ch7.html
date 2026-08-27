@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Deep Learning — Entraîner à grande échelle&nbsp;: recettes et scaling laws — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Deep Learning</a> › Entraîner à grande échelle&nbsp;: recettes et scaling laws</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52087_EP</span>Advanced Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: transformers, optimisation, normalisation</a>
+<a href="ch1.html">Vision Transformers&nbsp;: ViT, DeiT, Swin</a>
+<a href="ch2.html">Convnets modernes&nbsp;: la leçon ConvNeXt</a>
+<a href="ch3.html">Mélanges d'experts (MoE)</a>
+<a href="ch4.html">Self-supervision I&nbsp;: contrastif (SimCLR et fils)</a>
+<a href="ch5.html">Self-supervision II&nbsp;: masquage (MAE, BEiT, DINOv2)</a>
+<a href="ch6.html">Architectures efficaces&nbsp;: MobileNet et la distillation</a>
+<a href="ch7.html" class="active">Entraîner à grande échelle&nbsp;: recettes et scaling laws</a>
+<a href="ch8.html">Recherche reproductible&nbsp;: protocole expérimental</a>
+<a href="ch9.html">Multimodal et génératif&nbsp;: renvois</a>
+<a href="ch10.html">Travaux de l'équipe pédagogique</a>
+<a href="ch11.html">Projets&nbsp;: lire, expliquer, répliquer</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Entraîner à grande échelle&nbsp;: recettes et scaling laws</h2>
+
+<h3>7.1 La recette moderne</h3>
+<ul>
+  <li><strong>taux d'apprentissage</strong>&nbsp;: échauffement linéaire (quelques milliers
+  de pas — stabilise Adam et les normes&nbsp;; indispensable aux grands batchs)
+  puis décroissance cosinus&nbsp;; weight decay découplé (AdamW)&nbsp;;</li>
+  <li><strong>règle d'échelle linéaire</strong> (Goyal et al., 2017)&nbsp;: batch × \(k\)
+  ⇒ lr × \(k\) (valable tant que le batch reste «&nbsp;sous-horizon&nbsp;»&nbsp;; au-delà,
+  gains amortis — d'où LARS/LAMB qui normalisent le gradient par couche)&nbsp;;</li>
+  <li><strong>régularisation à l'échelle</strong>&nbsp;: label smoothing
+  \(\mathrm{CE}\) cible \((1-\varepsilon)\) sur la bonne classe et
+  \(\varepsilon/(K-1)\) ailleurs&nbsp;; stochastic depth&nbsp;; mixup/cutmix&nbsp;;</li>
+  <li><strong>précision mixte</strong>&nbsp;: bf16 (ou fp16 + loss scaling)&nbsp;— attention
+  aux réductions (sommes en fp32) et aux fonctions sensibles&nbsp;; le «&nbsp;zero&nbsp;»
+  du chapitre 8&nbsp;: une seule configuration matérielle ne se transpose pas à
+  l'identique&nbsp;;</li>
+  <li><strong>distribué minimal</strong>&nbsp;: data parallel (DDP)&nbsp;; au-delà,
+  sharding d'états/optimiseur (FSDP/ZeRO)&nbsp;; le module Emerging Subjects in ML
+  traite la SGD distribuée en profondeur.</li>
+</ul>
+
+<h3>7.2 Scaling laws — Kaplan puis Chinchilla</h3>
+<div class="def">
+  <span class="tag">Définition 7.1 — Loi de puissance de la loss</span>
+  Kaplan et al. (2020)&nbsp;: pour des transformers entraînés sur \(N\) paramètres
+  et \(D\) tokens, la loss test suit empiriquement
+  $$L(N, D) \approx E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}},$$
+  avec \(E &gt; 0\) irréductible et \(\alpha, \beta &gt; 0\) (autour de 0,3–0,5)&nbsp;;
+  valable sur plusieurs ordres de grandeur — le graphe le plus cité du deep
+  learning moderne.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.2 — Optimum compute-optimal (cas symétrique, esquisse de Chinchilla)</span>
+  À budget de calcul \(C \approx 6ND\) fixé, minimiser \(L\) mène à un point
+  \((N^*, D^*)\) où \(N^*\) et \(D^*\) croissent <strong>tous deux comme
+  \(\sqrt{C}\)</strong> — models et données doivent être agrandis <em>ensemble</em>, à
+  parts environ égales (tokens par paramètre \(\approx\) constante, ~20 dans le
+  papier).
+  <div class="proof">
+  (Cas \(\alpha = \beta\), à titre d'esquisse&nbsp;; le cas général est en
+  exercice.) On minimise \(A/N^\alpha + B/D^\beta\) sous la contrainte
+  \(ND = C/6\). Posons \(\mu = C/6\) et \(D = \mu/N\)&nbsp;:
+  \(F(N) = A N^{-\alpha} + B N^{\alpha}/\mu^{\alpha}\) (en utilisant \(\beta =
+  \alpha\)). \(F'(N) = -\alpha A N^{-\alpha-1} + \alpha B N^{\alpha-1}/\mu^{\alpha}
+  = 0\) donne \(N^{2\alpha} = A \mu^{\alpha} / B\), soit \(N^* = (A/B)^{1/2\alpha}
+  \mu^{1/2}\) — proportionnel à \(\mu^{1/2} \propto C^{1/2}\), et
+  \(D^* = \mu / N^* \propto \mu^{1/2} \propto C^{1/2}\). Chinchilla (Hoffmann
+  et al., 2022) estime \(\alpha \approx 0{,}34\), \(\beta \approx 0{,}28\) par
+  régression et confirme ~\(C^{0{,}5}\) — révélant que GPT-3 et consorts
+  étaient «&nbsp;trop gros pour leurs données&nbsp;»&nbsp;; à budget égal, 70 Md/1,4 T bat
+  280 Md/300 G. <span class="qed">∎</span>
+  </div>
+</div>
+
+<h3>7.3 MuP — transférer les hyperparamètres (esquisse)</h3>
+<p>Le problème pratique&nbsp;: la scaling law s'applique aux pertes, mais chaque
+taille de modèle exige <em>ses</em> hyperparamètres (lr surtout) — or on ne peut pas
+faire de grid search sur un modèle de 70 Md. <strong>µP (muParamétrisation)</strong>
+(Yang &amp; Hu — Tensor Programs IV–V)&nbsp;: une règle de paramétrisation des
+initialisations et du lr <em>par largeur</em> (couches cachées&nbsp;; multiplicateurs en
+\(d^{-1/2}\), \(d^{-1}\)…) sous laquelle le comportement d'entraînement devient
+<strong>indépendant de la largeur</strong>&nbsp;; on peut alors régler les hyperparamètres sur
+un petit modèle et <strong>les transférer à zéro essai</strong> au grand
+(muTransfer)&nbsp; — économies spectaculaires sur les very large runs. Nous en
+démontrons l'idée sur un MLP de largeur variable (exercice 9) et renvoyons au
+papier pour le programme complet.</p>
+
+<div class="note">
+  <span class="tag">Note — Lire une recette</span>
+  Un papier d'entraînement sérieux publie&nbsp;: config exacte (lr, schedule, wd,
+  batch, précision), graines et variabilités, budget FLOPs, matériel et durée,
+  et l'ablation qui justifie chaque ingrédient. C'est ce niveau de détail qui
+  permet la réplication — l'objet du chapitre suivant.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Architectures efficaces&nbsp;: MobileNet et la distillation</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Recherche reproductible&nbsp;: protocole expérimental</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Vision: From Fundamentals to Applications — Détection d'objets&nbsp;: les deux paradigmes — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Computer Vision: From Fundamentals to Applications</a> › Détection d'objets&nbsp;: les deux paradigmes</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">Brochure MSc&amp;T</span>Computer Vision: From Fundamentals to Applications</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: convolution, CNN, boîtes</a>
+<a href="ch1.html" class="active">Détection d'objets&nbsp;: les deux paradigmes</a>
+<a href="ch2.html">Évaluation (mAP) et détecteurs modernes</a>
+<a href="ch3.html">Segmentation&nbsp;: sémantique, instance, panoptique, SAM</a>
+<a href="ch4.html">Suivi multi-objets (tracking)</a>
+<a href="ch5.html">Vision 3D appliquée&nbsp;: stéréo et LiDAR</a>
+<a href="ch6.html">Données, benchmarks et annotation</a>
+<a href="ch7.html">Études de cas industrielles</a>
+<a href="ch8.html">Déploiement&nbsp;: ONNX, quantification, edge</a>
+<a href="ch9.html">Éthique, robustesse et limites</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Détection d'objets&nbsp;: les deux paradigmes</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Tâche de détection</span>
+  Étant donné une image \(x\), produire un ensemble
+  \(\{(b_i, c_i, s_i)\}_{i=1}^{N}\) où \(b_i\) est une boîte englobante,
+  \(c_i\) une classe parmi \(K\) classes et \(s_i \in [0,1]\) un score de confiance.
+  Contrairement à la classification (cf. module Deep Learning, chapitre 1), la sortie est
+  de cardinal variable&nbsp;: le nombre d'objets est inconnu et dépend du contenu de l'image.
+</div>
+
+<h3>1.1 La famille two-stage&nbsp;: proposer puis affiner</h3>
+<p>Les détecteurs dits <strong>à deux étapes</strong> (two-stage) séparent la génération de
+candidates et leur classification&nbsp;:</p>
+<ul>
+  <li><strong>R-CNN</strong> (2014)&nbsp;: ~2000 régions candidates extraites par
+  segmentation par grappes (selective search), chaque recadrement passe dans un CNN&nbsp;;
+  lent (des dizaines de secondes par image), mais la preuve de concept du CNN en
+  détection&nbsp;;</li>
+  <li><strong>Fast R-CNN</strong> (2015)&nbsp;: l'image entière passe une fois dans le CNN,
+  les candidates sont projetées dans l'espace des caractéristiques (RoI pooling)&nbsp;;
+  seul un classifieur léger est appliqué par candidate&nbsp;;</li>
+  <li><strong>Faster R-CNN</strong> (2015)&nbsp;: les candidates sont produites par un
+  <em>Region Proposal Network</em> (RPN) intégré, appris de bout en bout — le schéma
+  canonique&nbsp;;</li>
+  <li><strong>FPN</strong> (2017)&nbsp;: pyramide de caractéristiques&nbsp;; les objets
+  petits sont détectés sur les cartes de haute résolution, les grands sur les basses.</li>
+</ul>
+
+<div class="def">
+  <span class="tag">Définition 1.2 — Ancres (anchors)</span>
+  Pour chaque cellule d'une carte de caractéristiques, le RPN prédit des décalages par
+  rapport à un ensemble fixe de \(A\) rectangles de référence — les <strong>ancres</strong> —
+  produits par le produit cartésien de \(S\) échelles et \(R\) ratios d'aspect (typiquement
+  \(S = 5\), \(R = 3\), donc \(A = 15\) ancrages par position). La régression de boîte
+  encode
+  $$t_x = \frac{x - x_a}{w_a}, \quad t_y = \frac{y - y_a}{h_a}, \quad
+  t_w = \log\frac{w}{w_a}, \quad t_h = \log\frac{h}{h_a},$$
+  où \((x_a, y_a, w_a, h_a)\) sont centre et taille de l'ancre.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — Pourquoi le logarithme pour les tailles</span>
+  La paramétrisation logarithmique rend la régression <strong>invariante d'échelle</strong>&nbsp;:
+  un même décalage \(t_w\) correspond à un même rapport de tailles. Une erreur
+  \(|t_w| = \varepsilon\) signifie \(w = w_a e^{\pm\varepsilon}\), soit un taux d'erreur
+  relatif constant&nbsp;; avec une paramétrisation linéaire, la même erreur absolue serait
+  négligeable pour un camion (600&nbsp;px) et fatale pour un piéton lointain (10&nbsp;px).
+  <div class="proof">
+  Avec \(t_w = \log(w / w_a)\), on a \(w = w_a e^{t_w}\), donc l'erreur relative vaut
+  \(|e^{t_w} - 1| \approx |t_w|\) au premier ordre — indépendante de \(w_a\). En
+  paramétrisation directe \(\tilde t_w = w - w_a\), l'erreur relative
+  \(|\tilde t_w| / w_a\) dépend de \(w_a\)&nbsp;; fixer une échelle de bruit homogène pour
+  toutes les tailles d'objets exigerait une pondération par classe de taille, et la loss
+  serait dominée par les grands objets. <span class="qed">∎</span>
+  </div>
+</div>
+
+<h3>1.2 La famille single-stage&nbsp;: tout en une passe</h3>
+<p>Les détecteurs <strong>monostades</strong> (single-stage) prédisent directement boîtes et
+classes sur une grille dense, en une seule passe&nbsp;:</p>
+<ul>
+  <li><strong>YOLO</strong> (2015)&nbsp;: l'image est découpée en une grille
+  \(7 \times 7\)&nbsp;; chaque cellule prédit 2 boîtes + probabilités de classes&nbsp;;
+  vitesse remarquable (45 images/s à l'époque), au prix d'une localisation plus grossière&nbsp;;</li>
+  <li><strong>SSD</strong> (2016)&nbsp;: prédictions multi-échelles via des cartes de
+  caractéristiques de résolutions décroissantes, ancres par cellule&nbsp;;</li>
+  <li><strong>RetinaNet</strong> (2017)&nbsp;: introduit la <strong>focal loss</strong> pour
+  corriger le déséquilibre avant/arrière-plan (des centaines de milliers d'ancres faciles
+  contre quelques objets), réconciliant précision monostade et précision bistade.</li>
+</ul>
+
+<div class="def">
+  <span class="tag">Définition 1.4 — Focal loss</span>
+  Pour la classification binaire par ancre avec logit \(z\), probabilité prédite
+  \(p = \sigma(z)\) et étiquette \(y \in \{0, 1\}\)&nbsp;:
+  $$\mathrm{FL}(p) \;=\; -\alpha\,(1 - p_t)^{\gamma}\,\log(p_t), \qquad
+  p_t = y\,p + (1 - y)(1 - p),$$
+  avec facteur d'équilibrage \(\alpha \in [0,1]\) et <strong>focalisation</strong>
+  \(\gamma &gt; 0\) (typiquement \(\gamma = 2\)). Quand \(\gamma = 0\) et
+  \(\alpha = 0{,}5\), on retrouve l'entropie croisée.
+</div>
+
+<p>L'effet du facteur \((1 - p_t)^{\gamma}\) est de <strong>diviser la contribution des
+exemples faciles</strong>&nbsp;: une ancre d'arrière-plan classée à \(p_t = 0{,}9\) voit son
+loss réduit d'un facteur \(0{,}1^2 = 0{,}01\)&nbsp;; les rares exemples difficiles
+(\(p_t\) petit) gardent un gradient quasi intact. Le gradient devient
+\(\frac{\partial \mathrm{FL}}{\partial z} = -\alpha\,(1-p_t)^{\gamma}\big(\gamma\, p_t \log p_t + 1 - p_t\big)\,\frac{\partial p_t}{\partial z}\)&nbsp;:
+le module se concentre sur la frontière de décision.</p>
+
+<table class="tbl">
+  <tr><th>Critère</th><th>Two-stage (Faster R-CNN + FPN)</th><th>Single-stage (YOLO/SSD/RetinaNet)</th></tr>
+  <tr><td>Principe</td><td>propositions puis classification raffinée</td><td>prédiction dense en une passe</td></tr>
+  <tr><td>Précision (mAP COCO)</td><td>référence historique haute</td><td>comparable depuis RetinaNet et les YOLO récents</td></tr>
+  <tr><td>Latence</td><td>plus élevée (deux passes + RoI)</td><td>faible, adaptée temps réel</td></tr>
+  <tr><td>Petits objets</td><td>bons (FPN, RoI alignés)</td><td>sensibles à la résolution d'entrée</td></tr>
+  <tr><td>Cas d'usage</td><td>analyse hors ligne, imagerie médicale</td><td>embarqué, vidéo, robotique</td></tr>
+</table>
+
+<h3>1.3 Suppression des non-maxima (NMS)</h3>
+<p>Les détecteurs denses émettent de nombreuses boîtes redondantes autour d'un même objet.
+La <strong>NMS</strong> garde la boîte de score maximal et supprime celles qui la recouvrent
+trop&nbsp;:</p>
+<ol>
+  <li>trier les \(N\) détections par score décroissant&nbsp;;</li>
+  <li>prendre la première boîte \(b\), l'ajouter aux conservées&nbsp;;</li>
+  <li>supprimer toute boîte \(b'\) telle que \(\mathrm{IoU}(b, b') &gt; \tau\)
+  (typiquement \(\tau = 0{,}5\))&nbsp;;</li>
+  <li>reprendre en 2 avec les boîtes restantes, jusqu'à épuisement.</li>
+</ol>
+
+<pre class="code"><code>import numpy as np
+
+def nms(boxes, scores, tau=0.5):
+    """boxes: (N,4) [x1,y1,x2,y2] ; scores: (N,) ; retourne les indices conserves."""
+    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    areas = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
+    order = scores.argsort()[::-1]          # tri par score decroissant
+    keep = []
+    while order.size &gt; 0:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+        inter = np.maximum(0, xx2 - xx1) * np.maximum(0, yy2 - yy1)
+        iou = inter / (areas[i] + areas[order[1:]] - inter)
+        order = order[1:][iou &lt;= tau]       # on supprime les recouvrements
+    return np.array(keep)</code></pre>
+
+<div class="note">
+  <span class="tag">Note — Limites de la NMS gloutonne</span>
+  La NMS est <strong>greedy</strong>&nbsp;: en \(O(N^2)\) au pire, elle peut supprimer une
+  vraie détection qui chevauche un objet distinct (deux personnes se touchant, wagons
+  alignés). <strong>Soft-NMS</strong> (Bodla et al., 2017) remplace la suppression binaire
+  par une décroissance du score \(s_i \mapsto s_i \cdot f(\mathrm{IoU})\) — linéaire ou
+  gaussienne — ce qui laisse une seconde chance aux boîtes recouvrantes&nbsp;; la NMS
+  par classe doit être appliquée classe par classe, sauf variantes «&nbsp;class-agnostic&nbsp;».
+  Les détecteurs à prédiction d'ensemble du chapitre 2 remplacent la NMS par un
+  appariement global, différentiable.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Précédent</span> Rappels&nbsp;: convolution, CNN, boîtes</a><a class="next" href="ch2.html"><span class="dir">Suivant</span> Évaluation (mAP) et détecteurs modernes</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimization for AI — Optimisation des hyperparamètres — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Optimization for AI</a> › Optimisation des hyperparamètres</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_52067_EP</span>Optimization for AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: convexité et dualité</a>
+<a href="ch1.html">L'optimisation dans la boucle de l'IA</a>
+<a href="ch2.html">Descente de gradient&nbsp;: convergence démontrée</a>
+<a href="ch3.html">Conditionnement et accélération de Nesterov</a>
+<a href="ch4.html">Méthodes proximales&nbsp;: ISTA et FISTA</a>
+<a href="ch5.html">Descente de gradient stochastique</a>
+<a href="ch6.html">Réduction de variance&nbsp;: SAGA et SVRG</a>
+<a href="ch7.html">Newton et quasi-Newton</a>
+<a href="ch8.html">Contraintes en apprentissage</a>
+<a href="ch9.html" class="active">Optimisation des hyperparamètres</a>
+<a href="ch10.html">Optimiser l'entraînement des réseaux</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Optimisation des hyperparamètres</h2>
+
+<p>Le pas \(t\), la pénalité \(\lambda\), la taille du batch, le learning rate schedule&nbsp;:
+autant d'hyperparamètres que le module a jusqu'ici traités comme donnés. Or l'expérience
+montre qu'ils valent souvent plus de points de performance que le choix d'algorithme
+lui-même. Optimiser <em>l'optimiseur</em>.</p>
+
+<div class="def">
+  <span class="tag">Définition 9.1 — Le problème (et pourquoi il est dur)</span>
+  $$\max_{h \in \mathcal{H}}\; v(h), \qquad v(h) = \text{score de validation d'un modèle entraîné avec } h,$$
+  fonction <em>chère</em> (chaque évaluation = un entraînement), <em>bruitée</em>,
+  <em>non convexe</em>, sans gradient disponible. Typiquement 5 à 50 dimensions, budget
+  10 à 1&nbsp;000 évaluations. C'est le domaine de l'optimisation <em>sans dérivées</em>
+  bayésienne.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 9.2 — Grid vs random (Bergstra–Bengio, argument)</span>
+  À budget de \(B\) essais et \(p\) hyperparamètres «&nbsp;importants&nbsp;» parmi \(d\)&nbsp;:
+  la grille explore \(B^{1/d}\) valeurs par dimension, le tirage aléatoire en explore
+  \(B\) par dimension (mais une seule fois par tirage). Si seuls \(p \ll d\) paramètres
+  comptent vraiment, l'essai aléatoire atteint une bonne combinaison sur ces \(p\) avec
+  probabilité bien plus grande&nbsp;: en grille, toute case «&nbsp;bonne&nbsp;» sur les
+  \(p\) axes utiles est dupliquée sur les \(d-p\) axes inutiles — budget gâché.
+  <div class="proof">
+  Modèle&nbsp;: une cellule est «&nbsp;bonne&nbsp;» si ses coordonnées sur les \(p\) axes
+  utiles sont bonnes, probabilité \(q^p\) par tirage aléatoire (\(q\) = fraction de valeurs
+  bonnes par axe) — après \(B\) tirages, probabilité de n'en toucher aucune&nbsp;:
+  \((1-q^p)^B\). En grille régulière \(m = B^{1/d}\) valeurs par axe&nbsp;: le nombre de
+  combinaisons explorées sur les axes utiles est \(m^p = B^{p/d} \ll B\). Dès que
+  \(p &lt; d\), \(B^{p/d} &lt; B\) : la grille visite moins de régions utiles à budget
+  égal. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.3 — Optimisation bayésienne (GP-EI)</span>
+  (1) Modèle&nbsp;: \(v \sim \mathrm{GP}(0, k)\) sur \(\mathcal{H}\)&nbsp;; après \(k\)
+  évaluations, prédictions gaussiennes \((\mu_k(h), \sigma_k(h))\) en tout point.
+  (2) Acquisition <em>expected improvement</em>&nbsp;: avec \(v_k^\star = \max_j v(h_j)\),
+  $$\mathrm{EI}_k(h) = \mathbb{E}\big[(v(h) - v_k^\star)_+\big] = (\mu_k(h) - v_k^\star)\,\Phi(z_k(h)) + \sigma_k(h)\,\varphi(z_k(h)), \quad z_k = \frac{\mu_k - v_k^\star}{\sigma_k}.$$
+  (3) Boucle&nbsp;: évaluer \(h_{k+1} = \arg\max_h \mathrm{EI}_k(h)\), mettre à jour le GP.
+  La formule fermée montre la mécanique exploitation/exploration&nbsp;: \(\mathrm{EI}\)
+  grandit quand \(\mu\) dépasse le record (<em>exploiter</em>) et quand \(\sigma\) est
+  grand (<em>explorer</em>).
+</div>
+
+<div class="note">
+  <span class="tag">Multi-fidélité&nbsp;: Hyperband, le pragmatisme</span>
+  Quand l'évaluation a un «&nbsp;réglage de qualité&nbsp;» (epochs, sous-échantillon de
+  données), lancer beaucoup de configurations à bas prix puis ne poursuivre que les
+  prometteuses domine souvent le GP pur&nbsp;: c'est Successive Halving et Hyperband
+  (Li et al., 2017), omniprésent en pratique (optuna, ray&nbsp;tune). Le trio de
+  référence du praticien&nbsp;: random pour dégrossir, Hyperband pour creuser,
+  GP-EI pour les 5–10 paramètres vraiment sensibles.
+<pre class="code"><code>import numpy as np
+rng = np.random.default_rng(0)
+def train_score(lr, lam, epochs=30):          # proxy : modele lineaire reg
+    # ... entrainement reel remplace par une fonction rugueuse
+    peak = 0.92 - 0.4*np.abs(np.log10(lr) + 1.5) - 0.15*np.log10(1+lam)
+    return peak + 0.02*np.sin(10*lr) + 0.01*rng.standard_normal()
+
+best_grid = max(train_score(10**e, 10**-l)
+                for e in np.linspace(-4, -1, 8) for l in np.linspace(0, 3, 8))
+best_rand = max(train_score(10**rng.uniform(-4, -1), 10**-rng.uniform(0, 3))
+                for _ in range(64))           # meme budget : 64 essais
+print("grid:", round(best_grid, 4), "random:", round(best_rand, 4))
+# sur ce type de paysage (rares parametres sensibles), random gagne presque toujours</code></pre>
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> Contraintes en apprentissage</a><a class="next" href="ch10.html"><span class="dir">Suivant</span> Optimiser l'entraînement des réseaux</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Boosting to Foundation Models: learning with Tabular Data — Pourquoi les GBDT dominent (encore) le tabulaire — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">From Boosting to Foundation Models: learning with Tabular Data</a> › Pourquoi les GBDT dominent (encore) le tabulaire</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P1 (brochure)</span>From Boosting to Foundation Models: learning with Tabular Data</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: arbres, forêts, boosting</a>
+<a href="ch1.html" class="active">Pourquoi les GBDT dominent (encore) le tabulaire</a>
+<a href="ch2.html">Boosting&nbsp;: descente de gradient fonctionnelle</a>
+<a href="ch3.html">XGBoost, LightGBM, CatBoost&nbsp;: trois ingénieries</a>
+<a href="ch4.html">Encoder les colonnes&nbsp;: catégorielles et numériques</a>
+<a href="ch5.html">Deep tabular&nbsp;: MLP régularisés et FT-Transformer</a>
+<a href="ch6.html">TabPFN&nbsp;: apprendre les tables in-context</a>
+<a href="ch7.html">LLMs et tables&nbsp;: sérialisation, text-to-SQL</a>
+<a href="ch8.html">Données synthétiques tabulaires</a>
+<a href="ch9.html">Benchmarking honnête</a>
+<a href="ch10.html">Choisir sa méthode&nbsp;: guide et questions ouvertes</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Pourquoi les GBDT dominent (encore) le tabulaire</h2>
+
+<p>Les images, le texte, la parole, les graphes ont été conquis par les réseaux profonds. Les
+tables — qui restent le format majoritaire des données d'entreprise (CRM, capteurs, finance,
+santé, logs) — résistent. Ce constat a été établi avec rigueur par trois grandes études
+empiriques, qui servent de fil conducteur au module.</p>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — GBDT (rappel étendu)</span>
+  Un <strong>gradient boosted decision tree</strong> est un additif
+  $$ F_M(x) = \sum_{m=1}^{M} \eta\, h_m(x), $$
+  où chaque \(h_m\) est un arbre de régression peu profond ajusté sur le négatif du gradient de
+  la perte par rapport à la prédiction courante (ch. 2). Les hyperparamètres structurants&nbsp;:
+  nombre d'arbres \(M\), taux d'apprentissage \(\eta\), profondeur maximale (≈ ordre
+  d'interaction), taux de sous-échantillonnage (lignes/colonnes), régularisation des feuilles.
+</div>
+
+<div class="thm">
+  <span class="tag">Étude 1.2 — Grinsztajn, Oyallon &amp; Varoquaux (NeurIPS 2022)</span>
+  «&nbsp;<em>Why do tree-based models still outperform deep learning on typical tabular
+  data?</em>&nbsp;»&nbsp;: sur des dizaines de jeux OpenML de taille moyenne (jusqu'à
+  \(\sim\!10\,000\) lignes, regression et classification), les modèles à base d'arbres
+  (XGBoost, GBDT scikit-learn) battent systématiquement les réseaux profonds tabulaires, même
+  après un tuning raisonnable. L'article isole deux causes mécanistiques&nbsp;:
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li>les réseaux sont <strong>sensibles aux features non informatives</strong>&nbsp;: en
+    retirer un maximum aide les réseaux bien plus que les arbres, qui «&nbsp;isolent&nbsp;»
+    naturellement les colonnes utiles (un arbre peut simplement ne jamais splitter sur une
+    colonne inutile)&nbsp;;</li>
+    <li>les réseaux peinent sur les <strong>fonctions cibles irrégulières</strong>&nbsp;: ni
+    lisses, ni monotones, avec des «&nbsp;marches&nbsp;» et des interactions locales — terrain
+    naturel des coupes par seuil.</li>
+  </ul>
+  Une expérience de <strong>rotation aléatoire</strong> des colonnes confirme le diagnostic&nbsp;:
+  après rotation, les arbres se dégradent nettement (leurs coupes alignées sur les axes perdent
+  leur sens) alors que les réseaux — invariants par rotation par construction — s'en sortent
+  mieux&nbsp;: la structure <em>alignée sur les axes</em> des tables réelles est une information
+  que les arbres exploitent et que les MLP ignorent.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — Les arbres sont invariants par transformation monotone des colonnes</span>
+  Soit \(h\) un arbre et, pour chaque colonne \(j\), \(g_j : \mathbb{R} \to \mathbb{R}\) une
+  fonction strictement croissante. Si \(\tilde{x}_j = g_j(x_j)\), alors l'arbre entraîné sur les
+  données transformées induit <em>la même partition</em> de l'espace (aux seuils près) et fait les
+  mêmes prédictions. En particulier&nbsp;: log-transformer, whitener ou écrêter une colonne
+  asymétrique ne change (presque) rien pour un GBDT.
+  <div class="proof">
+  Une coupe \(x_j \leq t\) partitionne les exemples en \(\{i : x_{ij} \leq t\}\) et son
+  complément. Comme \(g_j\) est strictement croissante, \(x_{ij} \leq t \iff
+  g_j(x_{ij}) \leq g_j(t)\)&nbsp;: toute coupe sur \(x_j\) est une coupe sur \(\tilde{x}_j\), avec
+  le seuil image \(g_j(t)\). Par récurrence sur la profondeur, les partitions coïncident, donc les
+  feuilles reçoivent les mêmes exemples et les prédictions (moyennes/majorités de feuille) sont
+  identiques.&nbsp;<span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi cette proposition compte</span> Elle explique un résultat empirique
+  robuste&nbsp;: les GBDT gagnent surtout quand les features ont des distributions
+  <em>asymétriques, lourdes, multimodales</em> — précisément les cas où un réseau, qui ajoute et
+  multiplie des activations, souffre d'échelles et de queues de distribution, alors qu'un arbre ne
+  regarde que l'ordre des valeurs. McElfresh et al. (TabZilla, NeurIPS 2023&nbsp;:
+  <em>When do neural nets outperform boosted trees on tabular data?</em>) le quantifie sur
+  176 jeux et 19 algorithmes&nbsp;: les GBDT dominent sur les features asymétriques/à queues
+  lourdes, et le facteur le plus déterminant de performance n'est pas la famille de modèle mais
+  le <strong>budget de tuning</strong> — «&nbsp;tuner légèrement un GBDT compte plus que choisir
+  entre GBDT et réseau&nbsp;».
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 1.4 — Le débat 2021-2023 en trois études</span>
+  (i)&nbsp;Shwartz-Ziv &amp; Armon (<em>Tabular data: Deep learning is not all you need</em>,
+  Information Fusion 2022)&nbsp;: XGBoost bat les modèles profonds sur la plupart de leurs jeux,
+  et le tuning ne referme pas l'écart&nbsp;; ensembles GBDT+réseau = meilleur des deux.
+  (ii)&nbsp;Grinsztajn et al. (2022)&nbsp;: l'écart est réel sur les tailles moyennes et tient
+  aux biais inductifs (étude 1.2). (iii)&nbsp;McElfresh et al. (2023)&nbsp;: sur le plus grand
+  benchmark disponible, aucune famille ne domine partout&nbsp;; un <em>hybride</em> simple
+  (moyenne GBDT + MLP tunés légèrement) est le meilleur «&nbsp;par défaut&nbsp;». Morale&nbsp;:
+  la question n'est pas «&nbsp;qui est le meilleur&nbsp;» mais «&nbsp;dans quel régime&nbsp;» —
+  c'est l'objet du ch. 10.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Précédent</span> Rappels&nbsp;: arbres, forêts, boosting</a><a class="next" href="ch2.html"><span class="dir">Suivant</span> Boosting&nbsp;: descente de gradient fonctionnelle</a></nav>
+</main>
+</div>
+
+</body>
+</html>

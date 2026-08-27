@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real-time AI in Video Games: decisive &amp; collaborative actions — Navigation&nbsp;: grilles, navmesh, A* — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Real-time AI in Video Games: decisive &amp; collaborative actions</a> › Navigation&nbsp;: grilles, navmesh, A*</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">Brochure MSc&amp;T</span>Real-time AI in Video Games: decisive &amp; collaborative actions</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: graphes, files de priorité, probas</a>
+<a href="ch1.html">La boucle de jeu et le budget temps réel</a>
+<a href="ch2.html" class="active">Navigation&nbsp;: grilles, navmesh, A*</a>
+<a href="ch3.html">Comportements&nbsp;: machines à états, behavior trees, utility</a>
+<a href="ch4.html">Décisions collectives&nbsp;: steering, boids, formations</a>
+<a href="ch5.html">Monte-Carlo Tree Search&nbsp;: décider en quelques ms</a>
+<a href="ch6.html">Agents appris&nbsp;: RL et self-play dans les jeux</a>
+<a href="ch7.html">Jeux coopératifs et multi-agents</a>
+<a href="ch8.html">NPCs conversationnels (LLM) et anti-triche</a>
+<a href="ch9.html">Performance, profiling et budgets</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Navigation&nbsp;: grilles, navmesh, A*</h2>
+
+<h3>2.1 Représenter l'espace navigable</h3>
+<table class="tbl">
+  <tr><th>Représentation</th><th>Principe</th><th>Avantages</th><th>Inconvénients</th></tr>
+  <tr><td>Waypoints (graphe)</td><td>sommets posés à la main, arêtes franchissables</td><td>léger, lisible</td><td>manuel, chemins anguleux</td></tr>
+  <tr><td>Grille</td><td>cellules libres/occupées (2D ou 3D)</td><td>automatique, exacte pour la volumétrie</td><td>memory \(W \times H\), chemins en escalier</td></tr>
+  <tr><td>Navmesh</td><td>maillage de polygones convexes couvrant le sol navigable</td><td>compact, chemins naturels, standard industrie</td><td>génération plus délicate (recast)</td></tr>
+</table>
+<p>Le <strong>navmesh</strong> est le standard industriel&nbsp;: on y cherche un chemin de
+polygone à polygone (graphe de visibilité entre centres / bords partagés), puis on le
+lisse (<em>funnel algorithm</em> pour couper les coins). La génération automatique par
+voxelisation + régions navigables est popularisée par la bibliothèque open source
+<strong>Recast/Detour</strong> (Mikko Mononen), intégrée à la plupart des moteurs.</p>
+
+<h3>2.2 A* avec heuristique admissible</h3>
+<div class="recap">
+  <div class="recap-title">Rappel (Refresher CS, chapitre 5) — A*</div>
+  A* développe les nœuds par coût croissant \(f(n) = g(n) + h(n)\), où \(g(n)\) est le
+  coût déjà payé du départ à \(n\) et \(h(n)\) une <strong>heuristique</strong> estimant le
+  reste&nbsp;; l'open set est une file de priorité. Cas particuliers&nbsp;: \(h = 0\)
+  → Dijkstra&nbsp;; \(h\) exacte → développement direct du chemin optimal.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.1 — Admissibilité ⇒ optimalité</span>
+  Si pour tout nœud \(n\), \(h(n) \leq h^*(n)\) (coût optimal réel de \(n\) au but),
+  alors A* retourne un chemin de coût minimal.
+  <div class="proof">
+  Par l'absurde&nbsp;: supposons A* termine en déployant un but \(b\) de coût
+  \(g(b) &gt; C^*\) (coût optimal). Sur le chemin optimal, il existe un nœud frontalière
+  \(n\) (non encore développé)&nbsp;; à l'extraction de \(b\)&nbsp;:
+  \(f(b) = g(b) &gt; C^*\), tandis que
+  \(f(n) = g(n) + h(n) \leq g^*(n) + h^*(n) = C^*\) (car \(g(n)\) vaut au plus le coût
+  optimal jusqu'à \(n\), et \(h\) sous-estime le reste)&nbsp;; donc \(f(n) &lt; f(b)\)&nbsp;:
+  la file de priorité aurait extrait \(n\) avant \(b\) — contradiction.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.2 — Heuristiques sur grilles 4/8-connexes</span>
+  Déplacements à coût 1 (4-connexité)&nbsp;: \(h = |dx| + |dy|\) (Manhattan) est
+  admissible — c'est exactement la longueur minimale sans obstacles. En
+  8-connexité avec diagonales de coût \(\sqrt2\)&nbsp;: l'heuristique
+  «&nbsp;octile&nbsp;»
+  $$h = \sqrt2 \cdot \min(|dx|, |dy|) + \big(\max(|dx|,|dy|) - \min(|dx|,|dy|)\big)$$
+  est admissible (elle suppose la route dégagée en diagonale puis en ligne)&nbsp;;
+  l'Euclidienne \(\sqrt{dx^2 + dy^2}\) l'est aussi mais exploration plus large&nbsp;;
+  Manhattan ne l'est <em>plus</em> en 8-connexité (elle surestime les chemins diagonaux).
+  Une heuristique <em>cohérente</em> (\(h(n) \leq c(n, n') + h(n')\) le long de chaque
+  arête) évite en outre les ré-ouvertures de nœuds.
+</div>
+
+<pre class="code"><code>import heapq
+
+def a_star(grille, depart, but):          # grille: dict {(x,y): cout}, ou None = mur
+    def h(p):                              # heuristique octile
+        dx, dy = abs(p[0]-but[0]), abs(p[1]-but[1])
+        return 1.4142*min(dx, dy) + (max(dx, dy) - min(dx, dy))
+    open_, g = [(h(depart), 0.0, depart)], {depart: 0.0}
+    came = {}
+    while open_:
+        f, g_n, n = heapq.heappop(open_)
+        if n == but:                       # reconstruction du chemin
+            path = [n]
+            while n in came: n = came[n]; path.append(n)
+            return path[::-1]
+        if g_n &gt; g.get(n, float("inf")):   # entree perimee : ignorer
+            continue
+        for dx, dy, c in ((1,0,1.0),(-1,0,1.0),(0,1,1.0),(0,-1,1.0),
+                          (1,1,1.4142),(1,-1,1.4142),(-1,1,1.4142),(-1,-1,1.4142)):
+            v = (n[0]+dx, n[1]+dy)
+            if v not in grille: continue   # mur / hors carte
+            nv = g_n + c * grille[v]       # terrain : foret = 2.0, etc.
+            if nv &lt; g.get(v, float("inf")):
+                g[v] = nv; came[v] = n
+                heapq.heappush(open_, (nv + h(v), nv, v))
+    return None                            # inaccessible</code></pre>
+
+<h3>2.3 À l'échelle&nbsp;: hiérarchies et amortissement</h3>
+<ul>
+  <li><strong>HPA*</strong> (2004)&nbsp;: découper la carte en clusters, précalculer les
+  chemins aux frontières, chercher dans le graphe abstrait puis raffiner localement —
+  des gains d'ordres de grandeur pour un chemin quasi optimal&nbsp;;</li>
+  <li><strong>chemins asynchrones</strong>&nbsp;: la requête passe dans une file traitée à
+  budget fixe par frame (N nœuds développés/frame)&nbsp;; le NPC suit son ancien chemin
+  en attendant — d'où l'importance du comportement «&nbsp;tout droit&nbsp;» de secours&nbsp;;</li>
+  <li><strong>évitement local</strong>&nbsp;: le chemin global ne gère pas les collisions
+  NPC-NPC&nbsp;; les modèles <strong>RVO/ORCA</strong> (velocity obstacles) calculent une
+  vitesse sans collision à l'horizon d'une seconde — la couche locale, appliquée chaque
+  frame, s'appuie sur le chemin global comme rail&nbsp;;</li>
+  <li><strong>foules</strong>&nbsp;: au-delà de quelques centaines d'agents, simulations
+  de flux continus (grille de densité) plutôt que d'individus — cf. chapitre 9 pour le
+  budget.</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Note — Trois couches à ne pas confondre</span>
+  (1) <strong>chemin global</strong> (A* / navmesh, quelques Hz)&nbsp;; (2) <strong>suivi +
+  évitement local</strong> (RVO/steering, chaque frame)&nbsp;; (3) <strong>animation</strong>
+  (moteur de rendu). Une IA de jeu «&nbsp;qui marche mal&nbsp;» est presque toujours un
+  problème de contrat entre ces couches (chemin trop près d'un mur, évitement qui
+  contredit le chemin…), pas de l'algorithme de chemin lui-même.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> La boucle de jeu et le budget temps réel</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Comportements&nbsp;: machines à états, behavior trees, utility</a></nav>
+</main>
+</div>
+
+</body>
+</html>

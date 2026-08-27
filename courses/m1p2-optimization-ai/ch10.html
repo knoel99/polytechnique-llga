@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimization for AI — Optimiser l'entraînement des réseaux — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Optimization for AI</a> › Optimiser l'entraînement des réseaux</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_52067_EP</span>Optimization for AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: convexité et dualité</a>
+<a href="ch1.html">L'optimisation dans la boucle de l'IA</a>
+<a href="ch2.html">Descente de gradient&nbsp;: convergence démontrée</a>
+<a href="ch3.html">Conditionnement et accélération de Nesterov</a>
+<a href="ch4.html">Méthodes proximales&nbsp;: ISTA et FISTA</a>
+<a href="ch5.html">Descente de gradient stochastique</a>
+<a href="ch6.html">Réduction de variance&nbsp;: SAGA et SVRG</a>
+<a href="ch7.html">Newton et quasi-Newton</a>
+<a href="ch8.html">Contraintes en apprentissage</a>
+<a href="ch9.html">Optimisation des hyperparamètres</a>
+<a href="ch10.html" class="active">Optimiser l'entraînement des réseaux</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch10">
+<h2>10. Optimiser l'entraînement des réseaux</h2>
+
+<p>Le grand écart&nbsp;: tout ce module est convexe, l'entraînement d'un réseau ne l'est
+pas. Pourtant les recettes du deep learning sont littéralement les objets des chapitres
+précédents, transplantés — avec des adaptations que la non-convexité exige.</p>
+
+<div class="note">
+  <span class="tag">Ce qui survit, ce qui casse</span>
+  <table class="tbl">
+  <thead><tr><th>Objet du module (convexe)</th><th>Transplant deep learning</th><th>Statut</th></tr></thead>
+  <tbody>
+  <tr><td>descente de gradient (ch. 2)</td><td>backprop + SGD (cf. Deep Learning, ch. 2–3)</td><td>marche&nbsp;; pas de garantie globale</td></tr>
+  <tr><td>momentum/Nesterov (ch. 3)</td><td>SGD+momentum 0,9</td><td>empiriquement&nbsp;: oui, gros gains</td></tr>
+  <tr><td>taux \(\kappa\), convergence linéaire (ch. 2–3)</td><td>paysage non convexe&nbsp;: plateaux, cols, vallées</td><td>remplacé par heuristiques (warmup, cosine)</td></tr>
+  <tr><td>proximal/ISTA (ch. 4)</td><td>weight decay, régularisation structurée</td><td>analogue exact pour \(\ell_2\) (AdamW)</td></tr>
+  <tr><td>SGD&nbsp;: variance (ch. 5)</td><td>batch size, grad clipping</td><td>analogie forte, théorie partielle</td></tr>
+  <tr><td>hyperparamètres (ch. 9)</td><td>learning rate = l'hyperparamètre n°1</td><td>identique</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 10.1 — Adam, relu et démonté (renvoi&nbsp;: module Deep Learning, ch. 3)</span>
+  Adam (Kingma–Ba, 2015) accumule deux moments exponentiels du gradient stochastique
+  \(g_k\)&nbsp;: \(m_k = \beta_1 m_{k-1} + (1-\beta_1)g_k\),
+  \(v_k = \beta_2 v_{k-1} + (1-\beta_2)g_k^2\), et met à jour
+  \(x_{k+1} = x_k - \eta\, \hat m_k / (\sqrt{\hat v_k} + \varepsilon)\).
+  Lecture «&nbsp;module&nbsp;»&nbsp;: \(m_k\) est du Nesterov-heavy-ball (ch. 3)&nbsp;;
+  \(1/\sqrt{v_k}\) est un pas <em>par coordonnée</em> adapté à la variance observée
+  (ch. 5&nbsp;: la contrer)&nbsp;; le bias-correction \(\hat\cdot\) règle l'initialisation.
+  AdamW (Loshchilov–Hutter, 2019) corrige l'interaction poids-décay — le weight decay
+  n'est <em>pas</em> un terme additif du gradient, mais un pas proximal (ch. 4) sur
+  \(\tfrac{\lambda}{2}\|x\|^2\)&nbsp;: la différence change les trajectoires.
+</div>
+
+<div class="note">
+  <span class="tag">Learning rate schedule&nbsp;: warmup, cosine, gros batch</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><strong>Warmup</strong>&nbsp;: aux premières itérations, les moments \(v_k\) sont mal
+  estimés et les activations des réseaux profonds mal calibrées (variance qui explose avec
+  la profondeur — cf. Deep Learning, ch. 1)&nbsp;; monter \(\eta\) linéairement sur
+  0,5–2&nbsp;% du budget évite les premiers pas destructeurs.</li>
+  <li><strong>Cosine / décroissance par paliers</strong>&nbsp;: réduire \(\eta\) en fin
+  d'entraînement comprime le voisinage \(O(\eta\sigma^2)\) du théorème 5.2 — c'est
+  exactement la logique Robbins–Monro, en version pratique.</li>
+  <li><strong>Gros batch</strong>&nbsp;: à batch multiplié par \(k\), variance
+  \(\sigma^2/k\), mais moins de pas par epoch&nbsp;; la «&nbsp;règle linéaire&nbsp;»
+  (\(\eta \to k\eta\)) échoue au-delà d'un seuil&nbsp;; LARS/LAMB (You et al., 2017–2020)
+  normalisent le pas par la norme poids/gradient par couche — heuristique, mais celle qui
+  a entraîné BERT et les LLMs.</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 10.2 — Pourquoi ça marche quand même (vue d'ensemble)</span>
+  Trois amortisseurs expliquent que la non-convexité ne soit pas rédhibitoire&nbsp;:
+  (i) <em>surparamétrage</em>&nbsp;: avec plus de paramètres que de contraintes, les
+  minimiseurs locaux deviennent rares — tous connectés et de valeur proche&nbsp;;
+  (ii) <em>inégalité PL locale</em>&nbsp;: le long des trajectoires, un analogue de la
+  condition de Polyak–Łojasiewicz (ch. 2) tient souvent empiriquement, ce qui redonne une
+  convergence linéaire locale «&nbsp;comme si&nbsp;»&nbsp;; (iii) <em>bruit du SGD</em>&nbsp;:
+  le régime stationnaire (prop. 5.3) balaie les cols étroits et sélectionne des minima
+  plats qui généralisent mieux. Aucun des trois n'est un théorème général — c'est
+  précisément la frontière de recherche du domaine (et l'angle d'attaque du module
+  Deep Learning P2 pour la partie efficacité, cf. module Deep Learning P2, ch. 2).
+</div>
+
+<div class="note">
+  <span class="tag">Fiche réflexe de l'ingénieur</span>
+  Diagnostic d'un entraînement qui diverge&nbsp;: (1) trop grand \(\eta\) — diviser par 10
+  (th. 5.2&nbsp;: le voisinage croît en \(\eta\sigma^2\))&nbsp;; (2) pas de warmup&nbsp;;
+  (3) initialization/normalisation défaillantes (renvoi Deep Learning, ch. 1)&nbsp;;
+  (4) gradient qui explose — clipping (\(\|g\| \mapsto \min(1, c/\|g\|)\|g\|\), une
+  projection du ch. 8 sur une boule). Un entraînement «&nbsp;plat&nbsp;»&nbsp;: pas trop
+  petit, batch trop grand, ou momentum manquant. Ces réflexes <em>sont</em> les
+  chapitres 2, 3 et 5.
+</div>
+</section>
+<nav class="pager"><a href="ch9.html"><span class="dir">← Précédent</span> Optimisation des hyperparamètres</a><a class="next" href="ch11.html"><span class="dir">Suivant</span> Travaux de l'équipe pédagogique</a></nav>
+</main>
+</div>
+
+</body>
+</html>

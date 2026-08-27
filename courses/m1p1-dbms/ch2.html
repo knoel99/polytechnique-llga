@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — SQL&nbsp;: requêtes, agrégats, fenêtrage — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">DataBase Management System</a> › SQL&nbsp;: requêtes, agrégats, fenêtrage</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51053_EP</span>DataBase Management System</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: ensembles, relations, complexité</a>
+<a href="ch1.html">Le modèle relationnel et l'algèbre</a>
+<a href="ch2.html" class="active">SQL&nbsp;: requêtes, agrégats, fenêtrage</a>
+<a href="ch3.html">Conception&nbsp;: dépendances et formes normales</a>
+<a href="ch4.html">Stockage&nbsp;: pages, fichiers, tri externe</a>
+<a href="ch5.html">Index&nbsp;: arbres B+ et hachage</a>
+<a href="ch6.html">Transactions et concurrence</a>
+<a href="ch7.html">Journal et reprise sur panne</a>
+<a href="ch8.html">Optimisation de requêtes</a>
+<a href="ch9.html">Au-delà du relationnel&nbsp;: NoSQL, graphes, vecteurs</a>
+<a href="ch10.html">Données du web et intégration hétérogène</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. SQL&nbsp;: requêtes, agrégats, fenêtrage</h2>
+
+<p>SQL est un langage <em>déclaratif</em>&nbsp;: on décrit le résultat, pas l'algorithme.
+Sa sémantique logique se comprend en trois temps, qu'il faut connaître pour prédire ce
+qu'une requête renvoie — et que tout optimiseur réécrit à sa manière (ch. 8)&nbsp;:
+le <code>FROM</code> produit le produit cartésien/jointures, le <code>WHERE</code>
+sélectionne ligne à ligne, puis le <code>GROUP BY</code> + <code>SELECT</code>
+regroupent, agrègent et projettent.</p>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Sémantique du bloc de base</span>
+  La requête <code>SELECT [DISTINCT] L FROM R1, …, Rk WHERE p</code> renvoie
+  $$\pi_L\big(\sigma_p(R_1 \times \cdots \times R_k)\big)$$
+  (multiensemble si <code>DISTINCT</code> est absent, ensemble sinon). Une
+  <strong>sous-requête</strong> est une requête imbriquée&nbsp;; <code>IN</code> et
+  <code>EXISTS</code> correspondent à des semi-jointures&nbsp;:
+  <code>WHERE EXISTS (SELECT …)</code> teste la non-vide-té de la réponse, ce qui
+  permet notamment d'exprimer des différences avec <code>NOT EXISTS</code>.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — Traduction des quantificateurs</span>
+  «&nbsp;Les \(x\) tels que \(\forall y \in S,\; \theta(x,y)\)&nbsp;» se traduit en SQL par
+  anti-jointure&nbsp;:
+  <code>… WHERE NOT EXISTS (SELECT 1 FROM S WHERE NOT θ)</code>.
+  «&nbsp;Il existe&nbsp;» est un simple <code>EXISTS</code>. Cette double négation est
+  l'héritage direct du fait que SQL n'a pas de quantificateur universel — et de la
+  propriété 1.7&nbsp;: la division du ch. 1 n'existe pas comme opérateur, elle se
+  programme.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.3 — Agrégats et clause HAVING</span>
+  Une requête avec <code>GROUP BY g</code> partitionne les lignes sélectionnées selon
+  les valeurs de \(g\), et chaque groupe produit <em>une</em> ligne&nbsp;: le
+  <code>SELECT</code> ne peut plus mentionner que \(g\) et des agrégats. La clause
+  <code>HAVING</code> filtre <em>les groupes</em> (après agrégation), là où
+  <code>WHERE</code> filtre les lignes (avant)&nbsp;: $$\pi_{g,f}\big({}_g\gamma_f(
+  \sigma_p(R))\big) \;=\; \texttt{SELECT g, f(a) … WHERE p GROUP BY g HAVING q(f)}.$$
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.4 — Fenêtrage (window functions)</span>
+  Les fonctions de fenêtre calculent un agrégat <em>sans regrouper</em>&nbsp;: chaque
+  ligne garde son identité et reçoit en plus la valeur calculée sur sa «&nbsp;fenêtre&nbsp;»
+  (toutes les lignes partageant sa partition, éventuellement ordonnées). Sur&nbsp;:
+  <table class="tbl">
+    <tr><th>etu</th><th>matière</th><th>note</th></tr>
+    <tr><td>Anna</td><td>ALG</td><td>16</td></tr>
+    <tr><td>Anna</td><td>PROG</td><td>14</td></tr>
+    <tr><td>Anna</td><td>STATS</td><td>12</td></tr>
+    <tr><td>Bruno</td><td>PROG</td><td>18</td></tr>
+    <tr><td>Chloé</td><td>ALG</td><td>15</td></tr>
+    <tr><td>Chloé</td><td>PROG</td><td>17</td></tr>
+  </table>
+  la requête <code>SELECT etu, note,
+  ROW_NUMBER() OVER (PARTITION BY etu ORDER BY note DESC) AS rang_perso,
+  AVG(note) OVER (PARTITION BY etu) AS moyenne,
+  RANK()       OVER (ORDER BY note DESC)        AS rang_global
+  FROM Notes</code> renvoie&nbsp;:
+  <table class="tbl">
+    <tr><th>etu</th><th>note</th><th>rang_perso</th><th>moyenne</th><th>rang_global</th></tr>
+    <tr><td>Anna</td><td>16</td><td>1</td><td>14,0</td><td>3</td></tr>
+    <tr><td>Anna</td><td>14</td><td>2</td><td>14,0</td><td>5</td></tr>
+    <tr><td>Anna</td><td>12</td><td>3</td><td>14,0</td><td>6</td></tr>
+    <tr><td>Bruno</td><td>18</td><td>1</td><td>18,0</td><td>1</td></tr>
+    <tr><td>Chloé</td><td>17</td><td>1</td><td>16,0</td><td>2</td></tr>
+    <tr><td>Chloé</td><td>15</td><td>2</td><td>16,0</td><td>4</td></tr>
+  </table>
+  Noter le comportement de <code>RANK()</code> (ex æquo = même rang, rang suivant
+  décalé&nbsp;: après deux 5 il y aurait un 7) et la différence partition/globale. Les
+  fenêtres, normalisées en 2003, sont aujourd'hui l'outil standard du top-\(k\) par
+  groupe, des cumuls (running sums via <code>ROWS BETWEEN UNBOUNDED PRECEDING AND
+  CURRENT ROW</code>) et des comparaisons inter-périodes.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.5 — NULL et logique trivaluée</span>
+  SQL distingue «&nbsp;valeur inconnue&nbsp;» (<code>NULL</code>) des valeurs réelles.
+  Toute comparaison avec <code>NULL</code> renvoie <code>UNKNOWN</code>, et
+  <code>WHERE</code> ne garde que les lignes <code>TRUE</code> — les
+  <code>UNKNOWN</code> sont éliminés silencieusement. Les tables de vérité s'étendent
+  naturellement&nbsp;:
+  <table class="tbl">
+    <tr><th>ET</th><th>T</th><th>U</th><th>F</th></tr>
+    <tr><td>T</td><td>T</td><td>U</td><td>F</td></tr>
+    <tr><td>U</td><td>U</td><td>U</td><td>F</td></tr>
+    <tr><td>F</td><td>F</td><td>F</td><td>F</td></tr>
+  </table>
+  Conséquence piège&nbsp;: <code>NOT (a = 1)</code> n'est pas <code>a != 1</code> si
+  <code>a</code> peut être <code>NULL</code>&nbsp;; il faut <code>a IS DISTINCT FROM 1</code>
+  (SQL&nbsp;:1999) ou un <code>OR a IS NULL</code> explicite. Les agrégats ignorent les
+  <code>NULL</code> (<code>AVG</code> divise par le nombre de non-<code>NULL</code>),
+  et <code>COUNT(*)</code> les compte — deux <code>COUNT</code> qui diffèrent sont le
+  symptôme classique de données incomplètes.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.6 — Récursion&nbsp;: WITH RECURSIVE</span>
+  SQL&nbsp;:1999 a comblé la limite du théorème 1.7&nbsp;: une CTE récursive
+  <code>WITH RECURSIVE T AS (base UNION ALL SELECT … FROM T …)</code> calcule le
+  <em>plus petit point fixe</em> de l'équation&nbsp;: on part de la requête
+  <code>base</code>, on itère la partie récursive jusqu'à ne plus produire de nouveaux
+  tuples. C'est exactement une fermeture transitive&nbsp;: les SGBD en font un
+  graphe-de-données semi-naïf (réécriture «&nbsp;delta&nbsp;» qui ne réévalue que les
+  tuples nouveaux), et le ch. 9 retrouvera cette sémantique de point fixe pour
+  interroger les graphes de connaissances.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.7 — Ancêtres dans un arbre en SQLite</span>
+<pre class="code"><code>-- graphe orienté parent(y, x) : y est parent de x
+WITH RECURSIVE ancetre(a, d) AS (          -- a ancêtre de d
+  SELECT parent, enfant FROM parent
+  UNION                                    -- UNION (sans ALL) = dédupliqué
+  SELECT p.parent, a.d
+  FROM ancetre a JOIN parent p ON p.enfant = a.a
+)
+SELECT d, COUNT(DISTINCT a) AS nb_ancetres FROM ancetre GROUP BY d;
+-- sémantique : point fixe ; à chaque itération, on ne développe
+-- que les tuples produits à l'itération précédente (évaluation semi-naïve).
+</code></pre>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.8 — SQLite et SQLAlchemy en Python</span>
+<pre class="code"><code>import sqlite3
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, ForeignKey, select
+
+# --- 1. SQLite : tout est dans un fichier, transactions ACID incluses
+con = sqlite3.connect("scolarite.db")
+con.execute("PRAGMA foreign_keys = ON")        # optionnel mais recommandé
+con.executescript("""
+CREATE TABLE IF NOT EXISTS etudiant(
+  nb INTEGER PRIMARY KEY, nom TEXT NOT NULL, majeure TEXT);
+CREATE TABLE IF NOT EXISTS cours(
+  code TEXT PRIMARY KEY, intitule TEXT, credits INTEGER CHECK (credits > 0));
+CREATE TABLE IF NOT EXISTS inscrit(
+  nb INTEGER REFERENCES etudiant(nb),
+  code TEXT REFERENCES cours(code),
+  annee INTEGER, PRIMARY KEY (nb, code));
+""")
+con.executemany("INSERT OR IGNORE INTO etudiant VALUES (?,?,?)",
+                [(1043, "Anna", "DS"), (1088, "Bruno", "IA"), (2101, "Chloé", "DS")])
+
+# moyenne par étudiant, avec fenêtre pour classer les cours de chacun
+q = """
+SELECT e.nom, c.intitule, i.annee,
+       RANK() OVER (PARTITION BY e.nb ORDER BY i.annee) AS rang_annee,
+       COUNT(*) OVER (PARTITION BY e.nb)                AS nb_cours
+FROM inscrit i
+JOIN etudiant e ON e.nb = i.nb
+JOIN cours    c ON c.code = i.code
+WHERE c.credits >= 3
+"""
+for row in con.execute(q):
+    print(row)
+
+# transaction explicite : tout ou rien
+try:
+    con.execute("BEGIN")
+    con.execute("UPDATE etudiant SET majeure='IA' WHERE nb=2101")
+    con.execute("INSERT INTO inscrit VALUES (2101, 'DB', 2026)")
+    con.commit()
+except sqlite3.IntegrityError as err:        # ex. clé étrangère violée
+    con.rollback()
+    print("annulé :", err)
+
+# plan d'exécution (utile au ch. 8) :
+for row in con.execute("EXPLAIN QUERY PLAN " + q):
+    print(row)
+
+# --- 2. SQLAlchemy Core : requêtes composables, indépendantes du SGBD
+engine = create_engine("sqlite:///scolarite.db", echo=False)
+md = MetaData()
+etudiant = Table("etudiant", md, Column("nb", Integer, primary_key=True),
+                 Column("nom", String), Column("majeure", String))
+inscrit   = Table("inscrit", md, Column("nb", Integer, ForeignKey("etudiant.nb"),
+                 primary_key=True), Column("code", String, primary_key=True),
+                 Column("annee", Integer))
+with engine.connect() as cn:
+    stmt = (select(etudiant.c.nom, inscrit.c.code)
+            .join(inscrit, etudiant.c.nb == inscrit.c.nb)
+            .where(inscrit.c.annee == 2025).order_by(etudiant.c.nom))
+    print(cn.execute(stmt).fetchall())
+</code></pre>
+</div>
+
+<div class="note">
+  <span class="tag">Note — Vues et contraintes</span>
+  Une <strong>vue</strong> est une requête nommée et stockée, réutilisée comme une
+  table (réévaluée ou matérialisée selon le moteur)&nbsp;: une abstraction au même
+  titre qu'une fonction. Les contraintes (<code>PRIMARY KEY</code>,
+  <code>FOREIGN KEY</code>, <code>CHECK</code>, <code>UNIQUE</code>,
+  <code>NOT NULL</code>) sont vérifiées <em>à chaque écriture</em>&nbsp;: repousser
+  la validation après chargement (approche «&nbsp;data lake&nbsp;» du ch. 10)
+  déplace le coût, ne le supprime pas.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Le modèle relationnel et l'algèbre</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Conception&nbsp;: dépendances et formes normales</a></nav>
+</main>
+</div>
+
+</body>
+</html>

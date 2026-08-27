@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Introduction to Text Mining and NLP — Text mining industriel — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Introduction to Text Mining and NLP</a> › Text mining industriel</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52082_EP</span>Introduction to Text Mining and NLP</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: espace vectoriel et probabilités</a>
+<a href="ch1.html">La chaîne de traitement texte</a>
+<a href="ch2.html">Sac de mots, TF-IDF et BM25</a>
+<a href="ch3.html">Word embeddings</a>
+<a href="ch4.html">Topic models</a>
+<a href="ch5.html">Classification de textes</a>
+<a href="ch6.html">Séquences&nbsp;: NER, HMM, CRF</a>
+<a href="ch7.html">Transformers pour le NLP</a>
+<a href="ch8.html" class="active">Text mining industriel</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Text mining industriel</h2>
+
+<p>Ce chapitre assemble les briques ch. 1-7 en <em>produits</em>&nbsp;: résumés,
+mots-clés, déduplication, classification de tickets — les charges de travail réelles du
+NLP en entreprise, avec leurs pièges d'ingénierie.</p>
+
+<h3>8.1 TextRank&nbsp;: le résumé extractif par PageRank</h3>
+
+<div class="thm">
+  <span class="tag">TextRank (Mihalcea &amp; Tarau, 2004)</span>
+  (1) Phrase → nœud&nbsp;; similarité entre phrases \(S_i,S_j\) (recouvrement de mots
+  filtrés)&nbsp;:
+  \(w_{ij}=\frac{|\{t\in S_i\}\cap\{t\in S_j\}|}{\log|S_i|+\log|S_j|}\)&nbsp;; (2) poids
+  symétriques → marche aléatoire&nbsp;; (3) score&nbsp;:
+  $$\mathrm{TR}(u)=\frac{1-d}{N}+d\sum_{v\to u}\frac{w_{vu}}{\sum_{v'}w_{vv'}}\,\mathrm{TR}(v),$$
+  itérée depuis l'uniforme (puissance de matrice)&nbsp;; convergence géométrique vers
+  l'unique stationnaire (Perron–Frobenius&nbsp;: matrice stochastique primitive —
+  rappel chaînes de Markov, ch. 0)&nbsp;; (4) les k phrases de plus haut score =
+  résumé (réordonnées chronologiquement). Le même algorithme sur le graphe de
+  <em>mots</em> (fenêtre de cooccurrence) donne l'extraction de mots-clés —
+  «&nbsp;PageRank pour le texte&nbsp;».
+  <div class="proof">
+  La récurrence s'écrit \(\pi^{(k+1)}=\big[(1-d)\tfrac{\mathbb{1}}{N}
+  +d\,M\big]\pi^{(k)}\) avec \(M\) la matrice de transition pondérée&nbsp;: l'opérateur
+  est contractant (facteur \(d<1\)), d'où convergence géométrique de taux \(d\) —
+  amorti en ~20-30 itérations pour \(d=0{,}85\). <span class="qed">∎</span></div>
+</div>
+
+<h3>8.2 Extraction de mots-clés&nbsp;: RAKE, YAKE, KeyBERT</h3>
+
+<ul>
+  <li><strong>RAKE</strong> (Rose et al., 2010)&nbsp;: découper sur stopwords/ponctuation
+  → phrases candidates&nbsp;; score d'un mot = \(\deg(w)/\mathrm{freq}(w)\) (degré dans
+  le graphe de cooccurrence <em>au sein des candidats</em>) + fréquence des
+  bigrammes&nbsp;; score d'une expression = somme des mots. Rapide, sans corpus
+  externe, sensible aux stopwords&nbsp;;</li>
+  <li><strong>YAKE</strong> (Campos et al., 2020)&nbsp;: features statistiques
+  <em>non supervisées</em> par mot — fréquence, dispersion des positions (un mot-clé
+  apparaît partout), casse (majuscule intra-phrase = signal), redondance des
+  variantes (distance d'édition) — score agrégé, fenêtre gauche/droite pour le
+  contexte&nbsp;; robuste et multilingue&nbsp;;</li>
+  <li><strong>KeyBERT</strong> (Grootendorst, 2020)&nbsp;: extraire des candidats
+  (n-grammes), les <em>embedder</em> (ch. 3), prendre les plus proches du document —
+  et diversifier par <strong>MMR</strong>&nbsp;:
+  $$\mathrm{MMR}=\arg\max_{c\,\in\,C\setminus S}\ \Big[\lambda\cos(c,d)-(1-\lambda)\max_{s\in S}\cos(c,s)\Big],$$
+  qui ajoute à l'ensemble \(S\) le candidat pertinent <em>et</em> peu redondant&nbsp;;
+  le même schéma «&nbsp;embeddings + MMR&nbsp;» revient en RAG (M2, ch. 7).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Extractif vs abstractif</span>
+  Extractif (TextRank&nbsp;;BERT&nbsp;: classer des phrases)&nbsp;: extractible, sans
+  hallucination, mais redondant et haché. Abstractif (générer)&nbsp;: fluide, mais
+  exige un modèle génératif <em>et</em> une évaluation de fidélité — c'est le terrain
+  du M2 (LLMs ch. 7-8) et des travaux de l'enseignant du M2 (résumé de réunions,
+  cf. ch. 9). En entreprise&nbsp;: l'extractif reste la solution de confiance quand
+  chaque phrase doit être traçable à la source.
+</div>
+
+<h3>8.3 Déduplication à grande échelle&nbsp;: MinHash + LSH</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 8.1 — MinHash estime la similarité de Jaccard</span>
+  Pour \(h\) uniforme, \(\;\mathbb{P}\big(\min_{x\in A} h(x)=\min_{y\in B} h(y)\big)
+  = J(A,B)=\frac{|A\cap B|}{|A\cup B|}\). Empiler \(m\) hachages → signature
+  \(\mathrm{sig}(A)\in\{0,\dots,2^{64}\}^m\), et la fréquence de collisions estime
+  \(J\).
+  <div class="proof">
+  Soit \(z\) l'élément de \(A\cup B\) minimisant \(h\) (unique p.s. si \(h\) uniforme).
+  \(\min h(A)=\min h(B)\) ssi \(z\in A\cap B\). Or \(z\) est uniforme sur
+  \(A\cup B\) (invariance par permutation des hachages), d'où la probabilité
+  \(\frac{|A\cap B|}{|A\cup B|}\). <span class="qed">∎</span></div>
+</div>
+
+<div class="def">
+  <span class="tag">LSH (Locality-Sensitive Hashing)&nbsp;: bandes et rangs</span>
+  Signature découpée en \(b\) bandes de \(r\) rangs&nbsp;; deux documents sont
+  <em>candidats</em> si une bande entière coïncide. Probabilité de détection&nbsp;:
+  $$\mathbb{P}_{\mathrm{détecter}}(J)=1-\big(1-J^{\,r}\big)^{b}$$
+  — une sigmoïde raide&nbsp;: avec \(r=5,\ b=20\)&nbsp;:
+  \(J=0{,}5\to 47\,\%\), \(J=0{,}8\to 99{,}96\,\%\). On «&nbsp;choisit&nbsp;» la
+  frontière accepté/rejeté par \((r,b)\) — c'est le mécanisme exact de déduplication
+  des corpus de pré-entraînement des LLMs (M2 LLMs, ch. 3, où il est détaillé avec
+  les chiffres d'échelle&nbsp;; implémentation TP&nbsp;: <code>datasketch</code>).
+</div>
+
+<h3>8.4 Cas complet&nbsp;: classification de tickets support</h3>
+
+<div class="ex">
+  <span class="tag">Étude de cas — 50 000 tickets, 40 catégories, 3 langues</span>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li><strong>Données</strong>&nbsp;: tickets (sujet + corps), catégories très
+    déséquilibrées (logiciel ~30&nbsp;%, licence ~0,2&nbsp;%)&nbsp;; annotation
+    fragmentaire, historique bruité&nbsp;;</li>
+    <li><strong>Prétraitement</strong>&nbsp;: NFKC (ch. 1), détection de langue,
+    remplacement des références produits/numéros par des tokens génériques
+    (&lt;REF&gt;, &lt;DATE&gt;) — <em>étape à plus fort impact</em>&nbsp;: les tickets
+    sont 30&nbsp;% de codes&nbsp;;</li>
+    <li><strong>Baseline</strong>&nbsp;: TF-IDF (unigrammes, sublinear) + régression
+    logistique pondérée → macro-F1 ≈ 0,72 — à battre&nbsp;;</li>
+    <li><strong>Modèle</strong>&nbsp;: CamemBERT/multilingue fine-tuné (protocole 7.1)
+    → macro-F1 ≈ 0,82&nbsp;; gain principal sur les classes rares&nbsp;;</li>
+    <li><strong>Erreurs</strong>&nbsp;: matrice de confusion —
+    «&nbsp;connexion&nbsp;» vs «&nbsp;mot de passe&nbsp;» systématiquement confondus
+    (frontière sémantique floue aussi pour les humains)&nbsp;; solution&nbsp;:
+    fusion de classes métier ou seuil de rejet (confidence &lt; τ → file humaine)&nbsp;;</li>
+    <li><strong>Production</strong>&nbsp;: dérive (nouveaux produits → OOV)&nbsp;:
+    surveillance de la distribution d'entrée, ré-entraînement trimestriel, active
+    learning sur les tickets rejetés (les plus incertains = les plus informatifs).</li>
+  </ol>
+</div>
+
+<ul>
+  <li><strong>Question-réponse et RAG</strong>&nbsp;: retriever (BM25 — le descendant
+  direct du ch. 2 — et/ou dense&nbsp;;<em>hybrid search</em>) + générateur&nbsp;; le
+  module de référence est le M2 LLMs (ch. 7)&nbsp;; le TP fil rouge en monte une
+  version graph&nbsp;;</li>
+  <li><strong>Veille</strong>&nbsp;: flux → dédup MinHash → topic model (ch. 4) →
+  mots-clés (8.2) → classification → alertes&nbsp;;</li>
+  <li><strong>Le français et le multilingue</strong>&nbsp;: corpus, modèles
+  multilingues (mBERT, XLM-R)&nbsp;; juridique/français = difficultés spécifiques —
+  JuriBERT (ch. 9) y répond côté modèle, les travaux Buscaldi (ch. 9) côté
+  recherche d'information.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Projet fil rouge</span> Pipeline complet de veille&nbsp;:
+  corpus de 500 articles → nettoyage/tokenisation → TF-IDF + LDA (thématiques) →
+  classification supervisée fine-tunée → NER + relations → export vers le mini-GraphRAG
+  (module Graph ML)&nbsp;; évaluation à chaque étage (perplexité, cohérence, macro-F1, F1 NER).
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Précédent</span> Transformers pour le NLP</a><a class="next" href="ch9.html"><span class="dir">Suivant</span> Travaux de l'équipe pédagogique</a></nav>
+</main>
+</div>
+
+</body>
+</html>

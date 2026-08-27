@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — Agents en production&nbsp;: tracing et garde-fous — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">ML Ops and LLM Engineering Principles</a> › Agents en production&nbsp;: tracing et garde-fous</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: du notebook au système</a>
+<a href="ch1.html">Cycle de vie&nbsp;: versionner données, features, modèles</a>
+<a href="ch2.html">CI/CD pour le ML&nbsp;: tester données et modèles</a>
+<a href="ch3.html">Serving des LLMs&nbsp;: batching continu, latence P99</a>
+<a href="ch4.html">Coûts&nbsp;: euros par million de tokens</a>
+<a href="ch5.html">Évaluation en production&nbsp;: drift et monitoring</a>
+<a href="ch6.html">RAG Ops&nbsp;: fraîcheur et évaluation continue</a>
+<a href="ch7.html">Fine-tuning Ops&nbsp;: LoRA versionnés</a>
+<a href="ch8.html" class="active">Agents en production&nbsp;: tracing et garde-fous</a>
+<a href="ch9.html">Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Étude de cas et green ops</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Agents en production&nbsp;: tracing et garde-fous</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappel — module LLMs ch. 8 (agents)</div>
+  Un agent = LLM dans une boucle (observation → raisonnement → action via outils),
+  avec mémoire et éventuellement planification multi-étapes. Ce chapitre
+  n'ajoute pas d'intelligence&nbsp;: il ajoute l'<em>observabilité</em>, les
+  <em>budgets</em> et les <em>permissions</em> sans lesquels un agent est
+  indébuggable et dangereux.
+</div>
+
+<h3>8.1 Tracing&nbsp;: l'arbre des appels</h3>
+
+<p>Une requête d'agent se déroule en dizaines d'appels LLM et d'outils imbriqués.
+La donnée centrale est la <strong>trace</strong>&nbsp;: un arbre de
+<em>spans</em> (un span par appel&nbsp;: entrée, sortie, coût en tokens, latence,
+modèle, tentative), conforme OpenTelemetry — les vendor Langfuse/W&amp;B Weave
+s'y raccordent. Sans trace&nbsp;: aucune capacité à répondre «&nbsp;pourquoi
+l'agent a-t-il envoyé ce mail&nbsp;?&nbsp;». Avec trace&nbsp;: replay
+déterministe (en journalisant les graines/temps), analyse des goulets (quel
+outil domine la latence&nbsp;?), des coûts par étape, et détection d'anomalies
+comportementales (boucles&nbsp;: même outil, mêmes arguments, N fois).</p>
+
+<pre class="code"><code>// Span OTel d'un appel d'agent (extrait) -- tout y est pour le replay et le cout
+{
+  "trace_id": "a1b2...", "span_id": "17", "parent_id": "03",
+  "name": "llm.call",
+  "attributes": {
+    "llm.model": "llama3-8b-instruct@v3-lora-faq",
+    "llm.prompt_hash": "9e21...",         // -> template versionne (ch. 1)
+    "llm.input_tokens": 1842, "llm.output_tokens": 96,
+    "llm.cost_eur": 0.00042, "llm.latency_ms": 741,
+    "agent.step": 4, "agent.tool": "search_confluence",
+    "rag.index_version": "2026-03-11.2"
+  }
+}</code></pre>
+
+<h3>8.2 Garde-fous&nbsp;: en couches, autour de la boucle</h3>
+
+<table class="tbl">
+  <tr><th>Couche</th><th>Mécanisme</th><th>Exemple</th></tr>
+  <tr><td>Entrée</td><td>validation, classifieurs d'injection, quota</td><td>bloquer prompts de 500&nbsp;ko, détecteur d'injection (module Sécurité ch. 5-6)</td></tr>
+  <tr><td>Boucle</td><td>budgets maximaux</td><td>max 15 étapes, max 0,10&nbsp;€/tâche, timeout global</td></tr>
+  <tr><td>Action</td><td>permissions par outil, scoping</td><td>lecture seule sur Confluence&nbsp;; envoi d'e-mails = confirmation humaine</td></tr>
+  <tr><td>Sortie</td><td>validateurs de format et de contenu</td><td>schéma JSON strict&nbsp;; pas de coordonnées bancaires dans les réponses</td></tr>
+  <tr><td>Exécution</td><td>sandbox (ch. 9)</td><td>code exécuté dans conteneur éphémère sans réseau sortant</td></tr>
+  <tr><td>Observation</td><td>alertes comportementales</td><td>taux de boucles, succès par tâche, dérive des coûts</td></tr>
+</table>
+
+<div class="ex">
+  <span class="tag">Exemple 8.1 — Le budget comme garde-fou premier</span>
+  Un agent de veille effectue en moyenne 6 appels LLM + 3 appels d'outil par
+  tâche. Un utilisateur malveillant (ou un document piégé — injection indirecte,
+  cf. module Sécurité ch. 5) peut le faire boucler&nbsp;: chaque itération
+  ré-injecte un peu de contexte. Plafonner <em>par tâche</em>&nbsp;: étapes ≤ 15,
+  tokens ≤ 50&nbsp;k, coût ≤ 0,10&nbsp;€ — et couper proprement (réponse
+  dégradée&nbsp;: «&nbsp;je n'ai pas pu terminer&nbsp;»)&nbsp;: la panne devient un
+  <em>coût borné</em> au lieu d'un incident de facturation.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 8.2 — Le succès par tâche s'effondre avec la longueur</span>
+  Si chaque étape réussit indépendamment avec probabilité \(p\), une tâche de
+  \(k\) étapes réussit avec \(p^k\)&nbsp;: \(p = 0{,}95\) et \(k = 20\) donnent
+  36&nbsp;%. D'où&nbsp;: (i)&nbsp;raccourcir les chaînes (outils plus fiables,
+  plans moins profonds)&nbsp;; (ii)&nbsp;retries locaux et réflexivité&nbsp;;
+  (iii)&nbsp;évaluer les agents <em>par tâche complète</em>, jamais par étape.
+</div>
+
+<h3>8.3 Évaluer un agent</h3>
+
+<p>Métriques agents&nbsp;: <strong>taux de succès par tâche</strong> (sur des
+tâches scénarisées avec état initial et critère de réussite — p.&nbsp;ex.
+  «&nbsp;le ticket est créé avec les bons champs&nbsp;»), <strong>coût moyen par
+tâche</strong> (tokens × tarif + outils), <strong>latence P95 de bout en
+bout</strong>, <strong>taux d'intervention humaine</strong>. Les environnements
+d'évaluation doivent être <em>rejouables</em>&nbsp;: outils simulés (mock du
+Confluence, du mail) pour la CI, environnement réel échantillonné pour la
+production — la simulation exécute des centaines de tâches pour quelques centimes.</p>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Précédent</span> Fine-tuning Ops&nbsp;: LoRA versionnés</a><a class="next" href="ch9.html"><span class="dir">Suivant</span> Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a></nav>
+</main>
+</div>
+
+</body>
+</html>

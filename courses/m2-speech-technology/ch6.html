@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech Technology for Conversational AI — Vocodeurs&nbsp;: de WaveNet à HiFi-GAN — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Speech Technology for Conversational AI</a> › Vocodeurs&nbsp;: de WaveNet à HiFi-GAN</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Speech Technology for Conversational AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le signal de parole et ses représentations</a>
+<a href="ch1.html">ASR classique&nbsp;: le pipeline GMM-HMM</a>
+<a href="ch2.html">CTC&nbsp;: la perte dérivée</a>
+<a href="ch3.html">Encoder-décodeur&nbsp;: LAS, Conformer, RNN-T</a>
+<a href="ch4.html">Whisper&nbsp;: robustesse et multi-tâche</a>
+<a href="ch5.html">Streaming&nbsp;: chunking, VAD, latence contre qualité</a>
+<a href="ch6.html" class="active">Vocodeurs&nbsp;: de WaveNet à HiFi-GAN</a>
+<a href="ch7.html">TTS neuronal&nbsp;: Tacotron 2, VITS, diffusion et flow</a>
+<a href="ch8.html">Expressivité&nbsp;: prosodie, style tokens, SSML</a>
+<a href="ch9.html">Conversion et clonage de voix&nbsp;: éthique et watermarking</a>
+<a href="ch10.html">La boucle conversationnelle&nbsp;: VAD, turn-taking, full-duplex</a>
+<a href="ch11.html">Speech LLMs et multilinguisme</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Vocodeurs&nbsp;: de WaveNet à HiFi-GAN</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 6.1 — WaveNet (van den Oord et al., 2016)&nbsp;: l'autorégression sur les échantillons</span>
+  Le vocodeur modélise la forme d'onde directement&nbsp;:
+  $$p(x) = \prod_{t=1}^{T_{\mathrm{ech}}} p(x_t \mid x_{&lt;t},\, c),$$
+  avec \(T_{\mathrm{ech}}\) = 24&nbsp;000 échantillons par seconde, \(x_t\) quantifié
+  \(\mu\)-law sur 256 niveaux, \(c\) le conditionnement (Mel, locuteur). Architecture&nbsp;:
+  <strong>convolutions causales dilatées</strong> — couche \(k\) regarde \(2^k\) échantillons
+  en arrière (dilatations 1, 2, 4, …, 512, empilées)&nbsp;: le champ récepteur croît
+  <em>exponentiellement</em> avec la profondeur (\(\approx 2^L\) pour \(L\) couches), là où
+  une convolution non dilatée exigerait \(2^L\) couches. Qualité&nbsp;: proche de la
+  parole humaine en tests subjectifs (MOS au-delà de 4, contre ~4,5 pour la vérité
+  terrain)&nbsp;; défaut fatal&nbsp;:
+  générérer une seconde de parole demande 24&nbsp;000 pas séquentiels — des ordres de
+  grandeur plus lent que le temps réel, inutilisable en production.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — HiFi-GAN (Kong et al., NeurIPS 2020)&nbsp;: la vitesse par l'adversaire</span>
+  Renversement complet&nbsp;: le générateur est <em>feed-forward parallèle</em> (sur-échantillonnage
+  par convolutions transposées du Mel 80 bins vers la forme d'onde, puis convolutions
+  dilatées multi-champs récepteurs pour la cohérence de phase)&nbsp;; l'entraînement est
+  <em>adversarial</em> (rappel des GAN&nbsp;: module Multimodal GenAI M1 ch. 2) avec deux
+  familles de discriminateurs — <em>multi-période</em> (réarrangent la forme d'onde en
+  matrices de périodes 2, 3, 5, 7, 11 pour piéger les artéfacts périodiques&nbsp;: le
+  «&nbsp;buzz&nbsp;») et <em>multi-échelle</em> — plus une perte L1 sur le Mel reconstruit
+  pour ancrer le contenu. Résultat&nbsp;: qualité WaveNet, génération parallèle — des
+  ordres de grandeur plus rapide que le temps réel sur GPU, le vocodeur par défaut de
+  l'industrie. À retenir du chapitre&nbsp;: le couple <em>durée du mélange</em> (autorégressif
+  sur 24 kHz) <em>contre architecture parallèle + perte perceptuelle</em> dicte tout le TTS
+  moderne.
+</div>
+
+<div class="note">
+  <span class="tag">Le Mel comme interface contractuelle</span>
+  Les deux étages du TTS (ch. 7) communiquent par spectrogramme Mel&nbsp;: 80 bins, une
+  trame toutes les 12&nbsp;ms environ (~ 80&nbsp;Hz), échelle logarithmique — le
+  <em>cahier des charges</em> du vocodeur. Changer la définition (fréquence
+  d'échantillonnage, hop, n_bins) casse la compatibilité modèle/vocodeur — première
+  expérience du lab 2. Et le Mel n'est pas inversible (phase perdue)&nbsp;: toute la
+  difficulté du vocodeur est de <em>ré-inventer</em> une phase cohérente — d'où les
+  discriminateurs de période.
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> Streaming&nbsp;: chunking, VAD, latence contre qualité</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> TTS neuronal&nbsp;: Tacotron 2, VITS, diffusion et flow</a></nav>
+</main>
+</div>
+
+</body>
+</html>

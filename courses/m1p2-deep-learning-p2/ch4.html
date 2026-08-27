@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Communication&nbsp;: all-reduce et compagnie — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Communication&nbsp;: all-reduce et compagnie</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_52183_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels compacts&nbsp;: le socle de P1</a>
+<a href="ch1.html">Compter&nbsp;: FLOPs, mémoire, lois d'échelle</a>
+<a href="ch2.html">Complexité théorique de l'entraînement</a>
+<a href="ch3.html">Parallélisme&nbsp;: data, tensor, pipeline</a>
+<a href="ch4.html" class="active">Communication&nbsp;: all-reduce et compagnie</a>
+<a href="ch5.html">Efficience mémoire&nbsp;: checkpointing, ZeRO</a>
+<a href="ch6.html">Inférence efficiente</a>
+<a href="ch7.html">Systèmes réels&nbsp;: roofline, GPU, LLM 7B</a>
+<a href="ch8.html">Travaux de l'enseignant</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Communication&nbsp;: all-reduce et compagnie</h2>
+
+<p>Le goulot réel des entraînements distribués n'est presque jamais le calcul&nbsp;:
+c'est l'<strong>échange des gradients</strong>. Un seul opérateur à connaître
+vraiment — l'all-reduce — et deux réductions&nbsp;: bande passante ou latence.</p>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — All-reduce</span>
+  \(P\) machines détiennent chacune un vecteur \(g_i\) de \(S\) octets&nbsp;;
+  toutes doivent recevoir \(\bar g = \frac1P\sum_i g_i\) (moyenne des gradients en
+  DP). Réseau homogène&nbsp;: latence \(\alpha\) par message, bande passante
+  \(b\) octets/s.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.2 — Ring all-reduce&nbsp;: optimal en bande passante (démontré)</span>
+  En disposant les \(P\) machines en anneau et en découpant le vecteur en \(P\)
+  morceaux de \(S/P\) octets, l'all-reduce se fait en deux phases
+  (reduce-scatter puis all-gather) de \(P-1\) étapes chacune&nbsp;:
+  $$T_\mathrm{ring} \;=\; 2\,(P-1)\,\alpha \;+\; \frac{2(P-1)}{P}\cdot\frac{S}{b} \;\xrightarrow[P \to \infty]{}\; 2\alpha P + \frac{2S}{b}.$$
+  Le terme de <em>bande passante</em> devient indépendant de \(P\) — chaque
+  machine n'envoie jamais plus que \(\approx 2S/P\) ... c'est-à-dire au total
+  \(2S(P-1)/P &lt; 2S\) octets&nbsp;: optimal à constantes près.
+  <div class="proof">
+  <em>Reduce-scatter.</em> À l'étape \(t\), la machine \(i\) envoie un morceau
+  (déjà partiellement sommé) à \(i+1\) et reçoit de \(i-1\) un morceau différent
+  qu'elle additionne au sien&nbsp;: après \(P-1\) étapes, la machine \(i\) détient
+  la somme <em>complète</em> du morceau \(i\) — chaque machine a envoyé
+  \((P-1)\cdot S/P\) octets. <em>All-gather.</em> Même ronde en sens de
+  diffusion&nbsp;: les sommes complètes circulent, \((P-1)\cdot S/P\) octets émis
+  par machine. Total par machine&nbsp;: \(2(P-1)S/P\) octets à débit \(b\), soit
+  \(2(P-1)S/(Pb)\) — et le chemin critique est bien la séquence des
+  \(2(P-1)\) étapes de latence \(\alpha\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.3 — Tree all-reduce&nbsp;: optimal en latence</span>
+  En arbre binaire&nbsp;: réduction en \(\log_2 P\) étapes puis diffusion en
+  \(\log_2 P\) étapes, mais chaque étape transmet le vecteur <em>entier</em>&nbsp;:
+  \(T_\mathrm{tree} = 2\log_2 P\,(\alpha + S/b)\). À petit \(S\) (gradients courts,
+  beaucoup de petits tenseurs)&nbsp;: l'arbre gagne (latence)&nbsp;; à grand \(S\)
+  (les gradients de LLM)&nbsp;: l'anneau gagne (bande passante). Les vraies
+  bibliothèques (NCCL) choisissent dynamiquement — et composent anneaux partiels sur
+  la topologie réelle (NVLink/intra, IB/inter).
+</div>
+
+<div class="note">
+  <span class="tag">Trois guerres contre \(\gamma\)&nbsp;: recouvrement, bucketing, compression</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><strong>Recouvrement</strong>&nbsp;: pendant que le GPU calcule la couche
+  \(k+1\), le gradient de la couche \(k\) part déjà sur le réseau (async par
+  buckets)&nbsp;; à condition que \(T_\mathrm{comm} \leq T_\mathrm{calc}\), la
+  communication disparaît du temps critique — la raison d'être du «&nbsp;bucketing&nbsp;»
+  de PyTorch DDP.</li>
+  <li><strong>Compression de gradients</strong>&nbsp;: quantifier les gradients
+  (8 bits, voire 1 bit) avant échange divise \(S\) par 2–16&nbsp;; l'<em>error
+  feedback</em> (compenser l'erreur de quantification au pas suivant) préserve la
+  convergence — au prix d'un délicat compromis variance/théorie (cf. module
+  Emerging ML, ch. 2–3 pour le fédéré, où la communication est le facteur
+  limitant).</li>
+  <li><strong>Localité</strong>&nbsp;: réduire le nombre de communications
+  (pas locaux, gossip) est exactement la stratégie que la borne du ch. 2
+  dicte&nbsp;: moins de rondes, mais des pas plus nombreux — l'optimal de Scaman
+  et al. est un point précis sur cette frontière.</li>
+  </ul>
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Parallélisme&nbsp;: data, tensor, pipeline</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Efficience mémoire&nbsp;: checkpointing, ZeRO</a></nav>
+</main>
+</div>
+
+</body>
+</html>

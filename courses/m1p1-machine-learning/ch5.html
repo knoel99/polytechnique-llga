@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Machine Learning — Arbres, forêts, boosting — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Machine Learning</a> › Arbres, forêts, boosting</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">MDC_51006_EP</span>Machine Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: optimisation et concentration</a>
+<a href="ch1.html">Le cadre statistique de l'apprentissage</a>
+<a href="ch2.html">Régression linéaire et régularisation</a>
+<a href="ch3.html">Classification&nbsp;: logistic et SVM</a>
+<a href="ch4.html">Noyaux et RKHS</a>
+<a href="ch5.html" class="active">Arbres, forêts, boosting</a>
+<a href="ch6.html">Non supervisé&nbsp;: k-moyennes, EM, ACP</a>
+<a href="ch7.html">Théorie de la généralisation</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html">Évaluation, données massives et pipelines</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Arbres, forêts, boosting</h2>
+
+<h3>5.1 Arbres de décision (CART)</h3>
+<p>Partition récursive de \(\mathcal{X}\) par des coupes axées (questions binaires
+«&nbsp;\(x_j \leq t\)&nbsp;?»). À chaque feuille, on prédit la moyenne (régression) ou la classe
+majoritaire (classification). Croissance&nbsp;: à chaque nœud, choisir \((j, t)\) maximisant le
+gain d'impureté&nbsp;; puis <strong>élagage</strong> pour éviter le sur-apprentissage. Les critères
+d'impureté exacts, pour un nœud \(D\) contenant les classes en proportions
+\(p_1, \dots, p_K\)&nbsp;:</p>
+<div class="def">
+  <span class="tag">Définition 5.1 — Impuretés usuelles</span>
+  $$\text{entropie : } H(D) = -\sum_{k=1}^K p_k \log_2 p_k, \qquad \text{Gini : } G(D) = 1 - \sum_{k=1}^K p_k^2 = \sum_k p_k(1 - p_k).$$
+  En régression, on utilise l'erreur quadratique \(Q(D) = \frac{1}{|D|}\sum_{i \in D}(y_i - \bar y_D)^2\).
+  Pour une coupe \(D = D_L \cup D_R\), le <strong>gain</strong> vaut
+  $$\Delta(j, t) = I(D) - \frac{|D_L|}{|D|} I(D_L) - \frac{|D_R|}{|D|} I(D_R).$$
+</div>
+<div class="note">
+  <span class="tag">Gini et entropie sont presque interchangeables</span>
+  À deux classes (\(p = p_1 = 1 - p_2\))&nbsp;: \(G(p) = 2p(1-p)\) et
+  \(H(p) = -p\log_2 p - (1-p)\log_2(1-p)\). Toutes deux sont maximales en \(p = 1/2\), nulles en
+  \(0\) et \(1\), et leur développement autour de \(1/2\) coïncide au premier ordre&nbsp;:
+  \(H(p) = 1 - \frac{2}{\ln 2}(p - \tfrac12)^2 + o\big((p-\tfrac12)^2\big)\) et
+  \(G(p) = \frac12 - 2(p - \tfrac12)^2\). CART utilise Gini (pas de logarithme, calcul direct)&nbsp;;
+  ID3/C4.5 utilisent l'entropie (gain d'information). Le choix est rarement décisif — le
+  <em>élagage</em> l'est. L'élagage coût-complexité de CART minimise
+  \(R_\alpha(T) = R(T) + \alpha\,|\text{feuilles}(T)|\) sur la famille des sous-arbres&nbsp;:
+  encore un compromis ajustement/complexité (chapitre&nbsp;7).
+</div>
+
+<h3>5.2 Forêts aléatoires (bagging)</h3>
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Le bagging réduit la variance</span>
+  Soient \(T_1, \dots, T_B\) des prédicteurs de même variance \(\sigma^2\), deux à deux de
+  corrélation \(\rho\). La moyenne \(A_B = \frac1B\sum_b T_b\) vérifie
+  $$\mathrm{Var}(A_B) = \rho\,\sigma^2 + \frac{1 - \rho}{B}\,\sigma^2.$$
+  <div class="proof">
+  \(\mathrm{Var}(A_B) = \frac{1}{B^2}\big[\sum_b \mathrm{Var}(T_b) + \sum_{b \neq b'} \mathrm{Cov}(T_b, T_{b'})\big]
+  = \frac{1}{B^2}\big[B\sigma^2 + B(B-1)\rho\sigma^2\big] = \frac{\sigma^2}{B} + \frac{B-1}{B}\rho\sigma^2\),
+  qui se réécrit comme annoncé.
+  <em>Cas iid</em> (\(\rho = 0\), par exemple variables gaussiennes de même loi)&nbsp;:
+  \(\mathrm{Var} = \sigma^2/B\) — diviser la variance par \(B\) en moyennant des réplicats
+  indépendants.<span class="qed">∎</span>
+  </div>
+</div>
+<div class="note">
+  <span class="tag">Pourquoi ça marche si bien pour les arbres</span>
+  Quand \(B \to \infty\), la variance résiduelle tend vers le plancher \(\rho\sigma^2\)&nbsp;:
+  tout l'art consiste à faire baisser \(\rho\). Les forêts aléatoires combinent deux
+  mécanismes&nbsp;: (i) le <strong>bootstrap</strong> (rééchantillonnage des lignes)&nbsp;;
+  (ii) la sélection aléatoire de \(m_{\text{try}} &lt; d\) variables candidate à chaque split
+  (<em>decorrelation</em>), qui force les arbres à différer structurellement. Les arbres non
+  élagués ont un biais faible et une variance élevée — exactement le profil que le bagging sait
+  corriger. Bonus&nbsp;: chaque arbre laisse de côté en moyenne \(e^{-1} \approx 37\,\%\) des
+  données (out-of-bag), une estimation du risque <em>gratuite</em> — on y revient au
+  chapitre&nbsp;9. Les forêts restent une référence <em>tabulaire</em> difficile à battre.
+</div>
+
+<h3>5.3 Boosting&nbsp;: descente de gradient dans l'espace des fonctions</h3>
+<div class="def">
+  <span class="tag">Définition 5.3 — Le problème fonctionnel</span>
+  On cherche \(f : \mathcal{X} \to \mathbb{R}\) minimisant
+  $$\Phi(f) = \frac1n \sum_{i=1}^n \ell\big(y_i, f(x_i)\big),$$
+  où \(\ell\) est convexe et dérivable en sa seconde variable (quadratique, logistique…).
+  On construit \(f\) comme une somme \(f_M = \sum_{m=0}^M \eta\, h_m\) de fonctions simples
+  (typiquement des petits arbres), choisies une à une — c'est un <em>modèle additif</em> stagewise.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.4 — Le boosting est une descente de gradient fonctionnelle</span>
+  Supposons \(f_{m-1}\) construit et posons
+  \(g_i = \frac{\partial\, \ell}{\partial f}(y_i, f_{m-1}(x_i))\) (<em>pseudo-résidus</em>,
+  signe opposé près). Alors, au premier ordre en \(\eta\)&nbsp;:
+  $$\Phi(f_{m-1} + \eta h) = \Phi(f_{m-1}) - \frac{\eta}{n}\sum_{i=1}^n h(x_i)\,\underbrace{(-g_i)}_{\text{pseudo-résidus}} + o(\eta),$$
+  si bien que la direction \(h\) qui fait le plus baisser \(\Phi\) est celle alignée sur les
+  pseudo-résidus \(-g_i\). Le gradient boosting ajuste \(h_m\) par régression (arbres) sur les
+  couples \((x_i, -g_i)\).
+  <div class="proof">
+  C'est un développement de Taylor de la fonction d'une variable
+  \(s \mapsto \ell(y_i, f_{m-1}(x_i) + s\,h(x_i))\) autour de \(s = 0\), sommé sur \(i\) et
+  divisé par \(n\) (avec \(s = \eta\))&nbsp;:
+  \(\ell(y_i, f_{m-1}(x_i) + \eta h(x_i)) = \ell(y_i, f_{m-1}(x_i)) + \eta\, h(x_i)\, \frac{\partial \ell}{\partial f}(y_i, f_{m-1}(x_i)) + o(\eta)\).
+  <em>Cas quadratique</em> \(\ell(y, f) = \frac12(y - f)^2\)&nbsp;:
+  \(g_i = f_{m-1}(x_i) - y_i\), donc \(-g_i = y_i - f_{m-1}(x_i)\) — les <em>vrais</em> résidus&nbsp;:
+  chaque arbre prédit les résidus des précédents, et
+  \(\Phi(f + \eta h)\) est exact (pas de reste) pour \(h\) = résidus.
+  <em>Cas logistique</em> \(\ell(y, p) = -y\log p - (1-y)\log(1-p)\) composée avec la
+  sigmoïde&nbsp;: \(\frac{\partial \ell}{\partial f} = \sigma(f) - y\) (calcul du
+  chapitre&nbsp;3)&nbsp;; pseudo-résidus \(y_i - p_i\).<span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Learning rate et early stopping</span>
+  Le pas \(\eta\) (typiquement \(0.01\)–\(0.1\)) n'est pas la constante optimale de descente&nbsp;:
+  on renonce au line search exact pour un petit pas qui (i) limite la variance de chaque arbre,
+  (ii) laisse les arbres suivants corriger les précédents — d'où plus d'itérations nécessaires.
+  Le nombre \(M\) d'itérations joue le rôle de <em>capacité effective</em>&nbsp;: \(\Phi(f_M)\)
+  décroît mécaniquement avec \(M\), mais le risque de généralisation décroît puis remonte&nbsp;;
+  l'<strong>early stopping</strong> (choisir \(M\) sur validation) est la vraie régularisation du
+  boosting — même logique que la norme \(\|\theta\|\) en ridge (chapitre&nbsp;7)&nbsp;: à \(M\)
+  croissant correspond un dictionnaire de directions croissant. Friedman (2001) formalise ce
+  paradigme&nbsp;; XGBoost/LightGBM le rendent industriel (second ordre, régularisation sur les
+  feuilles, histogrammes)&nbsp;; le module M2 «&nbsp;From Boosting to Foundation Models&nbsp;»
+  part de là.
+</div>
+
+<pre class="code"><code>from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
+from sklearn.model_selection import cross_val_score
+rf  = RandomForestClassifier(n_estimators=300, min_samples_leaf=2, oob_score=True)
+gbt = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.06)
+print(cross_val_score(rf, X, y, cv=5).mean(), cross_val_score(gbt, X, y, cv=5).mean())
+print("erreur OOB de la foret :", 1 - rf.fit(X, y).oob_score_)  # validation gratuite</code></pre>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Précédent</span> Noyaux et RKHS</a><a class="next" href="ch6.html"><span class="dir">Suivant</span> Non supervisé&nbsp;: k-moyennes, EM, ACP</a></nav>
+</main>
+</div>
+
+</body>
+</html>

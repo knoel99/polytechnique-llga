@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Processing — Le signal pour le ML moderne — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Signal Processing</a> › Le signal pour le ML moderne</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_51055_EP</span>Signal Processing</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: séries de Fourier au sens L², Fubini</a>
+<a href="ch1.html">Signaux et systèmes linéaires</a>
+<a href="ch2.html">La série de Fourier</a>
+<a href="ch3.html">La transformée de Fourier</a>
+<a href="ch4.html">Échantillonnage&nbsp;: le théorème de Shannon</a>
+<a href="ch5.html">DFT, FFT et filtrage numérique</a>
+<a href="ch6.html">Analyse temps-fréquence et ondelettes</a>
+<a href="ch7.html">Signaux aléatoires et estimation spectrale</a>
+<a href="ch8.html" class="active">Le signal pour le ML moderne</a>
+<a href="ch9.html">Les travaux de l'enseignant&nbsp;: du signal au transport optimal</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Le signal pour le ML moderne</h2>
+
+<div class="thm">
+  <span class="tag">Spectrogramme Mel et MFCC&nbsp;: le pipeline standard</span>
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li><strong>Trames</strong>&nbsp;: découpage 25 ms tous les 10 ms, fenêtre Hann
+    (une frame de Gabor, ch. 6)&nbsp;; STFT.</li>
+    <li><strong>Échelle de Mel</strong> (perceptive, linéaire &lt; 1 kHz puis
+    logarithmique)&nbsp;:
+    $$m = 2595\,\log_{10}\Big(1 + \frac{f}{700}\Big), \qquad
+    f = 700\,\big(10^{m/2595} - 1\big).$$</li>
+    <li><strong>Banc de filtres Mel</strong>&nbsp;: 20-80 filtres triangulaires à bords
+    uniformément espacés <em>en Mel</em> — des passe-bande de largeur croissante en
+    Hz&nbsp;: \(E_m = \sum_\nu W_m(\nu)\,|\mathrm{STFT}(\nu)|^2\) (pondération parcimonieuse
+    du spectrogramme).</li>
+    <li><strong>Log</strong> (perception d'amplitude)&nbsp;; <strong>DCT</strong> le long
+    de l'axe Mel (une DCT = une «&nbsp;TF réelle&nbsp;»)&nbsp;: les \(c_j\) sont les
+    <strong>MFCC</strong>&nbsp;; on garde 13-20 coefficients + dérivées \(\Delta,
+    \Delta\Delta\), et on normalise en moyenne/variance par locuteur.</li>
+  </ol>
+  Historiquement des <em>features</em> pour modèles légers (GMM-HMM), les MFCC restent la
+  porte d'entrée compacte&nbsp;; les réseaux profonds consomment plutôt le
+  <strong>spectrogramme Mel</strong> brut.
+</div>
+
+<div class="note">
+  <span class="tag">Réseaux sur spectrogrammes</span>
+  Le spectrogramme Mel est <em>l'image</em> que les CNN 2D et les transformeurs audio
+  consomment&nbsp;: les premières couches des CNN audio apprennent des détecteurs de
+  fréquence orientés — des filtres de Gabor (ch. 6), cf. module Deep Learning. L'augmentation
+  de données emblématique (masquage de bandes de fréquence et de trames temporelles)
+  opère directement <em>dans le plan temps-fréquence</em>&nbsp;: le spectrogramme est
+  traité comme une texture à corriger près. Speech technology, transcription,
+  transformeurs audio-multimodaux&nbsp;: tout ce pipeline est le prétraitement du signal
+  du ML moderne.
+</div>
+
+<div class="thm">
+  <span class="tag">Distances entre distributions spectrales&nbsp;: FID et spectral loss OT</span>
+  Comparer deux jeux de signaux = comparer deux distributions de spectrogrammes (ou de
+  features). Standard&nbsp;: ajuster une gaussienne sur les features de chaque jeu et
+  mesurer la <strong>distance de Fréchet</strong>
+  $$d^2\big(\mathcal{N}(\mu_1,\Sigma_1), \mathcal{N}(\mu_2,\Sigma_2)\big)
+  = \|\mu_1 - \mu_2\|^2 + \mathrm{tr}\Big(\Sigma_1 + \Sigma_2
+  - 2\big(\Sigma_1^{1/2}\Sigma_2\Sigma_1^{1/2}\big)^{1/2}\Big).$$
+  Ce n'est <em>rien d'autre</em> que \(W_2^2\) entre gaussiennes (métrique de
+  Bures)&nbsp;: la FID des générateurs d'images et la «&nbsp;Fréchet audio
+  distance&nbsp;» des générateurs audio sont des distances de Wasserstein déguisées.
+  La <strong>spectral loss OT</strong> des modèles génératifs audio généralise l'idée&nbsp;:
+  comparer lots réel/généré par \(W_2\) gaussien (forme fermée ci-dessus, différentiable)
+  ou par Sinkhorn sur les spectres&nbsp;: la <em>démonstration complète</em> de la formule
+  de Bures et l'algorithme de Sinkhorn sont au programme du module
+  <em>Computational Optimal Transport</em> (M1P2, ch. 2 et 3, même enseignant)&nbsp;—
+  ce chapitre en est la préparation. En 1D (spectres ou signaux mono-dim), tout se
+  réduit au couplage des quantiles&nbsp;:
+  \(W_2^2 = \int_0^1\big(F_1^{-1}(u) - F_2^{-1}(u)\big)^2du\) (démontré là-bas).
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 8.1 — Domain adaptation 1D sur signaux</span>
+  Deux capteurs mesurent le même phénomène avec des dérives différentes (offset, gain,
+  réponse en fréquence)&nbsp;: les <em>distributions</em> des trames diffèrent, pas la
+  sémantique. Alignement par OT 1D&nbsp;: transporter les quantiles du capteur A sur
+  ceux du capteur B (transport monotone, calculable par tri)&nbsp;; le même principe à
+  l'échelle de d-dimensions (nuages de features) est l'<em>optimal transport domain
+  adaptation</em> détaillé dans le module OT (ch. 4), dont l'enseignant est co-auteur.
+  Le signal fournit le spectre&nbsp;; l'OT fournit la géométrie.
+</div>
+
+<div class="note">
+  <span class="tag">Fourier dans les architectures&nbsp;: convolutions et positions</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Convolution des CNN</strong> = convolution discrète du ch. 1&nbsp;: le
+    noyau appris est un filtre dont la réponse en fréquence (DTFT, ch. 5) explique le
+    comportement — les CNN apprennent des bancs de filtres de Gabor&nbsp;; convolution
+    par FFT en \(\mathcal{O}(n\log n)\) quand les noyaux sont grands (th. 5.3).</li>
+    <li><strong>Convolution sur graphes</strong>&nbsp;: le message passing GNN
+    \(h \leftarrow \sigma(\tilde D^{-1/2}\tilde A \tilde D^{-1/2} h W)\) est une
+    convolution au sens spectral — le filtre de Kipf &amp; Welling est un polynôme de
+    degré 1 du laplacien&nbsp;; approfondi au module Graph ML.</li>
+    <li><strong>Positional encodings</strong>&nbsp;: sinus/cosinus des transformeurs
+    (\(\mathrm{PE}(p, 2i) = \sin(p/10000^{2i/d})\)…) = bases de Fourier&nbsp;; les
+    encodages de position sur graphes (LapEig) réutilisent les vecteurs propres du
+    laplacien — encore Fourier, cf. module Graph ML.</li>
+  </ul>
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Précédent</span> Signaux aléatoires et estimation spectrale</a><a class="next" href="ch9.html"><span class="dir">Suivant</span> Les travaux de l'enseignant&nbsp;: du signal au transport optimal</a></nav>
+</main>
+</div>
+
+</body>
+</html>

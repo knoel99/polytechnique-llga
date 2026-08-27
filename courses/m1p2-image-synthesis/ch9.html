@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — Neural rendering&nbsp;: NeRF et Gaussiennes 3D — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Synthesis: Theory and Practice</a> › Neural rendering&nbsp;: NeRF et Gaussiennes 3D</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités, intégrales, EDO linéaires</a>
+<a href="ch1.html">Radiométrie&nbsp;: la radiance</a>
+<a href="ch2.html">L'équation du rendu</a>
+<a href="ch3.html">BRDF et modèles de matériaux</a>
+<a href="ch4.html">Caméras&nbsp;: le modèle sténopé</a>
+<a href="ch5.html">Rastérisation contre lancer de rayons</a>
+<a href="ch6.html">Path tracing Monte Carlo</a>
+<a href="ch7.html">Accélération&nbsp;: intersection et BVH</a>
+<a href="ch8.html">Bruit, débruitage, tone mapping</a>
+<a href="ch9.html" class="active">Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a>
+<a href="ch10.html">Le temps réel&nbsp;: GPU, hybride, upscaling</a>
+<a href="ch11.html">Travaux de l'enseignant</a>
+<a href="code.html">Un path tracer complet en Python</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Neural rendering&nbsp;: NeRF et Gaussiennes 3D</h2>
+
+<div class="def">
+  <span class="tag">Définition 9.1 — L'équation du rendu volumique</span>
+  Dans un milieu participatif de densité \(\sigma(x)\) (extinction, m⁻¹) et
+  d'émission colorée \(c(x, \omega)\), la radiance le long d'un rayon
+  \(r(t) = o + t\mathbf{d}\), \(t \in [s, \infty)\), vaut
+  $$L(r) = \int_s^{\infty} T(t)\, \sigma(r(t))\, c(r(t), \mathbf{d})\, dt,
+  \qquad T(t) = \exp\Big(\!-\int_s^{t} \sigma(r(u))\, du\Big),$$
+  où \(T\) est la <strong>transmittance</strong> — la probabilité que le
+  rayon «&nbsp;survive&nbsp;» (sans interaction) jusqu'à \(t\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 9.2 — La transmittance résout une EDO linéaire</span>
+  \(T\) est l'unique solution de
+  $$\frac{dT}{dt}(t) = -\,\sigma(r(t))\,T(t), \qquad T(s) = 1,$$
+  et pour \(\sigma\) constant par morceaux sur des intervalles
+  \([t_i, t_{i+1})\) de longueurs \(\delta_i\), le rendu volumique se
+  discrétise en <strong>alpha-composition</strong>
+  $$L \approx \sum_i \Big(\prod_{j&lt;i} (1 - \alpha_j)\Big)\, \alpha_i\, c_i,
+  \qquad \alpha_i = 1 - e^{-\sigma_i \delta_i}.$$
+  <div class="proof">
+    L'EDO est linéaire d'ordre 1 (rappel du chapitre 0)&nbsp;: en posant
+    \(\Sigma(t) = \int_s^t \sigma(r(u))\,du\), \(d(e^{\Sigma} T)/dt =
+    e^{\Sigma}(\Sigma' T + T') = e^{\Sigma}(\sigma T - \sigma T) = 0\),
+    donc \(e^{\Sigma(t)}T(t)\) est constant égal à \(T(s) = 1\) (car
+    \(\Sigma(s) = 0\))&nbsp;: \(T(t) = e^{-\Sigma(t)}\). Sur un intervalle
+    de \(\sigma_i\) constant, \(T(t_{i+1}) = T(t_i)\, e^{-\sigma_i\delta_i}\),
+    d'où la probabilité d'interaction \(\alpha_i = 1 - T(t_{i+1})/T(t_i)
+    = 1 - e^{-\sigma_i \delta_i}\)&nbsp;; sommer «&nbsp;interaction en \(i\)
+    ET survie avant&nbsp;» donne la série discrète (les produits
+    télescopiques \(\prod_{j&lt;i}(1-\alpha_j) = T(t_i)\)).
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.3 — NeRF (Neural Radiance Fields)</span>
+  NeRF (Mildenhall et al., 2020) représente la scène par un réseau de
+  neurones \(F_\theta\)&nbsp;:
+  $$F_\theta\big(\gamma(x), \gamma(\mathbf{d})\big) = \big(\sigma(x),\ c(x, \mathbf{d})\big),$$
+  où \(\gamma\) est l'<strong>encodage positionnel</strong>
+  \(\gamma(u) = (u, \sin 2^k \pi u, \cos 2^k \pi u)_k\) — il donne au MLP le
+  spectre haute fréquence qu'il ne peut pas apprendre seul (le «&nbsp;théorème
+  spectral&nbsp;» de Tancik et al., 2020). L'entraînement minimise
+  l'erreur photométrique sur des rayons de photos calibrées (pose connue,
+  SfM)&nbsp;; l'évaluation rend 100–300 échantillons par rayon et
+  alpha-compose (théorème 9.2). Résultat&nbsp;: photoréalisme, vues
+  nouvelles — au prix d'heures d'entraînement et d'une seconde par
+  image&nbsp;; les successeurs (Instant-NGP et ses hash grids encodant
+  l'espace) ramènent l'entraînement à la minute.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.4 — Gaussiennes 3D (splatting)</span>
+  La représentation par <strong>Gaussiennes 3D</strong> (Kerbl et al., 2023)
+  remplace le réseau par 10⁵–10⁷ gaussiennes anisotropes (position,
+  covariance 3D, opacité, couleur sphérique harmonique)&nbsp;; un rayon les
+  accumule par alpha-composition <em>ordonnée par profondeur</em>, chaque
+  gaussienne étant projetée (rasterisée) en ellipse 2D. Les gradients de la
+  covariance rendent l'optimisation <em>différentiable et rapide</em> (le
+  nombre de gaussiennes s'adapte&nbsp;: clonage/scission)&nbsp;: entraînement
+  en minutes, rendu en <em>temps réel</em> — le standard actuel de la
+  capture de scène. La parenté avec le chapitre 5&nbsp;: c'est une
+  rastérisation (ordre objet&nbsp;!) de primitives volumiques — les deux
+  paradigms du chapitre 5 se réconcilient.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 9.5 — Vérifier l'alpha-composition à la main</span>
+  Rayon traversant 4 intervalles égaux \(\delta = 0{,}5\), densités
+  \(\sigma = (2, 0, 4, 2)\). Alphas&nbsp;: \(\alpha_1 = 1 - e^{-1} \approx
+  0{,}632\), \(\alpha_2 = 0\), \(\alpha_3 = 1 - e^{-2} \approx 0{,}865\),
+  \(\alpha_4 = 0{,}632\). Couleurs \(c_i = (1, 0{,}5, 1, 0{,}25)\)&nbsp;:
+  $$L \approx 0{,}632 \cdot 1 + 0{,}368 \cdot 0 \cdot 0{,}5 + 0{,}368
+  \cdot 0{,}865 \cdot 1 + 0{,}368 \cdot 0{,}135 \cdot 0{,}632 \cdot 0{,}25
+  \approx 0{,}957,$$
+  (transmittances&nbsp;: \(T_1 = 1\), \(T_2 = 0{,}368\), \(T_3 = 0{,}368\),
+  \(T_4 = 0{,}0498\)) — à comparer à l'intégrale exacte \(L = \int T\sigma c\,
+  dt\) des densités constantes par morceaux&nbsp;: la quadrature
+  «&nbsp;échantillon au milieu&nbsp;» de NeRF introduit un <em>biais</em>
+  faible (échantillons aléatoires ⟹ sans biais en espérance).
+</div>
+
+<div class="note">
+  <span class="tag">Le rendu différentiable, paradigme commun</span>
+  NeRF, Gaussiennes 3D, débruitage ML (chapitre 8), upscaling (chapitre
+  10)&nbsp;: partout, un <em>rendu différentiable</em> relie paramètres et
+  image, et l'apprentissage fait le reste — l'équation du rendu devient la
+  couche finale d'un réseau (cf. module Machine Learning, chapitre
+  rétro-propagation&nbsp;; module Multimodal GenAI, chapitre sur la génération
+  3D). La théorie des chapitres 1–6 n'est pas remplacée&nbsp;: elle fournit
+  la <em>structure</em> (physique, estimateurs, biais/variance) que les
+  réseaux ne peuvent qu'exploiter.
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> Bruit, débruitage, tone mapping</a><a class="next" href="ch10.html"><span class="dir">Suivant</span> Le temps réel&nbsp;: GPU, hybride, upscaling</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — Cycle de vie&nbsp;: versionner données, features, modèles — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">ML Ops and LLM Engineering Principles</a> › Cycle de vie&nbsp;: versionner données, features, modèles</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: du notebook au système</a>
+<a href="ch1.html" class="active">Cycle de vie&nbsp;: versionner données, features, modèles</a>
+<a href="ch2.html">CI/CD pour le ML&nbsp;: tester données et modèles</a>
+<a href="ch3.html">Serving des LLMs&nbsp;: batching continu, latence P99</a>
+<a href="ch4.html">Coûts&nbsp;: euros par million de tokens</a>
+<a href="ch5.html">Évaluation en production&nbsp;: drift et monitoring</a>
+<a href="ch6.html">RAG Ops&nbsp;: fraîcheur et évaluation continue</a>
+<a href="ch7.html">Fine-tuning Ops&nbsp;: LoRA versionnés</a>
+<a href="ch8.html">Agents en production&nbsp;: tracing et garde-fous</a>
+<a href="ch9.html">Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Étude de cas et green ops</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Cycle de vie&nbsp;: versionner données, features, modèles</h2>
+
+<p>Le cycle de vie ML s'étend bien au-delà de l'entraînement&nbsp;:
+<strong>collecte → labellisation → features → entraînement → évaluation → registre →
+déploiement → monitoring → (ré)entraînement</strong>. Chaque flèche de ce cycle est un
+artefact qu'il faut <em>identifier de façon immuable</em>, faute de quoi aucune
+métrique n'est reproductible — ni en debug, ni en audit, ni devant un client.</p>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Artefact et lineage</span>
+  Un <strong>artefact</strong> est tout objet produit ou consommé par le cycle&nbsp;:
+  jeu de données, schéma de features, poids, tokenizer, template de prompt, index
+  vectoriel, configuration, image conteneur. Le <strong>lineage</strong> est le graphe
+  des dépendances artefact → artefact. Un entraînement est <em>reproductible</em>
+  lorsque code + données + configuration + environnement sont tous identifiés par
+  des empreintes (hashes) et rejouables.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — La triple empreinte</span>
+  Un run d'entraînement n'est reproductible que si l'on sait rejouer le triplet
+  \((\text{code}, \text{données}, \text{config})\). En pratique&nbsp;:
+  <code>git</code> versionne le code (commit hash), <strong>DVC</strong> versionne
+  les données et les poids (empreinte du contenu, le fichier vivant hors du dépôt),
+  et <code>params.yaml</code> lie les deux. Toute métrique publiée référence les
+  trois empreintes — sinon elle n'est pas une mesure, c'est une rumeur.
+</div>
+
+<pre class="code"><code># Donnees volumineuses versionnees par contenu (DVC) -- seul le pointeur entre dans git
+$ dvc add data/faq_2026.parquet          # crée data/faq_2026.parquet.dvc (hash + taille)
+$ git add data/faq_2026.parquet.dvc &amp;&amp; git commit -m "faq v3 (dedup + PII scrub)"
+
+# Pipeline déclaratif : stages re-joués si et seulement si leurs entrées changent
+# dvc.yaml
+stages:
+  prepare:
+    cmd: python src/prepare.py data/raw/ data/train.parquet
+    deps: [data/raw/, src/prepare.py]
+    outs: [data/train.parquet]
+  finetune:
+    cmd: python src/train_lora.py --config params.yaml
+    deps: [data/train.parquet, src/train_lora.py, params.yaml]
+    outs: [artifacts/lora_faq_v3/]
+  evaluate:
+    cmd: python src/evaluate.py --run artifacts/lora_faq_v3/
+    deps: [artifacts/lora_faq_v3/, data/eval_v3.parquet]
+    metrics: [artifacts/lora_faq_v3/metrics.json:
+              {cache: false}]
+
+$ dvc exp run            # rejoue la chaîne, enregistre l'expérience
+$ dvc metrics diff       # compare v2 -> v3</code></pre>
+
+<h3>Feature stores et registres</h3>
+
+<p>Pour le ML tabulaire, un <strong>feature store</strong> (p.&nbsp;ex. Feast) sert
+la même définition de feature en <em>offline</em> (entraînement, batch) et en
+<em>online</em> (serving, low-latency), éliminant le skew entraînement/inférence —
+la classe de bug la plus sournoise du ML industriel. Pour les LLMs, l'équivalent
+fonctionnel est double&nbsp;: la <strong>cache de prompts</strong> (préfixes partagés&nbsp;;
+cf. ch. 4) et la <strong>banque d'embeddings</strong> du RAG (ch. 6), dont le schéma
+(type de chunk, modèle d'embedding, version de l'index) doit être géré comme une
+feature&nbsp;: identifiée, versionnée, rejouable.</p>
+
+<p>Le <strong>registre de modèles</strong> (MLflow, ou répertoire
+<code>hf_hub</code> privatisé) enregistre pour chaque version&nbsp;: les empreintes
+du triplet, les métriques de qualification, la signature (entrées/sorties), et le
+statut (<em>staging / production / archived</em>). Un déploiement ne référence
+jamais «&nbsp;le dernier entraînement&nbsp;» mais une version figée du registre.</p>
+
+<div class="note">
+  <span class="tag">Spécificité LLM&nbsp;: les prompts et les évals sont des artefacts</span>
+  Dans une application LLM, trois familles d'artefacts s'ajoutent au triplet
+  classique&nbsp;: (i)&nbsp;les <strong>templates de prompts</strong> (versionnés comme
+  du code, avec tests — ch. 2)&nbsp;; (ii)&nbsp;les <strong>jeux d'évaluation</strong>
+  (golden sets question → réponse attendue / documents pertinents)&nbsp;; (iii)&nbsp;les
+  <strong>modèles d'embedding et index</strong> du RAG, couplés&nbsp;: changer de
+  modèle d'embedding invalide tout l'index (ch. 6). Oublier de versionner un prompt
+  revient à ne pas versionner les poids.
+</div>
+
+<table class="tbl">
+  <tr><th>Étape</th><th>Artefact</th><th>Outil typique</th><th>Empreinte</th></tr>
+  <tr><td>Données</td><td>jeux train/eval</td><td>DVC, lakeFS</td><td>hash de contenu</td></tr>
+  <tr><td>Features / embeddings</td><td>définitions, index</td><td>Feast, base vectorielle</td><td>version de schéma</td></tr>
+  <tr><td>Entraînement</td><td>run + poids + LoRA</td><td>MLflow, HF Hub</td><td>run id + commit</td></tr>
+  <tr><td>Évaluation</td><td>rapports, métriques</td><td>MLflow, RAGAS</td><td>hash du jeu d'éval</td></tr>
+  <tr><td>Déploiement</td><td>image conteneur</td><td>registre OCI</td><td>digest sha256</td></tr>
+  <tr><td>Serving</td><td>logs, traces</td><td>OTel, Langfuse</td><td>modèle + prompt + index</td></tr>
+</table>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Précédent</span> Rappels&nbsp;: du notebook au système</a><a class="next" href="ch2.html"><span class="dir">Suivant</span> CI/CD pour le ML&nbsp;: tester données et modèles</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Introduction to Text Mining and NLP — Classification de textes — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Introduction to Text Mining and NLP</a> › Classification de textes</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52082_EP</span>Introduction to Text Mining and NLP</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: espace vectoriel et probabilités</a>
+<a href="ch1.html">La chaîne de traitement texte</a>
+<a href="ch2.html">Sac de mots, TF-IDF et BM25</a>
+<a href="ch3.html">Word embeddings</a>
+<a href="ch4.html">Topic models</a>
+<a href="ch5.html" class="active">Classification de textes</a>
+<a href="ch6.html">Séquences&nbsp;: NER, HMM, CRF</a>
+<a href="ch7.html">Transformers pour le NLP</a>
+<a href="ch8.html">Text mining industriel</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Classification de textes</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 5.1 — Naive Bayes multinomial, dérivé</span>
+  Avec l'hypothèse (fausse&nbsp;!) d'indépendance des mots sachant la classe,
+  \(\mathbb{P}(d\mid c)=\prod_{t\in d}\mathbb{P}(t\mid c)^{\mathrm{tf}(t,d)}\), et Bayes&nbsp;:
+  $$\hat c = \arg\max_c \Big[\log \mathbb{P}(c) + \sum_{t\in d}\mathrm{tf}(t,d)\log \mathbb{P}(t\mid c)\Big].$$
+  MLE des paramètres&nbsp;: \(\mathbb{P}(t\mid c)=\frac{n_{t,c}}{n_c}\) (comptages),
+  \(\mathbb{P}(c)=\frac{n_c}{n}\). <strong>Lissage de Laplace</strong>&nbsp;:
+  $$\mathbb{P}(t\mid c)=\frac{n_{t,c}+1}{n_c+|V|}.$$
+  <div class="proof">
+  (i) Le MLE vient de la maximisation de la log-vraisemblance multinomiale sous contrainte
+  \(\sum_t \mathbb{P}(t\mid c)=1\) (multiplicateurs de Lagrange — comptages relatifs).
+  (ii) Problème&nbsp;: un mot vu en test mais jamais en classe \(c\) donne
+  \(\log 0 = -\infty\) — une seule rareté annule toute la classe&nbsp;; en français
+  («&nbsp;compte&nbsp;» etc.) c'est systématique en petits corpus. (iii) Le lissage de
+  Laplace = le <em>MAP</em> sous prior Dirichlet\((1,\dots,1)\) uniforme&nbsp;: la
+  densité a posteriori \(\propto \prod_t \pi_t^{n_{t,c}}\cdot\prod_t\pi_t^{1-1}\) est
+  maximisée en \(\frac{n_{t,c}+1}{n_c+|V|}\) — le lien Bayésien exact du ch. 0.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi NB marche malgré une hypothèse absurde</span>
+  L'indépendance conditionnelle est massivement violée («&nbsp;New&nbsp;» prédit
+  «&nbsp;York&nbsp;»). Mais la <em>décision</em> (argmax) est souvent correcte même quand
+  les <em>probabilités</em> sont très mal calibrées&nbsp;: il suffit que le bon candidat
+  gagne, pas que son score soit juste (théorie de Domingos &amp; Pazzani). D'où le
+  statut de NB&nbsp;: mauvaises probabilités, bonne baseline — toujours la
+  <em>première</em> d'un projet texte, parce qu'elle s'entraîne en secondes et fixe le
+  plancher de performance.
+</div>
+
+<div class="prop">
+  <span class="tag">Régression logistique creuse&nbsp;: pourquoi ça marche en haute dimension</span>
+  Sur TF-IDF, \(\#\text{features} \gg \#\text{docs}\) (10⁵ features pour 10³
+  documents)&nbsp;: le risque de sur-apprendre semble maximal, or le modèle linéaire
+  régularisé (L2, ou L1 pour sélectionner) généralise très bien. Trois raisons&nbsp;:
+  (1) les vecteurs sont <em>presque orthogonaux</em> en haute dimension — les exemples
+  sont naturellement séparables, la régularisation suffit à choisir un séparateur
+  «&nbsp;sobre&nbsp;»&nbsp;; (2) la pondération IDF a déjà fait une grosse part du travail
+  statistique (prop. 2.3)&nbsp;; (3) les unigrammes/bigrammes discriminants sont
+  exactement les features que le linéaire pondère bien. État de l'art
+  «&nbsp;classique&nbsp;» jusqu'en 2018 (Joulin et al., fastText)&nbsp;; encore
+  redoutable sous 1&nbsp;000 exemples étiquetés.
+</div>
+
+<ul>
+  <li><strong>Calibration</strong>&nbsp;: quand on consomme la probabilité (seuils
+  métier, routing de tickets), recalibrer — Platt (régression logistique sur les
+  scores) ou isotone&nbsp;; diagnostic&nbsp;: courbe de fiabilité (fiabilité prédite vs
+  observée)&nbsp;;</li>
+  <li><strong>Classes déséquilibrées</strong>&nbsp;: pondération de classes
+    (<code>class_weight="balanced"</code>), seuil optimal sur la courbe PR (pas
+    ROC)&nbsp;; métrique&nbsp;: <strong>macro-F1</strong> (moyenne par classe — chaque
+    classe compte pareil) plutôt qu'accuracy (majoritaire flattée)&nbsp;; matrice de
+    confusion par intention pour chatbots&nbsp;;</li>
+  <li><strong>Réseaux</strong>&nbsp;: CNN de phrases (Kim, 2014), BiLSTM&nbsp;; puis
+  fine-tuning de transformers (ch. 7). Courbes d'apprentissage empiriques&nbsp;:
+  linéaire+TF-IDF gagne sous ~10²-10³ exemples, le transformer au-dessus&nbsp;;</li>
+  <li><strong>Zero-shot / few-shot par LLM</strong>&nbsp;: zéro exemple étiqueté,
+  k exemples dans le prompt (M2 LLMs, ch. 4)&nbsp;: excellent point de départ
+  exploratoire et étiquetage assisté (active learning), rarement la solution finale en
+  production (coût, latence, confidentialité) — arbitrage détaillé au M2.</li>
+</ul>
+
+<pre class="code"><code>from sklearn.pipeline import make_pipeline
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.datasets import fetch_20newsgroups
+from sklearn.metrics import f1_score, classification_report
+
+train = fetch_20newsgroups(subset="train", remove=("headers","footers","quotes"))
+test  = fetch_20newsgroups(subset="test",  remove=("headers","footers","quotes"))
+
+pipe = make_pipeline(TfidfVectorizer(min_df=3, ngram_range=(1,2), sublinear_tf=True),
+                     LogisticRegression(C=10, max_iter=2000, class_weight="balanced"))
+pipe.fit(train.data, train.target)
+pred = pipe.predict(test.data)
+print("macro-F1 :", f1_score(test.target, pred, average="macro"))
+print(classification_report(test.target, pred, target_names=test.target_names[:3]))</code></pre>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Précédent</span> Topic models</a><a class="next" href="ch6.html"><span class="dir">Suivant</span> Séquences&nbsp;: NER, HMM, CRF</a></nav>
+</main>
+</div>
+
+</body>
+</html>

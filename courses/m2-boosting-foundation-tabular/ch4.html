@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Boosting to Foundation Models: learning with Tabular Data — Encoder les colonnes&nbsp;: catégorielles et numériques — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">From Boosting to Foundation Models: learning with Tabular Data</a> › Encoder les colonnes&nbsp;: catégorielles et numériques</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P1 (brochure)</span>From Boosting to Foundation Models: learning with Tabular Data</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: arbres, forêts, boosting</a>
+<a href="ch1.html">Pourquoi les GBDT dominent (encore) le tabulaire</a>
+<a href="ch2.html">Boosting&nbsp;: descente de gradient fonctionnelle</a>
+<a href="ch3.html">XGBoost, LightGBM, CatBoost&nbsp;: trois ingénieries</a>
+<a href="ch4.html" class="active">Encoder les colonnes&nbsp;: catégorielles et numériques</a>
+<a href="ch5.html">Deep tabular&nbsp;: MLP régularisés et FT-Transformer</a>
+<a href="ch6.html">TabPFN&nbsp;: apprendre les tables in-context</a>
+<a href="ch7.html">LLMs et tables&nbsp;: sérialisation, text-to-SQL</a>
+<a href="ch8.html">Données synthétiques tabulaires</a>
+<a href="ch9.html">Benchmarking honnête</a>
+<a href="ch10.html">Choisir sa méthode&nbsp;: guide et questions ouvertes</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Encoder les colonnes&nbsp;: catégorielles et numériques</h2>
+
+<p>Sur tables, une part massive de la performance se joue <em>avant</em> le modèle&nbsp;: les
+GBDT digèrent à peine les one-hot massifs, les réseaux exigent des entrées numériques propres.
+Ce chapitre fait le tour des encodages, avec le piège central&nbsp;: la fuite de cible.</p>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Target encoding (mean encoding)</span>
+  Pour une catégorielle \(c\) à haute cardinalité (codes postaux, SKU, utilisateurs), on remplace
+  la modalité par une statistique de la cible&nbsp;; version lissée de Micci-Barreca (2001)&nbsp;:
+  $$ \mathrm{enc}(v) = \frac{n_v\, \bar{y}_v + m\, \bar{y}}{n_v + m}, $$
+  où \(\bar{y}_v\) est la moyenne de la cible sur la modalité \(v\), \(n_v\) son effectif,
+  \(\bar{y}\) la moyenne globale et \(m\) un pseudo-compte&nbsp;: les modalités rares sont
+  tirées vers le prior global.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.2 — La fuite, démontrée</span>
+  Supposons une colonne «&nbsp;identifiant&nbsp;» unique par ligne (\(n_v = 1\) partout) et une
+  cible <em>indépendante</em> de tout (bruit pur). Le target encoding naïf (calculé sur tout le
+  train, ligne incluse) donne \(\mathrm{enc}(v_i) = y_i\)&nbsp;: le feature contient
+  <em>exactement</em> la cible. N'importe quel modèle atteint une AUC d'entraînement de 1,0,
+  tandis que l'AUC de test retombe à 0,5. Le modèle n'a rien appris&nbsp;: il recopie. Avec une
+  cardinalité intermédiaire, la fuite est partielle (\(\mathrm{enc}(v)\) mélange \(y_i\) et
+  \(\bar{y}_v\)) — plus dangereuse encore, car invisible sur les métriques naïves.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.3 — Anti-fuite&nbsp;: out-of-fold et ordre aléatoire</span>
+  Deux réparations standard&nbsp;: (i)&nbsp;<strong>K-fold out-of-fold</strong>&nbsp;: couper le
+  train en \(K\) blocs, encoder chaque bloc avec les statistiques des \(K-1\) autres&nbsp;;
+  (ii)&nbsp;<strong>ordre aléatoire</strong> (CatBoost, déf. 3.8)&nbsp;: chaque ligne encodée avec
+  les seules lignes antérieures. Dans les deux cas, \(\mathrm{enc}(v_i)\) devient indépendant de
+  \(y_i\) conditionnellement à la modalité — la fuite disparaît au prix d'un léger bruit
+  d'estimation, absorbé par le lissage \(m\).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.4 — One-hot vs embeddings</span>
+  <strong>One-hot</strong>&nbsp;: \(K\) colonnes binaires&nbsp;: aucune hypothèse de similarité
+  entre modalités, mais dimension \(K\) (désastreux pour \(K\) grand, et cf. EFB). 
+  <strong>Entity embeddings</strong> (Guo &amp; Berkhahn, 2016)&nbsp;: chaque modalité \(v\)
+  reçoit un vecteur appris \(z_v \in \mathbb{R}^{d}\) (\(d \ll K\)), via une table embarquée dans
+  le réseau&nbsp;: les modalités qui se comportent semblablement vis-à-vis de la cible se
+  rapprochent — l'embedding de «&nbsp;Bavière&nbsp;» et «&nbsp;Bade-Wurtemberg&nbsp;» (concours
+  Rossmann) finissent voisins. C'est le pont naturel entre catégorielles et réseaux&nbsp;;
+  les GBDT, eux, préfèrent target encoding natif ou splits par partitions de modalités.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.5 — Embeddings de features numériques</span>
+  Trois familles pour «&nbsp;textualiser&nbsp;» un scalaire aux yeux d'un réseau (Gorishniy et
+  al., NeurIPS 2022)&nbsp;:
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Linéaire</strong>&nbsp;: \(e_j = b_j + x_j w_j\) (le tokenizer du FT-Transformer,
+    ch. 5)&nbsp;;</li>
+    <li><strong>Périodique</strong>&nbsp;: \(e_j = [\sin(2\pi c_j x_j), \cos(2\pi c_j x_j)]_{c_j
+    \sim \mathcal{N}(0, \sigma^2)}\), paramètres \(\sigma\) (ou les \(c_j\)) appris — brique de
+    type kernel&nbsp;;</li>
+    <li><strong>Par morceaux (piecewise-linear binning)</strong>&nbsp;: \(x_j \to\) coordonnées
+    d'interpolation sur \(B\) bins définis par quantiles — retour contrôlé vers la
+    «&nbsp;logique histogramme&nbsp;» des GBDT.</li>
+  </ul>
+  Résultat empirique massif&nbsp;: un simple MLP avec bons embeddings numériques rivalise des
+  architectures sophistiquées.
+</div>
+
+<div class="note">
+  <span class="tag">Ingénierie, pas magie</span> Les réseaux héritent des réflexes du M1&nbsp;:
+  standardiser <em>par colonne</em> (jamais globalement), transformer les distributions lourdes
+  (rank/quantile), extraire dates (jour de semaine, vacances, cyclicité
+  \(\sin/\cos\) de l'heure), croiser des colonnes métier (revenu/dépense), et traiter les
+  manquants par imputation + indicateur (les réseaux n'ont pas de direction par défaut à la
+  XGBoost — les GBDT, si&nbsp;; cf. ch. 3). La proposition 1.3 rappelle pourquoi tout cela ne
+  profite qu'aux réseaux&nbsp;: les arbres s'en moquent.
+</div>
+
+<table class="tbl">
+  <tr><th>Encodage</th><th>Bonne cardinalité</th><th>Fuite&nbsp;?</th><th>GBDT</th><th>Réseaux</th></tr>
+  <tr><td>One-hot</td><td>faible</td><td>non</td><td>moyen (creux)</td><td>bien (couche dense)</td></tr>
+  <tr><td>Ordinal</td><td>—</td><td>non</td><td>compatible CatBoost/LightGBM natifs</td><td>faux ordre — à éviter</td></tr>
+  <tr><td>Target encoding naïf</td><td>haute</td><td><strong>oui</strong> (ex. 4.2)</td><td>piège</td><td>piège</td></tr>
+  <tr><td>Target OOF / ordonné</td><td>haute</td><td>non</td><td>excellent</td><td>bien</td></tr>
+  <tr><td>Entity embeddings</td><td>haute</td><td>non (appris)</td><td>via pré-entraînement</td><td>excellent (déf. 4.4)</td></tr>
+</table>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> XGBoost, LightGBM, CatBoost&nbsp;: trois ingénieries</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Deep tabular&nbsp;: MLP régularisés et FT-Transformer</a></nav>
+</main>
+</div>
+
+</body>
+</html>

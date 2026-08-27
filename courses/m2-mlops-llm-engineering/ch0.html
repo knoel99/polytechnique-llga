@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — Rappels&nbsp;: du notebook au système — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">ML Ops and LLM Engineering Principles</a> › Rappels&nbsp;: du notebook au système</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="ch0.html" class="active">Rappels&nbsp;: du notebook au système</a>
+<a href="ch1.html">Cycle de vie&nbsp;: versionner données, features, modèles</a>
+<a href="ch2.html">CI/CD pour le ML&nbsp;: tester données et modèles</a>
+<a href="ch3.html">Serving des LLMs&nbsp;: batching continu, latence P99</a>
+<a href="ch4.html">Coûts&nbsp;: euros par million de tokens</a>
+<a href="ch5.html">Évaluation en production&nbsp;: drift et monitoring</a>
+<a href="ch6.html">RAG Ops&nbsp;: fraîcheur et évaluation continue</a>
+<a href="ch7.html">Fine-tuning Ops&nbsp;: LoRA versionnés</a>
+<a href="ch8.html">Agents en production&nbsp;: tracing et garde-fous</a>
+<a href="ch9.html">Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Étude de cas et green ops</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: du notebook au système</h2>
+
+<div class="recap">
+  <div class="recap-title">Prérequis (modules M1/M2)</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>LLMs</strong> (module LLMs M2)&nbsp;: architecture et entraînement (ch. 2-3),
+    post-training SFT/RLHF/DPO (ch. 4-5), <em>inférence et serving avec vLLM</em>
+    (ch. 6), RAG (ch. 7), agents (ch. 8), évaluation et sûreté (ch. 9) — ce module
+    prolonge le ch. 6 en ingénierie&nbsp;;</li>
+    <li><strong>Deep Learning</strong> (M1)&nbsp;: boucles d'entraînement PyTorch, GPU,
+    checkpoints — le socle de ce qu'il faut industrialiser&nbsp;;</li>
+    <li><strong>ML</strong> (M1)&nbsp;: théorie de la généralisation, concentration
+    (Hoeffding) — utilisée au ch. 2 pour borner les tests de non-régression&nbsp;;</li>
+    <li><strong>RL</strong> (M1)&nbsp;: bandits (ch. 6) pour les tests A/B et le routing
+    de modèles&nbsp;;</li>
+    <li><strong>Refresher CS</strong> (M1)&nbsp;: conteneurs, files, complexité — le
+    vocabulaire système du serving (ch. 3).</li>
+  </ul>
+</div>
+
+<p><strong>Le constat fondateur.</strong> Un modèle qui atteint 92&nbsp;% de F1 dans un
+notebook ne «&nbsp;marche&nbsp;» pas&nbsp;: il marche <em>dans un environnement</em>. Le
+papier fondateur du domaine (Sculley et al., NeurIPS 2015) montre que la dette
+technique du ML ne loge pas dans le modèle mais autour&nbsp;: pipelines de données,
+glue code, chaînes de dépendances, configurations, et <em>feedback loops</em> — le
+modèle en production influence les données qui serviront à le réentraîner. Le LLM
+n'abolit pas cette dette, il y ajoute trois spécificités&nbsp;: le modèle est
+<em>non déterministe</em>, son <em>espace d'entrées</em> est le langage naturel tout
+entier (donc non bornable par un schéma), et son <em>coût unitaire</em> (le token) se
+facture à chaque requête.</p>
+
+<div class="def">
+  <span class="tag">Définition 0.1 — ML Ops</span>
+  Ensemble des pratiques d'ingénierie logicielle, de données et de systèmes appliquées
+  au cycle de vie complet d'un système d'apprentissage automatique&nbsp;:
+  développement, test, intégration, déploiement, surveillance, réentraînement. Le
+  <em>LLM engineering</em> en est le cas particulier où le composant central est un
+  modèle de langage (API ou poids ouverts), typiquement au sein d'un RAG, d'un
+  fine-tuning ou d'un agent.
+</div>
+
+<table class="tbl">
+  <tr><th></th><th>Logiciel classique</th><th>ML traditionnel</th><th>Application LLM</th></tr>
+  <tr><td>Unité de test</td><td>Fonction, contrat d'API</td><td>Jeu de validation, métrique</td><td>Jeu d'éval + juge + contrats de prompt</td></tr>
+  <tr><td>Régression visible</td><td>Exception, crash</td><td>Chute de métrique</td><td>Dégradation <em>floue</em>&nbsp;: style, hallucinations</td></tr>
+  <tr><td>Entrées</td><td>Typées, validables</td><td>Tabulaires, schéma</td><td>Langage naturel + documents non fiables</td></tr>
+  <tr><td>Coût d'exécution</td><td>CPU, quasi nul</td><td>Inférence CPU/GPU</td><td>Tokens facturés ou GPU dédiés, latence P99</td></tr>
+  <tr><td>Dépendance externe</td><td>Peu</td><td>Données batch</td><td>API tierce, index vectoriel, outils d'agent</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Fil rouge du module</span> Chaque chapitre contribue une brique
+  d'une même application&nbsp;: un assistant d'entreprise sur documents internes
+  (Confluence/SharePoint), avec RAG, garde-fous et budget. Le lab 12 l'assemble.
+  Les renvois «&nbsp;module LLMs ch. N&nbsp;» pointent vers le module M2
+  <em>Large Language Models</em>&nbsp;; «&nbsp;Graph ML ch. 11&nbsp;» vers le
+  GraphRAG du module M1 <em>Graph Machine and Deep Learning</em>.
+</div>
+</section>
+<nav class="pager"><a href="index.html"><span class="dir">← Module</span> Accueil du module</a><a class="next" href="ch1.html"><span class="dir">Suivant</span> Cycle de vie&nbsp;: versionner données, features, modèles</a></nav>
+</main>
+</div>
+
+</body>
+</html>

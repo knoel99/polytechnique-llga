@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — Filtres spectraux et spectral clustering — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Graph Machine and Deep Learning for Generative AI</a> › Filtres spectraux et spectral clustering</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52072_EP</span>Graph Machine and Deep Learning for Generative AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: théorie des graphes</a>
+<a href="ch1.html">Pourquoi les graphes&nbsp;?</a>
+<a href="ch2.html">Tâches d'apprentissage sur graphes</a>
+<a href="ch3.html">Node embeddings</a>
+<a href="ch4.html" class="active">Filtres spectraux et spectral clustering</a>
+<a href="ch5.html">GNN et message passing</a>
+<a href="ch6.html">Link prediction et auto-encodeurs de graphes</a>
+<a href="ch7.html">GNN à l'échelle</a>
+<a href="ch8.html">Applications et mise en œuvre</a>
+<a href="ch9.html">Génération de graphes</a>
+<a href="ch10.html">Travaux de l'équipe pédagogique</a>
+<a href="ch11.html">Graphes × LLMs&nbsp;: GraphRAG et l'hybride</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Filtres spectraux et spectral clustering</h2>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Transformée de Fourier sur graphe</span>
+  Soit \(L = U \Lambda U^\top\) (décomposition spectrale, \(U\) orthogonale, colonnes
+  \(u_1, \dots, u_n\)). Pour un signal \(x \in \mathbb{R}^n\) porté par les nœuds&nbsp;:
+  $$\hat x = U^\top x \quad (\text{analyse}), \qquad x = U \hat x \quad (\text{synthèse}).$$
+  Les «&nbsp;fréquences&nbsp;» sont les valeurs propres \(\lambda_k\) — petites = variations lentes
+  sur le graphe (basses fréquences), grandes = alternances locales (hautes fréquences).
+  C'est la convolution du module Signal Processing, avec le laplacien en lieu et place de
+  \(-i\frac{d}{dt}\)&nbsp;: \(L\) y joue le rôle de l'opérateur différentiel.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.2 — Caractérisation variationnelle de \(\lambda_2\) (Fiedler)</span>
+  Pour un graphe connexe&nbsp;:
+  $$\lambda_2 \;=\; \min_{x \neq 0,\ x \perp \mathbf{1}} \frac{x^\top L x}{x^\top x},$$
+  atteinte au vecteur de Fiedler \(u_2\). Plus \(\lambda_2\) est petit, plus il existe un signal
+  quasi constant «&nbsp;presque orthogonal&nbsp;» à \(\mathbf{1}\) — c'est-à-dire deux grands
+  blocs de valeurs opposées faiblement connectés.
+  <div class="proof">
+  Écrivons \(x = \sum_i c_i u_i\) (base orthonormée)&nbsp;; \(x \perp \mathbf{1}\) impose
+  \(c_1 = 0\) car \(u_1 = \mathbf{1}/\sqrt{n}\) (le noyau de \(L\) est exactement engendré par
+  \(\mathbf{1}\), prop. 0.2 du calcul de multiplicité). Alors
+  \(x^\top L x = \sum_{i \geq 2} \lambda_i c_i^2\) et \(x^\top x = \sum_{i \geq 2} c_i^2\)&nbsp;;
+  le quotient est une moyenne pondérée des \(\lambda_i, i \geq 2\), donc minorée par
+  \(\lambda_2\), avec égalité pour \(x = u_2\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.3 — Vecteur de Fiedler sur deux cliques reliées (calcul exact)</span>
+  Deux \(K_5\) (\(\{u, x_1, \dots, x_4\}\) et \(\{v, y_1, \dots, y_4\}\)) reliés par le pont
+  \((u, v)\). Par symétrie, cherchons un vecteur propre antisymétrique&nbsp;: \(x_i = a\) sur
+  les 4 nœuds non-pont de gauche, \(u \mapsto b\), et valeurs opposées à droite. Les équations
+  \(L x = \lambda x\) en un nœud non-pont (degré 4) et en \(u\) (degré 5) donnent&nbsp;:
+  $$\lambda a = a - b \qquad \text{et} \qquad \lambda b = 6b - 4a
+  \;\;\Rightarrow\;\; \lambda^2 - 7\lambda + 2 = 0.$$
+  D'où \(\lambda_2 = \frac{7 - \sqrt{41}}{2} \approx 0{,}298\) et \(b = (1 - \lambda_2)\, a
+  \approx 0{,}70\, a\)&nbsp;; le vecteur de Fiedler vaut, à normalisation près&nbsp;:
+  $$(\underbrace{1, 1, 1, 1}_{x_i}, \underbrace{0{,}70}_{u}, \underbrace{-0{,}70}_{v},
+  \underbrace{-1, -1, -1, -1}_{y_j})$$
+  — le <strong>signe sépare exactement les deux communautés</strong>, et le nœud pont prend une
+  valeur intermédiaire. C'est <em>la</em> image à retenir du spectral clustering.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.4 — Spectral clustering&nbsp;: algorithme complet et justification (relaxation de RatioCut)</span>
+  <strong>Algorithme</strong> (pour \(k\) communautés)&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>calculer les \(k\) premiers vecteurs propres \(u_1, \dots, u_k\) de \(L\)&nbsp;;
+    former \(F = [u_1 | \dots | u_k] \in \mathbb{R}^{n \times k}\)&nbsp;;</li>
+    <li>normaliser chaque ligne de \(F\)&nbsp;;</li>
+    <li>appliquer k-means aux \(n\) lignes de \(F\) (descripteur spectral).</li>
+  </ol>
+  <strong>Justification</strong>&nbsp;: le RatioCut d'une partition \(\{C_1, \dots, C_k\}\) est
+  \(\mathrm{RatioCut} = \sum_{j=1}^{k} \frac{\mathrm{cut}(C_j, \bar{C}_j)}{|C_j|}\) (couper une
+  petite communauté coûte cher — contrairement à la simple minimisation de cut). Notons
+  \(H \in \mathbb{R}^{n \times k}\) les indicateurs renormalisés
+  \(H_{ij} = \mathbb{1}[v_i \in C_j] / \sqrt{|C_j|}\).
+  <div class="proof">
+  (i)&nbsp;<em>Exactitude sur la classe discrète</em>. \(H^\top H = I\) (colonnes orthogonales
+  de norme 1). De plus
+  \(h_j^\top L h_j = \sum_{(u,v) \in E} (h_j(u) - h_j(v))^2 = \frac{1}{|C_j|} \times
+  |\{(u,v) \in E : |\{u, v\} \cap C_j| = 1\}| = \frac{\mathrm{cut}(C_j, \bar{C_j})}{|C_j|}\).
+  Donc \(\mathrm{tr}(H^\top L H) = \mathrm{RatioCut}\)&nbsp;: minimiser RatioCut = minimiser
+  \(\mathrm{tr}(H^\top L H)\) sur les <em>indicateurs</em> orthonormés.
+  (ii)&nbsp;<em>Relaxation</em>. On autorise tout \(F \in \mathbb{R}^{n \times k}\) avec
+  \(F^\top F = I\)&nbsp;; le problème relaxé \(\min_{F^\top F = I} \mathrm{tr}(F^\top L F)\)
+  a pour solution les \(k\) premiers vecteurs propres (théorème de Ky Fan&nbsp;: montré en
+  écrivant \(F^\top L F = \sum_{ij} (F^\top u_i)\,\lambda_i\,(u_j^\top F)\) et en échangeant
+  l'ordre de sommation, puis en minimisant coefficients diagonalisés).
+  (iii)&nbsp;<em>Retour au discret</em>. Les lignes de \(F\) restent proches des lignes
+  d'indicateurs renormalisés&nbsp;; k-means les regroupe. <span class="qed">∎</span>
+  </div>
+  Variante <strong>Normalized Cut</strong> (Shi &amp; Malik)&nbsp;: pondérer par les volumes
+  \(d(C_j)\) conduit au problème généralisé \(L y = \lambda D y\), résolu par les vecteurs
+  propres de \(L_{\mathrm{sym}}\) — c'est la version utilisée en pratique (et celle de
+  scikit-learn). Liens&nbsp;: ACP (module Machine Learning — la matrice \(F\) est le pendant
+  spectral de la projection)&nbsp;; SBM (ch. 9) pour l'approche statistique&nbsp;; ambiguïtés
+  de signe des vecteurs propres — un vrai problème pour les GNN, résolu par SignNet (M2, ch. 3).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.5 — ChebNet&nbsp;: polynômes de Tchebychev (Defferrard et al., 2016)</span>
+  Filtrer exactement coûte \(y = U\, g_\theta(\Lambda)\, U^\top x\) — une décomposition complète
+  (\(\mathcal{O}(n^3)\)) <em>spécifique à chaque graphe</em>. Astuce&nbsp;: prendre \(g_\theta\)
+  <strong>polynomial de degré \(K\)</strong> dans la base de Tchebychev. Posons
+  \(T_0(x) = 1\), \(T_1(x) = x\), \(T_{k+1}(x) = 2x T_k(x) - T_{k-1}(x)\), et
+  \(\tilde\Lambda = \frac{2\Lambda}{\lambda_{\max}} - I\) (échelle vers \([-1, 1]\))&nbsp;;
+  alors
+  $$y = \sum_{k=0}^K \theta_k\, T_k(\tilde L)\, x, \qquad \tilde L = \frac{2L}{\lambda_{\max}} - I,$$
+  <em>sans vecteurs propres</em>&nbsp;: filtre \(K\)-localisé, poids \(\theta\) <em>partagés par
+  tous les graphes</em>.
+  <div class="proof">
+  (i)&nbsp;<em>Récurrence de Tchebychev</em>. Pour \(x = \cos\theta\),
+  \(T_k(x) = \cos(k\theta)\)&nbsp;; la formule d'addition
+  \(\cos((k{+}1)\theta) = 2\cos\theta \cos(k\theta) - \cos((k{-}1)\theta)\) donne la récurrence
+  (elle se propage à tout \(x \in \mathbb{R}\) par identité polynomiale).
+  (ii)&nbsp;<em>Calcul fonctionnel</em>. Montrons \(T_k(\tilde L) = U T_k(\tilde\Lambda) U^\top\)&nbsp;:
+  c'est vrai pour les monômes par récurrence — \(\tilde L^m = (U \tilde\Lambda U^\top)^m =
+  U \tilde\Lambda^m U^\top\), les produits internes \(U^\top U\) se simplifiant — donc pour
+  tout polynôme. Ainsi \(y = U\, g_\theta(\tilde\Lambda)\, U^\top x = g_\theta(\tilde L)\, x\)&nbsp;:
+  le filtre spectral s'exprime comme polynôme de \(L\) appliqué directement à \(x\).
+  (iii)&nbsp;<em>Localité</em>. \(\tilde L x\) en un nœud ne combine que \(x_v\) et
+  \(\{x_u : u \in \mathcal{N}(v)\}\)&nbsp;; par récurrence sur la récurrence de Tchebychev
+  (combinaison linéaire de \(\tilde L^k x\), \(k \leq K\)), la sortie en \(v\) ne dépend que du
+  \(K\)-voisinage. <span class="qed">∎</span>
+  </div>
+  Coût&nbsp;: \(\mathcal{O}(K |E|)\) par application — linéaire en la taille du graphe.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.6 — Du spectral au spatial&nbsp;: l'égalité démontrée</span>
+  Tout filtre <em>polynomial de degré \(K\)</em> en \(L\) est exactement un opérateur
+  \(K\)-localisé, et réciproquement tout opérateur de message passing à \(K\) couches dont la
+  propagation est un polynôme de \(A\) réalise un filtre spectral polynomial.
+  <div class="proof">
+  Sens direct&nbsp;: développé au (iii) ci-dessus. Réciproque&nbsp;: une couche locale
+  \(y_v = \sum_{u \in \{v\} \cup \mathcal{N}(v)} c_{uv} x_u\) avec poids uniformes par
+  symétrie s'écrit matriciellement \(y = \sum_{k \leq 1} c_k\, \Pi_k(A) x\) pour des polynômes
+  \(\Pi_k\) de degré \(\leq 1\) (le terme diagonal est \(\Pi_0\), les arêtes \(\Pi_1\))&nbsp;;
+  en composant \(K\) couches sans non-linéarité, \(y = \Pi(A) x\) avec \(\deg \Pi \leq K\), et
+  comme \(L = D - A\) est lui-même polynomial en \(A\) (à \(D\) fixé par le graphe),
+  \(\Pi(A) = g(L)\) pour un polynôme \(g\) de même degré. Les non-linéarités entre couches
+  brisent l'égalité exacte — c'est précisément l'écart entre «&nbsp;CNN sur graphe&nbsp;»
+  spectral et GNN spatial&nbsp;: le GNN généralise le filtre en insérant des point-par-point
+  non linéaires, comme un CNN 1D. <span class="qed">∎</span>
+  </div>
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Node embeddings</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> GNN et message passing</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -723,7 +723,287 @@ tronqués (ch. 10).</p>
 </div>
 </section>
 
-<!-- SUITE -->
+<!-- ============================ CH 8 ============================ -->
+<section class="chapter" id="ch8">
+<h2>8. Applications&nbsp;: médicaments, matériaux, réseaux synthétiques</h2>
+
+<p>Générer des graphes n'est pas une fin en soi&nbsp;: c'est le bras opérationnel du
+<strong>design inverse</strong> — spécifier ce que l'on veut (une propriété, une structure,
+une statistique) et laisser le modèle explorer l'espace \(\mathcal{G}\) à notre place.
+Ce chapitre visite les trois terrains d'application du module, chaque fois avec les trois
+mêmes questions&nbsp;: quelles <em>contraintes dures</em>&nbsp;? quels <em>objectifs</em>&nbsp;?
+quelle <em>évaluation</em>&nbsp;?</p>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Design inverse, Pareto, scalarisation</span>
+  On dispose de prédicteurs \(Q_1, \dots, Q_m : \mathcal{G} \to \mathbb{R}\) (solubilité,
+  synthésabilité, activité prédite…). Le <strong>design inverse</strong> cherche à maximiser
+  un objectif <em>vectoriel</em> \(Q = (Q_1, \dots, Q_m)\)&nbsp;: en général aucun \(G\)
+  n'optimise tous les \(Q_i\) à la fois (solubilité contre perméabilité, activité contre
+  toxicité). On définit la <strong>dominance de Pareto</strong>&nbsp;: \(G \succ G'\) si
+  \(Q_i(G) \geq Q_i(G')\) pour tout \(i\), avec au moins une inégalité stricte&nbsp;; les
+  non-dominés forment la <strong>frontière de Pareto</strong>. Deux scalarisations usuelles
+  ramènent le problème à un objectif scalaire&nbsp;:
+  $$J(G) = \sum_{i} w_i\, Q_i(G) \quad\text{(pondérée)}, \qquad
+  J_{\times}(G) = \prod_{i} \pi_i\big(Q_i(G)\big)^{w_i} \quad\text{(géométrique)},$$
+  où \(\pi_i : \mathbb{R} \to [0,1]\) ramène chaque propriété dans \([0,1]\) (sigmoïdes,
+  normalisation)&nbsp;; la forme géométrique (celle des tâches MPO de GuacaMol) pénalise
+  <em>lourdement</em> tout objectif effondré&nbsp;: un produit ne pardonne pas un zéro.
+  Le rôle de la génératrice&nbsp;: proposer des candidats là où l'optimisation combinatoire
+  directe (\(10^{500}\) adjacences, ch. 1) est désespérée — le guidage par gradient du
+  ch. 4, le CFG du ch. 5 et l'optimisation par renforcement du ch. 7 sont les trois
+  interfaces entre \(p_\theta\) et \(J\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 8.2 — Découverte de médicaments&nbsp;: où la génératrice se branche-t-elle&nbsp;?</span>
+  Le pipeline industriel, simplifié mais fidèle&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Cible et hypothèse</strong>&nbsp;: une protéine impliquée dans une maladie&nbsp;;</li>
+    <li><strong>Proposition</strong>&nbsp;: la génératrice échantillonne \(G \sim
+    p_\theta(\cdot \mid c)\) (c = descripteur de cible, propriétés) ou optimise \(J\) dans
+    l'espace latent — guidance de GraphAF (ch. 4), CFG de DiGress (ch. 5), politiques RL
+    sur SMILES (les pipelines industriels type REINVENT)&nbsp;;</li>
+    <li><strong>Filtrage</strong>&nbsp;: validité (valence, ch. 3), \(QED\) — la note de
+    «&nbsp;drug-likeness&nbsp;» sur \([0,1]\) (Bickerton et al., 2012) —, synthésabilité
+    \(SA\), logP, diversité (ch. 6)&nbsp;;</li>
+    <li><strong>Évaluation coûteuse</strong>&nbsp;: docking (énergie d'interaction prédite),
+    modèles ADMET (absorption, toxicité) — chaque étape coûte des ordres de grandeur de plus
+    que la précédente&nbsp;;</li>
+    <li><strong>Synthèse et essais</strong>&nbsp;: le goulot réel — d'où la métrique
+    opérationnelle&nbsp;: la qualité du <em>top-k</em> (les k candidats effectivement
+    synthétisés), pas la moyenne du lot.</li>
+  </ol>
+  Conséquence souvent ignorée&nbsp;: optimiser la moyenne de \(J\) sur 10<sup>4</sup>
+  molécules peut être <em>pire</em> qu'optimiser le maximum — la génératrice utile est
+  celle qui explore les coins de la frontière de Pareto&nbsp;; c'est exactement la courbe
+  fidélité/diversité du module <em>Control in Generative AI</em> (ch. 9), relue côté
+  application.
+</div>
+
+<div class="note">
+  <span class="tag">Benchmarks moléculaires&nbsp;: ZINC, MOSES, GuacaMol</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>ZINC</strong> (Sterling &amp; Irwin, 2015)&nbsp;: la base de composés
+    <em>achetables</em> — le réservoir&nbsp;; le sous-ensemble <strong>ZINC-250k</strong>
+    (≈ 250&nbsp;000 molécules lead-like, popularisé par les VAE grammaticaux) est le jeu
+    d'entraînement standard des chapitres 3-5 (NeVAE, GraphAF s'y entraînent et s'y
+    évaluent)&nbsp;;</li>
+    <li><strong>MOSES</strong> (Polykovskiy et al., 2020)&nbsp;: ~1,9&nbsp;M de molécules
+    ZINC avec <em>découpage par scaffolds</em> (les squelettes du test sont inconnus à
+    l'entraînement) et métriques standardisées&nbsp;: validité, unicité, nouveauté, FCD,
+    similarité de scaffolds — le protocole «&nbsp;distribution-learning&nbsp;» du
+    ch. 6&nbsp;;</li>
+    <li><strong>GuacaMol</strong> (Brown et al., 2019)&nbsp;: deux familles de tâches —
+    <em>distribution-learning</em> (reproduire une bibliothèque&nbsp;: FCD, divergences KL
+    sur les propriétés physico-chimiques, validité/nouveauté) et <em>goal-directed</em>
+    (redécouvrir une molécule donnée, similarité, isomères, et les tâches
+    <strong>MPO</strong>&nbsp;: maximiser le produit géométrique de propriétés — la
+    définition 8.1 en action).</li>
+  </ul>
+  Le piège commun&nbsp;: l'apprentissage de la métrique (ch. 6, point 4)&nbsp;; sur les
+  tâches goal-directed, un modèle peut mémoriser les cibles — d'où l'évaluation sur cibles
+  tenues secrètes. Ces benchmarks sont à la génération moléculaire ce que CIFAR/ImageNet
+  sont à la vision (cf. module Deep Learning)&nbsp;: des arrêts commodes, pas la
+  destination.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 8.3 — Matériaux&nbsp;: la contrainte périodique (CDVAE, MatterGen)</span>
+  Un cristal n'est pas une molécule&nbsp;: c'est un triplet \((\Lambda, X, L)\) — réseau
+  \(\Lambda\) (trois vecteurs de maille), positions \(X\) de \(n\) atomes <em>dans la
+  maille</em>, l'invariance étant le groupe des translations entières&nbsp;: toute quantité
+  (distances, énergies, densités) se calcule <em>modulo les images périodiques</em>. Deux
+  modèles bornent le domaine&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>CDVAE</strong> (Xie et al., ICLR 2022)&nbsp;: un VAE dont le décodeur
+    <em>débruite</em> par diffusion&nbsp;; l'initialisation place les atomes loin de tout
+    équilibre et la diffusion les fait «&nbsp;tomber&nbsp;» vers des liaisons réalistes —
+    le biais inductif physique (la stabilité est un minimum local d'énergie) est inscrit
+    <em>dans la dynamique</em>&nbsp;: l'analogue exact du masque de valence du ch. 3,
+    déplacé dans l'espace des positions&nbsp;;</li>
+    <li><strong>MatterGen</strong> (Zeni et al., Nature 2025)&nbsp;: diffusion conjointe
+    sur types d'atomes, coordonnées <em>et</em> réseau — avec conditionnement par
+    <strong>adaptateur</strong>&nbsp;: le modèle de base (appris sur toute la table
+    périodique) est figé, un petit module par tâche réoriente le débruitage vers la
+    propriété cible (composition, symétrie, magnétisme…) — l'analogue industriel du
+    classifier-free guidance du ch. 5&nbsp;: un seul grand modèle, mille adaptations
+    bon marché.</li>
+  </ol>
+  Évaluation propre aux matériaux&nbsp;: fraction <strong>stable</strong> (énergie prédite
+  proche de l'enveloppe convexe des phases connues), <strong>nouveauté</strong> contre les
+  bases cristallographiques (l'analogue de la nouveauté du ch. 6), validité de symétrie
+  (groupes d'espace). La leçon du module se répète&nbsp;: la périodicité est une contrainte
+  <em>dure</em> — elle est architecturale (équivariance aux translations, cf. module
+  Geometric Deep Learning M2), jamais un post-traitement.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 8.4 — Réseaux synthétiques&nbsp;: générer pour protéger</span>
+  Partager un graphe réel (contacts, transactions, appels) c'est exposer des individus&nbsp;:
+  la structure elle-même ré-identifie — connaître les voisins d'un nœud suffit à le
+  retrouver dans la plupart des réseaux réels, et les anonymisations par masquage sont
+  systématiquement cassées. Générer un réseau <em>synthétique</em> qui reproduit les
+  statistiques utiles (degrés, clustering, motifs — les features du ch. 6) sans copier les
+  individus est l'alternative&nbsp;; <strong>NetGAN</strong> (Bojchevski et al., ICML 2018)
+  a ouvert la voie&nbsp;: apprendre la distribution des <em>marches aléatoires</em> biaisées
+  du graphe (un GAN sur des séquences de nœuds), puis reconstruire l'adjacence par les
+  co-occurrences des marches — le graphe n'est jamais copié, seule sa «&nbsp;signature de
+  marches&nbsp;» l'est.
+  <div class="proof">
+  <strong>Le compromis fidélité/confidentialité, quantifié.</strong> La fidélité se mesure
+  par MMD sur degrés/clustering/orbits (ch. 6)&nbsp;; la confidentialité par des tests
+  d'inférence d'appartenance au niveau nœud (le pendant graphique des attaques du module
+  <em>Security and Robustness</em> M2)&nbsp;: un générateur qui <em>mémorise</em>
+  (sur-apprentissage sur un graphe unique) recrache des sous-graphes exacts — détectables,
+  dommages réels. La maîtrise du compromis passe par (i)&nbsp;la régularisation de
+  \(p_\theta\) (limiter la mémorisation comme on limite le sur-apprentissage — cf. module
+  Machine Learning ch. 7)&nbsp;; (ii)&nbsp;le bruit au niveau nœud/arête (l'analogue du
+  mécanisme gaussien de la DP — cf. modules Emerging ML ch. 5 et Privacy and Uncertainty
+  M2)&nbsp;; (iii)&nbsp;l'évaluation <em>des deux côtés</em>&nbsp;: publier un réseau
+  synthétique sans test d'attaque est la réédition du «&nbsp;100&nbsp;% de validité&nbsp;»
+  du ch. 6 — une moitié de preuve. <span class="qed">∎</span></div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 8.5 — Pareto à la main (papier-crayon)</span>
+  Quatre candidats, deux objectifs normalisés (\(Q_1\) = activité prédite, \(Q_2\) =
+  synthésabilité)&nbsp;: \(A = (0{,}9\,;\ 0{,}2)\), \(B = (0{,}7\,;\ 0{,}7)\),
+  \(C = (0{,}6\,;\ 0{,}9)\), \(D = (0{,}2\,;\ 0{,}95)\). Dominance&nbsp;: \(B\) domine-t-il
+  \(D\)&nbsp;? \(0{,}7 &gt; 0{,}2\) mais \(0{,}7 &lt; 0{,}95\) — non&nbsp;; de proche en
+  proche, les quatre sont sur la frontière. Scalarisation pondérée
+  \(J = w Q_1 + (1-w) Q_2\)&nbsp;: à \(w = 0{,}3\), \(C\) gagne (\(J = 0{,}81\)) devant
+  \(D\) (0,725) et \(B\) (0,70)&nbsp;; à \(w = 0{,}6\), \(C\) l'emporte encore (0,72)
+  contre \(B\) (0,70) et \(A\) (0,62)&nbsp;; \(A\) ne dépasse \(C\) que pour
+  \(w \geq 0{,}7\) — le classement <em>pivote</em> au gré des poids&nbsp;: rapporter la
+  frontière, jamais un argmax isolé. Version géométrique \(J_\times = Q_1 Q_2\)&nbsp;:
+  \(C\) (0,54) et \(B\) (0,49) dominent, \(A\) (0,18) et \(D\) (0,19) sont éliminés —
+  les profils déséquilibrés sont écrasés&nbsp;: la signature du MPO.
+</div>
+
+<table class="tbl">
+  <tr><th>Domaine</th><th>Objet</th><th>Contrainte dure</th><th>Objectifs types</th><th>Évaluation</th></tr>
+  <tr><td>Molécules</td><td>graphe 2D (types, liaisons) ou SMILES</td><td>valence, aromaticité (ch. 3)</td><td>QED, SA, logP, docking, MPO</td><td>validité/unicité/nouveauté, FCD (ch. 6), GuacaMol, MOSES</td></tr>
+  <tr><td>Matériaux</td><td>cristal \((\Lambda, X, L)\)</td><td>périodicité, équivariance (Geometric DL)</td><td>stabilité, bande interdite, magnétisme</td><td>fraction stable, nouveauté vs bases cristallographiques</td></tr>
+  <tr><td>Réseaux</td><td>graphe simple, parfois étiqueté</td><td>taille, degrés visés</td><td>statistiques cibles (spectre, degrés, clustering)</td><td>MMD (ch. 6), tests d'appartenance (privacy)</td></tr>
+</table>
+</section>
+
+<!-- ============================ CH 9 ============================ -->
+<section class="chapter" id="ch9">
+<h2>9. Travaux de l'équipe LLGA</h2>
+
+<p>Le master LLGA est porté par le laboratoire <strong>DaSciM</strong> (Data Science and
+Mining, LIX, CNRS — École Polytechnique&nbsp;: M.&nbsp;Vazirgiannis, J.&nbsp;Lutzeyer,
+G.&nbsp;Nikolentzos et leurs doctorants), laboratoire d'accueil des stages et thèses. Ce
+chapitre présente quatre de ses travaux, choisis parce qu'ils touchent
+<em>directement</em> les objets de ce module&nbsp;: l'encodeur des génératrices (PathNN),
+la question de l'ordre (GOAT), une génératrice à diffusion latente conditionnée par
+features (NGG) et la frontière LLM × graphes (pseudo-code prompting). Les autres axes du
+laboratoire sont couverts par les modules Graph ML (ch. 10) et Advanced GNN (ch. 8)&nbsp;;
+ici, chaque article se lit comme le <em>prolongement d'un chapitre</em>.</p>
+
+<div class="thm">
+  <span class="tag">Travail 9.1 — PathNN&nbsp;: agréger des chemins, pas des voisins (Michel, Nikolentzos, Lutzeyer &amp; Vazirgiannis, ICML 2023)</span>
+  Le message passing standard (ch. 0) agrège les <em>voisins immédiats</em>&nbsp;; PathNN
+  agrège des <strong>chemins</strong> partant du nœud&nbsp;:
+  $$h_v^{(\ell)} = \mathrm{AGG}\Big(\big\{\, \mathrm{LSTM}\big(h_v^{(0)}, h_{u_1}^{(0)},
+  \dots, h_{u_\ell}^{(0)}\big)\ :\ (v, u_1, \dots, u_\ell) \in \mathcal{P}_v^{(\ell)}
+  \,\big\}\Big),$$
+  où \(\mathcal{P}_v^{(\ell)}\) est un ensemble de chemins de longueur \(\ell\) — trois
+  variantes&nbsp;: plus courts chemins (vers toutes destinations), marches aléatoires,
+  chemins simples échantillonnés. Deux raisons de s'y intéresser ici&nbsp;:
+  (i)&nbsp;<em>expressivité</em>&nbsp;: les chemins de longueur \(\ell\) capturent des
+  dépendances multi-sauts que \(\ell\) couches de MPNN mélangent irrémédiablement —
+  strictement au-dessus de 1-WL sur des paires choisies (cf. module Advanced GNN
+  ch. 1-2)&nbsp;; comme le nombre de chemins simples croît exponentiellement,
+  l'échantillonnage de \(\mathcal{P}_v\) borne le coût&nbsp;: un compromis
+  expressivité/coût réglé <em>dans l'encodeur</em>&nbsp;;
+  (ii)&nbsp;<em>rôle dans ce module</em>&nbsp;: PathNN est un encodeur — le candidat
+  naturel pour le \(q_\phi(z \mid G)\) des VAE (ch. 3) et le squelette du NGG
+  ci-dessous&nbsp;; remplacer le MPNN par un encodeur plus expressif est le levier
+  d'amélioration le plus simple des génératrices à latent.
+</div>
+
+<div class="thm">
+  <span class="tag">Travail 9.2 — GOAT&nbsp;: réhabiliter l'ordre des voisins (Chatzianastasis, Lutzeyer, Dasoulas &amp; Vazirgiannis, AAAI 2023)</span>
+  Tout le module a croisé l'ordre&nbsp;: les autorégressifs lui <em>imposent</em> un ordre
+  canonique (BFS, ch. 2), le décodeur one-shot doit <em>apparier</em> ses nœuds (matching
+  hongrois, ch. 3). GOAT attaque la racine&nbsp;: les agrégateurs usuels (somme, moyenne,
+  max, attention) sont invariants — ils jettent <em>toute</em> information d'ordre entre
+  voisins, alors que cet ordre porte du signal (synergies, redondances entre voisins). La
+  couche GOAT est une attention <strong>permutation-sensitive</strong>&nbsp;: chaque nœud
+  apprend un <em>ordre local</em> de son voisinage (scores de position) et encode les
+  voisins <em>dans cet ordre appris</em> — l'invariance globale est préservée (l'ordre est
+  une fonction du graphe, pas d'une numérotation), la sensibilité locale est restaurée.
+  Résultats&nbsp;: prédiction de métriques centrales (betweenness…) où les GNN invariants
+  peinent. La lecture «&nbsp;génération&nbsp;»&nbsp;: un encodage qui distingue des
+  voisinages que 1-WL confond donne au latent <em>plus à dire</em> — la réciproque du
+  problème du matching du ch. 3&nbsp;: mieux encoder l'ordre, c'est mieux le retrouver au
+  décodage.
+</div>
+
+<div class="thm">
+  <span class="tag">Travail 9.3 — NGG&nbsp;: diffusion latente conditionnée par features de graphe (Evdaimon, Nikolentzos, Xypolopoulos, Kammoun, …, Vazirgiannis, 2024)</span>
+  <em>Neural Graph Generator</em> applique aux graphes la recette <strong>latent
+  diffusion</strong> (rappel&nbsp;: module Multimodal GenAI ch. 3-4)&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Encodeur</strong>&nbsp;: un GNN comprime \(G \mapsto h_G\) (latent)&nbsp;;</li>
+    <li><strong>Diffusion latente conditionnée</strong>&nbsp;: un débruiteur apprend à
+    débruiter \(h_G\) <em>sachant un vecteur de features cibles</em> \(c\) — spectre du
+    laplacien (les premières valeurs propres), statistiques de degrés, coefficient de
+    clustering… descripteurs <em>globaux, interprétables, mesurables</em>&nbsp;;</li>
+    <li><strong>Décodeur</strong>&nbsp;: du latent débruité vers l'adjacence.
+    Échantillonnage&nbsp;: choisir \(c\) — le «&nbsp;cahier des charges&nbsp;»
+    statistique — puis générer.</li>
+  </ol>
+  Positionnement par rapport aux chapitres&nbsp;: DiGress (ch. 5) débruite <em>l'objet
+  complet</em> (types, arêtes)&nbsp;; NGG débruite <em>une représentation</em> —
+  l'échangeabilité est celle de l'encodeur, le coût par pas bien moindre, et le
+  conditionnement est «&nbsp;macro&nbsp;» (features globales) là où le CFG moléculaire du
+  ch. 7 est «&nbsp;micro&nbsp;» (propriété d'une molécule). L'évaluation est celle du
+  ch. 6&nbsp;: MMD sur degrés/clustering/orbits entre générés et familles cibles (SBM,
+  réseaux de citation…). C'est aussi la brique «&nbsp;réseaux synthétiques&nbsp;» du
+  ch. 8&nbsp;: spécifier un spectre et une distribution de degrés, obtenir des graphes
+  entiers.
+</div>
+
+<div class="thm">
+  <span class="tag">Travail 9.4 — Pseudo-code prompting&nbsp;: raisonner sur les graphes par programme (Skianis, Nikolentzos &amp; Vazirgiannis, 2024)</span>
+  Une série de problèmes de graphes (connectivité, plus court chemin, existence de cycles,
+  flot maximal, arbre couvrant…) est soumise à des LLMs&nbsp;: la même instruction
+  formulée en <strong>pseudo-code</strong> (spécification algorithmique&nbsp;: boucles,
+  conditions, invariants) bat systématiquement sa formulation en langue naturelle — sur
+  les deux axes&nbsp;: comprendre (exécuter l'algorithme décrit) et produire (écrire
+  l'algorithme pour le problème posé). La lecture pour ce module&nbsp;:
+  (i)&nbsp;c'est la confirmation expérimentale de la voie 2 du ch. 7 («&nbsp;l'LLM écrit
+  le générateur&nbsp;»)&nbsp;: le <em>programme</em> est la représentation de graphe la
+  plus fiable pour un LLM — non ambiguë, vérifiable, exécutable&nbsp;;
+  (ii)&nbsp;le pont naturel avec les agents à outils (ch. 7, ChemCrow)&nbsp;: décrire la
+  tâche en pseudo-code puis la faire vérifier par un solveur (NetworkX) — la boucle
+  proposition/vérification du module Control (ch. 10), instanciée aux graphes.
+</div>
+
+<table class="tbl">
+  <tr><th>Travail</th><th>Question</th><th>Idée centrale</th><th>Chapitres liés</th></tr>
+  <tr><td>PathNN (ICML 2023)</td><td>que lire sur un graphe&nbsp;?</td><td>agréger des chemins (LSTM) au lieu de voisinages</td><td>ch. 3-5 (encodeurs)</td></tr>
+  <tr><td>GOAT (AAAI 2023)</td><td>l'ordre local des voisins</td><td>attention permutation-sensitive, ordre appris</td><td>ch. 2-3 (ordres, matching)</td></tr>
+  <tr><td>NGG (2024)</td><td>générer à features données</td><td>diffusion latente conditionnée par spectre/degrés</td><td>ch. 5-6, ch. 8 (réseaux synthétiques)</td></tr>
+  <tr><td>Pseudo-code prompting (2024)</td><td>faire exécuter des algorithmes de graphes</td><td>le pseudo-code bat le langage naturel</td><td>ch. 7 (text-to-graph)</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Mode d'emploi pédagogique</span>
+  Ordre de lecture conseillé&nbsp;: NGG d'abord (le plus proche du cœur du module —
+  l'exercice 8 le prolonge)&nbsp;; GOAT ensuite (après avoir refait le matching du
+  ch. 3)&nbsp;; PathNN (avec le module Advanced GNN ch. 2 en regard)&nbsp;; pseudo-code
+  prompting enfin (après le ch. 7). Chaque article se prête à une séance de
+  présentation&nbsp;: problème, idée, une équation, une expérience critique, une limite —
+  le format des soutenances du module.
+</div>
+</section>
+
+<!-- SUITE2 -->
 </div>
 </body>
 </html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — Bruit, débruitage, tone mapping — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Synthesis: Theory and Practice</a> › Bruit, débruitage, tone mapping</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités, intégrales, EDO linéaires</a>
+<a href="ch1.html">Radiométrie&nbsp;: la radiance</a>
+<a href="ch2.html">L'équation du rendu</a>
+<a href="ch3.html">BRDF et modèles de matériaux</a>
+<a href="ch4.html">Caméras&nbsp;: le modèle sténopé</a>
+<a href="ch5.html">Rastérisation contre lancer de rayons</a>
+<a href="ch6.html">Path tracing Monte Carlo</a>
+<a href="ch7.html">Accélération&nbsp;: intersection et BVH</a>
+<a href="ch8.html" class="active">Bruit, débruitage, tone mapping</a>
+<a href="ch9.html">Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a>
+<a href="ch10.html">Le temps réel&nbsp;: GPU, hybride, upscaling</a>
+<a href="ch11.html">Travaux de l'enseignant</a>
+<a href="code.html">Un path tracer complet en Python</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Bruit, débruitage, tone mapping</h2>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Le budget bruit/temps</span>
+  Un rendu MC à \(N\) échantillons par pixel (spp) a un bruit \(\propto
+  1/\sqrt{N}\)&nbsp;; l'erreur quadratique moyenne se décompose
+  biais² + variance&nbsp;; le path tracing pur est <em>sans biais</em>
+  (variance seulement), les méthodes à rebonds tronqués ou photon mapping
+  échangent un peu de biais contre beaucoup de variance. Chiffres
+  types&nbsp;: intérieur avec ciel par la fenêtre — 256 spp&nbsp;: bruit
+  visible dans les coins&nbsp;; 4096 spp&nbsp;: «&nbsp;propre&nbsp;» au
+  cinéma&nbsp;; 16–64 spp&nbsp;: cible des moteurs temps réel — puis
+  <em>débruitage</em>.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 8.2 — Trois familles de débruitage</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Filtres à noyau géométrique</strong>&nbsp;: moyenne pondérée
+    par des distances (position, normale, profondeur, albédo) — le filtre
+    <em>bilateral</em> et sa cascade multi-échelle «&nbsp;à-trous&nbsp;»
+    (5 niveaux, biais croissant, variance décroissante)&nbsp;; encore le
+    standard des rendus architecturaux&nbsp;;</li>
+    <li><strong>Décomposition du signal rendu</strong>&nbsp;: séparer
+    albédo × éclairage avant filtrage (le bruit vit surtout dans
+    l'éclairage)&nbsp;; filtrer puis recomposer — gagne les bords de
+    texture gratuits&nbsp;;</li>
+    <li><strong>Apprentissage</strong>&nbsp;: réseau récurrent
+    temporel (Chaitanya et al., 2017) accumulant les frames d'un rendu
+    interactif&nbsp;; OIDN / OptiX denoiser&nbsp;: CNN entraînés sur des
+    paires (bruité, référence) avec buffers auxiliaires — le débruitage ML
+    est aujourd'hui <em>plus précis que 4096 spp</em> sur les matériaux
+    diffus, et le maillon essentiel du temps réel (chapitre 10).</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 8.3 — Mesurer le gain</span>
+  Patch uniforme de radiance moyenne \(\bar{L} = 0{,}5\), écart-type du
+  bruit \(\sigma = 0{,}15\) à 16 spp (SNR ≈ 10,5 dB)&nbsp;: à 64 spp,
+  \(\sigma = 0{,}075\) (SNR ≈ 16,5 dB, +6 dB à chaque quadruplement)&nbsp;;
+  un filtre bilateral sur 9² voisins <em>de même normale et albédo</em>
+  divise la variance par ~81 (81 échantillons effectifs)&nbsp;: SNR ≈ 29 dB
+  à 16 spp — l'équivalent de 1300 spp. C'est l'arme du temps réel&nbsp;:
+  le filtre «&nbsp;sait&nbsp;» que le patch est plat, le MC ne le sait
+  pas. La difficulté est aux bords&nbsp;: normales différentes ⟹ moins de
+  voisins valides ⟹ résidu de bruit&nbsp;; d'où les cascades
+  multi-échelles.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 8.4 — Tone mapping et gamma</span>
+  La radiance est HDR (rapport 10⁴–10⁸ entre ombre et soleil)&nbsp;; l'écran
+  est LDR (8 bits, gamma 2,2)&nbsp;; l'œil est <em>relatif</em> (réponse
+  approximativement logarithmique). Le <strong>tone mapping</strong> compresse
+  l'échelle&nbsp;: opérateur de Reinhard \(L_d = L/(1 + L)\) (global),
+  extensions locales (dodge and burn par blocs), ou courbes artistiques
+  (filmic ACES). Puis correction gamma&nbsp;: \(V_{enc} = V_{lin}^{1/2{,}2}\).
+  Erreur classique&nbsp;: filtrer (antialiasing, mipmaps, débruitage) en
+  espace <em>sRGB</em> — non linéaire&nbsp;: les moyennes sont fausses&nbsp;;
+  tout le pipeline de ce module travaille en linéaire et ne convertit
+  <em>qu'à la sortie</em>.
+</div>
+
+<div class="note">
+  <span class="tag">L'aliasing est un bruit aussi</span>
+  L'antialiasing par suréchantillonnage stochastique (jitter par pixel,
+  chapitre code) est un estimateur MC de l'intégrale du pixel — même théorie
+  que le chapitre 6&nbsp;; l'aliasing déterministe (échantillon au centre)
+  est un biais de quadrature qui se transforme en motifs périodiques moirés.
+  Règle&nbsp;: dès qu'une intégrale est difficile, <em>jitteriser</em> —
+  le bruit gaussien est visuellement préféré au moiré structurel.
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Précédent</span> Accélération&nbsp;: intersection et BVH</a><a class="next" href="ch9.html"><span class="dir">Suivant</span> Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a></nav>
+</main>
+</div>
+
+</body>
+</html>

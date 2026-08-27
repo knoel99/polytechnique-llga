@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Boosting to Foundation Models: learning with Tabular Data — XGBoost, LightGBM, CatBoost&nbsp;: trois ingénieries — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">From Boosting to Foundation Models: learning with Tabular Data</a> › XGBoost, LightGBM, CatBoost&nbsp;: trois ingénieries</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P1 (brochure)</span>From Boosting to Foundation Models: learning with Tabular Data</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: arbres, forêts, boosting</a>
+<a href="ch1.html">Pourquoi les GBDT dominent (encore) le tabulaire</a>
+<a href="ch2.html">Boosting&nbsp;: descente de gradient fonctionnelle</a>
+<a href="ch3.html" class="active">XGBoost, LightGBM, CatBoost&nbsp;: trois ingénieries</a>
+<a href="ch4.html">Encoder les colonnes&nbsp;: catégorielles et numériques</a>
+<a href="ch5.html">Deep tabular&nbsp;: MLP régularisés et FT-Transformer</a>
+<a href="ch6.html">TabPFN&nbsp;: apprendre les tables in-context</a>
+<a href="ch7.html">LLMs et tables&nbsp;: sérialisation, text-to-SQL</a>
+<a href="ch8.html">Données synthétiques tabulaires</a>
+<a href="ch9.html">Benchmarking honnête</a>
+<a href="ch10.html">Choisir sa méthode&nbsp;: guide et questions ouvertes</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. XGBoost, LightGBM, CatBoost&nbsp;: trois ingénieries du gradient</h2>
+
+<h3>3.1 XGBoost&nbsp;: la seconde dérivée et la régularisation explicite</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — Objectif régularisé de XGBoost</span>
+  À l'itération \(t\), avec \(g_i = \partial_{\hat{y}^{(t-1)}_i} L(y_i,
+  \hat{y}^{(t-1)}_i)\) et \(h_i = \partial^2_{\hat{y}^{(t-1)}_i} L(y_i, \hat{y}^{(t-1)}_i)\), on
+  minimise
+  $$ \sum_{i=1}^{n}\Big[ g_i\, f_t(x_i) + \tfrac{1}{2} h_i\, f_t(x_i)^2 \Big] + \Omega(f_t),
+  \qquad \Omega(f) = \gamma\, T + \tfrac{\lambda}{2}\sum_{j=1}^{T} w_j^2, $$
+  où \(f_t\) est un arbre à \(T\) feuilles de poids \(w_1, \dots, w_T\). C'est le développement
+  de Taylor d'ordre 2 de la perte, exact pour la perte quadratique, très bon pour le log-loss.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.2 — Poids optimaux et gain de split (XGBoost)</span>
+  Pour un arbre fixé, notons \(G_j = \sum_{i \in \text{feuille } j} g_i\) et \(H_j = \sum_{i \in
+  \text{feuille } j} h_i\). Alors
+  $$ w_j^\star = -\frac{G_j}{H_j + \lambda}, \qquad
+  \mathcal{L}^\star = -\frac{1}{2}\sum_{j=1}^{T}\frac{G_j^2}{H_j + \lambda} + \gamma T, $$
+  et scinder un nœud parental \(P\) en \(L, R\) améliore l'objectif de
+  $$ \mathrm{Gain} = \frac{1}{2}\left[\frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda}
+  - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda}\right] - \gamma. $$
+  <div class="proof">
+  L'objectif se factorise par feuille&nbsp;: \(\sum_j [\,w_j G_j + \tfrac{1}{2} w_j^2 (H_j +
+  \lambda)\,] + \gamma T\) (le \(\lambda\) complète le carré). Chaque terme est un trinôme en
+  \(w_j\) de minimum \(w_j^\star = -G_j/(H_j + \lambda)\), de valeur \(-\tfrac{1}{2}G_j^2/(H_j +
+  \lambda)\). D'où \(\mathcal{L}^\star\). Un split remplace la feuille \(P\) (sommes \(G_P = G_L +
+  G_R\), \(H_P = H_L + H_R\)) par deux feuilles&nbsp;: le gain est \(\mathcal{L}^\star_P -
+  \mathcal{L}^\star_{\{L,R\}}\), c'est-à-dire l'expression annoncée&nbsp;; on ne splitte que si
+  Gain &gt; 0, i.e. au-delà du «&nbsp;prix&nbsp;» \(\gamma\).&nbsp;<span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Les autres pièces d'XGBoost</span> <strong>Weighted quantile sketch</strong>&nbsp;:
+  proposer des seuils de split par quantiles pondérés par les \(h_i\) (les points à forte courbure
+  comptent plus), avec une garantie d'approximation. <strong>Sparsity-aware</strong>&nbsp;: chaque
+  nœud apprend une «&nbsp;direction par défaut&nbsp;» pour les valeurs manquantes. <strong>Colonne/
+  ligne sampling</strong>&nbsp;: bagging à la forêt aléatoire appliqué au boosting. L'ensemble fait
+  d'XGBoost (2016) le moteur de référence des compétitions tabulaires des années 2015+.
+</div>
+
+<h3>3.2 LightGBM&nbsp;: histogrammes, GOSS, EFB</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.3 — Splits par histogramme</span>
+  Chaque feature numérique est pré-discrétisée en \(B\) bins (typiquement 255)&nbsp;; les
+  \((g_i, h_i)\) sont accumulés par bin, et les seuils candidats sont les frontières de bins.
+  Coût par feature&nbsp;: \(O(n)\) pour construire l'histogramme, au lieu de \(O(n \log n)\) pour
+  trier&nbsp;; en mémoire, l'histogramme enfant se déduit du parent par soustraction. L'erreur
+  d'approximation est bornée par la largeur des bins — imperceptible en pratique.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 3.4 — GOSS (Gradient-based One-Side Sampling)</span>
+  Les exemples à <em>petit</em> gradient sont bien prédits&nbsp;; on garde les \(a \cdot n\)
+  exemples de plus grand \(|g_i|\) (ensemble \(A\)), on échantillonne aléatoirement \(b \cdot n\)
+  exemples dans le reste (\(B'\)), et l'on amplifie leurs gradients d'un facteur \((1-a)/b\).
+  Le gain de split est calculé sur cette sélection pondérée.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.5 — GOSS préserve (approximativement) le gain</span>
+  Avec les poids \(\tilde{g}_i = \frac{1-a}{b}\, g_i\) sur \(B'\), l'estimateur
+  \(\tilde{G}_j = \sum_{i \in A \cap j} g_i + \sum_{i \in B' \cap j} \tilde{g}_i\) est un
+  estimateur (approximativement) sans biais de \(G_j = \sum_{i \in j} g_i\), et de même pour les
+  \(H_j\) — donc le gain du théorème 3.2 est estimé de façon cohérente.
+  <div class="proof">
+  Ecrivons \(G_j = G_j^{A} + G_j^{\bar{A}}\). L'échantillonnage uniforme de \(B'\) dans
+  \(\bar{A}\) donne \(\mathbb{E}[\sum_{i \in B' \cap j} \tilde{g}_i] = \frac{1-a}{b}\,
+  \mathbb{E}[\sum_{i \in B' \cap j} g_i] = \frac{1-a}{b} \cdot \frac{b}{1-a} G_j^{\bar{A}} =
+  G_j^{\bar{A}}\), d'où l'espérance \(G_j^{A} + G_j^{\bar{A}} = G_j\). Le reste suit en
+  remplaçant les sommes par leurs estimateurs dans la formule du gain (biais d'ordre 2, négligeable
+  devant le gain lui-même).&nbsp;<span class="qed">∎</span></div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 3.6 — EFB (Exclusive Feature Bundling)</span>
+  Dans les données creuses (one-hot massif), deux colonnes sont rarement non nulles
+  simultanément&nbsp;: elles peuvent partager un bin «&nbsp;fusionné&nbsp;». On construit un graphe
+  de conflits (arête si co-non-zéro fréquent), qu'on colorie gloutonnement pour former des
+  groupes de features exclusives&nbsp;; chaque bundle devient une seule colonne d'histogramme.
+  Combiné à GOSS, c'est le couple qui donne à LightGBM ses gains de vitesse.
+</div>
+
+<h3>3.3 CatBoost&nbsp;: arbres oubliants et statistiques ordonnées</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.7 — Arbres oubliants (oblivious trees)</span>
+  Un arbre oubliant applique le <em>même</em> split à tous les nœuds d'un même niveau&nbsp;: la
+  profondeur \(d\) donne exactement \(d\) tests \((j_1, t_1), \dots, (j_d, t_d)\) et le résultat
+  s'indexe comme un tableau \(2^d\). Avantages&nbsp;: évaluation en \(O(d)\), exécution vectorisée
+  triviale, et une forte régularisation (biais plus élevé, variance plus faible — même logique
+  que la profondeur limitée du ch. 2).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 3.8 — Statistique cible ordonnée (ordered target statistics)</span>
+  Pour une catégorielle \(c\) et une permutation aléatoire \(\sigma\) des lignes, la valeur
+  encodée de la ligne \(i\) n'utilise que les lignes <em>antérieures</em>&nbsp;:
+  $$ \hat{x}_i = \frac{\sum_{\sigma(k) &lt; \sigma(i)} \mathbf{1}[c_k = c_i]\, y_k +
+  a\, p}{\sum_{\sigma(k) &lt; \sigma(i)} \mathbf{1}[c_k = c_i] + a}, $$
+  avec \(p\) un prior global (moyenne de la cible) et \(a\) un poids de lissage. C'est du target
+  encoding (ch. 4) <em>sans fuite</em>&nbsp;: la ligne \(i\) ne s'encode jamais avec sa propre
+  cible. Le <strong>boosting ordonné</strong> généralise l'idée aux résidus&nbsp;: chaque exemple
+  n'est noté que par des modèles qui ne l'ont pas vu — corrigeant le «&nbsp;shift de
+  prédiction&nbsp;» des GBDT classiques (Prokhorenkova et al., 2018).
+</div>
+
+<table class="tbl">
+  <tr><th></th><th>XGBoost</th><th>LightGBM</th><th>CatBoost</th></tr>
+  <tr><td>Split</td><td>exact / quantiles approx. (2e ordre)</td><td>histogramme, feuille par feuille (leaf-wise)</td><td>oubliant, niveau par niveau</td></tr>
+  <tr><td>Accélération</td><td>quantile sketch, sparsity-aware</td><td>GOSS + EFB (defs 3.4-3.6)</td><td>arbres symétriques, GPU natif</td></tr>
+  <tr><td>Catégorielles</td><td>one-hot / encodages fournis</td><td>partition des catégories par statistiques de gradient</td><td>ordered TS natives (déf. 3.8)</td></tr>
+  <tr><td>Biais inductif</td><td>régularisation \(\gamma, \lambda\)</td><td>croissance leaf-wise (attention au surapprentissage sur petits \(n\))</td><td>anti-fuite + symétrie</td></tr>
+</table>
+
+<pre class="code"><code># Le même problème vu par les trois moteurs (API quasi identiques)
+import xgboost as xgb, lightgbm as lgb, catboost as cb
+from sklearn.model_selection import train_test_split
+Xtr, Xva, ytr, yva = train_test_split(X, y, test_size=0.2, random_state=0)
+
+m1 = xgb.XGBClassifier(n_estimators=2000, learning_rate=0.02, max_depth=6,
+                       early_stopping_rounds=100).fit(Xtr, ytr, eval_set=[(Xva, yva)])
+m2 = lgb.LGBMClassifier(n_estimators=2000, learning_rate=0.02, num_leaves=63,
+                        subsample=0.8, colsample_bytree=0.8).fit(
+                        Xtr, ytr, eval_set=[(Xva, yva)],
+                        callbacks=[lgb.early_stopping(100)])
+m3 = cb.CatBoostClassifier(iterations=2000, learning_rate=0.02, depth=8,
+                           cat_features=cat_idx, early_stopping_rounds=100).fit(
+                           Xtr, ytr, eval_set=(Xva, yva), verbose=False)</code></pre>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Précédent</span> Boosting&nbsp;: descente de gradient fonctionnelle</a><a class="next" href="ch4.html"><span class="dir">Suivant</span> Encoder les colonnes&nbsp;: catégorielles et numériques</a></nav>
+</main>
+</div>
+
+</body>
+</html>

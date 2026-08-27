@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Complexité théorique de l'entraînement — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Deep Learning</a> › Complexité théorique de l'entraînement</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_52183_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels compacts&nbsp;: le socle de P1</a>
+<a href="ch1.html">Compter&nbsp;: FLOPs, mémoire, lois d'échelle</a>
+<a href="ch2.html" class="active">Complexité théorique de l'entraînement</a>
+<a href="ch3.html">Parallélisme&nbsp;: data, tensor, pipeline</a>
+<a href="ch4.html">Communication&nbsp;: all-reduce et compagnie</a>
+<a href="ch5.html">Efficience mémoire&nbsp;: checkpointing, ZeRO</a>
+<a href="ch6.html">Inférence efficiente</a>
+<a href="ch7.html">Systèmes réels&nbsp;: roofline, GPU, LLM 7B</a>
+<a href="ch8.html">Travaux de l'enseignant</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Complexité théorique de l'entraînement</h2>
+
+<p>Avant d'empiler les GPU, une question de théorie&nbsp;: y a-t-il une <em>limite</em>
+à ce que le parallélisme peut acheter&nbsp;? Réponse&nbsp;: oui, et elle est
+<em>démontrable</em>. Ce chapitre est la marque de fabrique du module (et de
+l'enseignant — ch. 8).</p>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Optimisation distribuée décentralisée sur un graphe</span>
+  \(P\) machines, chacune avec sa fonction convexe \(f_i\), reliées par un graphe
+  \(G\) (chaque machine ne parle qu'à ses voisines)&nbsp;; but commun&nbsp;:
+  $$\min_x\; f(x) = \frac{1}{P}\sum_{i=1}^{P} f_i(x).$$
+  Le <strong>temps d'exécution</strong> compte deux devises&nbsp;: le nombre
+  d'itérations <em>locales</em> (calcul&nbsp;: gradients au facteur de conditionnement
+  près — cf. module Optimization for AI, ch. 2–3) et les <strong>tours de
+  communication</strong> (une ronde de gossip = mélanger les vecteurs entre
+  voisins). La qualité du réseau se résume au <strong>trou spectral</strong>
+  \(\gamma \in [0,1)\) de la matrice de gossip \(W\) (deuxième plus grande valeur
+  propre en module)&nbsp;: le mélange converge comme \(\gamma^t\) — plus
+  \(\gamma \to 1\), plus le réseau est lent à consensus.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.2 — Bornes inférieures et optimalité (Scaman, Bach, Bubeck, Lee, Massoulié, ICML 2017&nbsp;; énoncé)</span>
+  Pour \(f = \frac1P \sum f_i\) \(\mu\)-fortement convexe et \(L\)-lisse
+  (\(\kappa = L/\mu\)), <em>tout</em> algorithme distribué (au sens de la déf. 2.1)
+  nécessite un temps
+  $$T \;=\; \Omega\!\Big(\sqrt{\kappa}\;\cdot\;\frac{1}{\sqrt{1-\gamma}}\Big) \qquad\text{(a constantes près, en temps homogène)},$$
+  et cet ordre est <strong>atteint</strong> par la combinaison&nbsp;: descente de
+  gradient accélérée de Nesterov (cf. module Optimization for AI, ch. 3) +
+  <em>gossip accéléré de Chebyshev</em> (remplacer \(W\) par un polynôme de degré
+  \(m\) en \(W\) choisi pour aplatir le spectre sur \([\gamma, 1]\) — la même astuce
+  qui accélère les gradients, appliquée au graphe). La version JMLR 2019 étend le
+  résultat au cas convexe non fortement convexe&nbsp;: \(\Omega(\sqrt{L/\varepsilon})\)
+  se double d'un facteur réseau.
+  <div class="proof">
+  <em>Esquisse de la borne inférieure (l'argument «&nbsp;adversaire&nbsp;»).</em> On
+  construit une famille de quadratiques «&nbsp;locales&nbsp;» à chaque nœud, dont la
+  solution \(x^\star\) dépend d'informations réparties&nbsp;: pour que la machine
+  \(i\) apprenne ce que savait la machine \(j\), l'information doit voyager le long
+  du graphe, et le <em>mélange du graphe</em> impose \(\Omega(1/\sqrt{1-\gamma})\)
+  rondes de communication (chaque gossip ne multiplie le déséquilibre que par
+  \(\gamma\))&nbsp;; indépendamment, même en séquentiel, une quadratique de
+  conditionnement \(\kappa\) exige \(\Omega(\sqrt\kappa)\) accès au gradient (borne
+  de Nesterov — module Optimization for AI, ch. 3). La construction croise les deux
+  obstacles en quadratique <em>sur le produit</em> graphe × conditionnement&nbsp;:
+  aucun algorithme ne peut battre le produit des deux bornes. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Lecture&nbsp;: les deux régimes, et pourquoi ils structurent la pratique</span>
+  <table class="tbl">
+  <thead><tr><th>Régime</th><th>Condition</th><th>Temps dominant</th><th>Équivalent pratique</th></tr></thead>
+  <tbody>
+  <tr><td><strong>séquentiel (calcul)</strong></td><td>réseau rapide, \(\gamma\) petit (NVLink, \(\gamma \approx 0{,}1\))</td><td>\(\sqrt{\kappa}\)&nbsp;: Nesterov règne</td><td>un seul nœud, 8 GPU soudés</td></tr>
+  <tr><td><strong>parallèle (communication)</strong></td><td>réseau lent, \(\gamma \to 1\) (Ethernet, grands clusters)</td><td>\(\sqrt{\kappa/(1-\gamma)}\)&nbsp;: le réseau plafonne tout</td><td>multi-datacenters, fédéré (cf. module Emerging ML, ch. 3)</td></tr>
+  </tbody>
+  </table>
+  Conséquence d'ingénieur&nbsp;: <strong>ajouter des machines ne diminue pas le temps
+  en dessous du plancher de communication</strong>. C'est l'analogue exact de la loi
+  d'Amdahl (ch. 7) pour l'optimisation&nbsp;: la partie «&nbsp;séquentielle&nbsp;»
+  n'est plus un programme, mais la géométrie du réseau. Tout le ch. 4 (all-reduce,
+  compression, recouvrement) est une guerre contre ce \(\sqrt{1/(1-\gamma)}\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.3 — Ce que le parallélisme <em>peut</em> acheter&nbsp;: le régime «&nbsp;somme finie&nbsp;»</span>
+  La borne du théorème 2.2 concerne le temps d'<em>atteinte</em> d'un point
+  \(\varepsilon\)-optimal quand les données sont <em>partitionnées</em> (chaque
+  \(f_i\) est opaque). Si au contraire toutes les machines peuvent évaluer la
+  <em>même</em> fonction (données répliquées), le parallélisme réduit la variance du
+  SGD (mini-batching&nbsp;: module Optimization for AI, ch. 5) — mais le taux
+  statistique optimal borne le gain (Dieuleveut et al., cf. module Optimization for
+  AI, ch. 11). En résumé&nbsp;: le parallélisme accélère le <em>calcul</em>, jamais
+  (ou marginalement) la <em>complexité statistique</em> — une distinction que les
+  annonces commerciales aiment oublier.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Compter&nbsp;: FLOPs, mémoire, lois d'échelle</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Parallélisme&nbsp;: data, tensor, pipeline</a></nav>
+</main>
+</div>
+
+</body>
+</html>

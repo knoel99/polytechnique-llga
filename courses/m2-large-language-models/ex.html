@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Language Models — Exercices / Labs — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Large Language Models</a> › Exercices / Labs</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_53432_EP</span>Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: de word2vec aux transformers</a>
+<a href="ch1.html">Tokenisation</a>
+<a href="ch2.html">L'architecture en profondeur</a>
+<a href="ch3.html">Pré-entraînement</a>
+<a href="ch4.html">Post-training&nbsp;: SFT et alignement</a>
+<a href="ch5.html">RLHF, DPO, GRPO</a>
+<a href="ch6.html">Faire tourner un LLM&nbsp;: inférence</a>
+<a href="ch7.html">RAG approfondi</a>
+<a href="ch8.html">Agents, multimodalité et perspectives</a>
+<a href="ch9.html">Évaluation et sûreté des LLMs</a>
+<a href="ch10.html">Travaux de l'enseignant</a>
+<a href="ex.html" class="active">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="exercises" id="ex">
+<h3>Exercices / Labs</h3>
+<ol>
+  <li><strong>Tokenisation multilingue.</strong> Comparer BPE vs Unigram vs SentencePiece sur un corpus
+  multilingue&nbsp;: compression (caractères/token), couverture des nombres&nbsp;; mesurer le
+  «&nbsp;surcoût&nbsp;» du français sur l'anglais pour un même texte.
+  <div class="proof">
+  Guidage (résultats attendus)&nbsp;: traductions professionnelles alignées
+  (fr/en/de) → tokens/mot&nbsp;; typiquement fr ≈ 1,15-1,25× en&nbsp;;
+  l'allemand avec composés encore plus — jusqu'à ce que les composés fréquents
+  deviennent des tokens&nbsp;; vérifier que o200k (GPT-4o) resserre l'écart vs
+  cl100k. Conclure sur le coût réel (contexte, prix API) d'une même application
+  selon la langue.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>RoPE.</strong> Démontrer la propriété relative du thm 2.3
+  (\(R(a)^\top R(b) = R(b-a)\)), puis vérifier numériquement que le score
+  d'attention est invariant par translation commune des positions&nbsp;;
+  implémenter l'interpolation de contexte \(m\to m/L\) et mesurer la perplexité
+  au-delà de la longueur d'entraînement.
+  <div class="proof">
+  Guidage&nbsp;: rotations 2D = nombres complexes — commutativité et
+  \(e^{-ia}e^{ib}=e^{i(b-a)}\)&nbsp;; l'invariance par translation découle du
+  théorème&nbsp;; en pratique l'extrapolation naïve dégrade la PPL, l'interpolation
+  la préserve largement (c'est la base des contextes étendus 32k→128k sans
+  ré-entraînement complet). <span class="qed">∎</span></div></li>
+
+  <li><strong>Arithmétique du KV-cache.</strong> Pour Llama-3-8B (32 couches, 8 têtes
+  KV, 128 dim) et un contexte de 128k tokens&nbsp;: calculer la mémoire du cache
+  en fp16, puis en int8, puis avec MQA&nbsp;; quel batch maximal tient sur un
+  GPU de 80&nbsp;Go (poids int4 ≈ 5&nbsp;Go)&nbsp;?
+  <div class="proof">
+  Guidage&nbsp;: 128 Kio/token (prop. 2.4) → 128k tokens = 16 Gio&nbsp;;
+  int8 → 8 Gio&nbsp;; MQA (1 tête KV) → 2 Gio&nbsp;; budget disponible ≈ 80−5 =
+  75 Gio → batch de ~4 (fp16) à ~37 (MQA int8)&nbsp;: le GQA/MQA et la
+  quantification du cache <em>déterminent</em> le débit servi.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Scaling.</strong> À partir des données publiées (LLaMA 1/2/3, Chinchilla),
+  vérifier la loi \(\mathcal{L} \approx A N^{-\alpha} + B D^{-\beta} + E\) par régression&nbsp;;
+  situer chaque modèle par rapport à l'optimum compute (thm 3.1).</li>
+
+  <li><strong>MoE.</strong> Dériver le minimum de la perte auxiliaire
+  \(\alpha E\sum_i f_iP_i\) sous contrainte \(\sum_i f_i=1\) et montrer qu'il
+  correspond au routage uniforme&nbsp;; simuler l'effondrement (routeur
+  initialisé biaisé) sans puis avec la perte.
+  <div class="proof">
+  Guidage&nbsp;: à l'équilibre du routeur, \(P_i=f_i\)&nbsp;; minimiser
+  \(E\sum f_i^2\) sous \(\sum f_i=1\) → Lagrange → \(f_i=1/E\) uniforme&nbsp;;
+  sans perte, l'expert gagnant attire les tokens (retour sur expérience
+  renforcé) et la spécialisation dégénère. <span class="qed">∎</span></div></li>
+
+  <li><strong>SFT guidé.</strong> Fine-tuner un petit modèle instructé (1-3B) sur
+  500 paires (question, réponse) de votre domaine&nbsp;: template strict,
+  labels masqués (code du ch. 4), 2-3 epochs&nbsp;; mesurer l'effet d'un
+  template faux au moment du test (chute spectaculaire à constater une fois
+  pour toutes).</li>
+
+  <li><strong>DPO papier.</strong> Dériver la forme fermée \(\pi^\star\) du problème KL-pénalisé
+  (variation classique), puis la perte DPO en réinjectant dans Bradley-Terry&nbsp;;
+  vérifier le gradient&nbsp;: il augmente la marge log-ratio des réponses préférées.
+  <div class="proof">
+  Guidage&nbsp;: suivre la preuve du thm 5.2 étape par étape — l'argument clé
+  est que \(\mathcal{J}=-\beta\,\mathrm{KL}(\pi\|\pi_{\mathrm{ref}}e^{r/\beta}/Z)+\beta\log Z\)&nbsp;;
+  puis \(Z(x)\) disparaît dans la différence \(r^+-r^-\). Le gradient pousse
+  \(\log\pi(y^+)-\log\pi_{\mathrm{ref}}(y^+)\) vers le haut et le \(y^-\) vers le
+  bas, modulé par \(\sigma(-\hat r)\) (paires difficiles d'abord).
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>GRPO jouet.</strong> Sur une tâche vérifiable (arithmétique binaire), entraîner
+  un mini-modèle avec GRPO (groupe de 8 réponses)&nbsp;; tracer accuracy et longueur des
+  réponses — observer l'émergence de «&nbsp;raisonnement&nbsp;» plus long&nbsp;;
+  comparer variance du gradient avec/sans normalisation par l'écart-type du
+  groupe.</li>
+
+  <li><strong>Spéculatif, sur le papier.</strong> Rédiger complètement la preuve du
+  thm 6.3 dans le cas \(\gamma=2\), puis estimer le gain de latence attendu
+  si \(q=p\) sur 80&nbsp;% de la masse mais diverge sur le reste.
+  <div class="proof">
+  Guidage&nbsp;: accepter le token 1 (proba \(\sum_y\min(q,p)\)), puis le
+  second conditionnellement&nbsp;; l'espérance de tokens acceptés par tour
+  est \(\frac{1}{1-\alpha}\) (géométrique) avec \(\alpha\approx0{,}8\) →
+  ~5 tokens/forward&nbsp;; gain borné par \(\gamma\) et par le rapport de
+  coût petit/gros modèle. <span class="qed">∎</span></div></li>
+
+  <li><strong>RAG vs longueur de contexte.</strong> Questionner un LLM avec 4k/32k/128k de
+  contexte sur un corpus&nbsp;: le «&nbsp;lost in the middle&nbsp;» apparaît-il&nbsp;?
+  Comparer avec RAG&nbsp;; discuter les compromis (coût, fidélité, frais
+  d'indexation).</li>
+
+  <li><strong>Filigrane.</strong> Avec \(\gamma=0{,}5\) et \(T=400\) tokens, calculer
+  \(z\) pour un texte portant 230 tokens verts&nbsp;; seuil à 5&nbsp;%&nbsp;;
+  combien de tokens faut-il pour détecter un biais de +5&nbsp;% de verts&nbsp;?
+  <div class="proof">
+  Guidage&nbsp;: \(z=(230-200)/10 = 3\) → p ≈ 0,1&nbsp;%&nbsp;: rejeté
+  (marqué)&nbsp;; pour un biais \(\varepsilon\) petit, l'espérance de \(z\)
+  croît comme \(\varepsilon\sqrt{T/\gamma(1-\gamma)}\) → il faut \(T\sim
+  (1{,}96/\varepsilon)^2\gamma(1-\gamma)\)&nbsp;; avec \(\varepsilon=0{,}05\),
+  ~770 tokens — d'où la difficulté sur les textes courts.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Projet agent.</strong> Étendre le lab final&nbsp;: un agent qui choisit
+  <em>entre</em> retrieval vectoriel et requête de graphe selon le type de question
+  (relationnelle ou factuelle) — mesure de l'amélioration et du surcoût.</li>
+</ol>
+</section>
+<nav class="pager"><a href="ch10.html"><span class="dir">← Précédent</span> Travaux de l'enseignant</a><a class="next" href="refs.html"><span class="dir">Suivant</span> Références</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainability, Security, Privacy of LLMs — Interprétabilité interne&nbsp;: probing et contrôle — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Explainability, Security, Privacy of LLMs</a> › Interprétabilité interne&nbsp;: probing et contrôle</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Explainability, Security, Privacy of LLMs</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: la boîte noire et ses trois questions</a>
+<a href="ch1.html" class="active">Interprétabilité interne&nbsp;: probing et contrôle</a>
+<a href="ch2.html">Lire les couches&nbsp;: logit lens, attention et ses limites</a>
+<a href="ch3.html">Superposition et sparse autoencoders</a>
+<a href="ch4.html">Expliquer une sortie&nbsp;: SHAP, LIME, gradients</a>
+<a href="ch5.html">Sécurité&nbsp;: taxonomie des attaques</a>
+<a href="ch6.html">Défenses en profondeur</a>
+<a href="ch7.html">Vie privée I&nbsp;: mémorisation et extraction</a>
+<a href="ch8.html">Vie privée II&nbsp;: membership inference et DP</a>
+<a href="ch9.html">Anonymisation et watermarking</a>
+<a href="ch10.html">Évaluer la sûreté&nbsp;: red teaming, AI Act</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Interprétabilité interne&nbsp;: probing et contrôle</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Sonde (probe)</span>
+  Une <strong>sonde</strong> est un classifieur (typiquement linéaire&nbsp;:
+  régression logistique) entraîné à prédire une propriété linguistique
+  \(y\) (catégorie grammaticale, langue, sujet du document, pays d'une capitale…)
+  à partir des <em>activations</em> \(h^{(l)}(x)\) d'une couche \(l\) du modèle,
+  <em>gélées</em>. Une forte précision de la sonde se lit comme&nbsp;: «&nbsp;la
+  couche \(l\) encode (linéairement) l'information nécessaire à \(y\)&nbsp;» —
+  et <em>seulement</em> comme cela (voir la mise en garde ci-dessous).
+</div>
+
+<pre class="code"><code>import torch, torch.nn.functional as F
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+
+model = GPT2.from_pretrained("gpt2").eval()          # gele
+
+@torch.no_grad()
+def states(texts, layer=6):                          # activations du flux residuel
+    out = model(input_ids=tokenizer(texts, return_tensors="pt").input_ids,
+                output_hidden_states=True)
+    return out.hidden_states[layer][:, -1].numpy()   # dernier token
+
+X = states(phrases)                                  # (n, d=768)
+Xtr, Xte, ytr, yte = train_test_split(X, pos_tags, test_size=.2)
+probe = LogisticRegression(max_iter=2000).fit(Xtr, ytr)
+print("acc sonde :", probe.score(Xte, yte))          # ~0.9 sur POS en couche 6-8</code></pre>
+
+<h3>1.1 Ce que les sondes ont révélé</h3>
+
+<p>Alain &amp; Bengio (2016) ont lancé la méthode&nbsp;: la perte d'une sonde
+linéaire par couche décroît avec la profondeur, puis remonte vers la couche de
+sortie — le modèle «&nbsp;résout&nbsp;» la tâche aux couches intermédiaires puis
+projette vers le vocabulaire. Depuis, les sondes ont cartographié&nbsp;: positions
+syntaxiques précoces, entités nommées, relations monde-fait («&nbsp;la tour Eiffel
+est à Paris&nbsp;») manipulées par des <em>éditions de sous-espace</em>, langue et
+sentiment linéairement décodables… L'hypothèse qui se dégage&nbsp;: le flux
+résiduel est un canal de communication où chaque tête écrit et lit des
+sous-espaces relativement linéaires.</p>
+
+<h3>1.2 Le piège&nbsp;: information ≠ usage</h3>
+
+<div class="prop">
+  <span class="tag">Problème 1.2 — Tâches de contrôle (Hewitt &amp; Liang, EMNLP 2019)</span>
+  Une sonde peut apprendre \(y\) à partir de \(h\) <em>même si le modèle
+  n'utilise pas</em> cette information — il suffit qu'elle soit décodable. La
+  parade&nbsp;: entraîner la même sonde sur une <strong>tâche de contrôle</strong>
+  \(y_{\text{ctrl}}\) — même structure statistique, mais étiquettes inventées
+  (type mélangé) que le modèle ne peut «&nbsp;connaître&nbsp;». On rapporte la
+  <strong>sélectivité</strong>&nbsp;:
+  $$\mathrm{sel} \;=\; \mathrm{acc}(\text{sonde sur } y) \;-\;
+  \mathrm{acc}(\text{sonde sur } y_{\text{ctrl}}).$$
+  Une forte précision avec une sélectivité faible = la sonde mémorise, pas le
+  modèle&nbsp;; seule une <em>sonde mince</em> (faible capacité) avec bonne
+  sélectivité témoigne d'un encodage <em>linéaire et exploitable</em>.
+</div>
+
+<div class="note">
+  <span class="tag">Corrélation n'est pas causalité — et la preuve causale</span>
+  Pour franchir le pas, on <em>intervient</em>&nbsp;: <strong>amnésie</strong>
+  (retirer l'information de \(h\) par projection, re-mesurer la performance du
+  modèle — si elle chute, l'information était <em>utilisée</em>), ablation de
+  têtes, patching d'activations entre exécutions (activation patching).
+  Règle du module&nbsp;: une affaire d'interprétabilité n'est close que quand
+  l'intervention confirme la corrélation. Voir Belinkov (2022) pour le survey
+  des promesses et des échecs de la méthode.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Précédent</span> Rappels&nbsp;: la boîte noire et ses trois questions</a><a class="next" href="ch2.html"><span class="dir">Suivant</span> Lire les couches&nbsp;: logit lens, attention et ses limites</a></nav>
+</main>
+</div>
+
+</body>
+</html>

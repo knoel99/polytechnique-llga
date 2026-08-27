@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multimodal Generative AI — Text-to-image&nbsp;: le pipeline complet — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Multimodal Generative AI</a> › Text-to-image&nbsp;: le pipeline complet</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52002_EP</span>Multimodal Generative AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités, réseaux, ELBO</a>
+<a href="ch1.html">VAE et espaces latents</a>
+<a href="ch2.html">GAN&nbsp;: adversaire, équilibre, Wasserstein</a>
+<a href="ch3.html">Diffusion&nbsp;: DDPM et score matching</a>
+<a href="ch4.html">Guidage, DDIM et diffusion latente</a>
+<a href="ch5.html">CLIP et l'alignement vision-langage</a>
+<a href="ch6.html" class="active">Text-to-image&nbsp;: le pipeline complet</a>
+<a href="ch7.html">Au-delà de l'image&nbsp;: vidéo, 3D, LLMs</a>
+<a href="ch8.html">Évaluation, coûts, éthique</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Text-to-image&nbsp;: le pipeline complet</h2>
+
+<div class="thm">
+  <span class="tag">Architecture 6.1 — De la phrase au pixel</span>
+  Le pipeline industriel d'un générateur text-to-image latent&nbsp;:
+  <table class="tbl">
+  <thead><tr><th>Étape</th><th>Composant</th><th>Rôle / détails</th></tr></thead>
+  <tbody>
+  <tr><td>1. Tokenisation</td><td>BPE / SentencePiece</td><td>prompt → séquence de tokens (module NLP)&nbsp;; tronqué à 77–225 selon les modèles</td></tr>
+  <tr><td>2. Text encoding</td><td>CLIP text encoder + T5/ByT5</td><td>tokens → tenseur \((L \times d)\)&nbsp;; le pooled embedding de CLIP conditionne aussi adaLN (DiT)</td></tr>
+  <tr><td>3. Diffusion latente</td><td>U-Net ou DiT + cross-attention</td><td>bruit → latent débruité (20–50 pas, solveur du ch. 4, CFG \(\tilde\epsilon\))</td></tr>
+  <tr><td>4. Décodage</td><td>Décodeur VAE</td><td>latent \((64\times64)\) → image \((512\times512)\) en un passage</td></tr>
+  <tr><td>5. Raffinement</td><td>refiner / super-résolution</td><td>upsampling ×2–4 (par diffusion à plus haute résolution ou GAN de super-résolution — ch. 2)</td></tr>
+  </tbody>
+  </table>
+  L'entraînement des grands modèles <em>fige</em> souvent l'encodeur de texte et le VAE,
+  et n'apprend que le débruiteur&nbsp;; le <strong>LoRA</strong> (Low-Rank Adaptation)
+  fige même le débruiteur et n'apprend que des corrections de faible rang dans les poids
+  de l'attention croisée — le fine-tuning thématique «&nbsp;domestique&nbsp;» (quelques
+  dizaines d'images, quelques minutes GPU).
+</div>
+
+<ul>
+  <li><strong>Prompt engineering, quantitativement</strong>&nbsp;: le prompt est un
+  <em>gradient</em> sur le conditionnement&nbsp;: ajouter «&nbsp;photorealistic,
+  85&nbsp;mm&nbsp;» déplace les embeddings et donc chaque pas de CFG. Effets mesurables&nbsp;:
+  position (les premiers tokens pèsent plus), saturation (au-delà de ~50 tokens
+  effectifs, rendement décroissant), <em>pondération syntaxique</em>
+  «&nbsp;(mot:1.3)&nbsp;» = rescaling du logit d'attention pendant l'entraînement de
+  l'inférence&nbsp;;</li>
+  <li><strong>Prompt négatif</strong>&nbsp;: la version générale du CFG à deux
+  conditions — on remplace \(\varnothing\) par \(c_-\)&nbsp;:
+  $$\tilde\epsilon = \epsilon_\theta(x_t,t,c_-) + w\big(\epsilon_\theta(x_t,t,c_+)
+  - \epsilon_\theta(x_t,t,c_-)\big),$$
+  la direction négative est <em>repoussée</em> (thm. 4.1)&nbsp;: «&nbsp;flou, watermark,
+  extra fingers&nbsp;»&nbsp;;</li>
+  <li><strong>Seeds</strong>&nbsp;: la graine fixe \(x_T\) (et les aléas du solveur)&nbsp;;
+  même seed + même prompt = même image en DDIM déterministe&nbsp;; on balaye les seeds
+  pour choisir la meilleure réalisation avant d'affiner le prompt — le flux de travail
+  réel des praticiens&nbsp;;</li>
+  <li><strong>Coût d'inférence</strong>&nbsp;: (nombre de pas) × (coût du débruiteur)
+  + décodage&nbsp;; la latence gouverne le choix industriel (solveurs rapides,
+  distillation 1-pas quand la diversité importe moins).</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> CLIP et l'alignement vision-langage</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Au-delà de l'image&nbsp;: vidéo, 3D, LLMs</a></nav>
+</main>
+</div>
+
+</body>
+</html>

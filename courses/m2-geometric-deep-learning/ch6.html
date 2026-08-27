@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Analysis and Deep Learning on Geometric Data — Deep learning sur surfaces — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Analysis and Deep Learning on Geometric Data</a> › Deep learning sur surfaces</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_53431_EP</span>Analysis and Deep Learning on Geometric Data</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: spectre, surfaces, calcul vectoriel</a>
+<a href="ch1.html">Géométrie différentielle discrète</a>
+<a href="ch2.html">L'opérateur de Laplace-Beltrami</a>
+<a href="ch3.html">Descripteurs et distances de formes</a>
+<a href="ch4.html">Cartographies fonctionnelles</a>
+<a href="ch5.html">Paramétrisation et traitement</a>
+<a href="ch6.html" class="active">Deep learning sur surfaces</a>
+<a href="ch7.html">Équivariance euclidienne</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html">Applications et passerelles LLGA</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Deep learning sur surfaces</h2>
+
+<div class="thm">
+  <span class="tag">Architecture 6.1 — PointNet (Qi et al., 2017)</span>
+  Nuages de points (sans maillage)&nbsp;: par point&nbsp;: MLP partagé&nbsp;; agrégation
+  globale <strong>max</strong> (permutation-invariante — la même exigence que les GNN,
+  module Graph ML ch. 2)&nbsp;; classification/segmentation de nuages&nbsp;:
+  $$f(X) = \rho\Big(\max_{x_i \in X}\ \gamma(x_i)\Big), \qquad |X| = n,\ x_i \in \mathbb{R}^3.$$
+</div>
+
+<div class="proof">
+<strong>Invariance.</strong> Une permutation \(\pi\) réordonne les lignes de \(X\)&nbsp;;
+le max terme à terme d'un ensemble ne dépend pas de l'ordre (le MLP partagé est
+appliqué colonne par colonne)&nbsp;: \(f(\pi X) = f(X)\). <em> Pourquoi max plutôt
+qu'un autre agrégateur invariant&nbsp;?</em> Le produit \(\prod_i \gamma(x_i)\) est
+lui aussi invariant par permutation, mais numériquement désastreux (explose vers 0
+ou \(\infty\), gradients multiplicatifs instables)&nbsp;; la moyenne est stable mais
+<em>dilue</em> les signaux locaux — une sous-région discriminante représentant 1&nbsp;% du
+nuage est noyée&nbsp;; le max est <em>sélectif</em>&nbsp;: il capte «&nbsp;au moins un point
+présente la caractéristique&nbsp;», ce qui est exactement la brique de
+l'approximation universelle qui suit. <strong>Universalité (esquisse).</strong> Sur un compact \(K\), une fonction
+continue invariante par permutation peut être uniformément approchée par des sommes de
+«&nbsp;indicatrices douces&nbsp;» de boules \(g(x) \approx \sum_j c_j\,\mathbb{1}_{B(c_j,
+r_j)}(x)\)&nbsp;; or \(\mathbb{1}_{B(c,r)}(x) \approx h_\varepsilon(\|x - c\|)\) avec
+\(h_\varepsilon\) une sigmoïde raide, et
+\(\max_{x_i}\big[1 - h_\varepsilon(\|x_i - c\|)\big]\) vaut ~1 dès qu'<em>un seul</em>
+point tombe dans la boule — l'union de boules s'exprime par le max&nbsp;: PointNet
+approche les fonctions d'«&nbsp;appartenance d'au moins un point à une
+boule&nbsp;», brique universelle des ensembles compacts (thm. 1 de l'article).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">PointNet++ et DGCNN — injecter le local</span>
+  PointNet ne voit que des <em>réunions</em> de régions (le max global ignore la
+  co-localisation). Deux réponses&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><strong>PointNet++</strong>&nbsp;: (a) <em>farthest point sampling</em>&nbsp;:
+  choisir itérativement le point le plus éloigné des centres déjà choisis (couverture
+  uniforme, algorithme glouton en \(O(n\,k)\))&nbsp;; (b) <em>ball query</em>&nbsp;:
+  grouper les voisins dans une boule de rayon fixé&nbsp;; (c) PointNet <em>local</em>
+  par groupe, puis hiérarchie (sous-échantillonnage progressif — exactement un
+  pooling spatial)&nbsp;; multi-échelles par rayons emboîtés&nbsp;;</li>
+  <li><strong>DGCNN</strong>&nbsp;: graphe k-NN <em>dynamique</em> dans l'espace des
+  features (EdgeConv)&nbsp;:
+  $$x_i' = \square_{j : (i,j) \in \mathrm{kNN}}\ h_\theta(x_i, x_j), \qquad
+  h_\theta(x_i, x_j) = \mathrm{MLP}\big(x_i,\ x_j - x_i\big),$$
+  le max (ou moyenne) sur les arêtes&nbsp;; le graphe se reconstruit à chaque couche —
+  les voisins s'éloignent dans l'espace latent&nbsp;: une portée de réception qui
+  grandit (de local à global, comme les convolutions empilées).</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Convolutions géodésiques et le problème de la jauge</span>
+  Une convolution filtre un <em>patch</em> (voisinage géodésique, anisotrope). Mais sur
+  une surface, <strong>il n'existe pas de repère canonique</strong> dans le plan
+  tangent&nbsp;: où mettre «&nbsp;nord&nbsp;»&nbsp;? Chaque choix de jauge (rotation locale du
+  repère) fait tourner le filtre&nbsp;: un filtre anisotrope n'est pas
+  <em>well-defined</em>. Trois stratégies&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li>mesurer l'alignement avec une direction extrinsèque (le gradient, la normale) —
+  fragile&nbsp;;</li>
+  <li>coordonnées principales (repères propres du tenseur de courbure)&nbsp;: stable
+  mais signe ambigu&nbsp;;</li>
+  <li>filer isotrope (angulairement invariant)&nbsp;: on renonce à l'anisotropie —
+  c'est la réponse spectrale (filtres fonctions de \(\Delta\), cf. ChebNet du module
+  Graph ML) et... la réponse DiffusionNet ci-dessous.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">DiffusionNet (Sharp, Attaiki, Crane, Ovsjanikov — TOG 2022)&nbsp;: équations complètes</span>
+  Remplacer la convolution par la <strong>diffusion apprise</strong>. Chaque couche
+  transforme des features \(H \in \mathbb{R}^{n \times d}\)&nbsp;:
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+  <li><strong>Diffusion apprise</strong>&nbsp;: apprendre \(m\) échelles
+  \(t_1, \dots, t_m &gt; 0\) (paramètres libres)&nbsp;:
+  $$H \leftarrow \mathrm{concat}\Big(H,\ \ \sum_{j=1}^{m} w_j\, e^{-t_j\Delta}H\Big)
+  \ \ \text{(mélange appris de heats à toutes échelles)}&nbsp;;$$</li>
+  <li><strong>MLP par point</strong>&nbsp;: \(H \leftarrow \mathrm{MLP}(H)\) —
+  opérateur <em>ponctuel</em> (aucune jauge&nbsp;!)&nbsp;;</li>
+  <li><strong>Gradient de features</strong>&nbsp;: le gradient \(\nabla_M H\) (vecteur
+  tangent par sommet, cotangent-Dérivation 2.2 généralisée) contient la
+  <em>direction</em> des variations — l'anisotropie réintroduite
+  <em>sans</em> repère&nbsp;: concaténé à \(H\)&nbsp;;</li>
+  <li>retour en (1) — 8–12 couches.</li>
+  </ol>
+  <strong>Propriétés</strong>&nbsp;: agnostique de discrétisation (seuls \(e^{-t\Delta}\)
+  et \(\nabla\) sont requis — disponibles sur maillages <em>et</em> nuages par
+  estimation de chaleur)&nbsp;; isotrope (pas de jauge) + gradient directionnel&nbsp;;
+  échelles apprises (plus de grille de \(t\) fixée)&nbsp;; SOTA sur FAUST/SCAPE à
+  l'époque, robuste aux re-maillages — l'«&nbsp;élément discret&nbsp;» du domaine.
+</div>
+
+<ul>
+  <li><strong>Transformers sur surfaces</strong>&nbsp;: attention globale entre
+  points/sommets avec encodages de position <em>intrinsèques</em> (HKS, distances
+  géodésiques aléatoires) en guise d'ajout de position&nbsp;: la recette GPS du module
+  Advanced GNN (global + local) transplantée&nbsp;; coût quadratique →
+  sous-échantillonnage hiérarchique&nbsp;;</li>
+  <li><strong>Apprentissage auto-supervisé</strong>&nbsp;: prétextes géométriques —
+  prédire des descripteurs (HKS&nbsp;: «&nbsp;connais-toi toi-même&nbsp;»), l'orientation
+  locale, reconstruire des régions masquées&nbsp;; pré-entraînement contrastif entre
+  vues/poses d'une même forme (l'esprit des méthodes type SurfContrast)&nbsp;: le
+  pré-entraînement des LLMs appliqué aux surfaces&nbsp;;</li>
+  <li><strong>Benchmarks</strong>&nbsp;:
+  <table class="tbl">
+  <thead><tr><th>Jeu</th><th>Tâche</th><th>Métrique</th></tr></thead>
+  <tbody>
+  <tr><td>FAUST / SCAPE</td><td>correspondance humaine (poses diverses)</td><td>erreur géodésique moyenne (×100)</td></tr>
+  <tr><td>SHREC</td><td>retrieval de formes</td><td>mAP</td></tr>
+  <tr><td>ModelNet40</td><td>classification de nuages</td><td>accuracy</td></tr>
+  <tr><td>ShapeNet-parts</td><td>segmentation partielle</td><td>mIoU</td></tr>
+  </tbody>
+  </table></li>
+</ul>
+
+<pre class="code"><code># Classification de maillages par LBO-features + petit classifieur (squelette TP)
+import torch
+# features : [curvature_Gauss, curvature_Mean, HKS(t1..t5)] par sommet
+model = torch.nn.Sequential(
+    torch.nn.Linear(7, 128), torch.nn.ReLU(),
+    torch.nn.Linear(128, 64),
+)
+# pooling invariant : max sur les sommets, puis tete de classification
+logits = model(features).max(dim=1).values.unsqueeze(0)   # (1, 64) -> (1, n_classes)
+
+# Couche "diffusion apprise" de DiffusionNet (version tronquee) :
+t_params = torch.nn.Parameter(torch.rand(m))              # echelles apprises
+def diffusion(H, evals, evecs):
+    H_spec = evecs.T @ H                                  # (k, d)
+    out = [H]
+    for t in torch.nn.functional.softplus(t_params):
+        out.append(evecs @ torch.exp(-t * evals).unsqueeze(1) * H_spec)
+    return torch.cat(out, dim=1)                          # concat des echelles</code></pre>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> Paramétrisation et traitement</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Équivariance euclidienne</a></nav>
+</main>
+</div>
+
+</body>
+</html>

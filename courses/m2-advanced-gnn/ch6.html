@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Graph Neural Networks — Échelle&nbsp;: sampling, systèmes — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Graph Neural Networks</a> › Échelle&nbsp;: sampling, systèmes</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · Advanced Graph Neural</span>Advanced Graph Neural Networks</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le socle message passing</a>
+<a href="ch1.html">Expressivité&nbsp;: le test de Weisfeiler-Lehman</a>
+<a href="ch2.html">Over-squashing et GNN profonds</a>
+<a href="ch3.html">Encodages de position et de structure</a>
+<a href="ch4.html">Graph transformers</a>
+<a href="ch5.html">Graphes dynamiques et temporels</a>
+<a href="ch6.html" class="active">Échelle&nbsp;: sampling, systèmes</a>
+<a href="ch7.html">Robustesse et privacy sur graphes</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html">Passerelles LLGA&nbsp;: 3D, raisonnement algorithmique, GNN × LLM</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Échelle&nbsp;: sampling, systèmes</h2>
+
+<div class="recap">
+  <div class="recap-title">Ce qui est supposé acquis (M1, ch. 7)</div>
+  NeighborSampler (fanouts, voisinage expansif \(1 + s_L(1 + s_{L-1}(\dots))\)),
+  Cluster-GCN (partition METIS, biais de partition), GraphSAINT (sous-graphes + normalisation
+  par couverture sans biais), et le triangle biais/variance/mémoire. Ici&nbsp;: la couche
+  <em>systèmes</em> et l'hygiène expérimentale.
+</div>
+
+<ul>
+  <li><strong>Multi-GPU et partitionnement</strong>&nbsp;: au-delà d'un GPU, partitionner le
+  graphe (METIS/vertex-cut) sur plusieurs machines&nbsp;; les arêtes frontalières sont
+  dupliquées (shadow nodes) — l'entraînement distribué du module Emerging ML s'applique
+  presque tel quel (parameter server vs all-reduce)&nbsp;; PinSage (M1, ch. 6) est la
+  référence industrielle&nbsp;;</li>
+  <li><strong>Caching et pipelining</strong>&nbsp;: l'échantillonnage voisinage est un problème
+  de <em>système</em> (I/O, réutilisation des sous-graphes entre batchs — d'où l'échantillon
+  par importance de PinSage qui fige les portes d'entrée)&nbsp;; les frameworks&nbsp;:
+  DGL, PyG + torch_geometric.sampler, Quiver&nbsp;;</li>
+  <li><strong>Complexités récapitulatives</strong>&nbsp;:
+  <table class="tbl">
+  <thead><tr><th>Méthode</th><th>Mémoire/batch</th><th>Biais</th><th>Notes</th></tr></thead>
+  <tbody>
+  <tr><td>full-batch</td><td>\(\mathcal{O}(|V| + |E|)\)</td><td>aucun</td><td>casse au-delà d'~1M nœuds</td></tr>
+  <tr><td>NeighborSampler</td><td>\(\mathcal{O}(\prod s_l)\)</td><td>variance</td><td>inductif, standard</td></tr>
+  <tr><td>Cluster-GCN</td><td>\(\mathcal{O}(|E|/k)\)</td><td>partition</td><td>profond possible</td></tr>
+  <tr><td>GraphSAINT</td><td>\(\mathcal{O}(|\mathcal{G}_s|)\)</td><td>corrigé</td><td>batchs denses</td></tr>
+  </tbody>
+  </table></li>
+  <li><strong>Benchmarks et hygiène</strong>&nbsp;: OGB (ogbn-arxiv 169k&nbsp;; ogbn-products
+  2,4M&nbsp;; PCQM4M 3,7M molécules), leaderboards publics&nbsp;; le papier «&nbsp;Benchmarking
+  Graph Neural Networks&nbsp;» (Dwivedi et al., 2020/2023) fixe le protocole&nbsp;: mêmes
+  budgets de paramètres, mêmes splits, <em>seeds multiples avec intervalles de
+  confiance</em> — beaucoup de «&nbsp;SOTA&nbsp;» meurent à cette aune&nbsp;; la recherche
+  d'hyperparamètres bayésienne est la règle (les gains &lt;&nbsp;0,5 point exigeant un
+  protocole strict)&nbsp;;</li>
+  <li><strong>Bonne pratique recherche</strong>&nbsp;: toujours publier la variance, tester
+  la significativité (tests appariés sur seeds), et vérifier la <em>fuite</em> (splits
+  temporels pour les graphes dynamiques — ch. 5).</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> Graphes dynamiques et temporels</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Robustesse et privacy sur graphes</a></nav>
+</main>
+</div>
+
+</body>
+</html>

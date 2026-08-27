@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainability, Security, Privacy of LLMs — Superposition et sparse autoencoders — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Explainability, Security, Privacy of LLMs</a> › Superposition et sparse autoencoders</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Explainability, Security, Privacy of LLMs</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: la boîte noire et ses trois questions</a>
+<a href="ch1.html">Interprétabilité interne&nbsp;: probing et contrôle</a>
+<a href="ch2.html">Lire les couches&nbsp;: logit lens, attention et ses limites</a>
+<a href="ch3.html" class="active">Superposition et sparse autoencoders</a>
+<a href="ch4.html">Expliquer une sortie&nbsp;: SHAP, LIME, gradients</a>
+<a href="ch5.html">Sécurité&nbsp;: taxonomie des attaques</a>
+<a href="ch6.html">Défenses en profondeur</a>
+<a href="ch7.html">Vie privée I&nbsp;: mémorisation et extraction</a>
+<a href="ch8.html">Vie privée II&nbsp;: membership inference et DP</a>
+<a href="ch9.html">Anonymisation et watermarking</a>
+<a href="ch10.html">Évaluer la sûreté&nbsp;: red teaming, AI Act</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Superposition et sparse autoencoders</h2>
+
+<h3>3.1 Le problème&nbsp;: plus de concepts que de dimensions</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — Superposition (Elhage et al., 2022)</span>
+  Un réseau de \(d\) dimensions peut stocker plus de \(d\) features
+  «&nbsp;presque orthogonales&nbsp;»&nbsp;: les directions s'interférent
+  faiblement au lieu de s'exclure. Conséquence observée&nbsp;: des
+  <strong>neurones poly-sémantiques</strong> (un même neurone active pour «&nbsp;code
+  Python&nbsp;», «&nbsp;recette&nbsp;» et «&nbsp;DNA&nbsp;») — l'objet «&nbsp;concept
+  = neurone&nbsp;» s'effondre. Les <em>toy models of superposition</em>
+  (Anthropic, 2022) reproduisent le phénomène&nbsp;: un autoencodeur de 2
+  dimensions apprend à représenter jusqu'à ~5 features en fonction de leur
+  rareté et de l'importance de l'interférence, avec des transitions de phase
+  (géométries en triangles, hexagones…).
+</div>
+
+<h3>3.2 La réponse&nbsp;: dictionnaires surcomplets par SAE</h3>
+
+<div class="def">
+  <span class="tag">Définition 3.2 — Sparse autoencoder (SAE)</span>
+  Un SAE apprend, sur les activations \(h \in \mathbb{R}^d\) d'une couche, un
+  dictionnaire surcomplet de \(m \gg d\) features&nbsp;:
+  $$z = \sigma_{\mathrm{ReLU}}\!\bigl(W_{\mathrm{enc}}\,h - b_e\bigr) \in
+  \mathbb{R}^m, \qquad
+  \hat h = W_{\mathrm{dec}}\,z + b_d,$$
+  entraîné à minimiser
+  $$\mathcal{L} \;=\; \underbrace{\|h - \hat h\|_2^2}_{\text{reconstruction}}
+  \;+\; \lambda\, \underbrace{\|z\|_1}_{\text{parcimonie}}.$$
+  Avec \(m \gg d\) et \(z\) parcimonieux, chaque feature active tend vers un
+  <em>concept unique</em> (mono-sémantique)&nbsp;: la superposition est
+  «&nbsp;défaite&nbsp;» au prix d'un espace plus grand.
+</div>
+
+<p>Bricken et al. (<em>Towards Monosemanticity</em>, 2023) obtiennent sur un
+modèle à une couche des features interprétables et manipulables&nbsp;;
+Templeton et al. (<em>Scaling Monosemanticity</em>, 2024) passent à
+l'échelle&nbsp;: SAE entraînés sur le flux résiduel de Claude&nbsp;3 Sonnet, des
+dictionnaires de l'ordre du million à dizaines de millions de latents, des
+features abstraites (le Golden Gate Bridge, la sécurité du code, l'ironie…),
+et la démonstration que <strong>forcer</strong> une feature (<em>steering</em>&nbsp;:
+amplifier son
+activation) modifie le comportement du modèle de façon ciblée — la boucle
+corrélation → intervention du ch. 1 se referme.</p>
+
+<div class="note">
+  <span class="tag">Analyse critique (à lire avant de croire)</span>
+  (i)&nbsp;<em>Qu'est-ce qu'une «&nbsp;vraie&nbsp;» feature&nbsp;?</em>&nbsp;—
+  les SAE en trouvent <em>une</em> base parcimonieuse parmi d'autres possibles&nbsp;;
+  il n'y a pas de ground truth. (ii)&nbsp;<em>Shrinkage</em>&nbsp;: le SAE
+  sous-estime les activations (biais de parcimonie), et les latents morts
+  pullulent si \(\lambda\) est mal réglé. (iii)&nbsp;<em>Coût</em>&nbsp;: entraîner
+  et curater des SAE à l'échelle coûte cher, et l'évaluation reste artisanale
+  (auto-évaluation humaine des features). (iv)&nbsp;<em>Portée</em>&nbsp;: un
+  SAE décrit des features <em>d'une couche, d'un modèle, d'un corpus</em>.
+  Reste l'objet le plus proche d'une «&nbsp;IRM du transformer&nbsp;» — à
+  utiliser comme tel&nbsp;: un outil d'exploration, pas un certificat.
+</div>
+
+<pre class="code"><code># Entrainement d'un SAE jouet sur les activations d'une couche (schema libre)
+import torch
+d, m, lmbda = 768, 8192, 1e-3
+Wenc = torch.nn.Parameter(torch.randn(m, d) / d**0.5)
+benc = torch.nn.Parameter(torch.zeros(m))
+Wdec = torch.nn.Parameter(torch.randn(d, m) / m**0.5)
+bdec = torch.nn.Parameter(torch.zeros(d))
+
+def sae_loss(h):                       # h : batch d'activations (gelees)
+    z = torch.relu(h @ Wenc.T + benc)  # code parcimonieux
+    rec = z @ Wdec.T + bdec
+    return ((h - rec)**2).mean() + lmbda * z.abs().mean(), z
+
+# Apres entrainement : trier les colonnes par frequence d'activation, lire les
+# top-k exemples par feature -> annotation humaine -> tableau de bord features</code></pre>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Précédent</span> Lire les couches&nbsp;: logit lens, attention et ses limites</a><a class="next" href="ch4.html"><span class="dir">Suivant</span> Expliquer une sortie&nbsp;: SHAP, LIME, gradients</a></nav>
+</main>
+</div>
+
+</body>
+</html>

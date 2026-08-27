@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — Filtrage et convolution — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Analysis and Computer Vision</a> › Filtrage et convolution</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: algèbre linéaire, convolution, probabilités</a>
+<a href="ch1.html">Formation des images&nbsp;: caméra et échantillonnage</a>
+<a href="ch2.html" class="active">Filtrage et convolution</a>
+<a href="ch3.html">Contours&nbsp;: gradient et Canny</a>
+<a href="ch4.html">Points d'intérêt&nbsp;: Harris et SIFT</a>
+<a href="ch5.html">Géométrie projective et homographies</a>
+<a href="ch6.html">Stéréovision et géométrie épipolaire</a>
+<a href="ch7.html">Flux optique&nbsp;: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation&nbsp;: k-moyennes et coupes de graphes</a>
+<a href="ch9.html">CNN pour la vision&nbsp;: détection et segmentation</a>
+<a href="ch10.html">Nuages de points 3D&nbsp;: ICP et analyse urbaine</a>
+<a href="ch11.html">Travaux de l'enseignant&nbsp;: LiDAR urbain à l'IGN</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Filtrage et convolution</h2>
+
+<p>Filtrer une image, c'est remplacer chaque pixel par une combinaison de son
+voisinage&nbsp;: lisser le bruit, accentuer les détails, détecter les variations.
+L'outil universel est la convolution, déjà rencontrée en 1D dans le module
+<em>Signal Processing</em> (ch. 2)&nbsp;: tout ce qui suit est sa traduction 2D.</p>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Convolution 2D et corrélation</span>
+  Pour une image \(I\) et un noyau \(K\) de support fini&nbsp;:
+  $$(I * K)(x, y) = \sum_{i}\sum_{j} I(x-i,\,y-j)\,K(i, j).$$
+  La convolution retourne le noyau&nbsp;; la <em>corrélation</em>
+  \(\sum I(x+i, y+j) K(i,j)\) ne le retourne pas — pour des noyaux symétriques
+  (gaussienne, box), les deux coïncident. Un filtre convolutif est
+  <strong>linéaire</strong> et <strong>invariant par translation</strong>&nbsp;:
+  ce sont exactement les systèmes LTI du traitement du signal, et le théorème
+  de convolution s'applique&nbsp;: \(I * K \longleftrightarrow \hat I \cdot \hat K\)
+  (transformée de Fourier 2D).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — Séparabilité de la gaussienne</span>
+  Le noyau gaussien 2D se factorise&nbsp;:
+  \(G_\sigma(x, y) = \frac{1}{2\pi\sigma^2}e^{-(x^2+y^2)/2\sigma^2}
+  = g_\sigma(x)\,g_\sigma(y)\) avec \(g_\sigma(t) = \frac{1}{\sqrt{2\pi}\sigma}
+  e^{-t^2/2\sigma^2}\). Convolver par \(G_\sigma\) revient donc à convolver
+  d'abord par ligne puis par colonne.
+  <div class="proof" style="margin-top:.5rem;">La factorisation est une identité
+  algébrique&nbsp;: \(e^{-(x^2+y^2)/2\sigma^2} = e^{-x^2/2\sigma^2}\cdot
+  e^{-y^2/2\sigma^2}\) et \(\frac{1}{2\pi\sigma^2} =
+  \frac{1}{\sqrt{2\pi}\sigma}\cdot\frac{1}{\sqrt{2\pi}\sigma}\). Le reste suit
+  par associativité de la convolution&nbsp;: \(I * G_\sigma =
+  I * (g_\sigma^{col} * g_\sigma^{row}) = (I * g_\sigma^{col}) * g_\sigma^{row}\).
+  <span class="qed">∎</span></div>
+  Gain&nbsp;: un noyau \(k\times k\) coûte \(k^2\) multiplications par pixel en
+  2D, \(2k\) en deux passes&nbsp;; pour \(k = 31\)&nbsp;: 961 → 62, soit
+  15,5× moins. En pratique on échantillonne \(g_\sigma\) sur \([-3\sigma, 3\sigma]\)
+  (99,7&nbsp;% de la masse) et on normalise la somme à 1.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 2.3 — Dérivation et différences finies</span>
+  La dérivée discrète s'approxime par différences centrées
+  \(\frac{\partial I}{\partial x}(x, y) \approx \frac{I(x+1,y) - I(x-1,y)}{2}\),
+  c'est-à-dire une convolution par \(\frac12[-1, 0, 1]\). Sur une image bruitée,
+  dériver <em>amplifie</em> le bruit haute fréquence&nbsp;; on lisse d'abord&nbsp;:
+  $$\frac{\partial}{\partial x}(G_\sigma * I) = \Big(\frac{\partial G_\sigma}{\partial x}\Big) * I,$$
+  l'égalité venant de l'échange dérivation/convolution (Fubini&nbsp;; cf.
+  rappels ch. 0 et module <em>Signal Processing</em>). Conclusion&nbsp;: dériver
+  une image lissée = convolver par la dérivée d'une gaussienne — un seul noyau,
+  optimal au sens de l'échelle choisie. C'est le point de départ du ch. 3.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.4 — Noyaux usuels et leurs effets</span>
+  <table class="tbl">
+    <tr><th>Noyau</th><th>Formule / masque</th><th>Effet</th></tr>
+    <tr><td>box 3×3</td><td>tous coefficients 1/9</td><td>lisser (rapide, artefacts de blocs)</td></tr>
+    <tr><td>gaussien</td><td>\(G_\sigma\)</td><td>lisser (isotrope, pas d'oscillation)</td></tr>
+    <tr><td>Sobel-x</td><td>\(\frac14\begin{pmatrix}-1&amp;0&amp;1\\-2&amp;0&amp;2\\-1&amp;0&amp;1\end{pmatrix}\)</td><td>dérivée horizontale lissée verticalement</td></tr>
+    <tr><td>laplacien</td><td>\(\begin{pmatrix}0&amp;1&amp;0\\1&amp;-4&amp;1\\0&amp;1&amp;0\end{pmatrix}\)</td><td>dérivée seconde&nbsp;; contours = passages par zéro</td></tr>
+    <tr><td>médiane</td><td>non linéaire</td><td>bruit impulsionnel (poivre/sel) sans flouter les bords</td></tr>
+    <tr><td>unsharp</td><td>\(I + \lambda\,(I - G_\sigma*I)\)</td><td>accentuation (le «&nbsp;masque flou&nbsp;»)</td></tr>
+  </table>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.5 — Pyramides&nbsp;: sous-échantillonner sans replier</span>
+  Diviser la résolution par 2 sans précaution replie les fréquences au-delà de la
+  nouvelle fréquence de Nyquist (déf. 1.4). La <strong>pyramide gaussienne</strong>
+  applique donc \(G_{\sigma_0}\) (avec \(\sigma_0 \geq \tfrac{\sqrt{2}}{2}\) pixel)
+  avant de garder un pixel sur deux&nbsp;; chaque niveau \(I^{(k+1)} =
+  \downarrow_2 (G * I^{(k)})\) représente l'image à l'échelle \(2^k\). Ces
+  pyramides accélèrent la recherche multi-échelle (ch. 4&nbsp;: SIFT,
+  ch. 7&nbsp;: Lucas-Kanade pyramidal) et le rendu progressif.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> Formation des images&nbsp;: caméra et échantillonnage</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Contours&nbsp;: gradient et Canny</a></nav>
+</main>
+</div>
+
+</body>
+</html>

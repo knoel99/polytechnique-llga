@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainability, Security, Privacy of LLMs — Anonymisation et watermarking — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Explainability, Security, Privacy of LLMs</a> › Anonymisation et watermarking</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Explainability, Security, Privacy of LLMs</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: la boîte noire et ses trois questions</a>
+<a href="ch1.html">Interprétabilité interne&nbsp;: probing et contrôle</a>
+<a href="ch2.html">Lire les couches&nbsp;: logit lens, attention et ses limites</a>
+<a href="ch3.html">Superposition et sparse autoencoders</a>
+<a href="ch4.html">Expliquer une sortie&nbsp;: SHAP, LIME, gradients</a>
+<a href="ch5.html">Sécurité&nbsp;: taxonomie des attaques</a>
+<a href="ch6.html">Défenses en profondeur</a>
+<a href="ch7.html">Vie privée I&nbsp;: mémorisation et extraction</a>
+<a href="ch8.html">Vie privée II&nbsp;: membership inference et DP</a>
+<a href="ch9.html" class="active">Anonymisation et watermarking</a>
+<a href="ch10.html">Évaluer la sûreté&nbsp;: red teaming, AI Act</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Anonymisation et watermarking</h2>
+
+<h3>9.1 Anonymisation&nbsp;: plus dur qu'il n'y paraît</h3>
+
+<p>Le pipeline classique&nbsp;: détection d'entités (NER — module NLP ch. 6) →
+masquage/remplacement (pseudonymisation) → re-entraînement. Trois pièges&nbsp;:
+(i)&nbsp;les quasi-identifiants (code postal + date + métier) réidentifient sans
+aucune «&nbsp;entité&nbsp;» nommée — l'anonymisation absolue n'existe pas, on
+réduit un <em>risque</em>&nbsp;; (ii)&nbsp;les données <em>synthétiques</em>
+générées par un LLM ne sont pas sûres par construction&nbsp;: le générateur
+mémorise aussi (ch. 7)&nbsp;; (iii)&nbsp;le remplacement à l'aveugle casse
+l'utilité (les noms portent de l'information syntaxique et sémantique).
+Position réglementaire&nbsp;: l'anonymisation «&nbsp;définitive&nbsp;» fait sortir
+les données du RGPD&nbsp;; la pseudonymisation, non — et le AI Act (ch. 10)
+exige des comptes rendus sur les données d'entraînement, pas leur
+disparition.</p>
+
+<h3>9.2 Watermarking&nbsp;: signer la génération</h3>
+
+<div class="def">
+  <span class="tag">Définition 9.1 — Filigrane green-list (Kirchenbauer et al., ICML 2023)</span>
+  À chaque pas de génération&nbsp;: (1)&nbsp;hacher le token précédent \(x_{t-1}\)
+  (plus éventuellement \(H\), une clé secrète) pour initialiser un générateur
+  pseudo-aléatoire&nbsp;; (2)&nbsp;partitionner le vocabulaire en une
+  <em>green list</em> \(G\) de proportion \(\gamma\) et sa complémentaire&nbsp;;
+  (3)&nbsp;ajouter \(\delta\) aux logits des tokens verts avant l'échantillonnage.
+  Le modèle <em>privilégie</em> statistiquement les tokens verts sans dégrader
+  perceptiblement la qualité (\(\delta \approx 1\)-2, \(\gamma \approx 0{,}5\)).
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 9.2 — Test de détection (z-test)</span>
+  Sur un texte suspect \(s = (s_1, \dots, s_T)\) (marqué ou non), on compte
+  \(|s|_G\) = nombre de tokens verts (listes recalculées pas à pas)&nbsp;:
+  $$z(s) \;=\; \frac{|s|_G - \gamma\, T}{\sqrt{T\, \gamma\, (1 - \gamma)}}.$$
+  Sous \(H_0\) (texte non marqué), les indicatrices vertes sont
+  (approximativement) i.i.d. Bernoulli(\(\gamma\)), donc \(z \approx
+  \mathcal{N}(0, 1)\) par le théorème central limite&nbsp;; sous \(H_1\),
+  \(z\) croît comme \(\sqrt{T}\) (biais \(\delta\)). Au seuil \(z &gt; 4\) et
+  \(T = 200\)&nbsp;: faux positif \(\approx \Phi(-4) \approx 3\times
+  10^{-5}\), et puissance élevée pour \(\delta\) modéré.
+</div>
+
+<div class="proof">
+Sous \(H_0\), \(|s|_G = \sum_t \mathbf{1}[s_t \in G_t]\) avec
+\(\mathbb{E} = \gamma T\) et \(\mathrm{Var} = T\gamma(1-\gamma)\) (somme de
+Bernoulli indépendantes — l'hypothèse d'indépendance est heuristique&nbsp;: les
+tokens d'un texte naturel sont corrélés&nbsp;; empiriquement la calibration
+tient). Le TCL donne \((|s|_G - \gamma T)/\sqrt{T\gamma(1-\gamma)}
+\Rightarrow \mathcal{N}(0,1)\), d'où le seuil par quantile gaussien. Sous
+\(H_1\), le biais des logits augmente la probabilité verte de
+\(\Delta \approx \gamma(1-\gamma)\delta\) (développement au premier ordre du
+softmax)&nbsp;; alors \(\mathbb{E}[z] \approx \delta\sqrt{T\gamma(1-\gamma)}
+\to \infty\) — la puissance tend vers 1 avec la longueur. <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Robustesse&nbsp;: le talon d'Achille</span>
+  Le test suppose le texte <em>intact</em>&nbsp;: paraphrase par un autre modèle,
+  traduction, insertion/suppression de tokens diluent le signal (le hachage du
+  token précédent se désynchronise). Les études de robustesse montrent des
+  détections qui s'effondrent après paraphrase à taux élevé — d'où la
+  recherche de schémas plus robustes et, à l'autre extrême, le résultat
+  cryptographique de Christ, Gunn &amp; Zamir (COLT 2024)&nbsp;: des filigranes
+  <em>indétectables</em> (détection à clé secrète seulement, construction par
+  fonctions à sens unique) qui ne dégradent <em>aucune</em> distribution —
+  au prix d'une clé à gérer. Usage visé&nbsp;: <strong>provenance</strong>
+  (prouver qu'un contenu vient de <em>mon</em> modèle), complément des
+  obligations de transparence du AI Act (ch. 10) — pas un détecteur de
+  triche universel.
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> Vie privée II&nbsp;: membership inference et DP</a><a class="next" href="ch10.html"><span class="dir">Suivant</span> Évaluer la sûreté&nbsp;: red teaming, AI Act</a></nav>
+</main>
+</div>
+
+</body>
+</html>

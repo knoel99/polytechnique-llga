@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — Au-delà du relationnel&nbsp;: NoSQL, graphes, vecteurs — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">DataBase Management System</a> › Au-delà du relationnel&nbsp;: NoSQL, graphes, vecteurs</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51053_EP</span>DataBase Management System</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: ensembles, relations, complexité</a>
+<a href="ch1.html">Le modèle relationnel et l'algèbre</a>
+<a href="ch2.html">SQL&nbsp;: requêtes, agrégats, fenêtrage</a>
+<a href="ch3.html">Conception&nbsp;: dépendances et formes normales</a>
+<a href="ch4.html">Stockage&nbsp;: pages, fichiers, tri externe</a>
+<a href="ch5.html">Index&nbsp;: arbres B+ et hachage</a>
+<a href="ch6.html">Transactions et concurrence</a>
+<a href="ch7.html">Journal et reprise sur panne</a>
+<a href="ch8.html">Optimisation de requêtes</a>
+<a href="ch9.html" class="active">Au-delà du relationnel&nbsp;: NoSQL, graphes, vecteurs</a>
+<a href="ch10.html">Données du web et intégration hétérogène</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Au-delà du relationnel&nbsp;: NoSQL, graphes, vecteurs</h2>
+
+<p>Le relationnel domine les charges transactionnelles, mais trois évolutions des
+années 2000-2020 ont essaimé de nouveaux modèles&nbsp;: l'échelle horizontale
+(NoSQL), la donnée en graphe (knowledge graphs), et la recherche par
+<strong>similarité</strong> sur vecteurs — le carburant des systèmes
+d'apprentissage et du RAG (cf. module <em>Large Language Models</em>, chapitre 7).</p>
+
+<div class="thm">
+  <span class="tag">Théorème 9.1 — CAP (Brewer, 2000&nbsp;; Gilbert-Lynch, 2002)</span>
+  Dans un système distribué soumis à des <em>pannes réseau</em> (partitions), on ne
+  peut garantir simultanément cohérence forte (C) et disponibilité (A)&nbsp;: il faut
+  choisir, au moins pendant la partition.
+  <div class="proof" style="margin-top:.5rem;">Esquisse. Partitionnez le réseau en deux
+  composants \(\Gamma_1, \Gamma_2\). Un client écrit dans \(\Gamma_1\), un autre lit
+  dans \(\Gamma_2\). Si les deux opérations aboutissent (A), la lecture ne peut pas
+  voir l'écriture&nbsp;: incohérence (non-C). Pour rester cohérent, \(\Gamma_2\) doit
+  refuser ou bloquer (non-A). <span class="qed">∎</span></div>
+  Les systèmes NoSQL revendiquent donc AP avec cohérence <em>éventuelle</em>
+  (BASE)&nbsp;; les systèmes dits CP sacrifient la disponibilité pendant les
+  partitions. Le compromis se pilote par requête (niveaux de cohérence lisibles /
+  écrites, quorum \(r + w &gt; n\)).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.2 — Familles NoSQL</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>clé-valeur</strong> (Redis, DynamoDB)&nbsp;: une table de hachage
+    distribuée (ch. 5 à l'échelle d'un cluster, consistent hashing)&nbsp;;</li>
+    <li><strong>documents</strong> (MongoDB)&nbsp;: des arbres JSON identifiés,
+    interrogation par champs — la 1NF est délibérément abandonnée pour
+    regrouper ce qui se lit ensemble&nbsp;;
+    <pre class="code"><code>{ "_id": "cmd1043", "client": { "nom": "Anna", "ville": "Palaiseau" },
+  "lignes": [ { "article": "DB", "qte": 2 }, { "article": "DL", "qte": 1 } ],
+  "statut": "expédiée" }</code></pre></li>
+    <li><strong>colonnes</strong> (Cassandra, Bigtable)&nbsp;: lignes clairsemées
+    regroupées physiquement par famille de colonnes et triées par clé de
+    regroupement — les SSTables et le <em>log-structured merge tree</em> (memtable
+    → niveaux de fichiers triés, lectures majorées par des filtres de Bloom)
+    remplacent le B+&nbsp;;</li>
+    <li><strong>graphes</strong>&nbsp;: voir ci-dessous — le seul modèle où la
+    jointure récursive est de première classe.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.3 — Property graphs et RDF</span>
+  Un <strong>property graph</strong> (Neo4j&nbsp;; standard GQL) est un graphe
+  multi-relations dont nœuds et arêtes portent des propriétés clé-valeur. Le langage
+  <strong>Cypher</strong> interroge par motifs&nbsp;:
+<pre class="code"><code>MATCH (a:Personne {nom: "Anna"})-[:INSCRIT_A*1..3]->(c:Cours)
+WHERE c.credits >= 3
+RETURN DISTINCT c.code;</code></pre>
+  Le modèle <strong>RDF</strong> (W3C) représente tout par des <em>triplets</em>
+  (sujet, prédicat, objet) formant un graphe orienté étiqueté global, avec des
+  <em>IRI</em> (identifiants universels) et des ontologies (RDFS, OWL) pour raisonner.
+  SPARQL reprend le SQL (SELECT/WHERE) sur des motifs de graphe&nbsp;:
+<pre class="code"><code>SELECT DISTINCT ?code WHERE {
+  :Anna :inscritA+ ?c .            # chemin de longueur ≥ 1 (SPARQL 1.1)
+  ?c :credits ?cr . FILTER(?cr >= 3)
+  ?c :code ?code . }</code></pre>
+  <table class="tbl">
+    <tr><th>Critère</th><th>Property graph</th><th>RDF</th></tr>
+    <tr><td>Identifiants</td><td>locaux à la base</td><td>IRI globaux → fédération naturelle</td></tr>
+    <tr><td>Propriétés d'arêtes</td><td>oui, de première classe</td><td>par réification (nœud-énoncé)</td></tr>
+    <tr><td>Schéma</td><td>souple, contraintes locales</td><td>ontologies RDFS/OWL, inférence</td></tr>
+    <tr><td>Requêtes</td><td>Cypher/GQL, motifs + chemins</td><td>SPARQL, fédéré, raisonnement</td></tr>
+    <tr><td>Écosystème</td><td>apps, recommandation, intégration</td><td>web de données, sciences, bibliothèques</td></tr>
+  </table>
+  Pour l'apprentissage sur graphes (plongements de nœuds, GNN, message passing),
+  les deux modèles se projettent en matrices creuses — cf. module <em>Graph ML</em>,
+  chapitres 1 (pourquoi les graphes&nbsp;?) et 5 (GNN).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.4 — Bases vectorielles et recherche ANN</span>
+  Un <strong>magasin de vecteurs</strong> indexe des plongements \(x_i \in
+  \mathbb{R}^d\) (produits par des encodeurs — cf. modules <em>NLP</em>, ch. 3, et
+  <em>Multimodal GenAI</em>, ch. 5) avec une distance (cosinus, \(L^2\)) et répond
+  «&nbsp;les \(k\) plus proches voisins de \(q\) ». La recherche <em>exacte</em> coûte
+  \(O(nd)\)&nbsp;: pour \(n = 10^7\), \(d = 768\), soit \(7{,}7\times10^{10}\)
+  multiplications par requête — prohibitif en service. La recherche
+  <strong>approchée</strong> (ANN) échange un peu de rappel contre des ordres de
+  grandeur de vitesse&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>IVF</strong> (inverted file)&nbsp;: partitionner l'espace en
+    \(n_{list}\) cellules par k-moyennes (cf. module <em>Machine Learning</em>,
+    ch. 6)&nbsp;; n'explorer que les \(n_{probe}\) cellules les plus proches.
+    \(n_{list} = 4096\), \(n_{probe} = 16\) sur \(10^7\) vecteurs&nbsp;: ~
+    \(39\,000\) distances au lieu de \(10^7\) — 250× moins de travail, rappel
+    typique &gt; 95&nbsp;%&nbsp;;</li>
+    <li><strong>HNSW</strong> (Malkov-Yashunin)&nbsp;: graphe hiérarchique
+    «&nbsp;navigable small-world&nbsp;». La couche 0 contient tous les vecteurs,
+    les couches supérieures des sommets de plus en plus clairsemés (un nœud
+    apparaît à la couche \(\ell\) avec probabilité \(p^{-\ell}\)). La recherche
+    part du sommet de la couche haute et fait du <em>greedy routing</em>
+    (passer au voisin qui rapproche le plus de \(q\)) en descendant couche par
+    couche&nbsp;; l'insertion relie le nouveau nœud à ses \(M\) plus proches
+    voisins ainsi trouvés. Les liens longs des couches hautes (choisis par une
+    heuristique de diversité) donnent le raccourci quasi logarithmique&nbsp;;
+    coût pratique ~\(O(\log n)\), rappel réglable, au prix d'une construction
+    coûteuse et d'un graphe en mémoire&nbsp;;</li>
+    <li><strong>quantification</strong> (PQ)&nbsp;: découper \(x \in
+    \mathbb{R}^d\) en \(m\) sous-vecteurs quantifiés chacun sur \(2^8\) centroïdes&nbsp;;
+    la distance devient une somme de termes lus dans des tables — mémoire
+    divisée par ~\(d\), au prix d'une distance approximée.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 9.5 — Recherche vectorielle en Python (parcours complet + IVF)</span>
+<pre class="code"><code>import numpy as np
+from sklearn.cluster import MiniBatchKMeans
+
+rng  = np.random.default_rng(0)
+X    = rng.normal(size=(100_000, 64)).astype("float32")   # "base" de vecteurs
+q    = rng.normal(size=(64,)).astype("float32")
+
+def normalize(A): return A / np.linalg.norm(A, axis=1, keepdims=True)
+Xn, qn = normalize(X), q / np.linalg.norm(q)
+
+# --- 1. recherche exacte (brute force) : O(n d)
+d_all = Xn @ qn
+top10_exact = set(np.argsort(d_all)[-10:])
+
+# --- 2. IVF : nlist cellules par k-means, on sonde nprobe cellules
+nlist, nprobe = 256, 8
+km = MiniBatchKMeans(n_clusters=nlist, n_init=3, random_state=0).fit(Xn)
+cell_of_X = km.labels_
+d_centro  = np.linalg.norm(km.cluster_centers_ - qn, axis=1)
+probes    = np.argsort(d_centro)[:nprobe]
+cand      = np.where(np.isin(cell_of_X, probes))[0]
+top10_ivf = set(cand[np.argsort(Xn[cand] @ qn)[-10:]])
+
+print(len(top10_exact & top10_ivf) / 10, "rappel@10")     # typiquement 0.9-1.0
+print(f"exact : {len(Xn)} distances ; IVF : {len(cand) + nlist} distances")
+</code></pre>
+  Le rappel <code>@k</code> se monnaie contre le coût&nbsp;: c'est le même compromis
+  que celui des index B+ (exact, logarithmique, contraint par les préfixes) — mais
+  avec une tolérance probabiliste assumée. Les SGBD relationnels intègrent
+  aujourd'hui ces index en extension (pgvector&nbsp;; le module <em>Large Language
+  Models</em>, ch. 7, montre le pipeline RAG complet qui les consomme).
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> Optimisation de requêtes</a><a class="next" href="ch10.html"><span class="dir">Suivant</span> Données du web et intégration hétérogène</a></nav>
+</main>
+</div>
+
+</body>
+</html>

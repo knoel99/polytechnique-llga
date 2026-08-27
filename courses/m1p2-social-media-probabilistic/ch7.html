@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Social Media and Communication: Probabilistic Models and Algorithms — Systèmes distribués à grande échelle — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Social Media and Communication: Probabilistic Models and Algorithms</a> › Systèmes distribués à grande échelle</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_51058_EP</span>Social Media and Communication: Probabilistic Models and Algorithms</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités et graphes</a>
+<a href="ch1.html">Graphes aléatoires&nbsp;: Erdős–Rényi</a>
+<a href="ch2.html">Degrés prescrits, petits mondes, scale-free</a>
+<a href="ch3.html">Processus épidémiques sur graphes</a>
+<a href="ch4.html">Rumeurs, push-pull et influence</a>
+<a href="ch5.html">Le stochastic block model</a>
+<a href="ch6.html">Détection de communautés et applications</a>
+<a href="ch7.html" class="active">Systèmes distribués à grande échelle</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html">Mise en œuvre&nbsp;: simulations networkx</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Systèmes distribués à grande échelle</h2>
+
+<p>Derrière chaque fil d'actualité&nbsp;: des millions de requêtes par seconde, des caches
+partout, des répartiteurs de charge. Ces systèmes consomment exactement les mêmes
+mathématiques que les chapitres précédents — boules dans des urnes, processus de
+Poisson, marcheurs aléatoires — et une partie des avancées vient de l'école française
+(Massoulié, ch. 8). Ce chapitre en donne les trois blocs&nbsp;: équilibrage de charge,
+caching, et partage de ressources.</p>
+
+<div class="thm">
+  <span class="tag">Théorème 7.1 — Boules dans des urnes&nbsp;: le pouvoir des deux choix</span>
+  On jette \(n\) boules indépendamment dans \(n\) urnes uniformément&nbsp;: la charge
+  maximale vaut \(\frac{\ln n}{\ln \ln n}\big( 1 + o(1) \big)\) avec grande probabilité
+  (Azar, Broder, Karlin, Upfal, 1999&nbsp;; Mitzenmacher, 2001). Si chaque boule
+  <strong>choisit deux urnes au hasard et va dans la moins chargée</strong>, la charge
+  maximale tombe à
+  $$\frac{\ln \ln n}{\ln 2} + O(1) \approx \log_2 \log_2 n + O(1),$$
+  gain exponentiel pour deux fois plus d'information.
+  <div class="proof">
+  (Esquisse — équations différentielles de densité, la méthode du champ moyen.)
+  Notons \(u_j(t)\) la fraction d'urnes de charge au moins \(j\) après \(t\) boules.
+  <strong>Un choix&nbsp;:</strong> une boule tombe sur une urne de charge \(j-1\) avec
+  probabilité \(u_{j-1} - u_j\) (première fois au niveau \(j\))&nbsp;;
+  \(\frac{\mathrm{d} u_j}{\mathrm{d} t} \approx u_{j-1} - u_j\), d'où
+  \(u_j \approx t^j / j!\) — et \(u_j \approx 1\) pour \(j \approx \frac{\ln n}{\ln \ln n}\).
+  <strong>Deux choix&nbsp;:</strong> la boule monte au niveau \(j\) seulement si
+  <em>les deux</em> urnes tirées sont au moins \(j - 1\)&nbsp;:
+  \(\frac{\mathrm{d} u_j}{\mathrm{d} t} \approx u_{j-1}^2 - u_j^2\)&nbsp;; en régime
+  stationnaire \(u_j \approx u_{j-1}^2\) — doublement à chaque niveau&nbsp;: \(k\)
+  niveaux atteignent \(u_k \approx 4^{-2^{k}} \cdot\)... et \(u_j\) atteint \(1/n\)
+  dès que \(2^{k} \approx \log_2 n\), soit \(k \approx \log_2 \log_2 n\).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Du modèle au data center</span>
+  Le «&nbsp;supermarché&nbsp;» (files d'attente + choix de la moins chargée) est la
+  modélisation des load balancers&nbsp;: à charge \(\rho &lt; 1\), le délai d'attente
+  typique passe de \(\Theta\big(\frac{1}{1 - \rho}\big)\) (un choix) à
+  \(\Theta\big(\log \frac{1}{1 - \rho}\big)\) (deux choix) — le comportement en queue
+  de distribution change d'échelle (Mitzenmacher&nbsp;; le régime JOIN-IDLE-QUEUE
+  traite les systèmes géants, la variante «&nbsp;power-of-d choices&nbsp;» avec
+  \(d &gt; 2\)). La même idée sert aux tables de hachage (cuckoo hashing)&nbsp;; le livre
+  de Mitzenmacher et Upfal en fait le tour.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.2 — Caching&nbsp;: LRU, LFU, et la hiérarchie des contenus</span>
+  Un <strong>cache</strong> de capacité \(k\) stocke \(k\) objets&nbsp;; les requêtes
+  arrivent selon un processus (idéalement Poisson), l'objet \(i\) avec probabilité
+  \(\lambda_i\) (popularité, typiquement en loi de puissance — ch. 2)&nbsp;; un
+  <em>hit</em> si l'objet est en cache, un <em>miss</em> sinon (coût&nbsp;: aller le
+  chercher plus loin). Politiques classiques&nbsp;: <strong>LRU</strong> (éjecter le
+  dernier utilisé — l'approximation de Che&nbsp;: le «&nbsp;temps caractéristique&nbsp;»
+  \(t_C\) donne \(\mathbb{P}(\text{hit}) = 1 - e^{-\lambda_i t_C}\))&nbsp;;
+  <strong>LFU</strong> (éjecter le moins fréquemment demandé)&nbsp;; <strong>random</strong>
+  et <strong>FIFO</strong>. Résultat structurel&nbsp;: contre un adversaire en ligne, LRU
+  est \(k\)-compétitive — son coût est au plus \(k\) fois celui de l'optimal hors
+  ligne (Sleator–Tarjan)&nbsp;; sous popularités i.i.d., l'approximation de Che la rend
+  analytique. La question <em>distribuée</em>&nbsp;: qui cache quoi,
+  quand les utilisateurs se servent entre eux — travaux de l'équipe au ch. 8.
+</div>
+
+<div class="thm">
+  <span class="tag">7.3 — Partage de bande passante et équité proportionnelle (Massoulié–Roberts, 1999-2002)</span>
+  Des flux partagent des liens&nbsp;; \(x_r\) = débit du flux \(r\), contraintes de
+  capacité \(A x \leq c\). Objectifs d'\(\alpha\)-équité&nbsp;: maximiser
+  \(\sum_r \frac{x_r^{1 - \alpha}}{1 - \alpha}\) — \(\alpha = 1\) (limite) donne
+  l'<strong>équité proportionnelle</strong> \(\max \sum_r \log x_r\), \(\alpha \to \infty\)
+  le max-min. Le théorème de Massoulié et Roberts (INFOCOM 1999 / IEEE-ACM ToN
+  2002)&nbsp;: les réseaux stabilisés par des algorithmes <em>distribués</em> simples
+  (fenêtre AIMD à la TCP, charge évoluant à l'échelle des RTT) convergent vers le point
+  d'équité proportionnelle — un pont entre la mécanique des protocoles et
+  l'optimisation convexe&nbsp;: «&nbsp;TCP fait de l'optimisation décentralisée sans le
+  savoir&nbsp;». Ce cadre a fondé toute une littérature (&gt; 900 citations) sur la
+  stabilité des réseaux à qualité de service.
+</div>
+
+<div class="note">
+  <span class="tag">Gossip et apprentissage distribué — le pont moderne</span>
+  Les protocoles push-pull du ch. 4 calculent aussi des <em>agrégats</em>&nbsp;: la
+  moyenne d'un champ de valeurs par itérations de marcheurs aléatoires (consensus
+  asymptotique), les quantiles approximatifs, les comptages distincts
+  (HyperLogLog). Le renouveau&nbsp;: <strong>SGD asynchrone sur graphes</strong> — des
+  travailleurs échangent des gradients par gossip au lieu d'un serveur central&nbsp;;
+  les garanties de convergence dépendent du trou spectral du graphe de communication
+  (travaux récents de l'équipe, ch. 8). Pour un master LLGA&nbsp;: le federated
+  learning est un protocole gossip contraint — la théorie du module s'y applique
+  directement.
+</div>
+
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Détection de communautés et applications</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Travaux de l'équipe pédagogique</a></nav>
+</main>
+</div>
+
+</body>
+</html>

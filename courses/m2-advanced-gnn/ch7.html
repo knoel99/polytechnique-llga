@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Graph Neural Networks — Robustesse et privacy sur graphes — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Graph Neural Networks</a> › Robustesse et privacy sur graphes</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · Advanced Graph Neural</span>Advanced Graph Neural Networks</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le socle message passing</a>
+<a href="ch1.html">Expressivité&nbsp;: le test de Weisfeiler-Lehman</a>
+<a href="ch2.html">Over-squashing et GNN profonds</a>
+<a href="ch3.html">Encodages de position et de structure</a>
+<a href="ch4.html">Graph transformers</a>
+<a href="ch5.html">Graphes dynamiques et temporels</a>
+<a href="ch6.html">Échelle&nbsp;: sampling, systèmes</a>
+<a href="ch7.html" class="active">Robustesse et privacy sur graphes</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html">Passerelles LLGA&nbsp;: 3D, raisonnement algorithmique, GNN × LLM</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Robustesse et privacy sur graphes</h2>
+
+<div class="thm">
+  <span class="tag">7.1 — Nettack (Zügner et al., 2018)&nbsp;: attaque par gradient, en détail</span>
+  Le scénario&nbsp;: <em>evasion</em> (l'attaquant modifie le graphe au moment du test) sur
+  une cible \(u\) et sa classe \(y_u\)&nbsp;; budget&nbsp;: \(\Delta\) modifications
+  (ajout/retrait d'arêtes, changements de features). Le dilemme de l'attaquant&nbsp;: le
+  modèle n'est pas différentiable <em>en</em> la structure discrète. La solution Nettack&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>entraîner un <em>surrogate</em> linéarisé (GCN à une couche, softmax)&nbsp;; sa
+    sortie \(Z_u(A)\) est alors polynomiale en \(A\) — continue, différentiable&nbsp;;</li>
+    <li><strong>score de première ordre</strong>&nbsp;: pour chaque modification candidate
+    \(\delta\) (flip d'une arête \((a,b)\) ou d'une feature),
+    $$\mathrm{score}(\delta) = -\nabla_{A}\, \mathcal{L}_{att}\big(Z_u(A)\big)\big|_{(a,b)} \cdot \big(\delta_{ab} - A_{ab}\big),$$
+    l'approximation de Taylor du changement de perte (produit du gradient avec la direction
+    du changement)&nbsp;; on retient la modification au score maximal&nbsp;;</li>
+    <li>itérer (modifier, re-score) jusqu'au budget&nbsp;; contraintes de «&nbsp;discrétion&nbsp;»&nbsp;:
+    n'ajouter que des arêtes plausibles (degrés, features communes).</li>
+  </ol>
+  Résultat historique&nbsp;: quelques flips suffisent à retourner la prédiction — et les
+  attaques <em>transfert</em> au vrai GCN (le surrogate suffit). La leçon LLGA&nbsp;: en
+  détection de fraude, l'attaquant <em>connaît</em> le modèle (ou son ombre)&nbsp;; la
+  robustesse est une exigence de conception, pas une option.
+</div>
+
+<div class="thm">
+  <span class="tag">7.2 — Empoisonnement&nbsp;: Meta-Self (Zügner &amp; Günnemann, 2019)</span>
+  Attaque <em>à l'entraînement</em> (poisoning)&nbsp;: le graphe est corrompu <em>avant</em>
+  l'apprentissage. Bilevel&nbsp;:
+  $$\min_{\delta}\ \mathcal{L}_{att}\big(f_{\theta^*}(A + \delta)\big) \quad \text{s.c.} \quad
+  \theta^* = \arg\min_\theta \mathcal{L}_{train}\big(f_\theta(A + \delta)\big),$$
+  résolu par <em>méta-gradient</em>&nbsp;: quelques pas de gradient interne sont déroulés
+  (differentiable), le gradient extérieur remonte à \(\delta\) — la même machinerie que le
+  MAML du module RL/Deep Learning. Variante «&nbsp;self-labeled&nbsp;» (Meta-Self)&nbsp;:
+  l'attaquant contrôle aussi quelques étiquettes. Défenses structurelles&nbsp;: le
+  <strong>pruning</strong> (les arêtes d'attaque sont souvent «&nbsp;suspectes&nbsp;» — grandes
+  distances features)&nbsp;; la <strong>purification</strong> (Pro-GNN&nbsp;: apprendre un
+  graphe propre \(A'\) régularisé proche de \(A\) tout en entraînant le GNN)&nbsp;; le
+  <strong>robust GCN</strong> (RGCN, Zhu et al., 2019)&nbsp;: couches gaussiennes dont la
+  variance absorbe l'attaque + attention sur les voisins fiables.
+</div>
+
+<div class="note">
+  <span class="tag">7.3 — Certification&nbsp;: esquisse</span>
+  Garantir qu'aucune attaque de budget \(\Delta\) ne change la prédiction&nbsp;: par
+  <em>randomized smoothing</em> appliqué aux graphes (majorité sur des graphes bruités par
+  flips aléatoires) ou par bornes spectrales (certificats liés à \(\lambda_{\max}\) du
+  ch. 2 — même monnaie)&nbsp;; l'état de l'art certifie de petits budgets sur des GCN
+  modérés&nbsp;: en pratique, on combine certification partielle + défenses ci-dessus +
+  monitoring (détecter les anomalies d'ajout d'arêtes).
+</div>
+
+<div class="thm">
+  <span class="tag">7.4 — Privacy&nbsp;: node-DP, edge-DP, réidentification</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>edge-DP</strong>&nbsp;: le mécanisme de base est la <em>randomized
+    response</em> — retourner chaque arête avec probabilité \(p\), calibrée pour
+    \((\varepsilon, 0)\)-DP&nbsp;; les requêtes de comptage (combien d'arêtes entre deux
+    groupes&nbsp;?) reçoivent du bruit Laplace sensibilité 1&nbsp;;</li>
+    <li><strong>node-DP</strong>&nbsp;: beaucoup plus dur — la sensibilité explose avec le
+    degré (retirer un nœud retire \(d\) arêtes)&nbsp;; recette&nbsp;: <em>projeter</em> le
+    graphe sur un graphe de degré borné \(k\) (garder les \(k\) voisins «&nbsp;les plus
+    importants&nbsp;»), puis appliquer les mécanismes bord&nbsp;; le prix&nbsp;: biais sur
+    les hubs&nbsp;;</li>
+    <li><strong>réidentification</strong>&nbsp;: les embeddings de graphe (M1, ch. 3) sont
+    des empreintes — re-router un nœud «&nbsp;anonymisé&nbsp;» dans un graphe public par
+    comparaison de voisinages (attaques par degrés, par sous-graphes — l'attaque de
+    Narayanan-Shmatikov transposée)&nbsp;; GraphRAG (M1, ch. 11) agrège des faits
+    dispersés&nbsp;: le risque de réidentification <em>croît</em> avec la qualité du
+    graphe&nbsp;;</li>
+    <li><strong>évaluation</strong>&nbsp;: mesurer trade-off utilité-privacy (AUC vs
+    \(\varepsilon\))&nbsp;; croisement avec le module sécurité des LLMs M2 (injection de
+    prompt sur le KG, fuite par génération).</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">7.5 — Équité structurelle</span>
+  Biais de degré&nbsp;: les nœuds à faible degré (minorités dans les réseaux sociaux,
+  nouveaux clients) sont moins bien prédits — moins de messages = moins de signal&nbsp;;
+  remèdes&nbsp;: features structurelles (RWSE, ch. 3), arêtes virtuelles, ré-échantillonnage
+  par degré, pertes repondérées&nbsp;; question ouverte&nbsp;: l'équité <em>structurelle</em>
+  (communautés) vs <em>individuelle</em> (nœuds) peut entrer en conflit — le pendant exact
+  des tensions fairness du module Optimal Transport (transporter des distributions de
+  nœuds&nbsp;; biais homophilie&nbsp;: un GNN homophile propage les biais des étiquettes).
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Échelle&nbsp;: sampling, systèmes</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Travaux de l'équipe pédagogique</a></nav>
+</main>
+</div>
+
+</body>
+</html>

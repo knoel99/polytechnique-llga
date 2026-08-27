@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Analysis and Computer Vision — Points d'intérêt&nbsp;: Harris et SIFT — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Analysis and Computer Vision</a> › Points d'intérêt&nbsp;: Harris et SIFT</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51073_EP</span>Image Analysis and Computer Vision</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: algèbre linéaire, convolution, probabilités</a>
+<a href="ch1.html">Formation des images&nbsp;: caméra et échantillonnage</a>
+<a href="ch2.html">Filtrage et convolution</a>
+<a href="ch3.html">Contours&nbsp;: gradient et Canny</a>
+<a href="ch4.html" class="active">Points d'intérêt&nbsp;: Harris et SIFT</a>
+<a href="ch5.html">Géométrie projective et homographies</a>
+<a href="ch6.html">Stéréovision et géométrie épipolaire</a>
+<a href="ch7.html">Flux optique&nbsp;: Lucas-Kanade</a>
+<a href="ch8.html">Segmentation&nbsp;: k-moyennes et coupes de graphes</a>
+<a href="ch9.html">CNN pour la vision&nbsp;: détection et segmentation</a>
+<a href="ch10.html">Nuages de points 3D&nbsp;: ICP et analyse urbaine</a>
+<a href="ch11.html">Travaux de l'enseignant&nbsp;: LiDAR urbain à l'IGN</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Points d'intérêt&nbsp;: Harris et SIFT</h2>
+
+<p>Apparier deux images revient à y trouver des points <em>distinctifs</em> et
+<em>stables</em>&nbsp;: coins, taches, structures locales. Deux classiques
+organisent le chapitre&nbsp;: Harris (1988) pour <em>détecter</em>, SIFT (2004)
+pour <em>décrire</em> — et les CNN du ch. 9 en sont les héritiers appris.</p>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Le tenseur de structure et le critère de Harris</span>
+  Mesurons la variation d'apparence d'une fenêtre \(W\) décalée de
+  \((u, v)\)&nbsp;:
+  $$E(u, v) = \sum_{(x,y)\in W} w(x,y)\,\big[I(x+u, y+v) - I(x, y)\big]^2.$$
+  Un développement de Taylor à l'ordre 1 (\(I(x+u, y+v) \approx I +
+  u\,I_x + v\,I_y\)) donne la forme quadratique
+  $$E(u, v) \approx \begin{pmatrix}u &amp; v\end{pmatrix}
+  M \begin{pmatrix}u\\ v\end{pmatrix},\qquad
+  M = \sum_W w \begin{pmatrix} I_x^2 &amp; I_xI_y \\ I_xI_y &amp; I_y^2\end{pmatrix},$$
+  le <strong>tenseur de structure</strong>. Si \(\lambda_1, \lambda_2\) sont
+  ses valeurs propres&nbsp;: toutes deux petites = zone plate&nbsp;; une grande
+  et une petite = bord&nbsp;; les deux grandes = <strong>coin</strong> (varie
+  dans toutes les directions). Le critère de Harris évite l'extraction
+  explicite des valeurs propres&nbsp;:
+  \(R = \det M - k\,(\mathrm{tr}\,M)^2 = \lambda_1\lambda_2 -
+  k(\lambda_1+\lambda_2)^2\), avec \(k \approx 0{,}04\) — positif = coin,
+  négatif = bord.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.2 — Harris chiffré</span>
+  Une fenêtre fournit \(\sum I_x^2 = 126\), \(\sum I_xI_y = 43\),
+  \(\sum I_y^2 = 18\)&nbsp;:
+  \(M = \begin{pmatrix}126 &amp; 43\\ 43 &amp; 18\end{pmatrix}\),
+  \(\det M = 2268 - 1849 = 419\), \(\mathrm{tr}M = 144\), d'où
+  \(R = 419 - 0{,}04\times 144^2 = 419 - 829 = -410 &lt; 0\) → <em>bord</em>.
+  Les valeurs propres \(\lambda_{1,2} = \frac{144 \pm \sqrt{144^2 -
+  4\cdot419}}{2} \approx 141\) et \(3\) confirment&nbsp;: une direction varie
+  47× plus que l'autre. Un coin aurait typiquement \(M \sim
+  \begin{pmatrix}400 &amp; 10\\ 10 &amp; 380\end{pmatrix}\), \(R = 151\,900 -
+  0{,}04\times 625^2 \approx 137\,000 &gt; 0\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.3 — Invariances de Harris, et son défaut</span>
+  Le tenseur \(M\) est une moyenne de matrices \(\nabla I\,\nabla I^\top\)&nbsp;:
+  sous une rotation \(R\) de l'image, \(\nabla I \mapsto R\,\nabla I\), donc
+  \(M \mapsto RMR^\top\) et les valeurs propres — donc la décision coin/bord
+  et la réponse \(R\) — sont <strong>invariantes par rotation</strong>&nbsp;;
+  un changement d'illuminations affine \(I \mapsto aI + b\) multiplie \(M\)
+  par \(a^2\) sans changer les signes. En revanche, zoomer change le nombre de
+  pixels qui participent au coin&nbsp;: Harris n'est <strong>pas invariant
+  d'échelle</strong> — c'est précisément le problème que SIFT résout.
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithme 4.4 — SIFT&nbsp;: détection + description</span>
+  <ol style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>espace des échelles</strong>&nbsp;: convoler par des gaussiennes
+    \(L(x, \sigma) = G_\sigma * I\) pour \(\sigma\) croissant par octaves&nbsp;;
+    la différence de gaussiennes \(\mathrm{DoG}(x,\sigma) = L(x, k\sigma) -
+    L(x, \sigma)\) approxime le laplacien normalisé \(\sigma^2\Delta I\),
+    exigé par l'invariance d'échelle&nbsp;;</li>
+    <li><strong>extrema spatio-échelle</strong>&nbsp;: les points clés sont les
+    extrema locaux de DoG dans le volume \((x, y, \sigma)\) — comparaison aux
+    26 voisins (8 en espace, 9×2 en échelle)&nbsp;;</li>
+    <li><strong>localisation</strong>&nbsp;: raffinement par Taylor 2D&nbsp;;
+    rejet des points de faible contraste et des bords via le ratio de Harris
+    appliqué à la matrice hessienne 2×2 (\(\mathrm{tr}^2/\det &lt; r\) rejeté)&nbsp;;</li>
+    <li><strong>orientation</strong>&nbsp;: histogramme (36 classes) des
+    gradients d'un voisinage, pondérés par une gaussienne&nbsp;; l'orientation
+    dominante fournit le repère canonique du descripteur →
+    <strong>invariance par rotation</strong>&nbsp;;</li>
+    <li><strong>descripteur</strong>&nbsp;: autour du point, 4×4 cellules,
+    chacune un histogramme d'orientations à 8 classes → \(4\times4\times8 =
+    128\) valeurs, normalisées (seuillage à 0,2 pour la robustesse aux
+    saturations) → <strong>invariance affine d'illumination</strong>.</li>
+  </ol>
+  L'appariement se fait par plus proche voisin avec le <em>ratio test</em> de
+  Lowe&nbsp;: accepter si \(d_1/d_2 &lt; 0{,}8\) (distance au premier voisin
+  sur distance au second)&nbsp;: rejeter les ambiguïtés coûte moins cher que
+  tolérer les faux appariements.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.5 — Coût de l'appariement</span>
+  Deux images de \(n\) descripteurs chacun&nbsp;: la recherche exhaustive des
+  plus proches voisins coûte \(O(n^2)\) en distance 128D — pour
+  \(n = 10^4\), \(10^8\) distances ≈ quelques secondes. L'arbre kd (ou son
+  homologue aléatoire) répond en \(O(\log n)\) <em>en petite dimension</em>,
+  mais la malédiction de la dimension rend l'approximation
+  (forêts d'arbres kd, FLANN, hachage localement sensible) indispensable en
+  pratique — même problématique que la recherche vectorielle du module
+  <em>DataBase Management System</em> (ch. 9), à 128 dimensions près.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.6 — Harris et SIFT en Python (numpy + OpenCV)</span>
+<pre class="code"><code>import cv2, numpy as np
+
+img  = cv2.imread("scene.jpg", cv2.IMREAD_GRAYSCALE)
+imgf = img.astype(np.float32)
+
+# --- 1. Harris manuel : tenseur de structure, reponse, seuillage
+Ix = cv2.Sobel(imgf, cv2.CV_32F, 1, 0, ksize=3)
+Iy = cv2.Sobel(imgf, cv2.CV_32F, 0, 1, ksize=3)
+A  = cv2.GaussianBlur(Ix*Ix, (5, 5), 1.5)     # somme locale ponderee
+B  = cv2.GaussianBlur(Ix*Iy, (5, 5), 1.5)
+C  = cv2.GaussianBlur(Iy*Iy, (5, 5), 1.5)
+R  = (A*C - B*B) - 0.04*(A + C)**2
+coins = np.argwhere(R > 0.01 * R.max())        # seuillage relatif
+
+# --- 2. versions OpenCV
+ Rc = cv2.cornerHarris(imgf, 2, 3, 0.04)
+ sift = cv2.SIFT_create(nfeatures=2000)
+ kps, desc = sift.detectAndCompute(img, None)   # 128-D par point cle
+ img2 = cv2.drawKeypoints(img, kps, None,
+                          flags=cv2.DRAW_RICH_KEYPOINTS)
+
+# --- 3. appariement de deux vues avec ratio test de Lowe
+kps2, desc2 = sift.detectAndCompute(cv2.imread("scene2.jpg", 0), None)
+bf  = cv2.BFMatcher()
+mch = [m for m, n in bf.knnMatch(desc, desc2, k=2) if m.distance < 0.8*n.distance]
+print(len(mch), "appariements retenus sur", len(desc))
+# et pour la suite du cours : Canny + transformee de Hough rapide
+edges = cv2.Canny(img, 80, 200)
+</code></pre>
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Précédent</span> Contours&nbsp;: gradient et Canny</a><a class="next" href="ch5.html"><span class="dir">Suivant</span> Géométrie projective et homographies</a></nav>
+</main>
+</div>
+
+</body>
+</html>

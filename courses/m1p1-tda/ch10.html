@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Topological Data Analysis — Mise en œuvre&nbsp;: GUDHI, scikit-tda, ripser — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Topological Data Analysis</a> › Mise en œuvre&nbsp;: GUDHI, scikit-tda, ripser</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51056_EP</span>Topological Data Analysis</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: topologie, distances, algèbre</a>
+<a href="ch1.html">Simplices et complexes simpliciaux</a>
+<a href="ch2.html">Du nuage de points au complexe&nbsp;: Rips et Čech</a>
+<a href="ch3.html">Homologie simpliciale</a>
+<a href="ch4.html">Homologie persistante&nbsp;: l'algorithme</a>
+<a href="ch5.html">Diagrammes, barcodes et paysages</a>
+<a href="ch6.html">Stabilité et statistique</a>
+<a href="ch7.html">L'algorithme Mapper</a>
+<a href="ch8.html">TDA × apprentissage automatique</a>
+<a href="ch9.html">Travaux de l'équipe pédagogique</a>
+<a href="ch10.html" class="active">Mise en œuvre&nbsp;: GUDHI, scikit-tda, ripser</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch10">
+<h2>10. Mise en œuvre&nbsp;: GUDHI, scikit-tda, ripser</h2>
+
+<p>Trois outils couvrent le workflow&nbsp;: <strong>GUDHI</strong> (complexes),
+<strong>ripser</strong> (Rips rapide) et <strong>scikit-tda</strong> (persim&nbsp;:
+distances, visualisations). Le TME&nbsp;: faire parler les formes canoniques — cercle,
+deux cercles, sphère, tore, bruit — puis mesurer la stabilité.</p>
+
+<pre class="code"><code># TME 1 -- Rips persistence avec GUDHI : le cercle bruite
+import numpy as np, gudhi
+from gudhi import RipsComplex
+
+t = np.linspace(0, 2*np.pi, 200, endpoint=False)
+X = np.stack([np.cos(t), np.sin(t)], 1) + 0.05*np.random.randn(200, 2)
+
+rips = RipsComplex(points=X, max_edge_length=2.0)
+st = rips.create_simplex_tree(max_dimension=2)
+st.compute_persistence(homology_coeff_field=2, min_persistence=0)
+
+dgm = {k: st.persistence_intervals_in_dimension(k) for k in (0, 1)}
+h1 = dgm[1][np.argsort(dgm[1][:, 1] - dgm[1][:, 0])[-1]]   # barre H1 la plus longue
+print("trou principal : naissance %.3f, mort %.3f" % tuple(h1))
+# attendu : naissance ~1.0 (rayon), mort ~2.0 (diametre) -- cf. exemple 5.2
+gudhi.plot_persistence_barcode(st.persistence()); gudhi.plot_persistence_diagram(st.persistence())</code></pre>
+
+<pre class="code"><code># TME 2 -- ripser + persim : bottleneck et stabilite au reechantillonnage
+from ripser import ripser
+from persim import plot_diagrams, bottleneck
+
+def sample_circle(n, r, sigma):
+    t = np.random.rand(n) * 2*np.pi
+    return np.stack([r*np.cos(t), r*np.sin(t)], 1) + sigma*np.random.randn(n, 2)
+
+D0 = ripser(sample_circle(200, 1, .05))['dgms']
+D1 = ripser(sample_circle(200, 1, .05))['dgms']
+print("d_b(H1) =", round(bottleneck(D0[1], D1[1]), 3))   # ~ 0.05-0.1 : ordre du bruit
+
+# faire varier sigma : d_b croit lineairement -- illustration numerique du th. 6.1
+for sigma in (.01, .05, .1, .2):
+    D = ripser(sample_circle(200, 1, sigma))['dgms']
+    print(f"sigma={sigma:4.2f}  d_b={bottleneck(D0[1], D[1]):.3f}")</code></pre>
+
+<pre class="code"><code># TME 3 -- paysages et classification (sklearn) : cercle vs deux cercles
+from gudhi.representations import Landscape, DiagramSelector
+from sklearn.svm import SVC
+from sklearn.pipeline import make_pipeline
+from sklearn.model_selection import cross_val_score
+
+def diag(n):
+    """renvoie le diagramme H1 d'un nuage : 1 ou 2 cercles aleatoires"""
+    k = np.random.randint(2) + 1
+    pts = [sample_circle(n, r, .05) + np.random.randn(2)*2.5 for r in (.6, 1.3)][:k]
+    return ripser(np.concatenate(pts))['dgms'][1]
+
+X = [diag(100) for _ in range(60)]                 # 60 diagrammes H1
+y = [1 if sum(p[1] - p[0] > .3 for p in d) > 1 else 0 for d in X]
+                                                  # label = 2 cercles ssi 2 barres longues
+vec = make_pipeline(DiagramSelector(), Landscape(num_landscapes=3, resolution=100))
+model = make_pipeline(vec, SVC(kernel='rbf'))
+print(cross_val_score(model, [[d] for d in X], y, cv=5).mean())  # attendu ~ 1.0</code></pre>
+
+<div class="note">
+  <span class="tag">Points d'attention</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>max_edge_length</strong> tronque la filtration&nbsp;: les classes non
+    mortes au bout sont essentielles (mort = inf), pas des bugs.</li>
+    <li><strong>Mémoire</strong>&nbsp;: limiter max_dimension à 2 (voire 3 pour H2)&nbsp;;
+    le nombre de simplexes croît comme \(n^{k+1}\)&nbsp;; ripser ne matérialise jamais la
+    matrice de bord — c'est sa force (Bauer, 2021).</li>
+    <li><strong>Choix du corps</strong>&nbsp;: homology_coeff_field=2 par défaut&nbsp;;
+    essayer 3 pour détecter la torsion sur des exemples exotiques.</li>
+    <li><strong>Cohérence avec le cours</strong>&nbsp;: sur l'exemple 4.5, reconstruire la
+    filtration à la main (gudhi.SimplexTree, insertion ordonnée) et vérifier que
+    persistence() retourne exactement les paires (2,5), (3,6), (4,7), (8,9) et les
+    essentielles 1, 10 — l'exercice 4 du TME.</li>
+  </ol>
+</div>
+
+</section>
+<nav class="pager"><a href="ch9.html"><span class="dir">← Précédent</span> Travaux de l'équipe pédagogique</a><a class="next" href="ex.html"><span class="dir">Suivant</span> Exercices</a></nav>
+</main>
+</div>
+
+</body>
+</html>

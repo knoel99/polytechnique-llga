@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — Accélération&nbsp;: intersection et BVH — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Image Synthesis: Theory and Practice</a> › Accélération&nbsp;: intersection et BVH</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: probabilités, intégrales, EDO linéaires</a>
+<a href="ch1.html">Radiométrie&nbsp;: la radiance</a>
+<a href="ch2.html">L'équation du rendu</a>
+<a href="ch3.html">BRDF et modèles de matériaux</a>
+<a href="ch4.html">Caméras&nbsp;: le modèle sténopé</a>
+<a href="ch5.html">Rastérisation contre lancer de rayons</a>
+<a href="ch6.html">Path tracing Monte Carlo</a>
+<a href="ch7.html" class="active">Accélération&nbsp;: intersection et BVH</a>
+<a href="ch8.html">Bruit, débruitage, tone mapping</a>
+<a href="ch9.html">Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a>
+<a href="ch10.html">Le temps réel&nbsp;: GPU, hybride, upscaling</a>
+<a href="ch11.html">Travaux de l'enseignant</a>
+<a href="code.html">Un path tracer complet en Python</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Accélération&nbsp;: intersection et BVH</h2>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — Intersection rayon-triangle (Möller–Trumbore)</span>
+  Pour un rayon \(o + t\mathbf{d}\) et un triangle \((v_0, v_1, v_2)\), on
+  résout \(o + t\mathbf{d} = v_0 + u\,(v_1 - v_0) + v\,(v_2 - v_0)\) en
+  \((t, u, v)\)&nbsp;: un système \(3 \times 3\) linéaire résolu par la règle
+  de Cramer (2 produits vectoriels et quelques divisions), le triangle étant
+  touché ssi \(t &gt; 0\), \(u, v \geq 0\), \(u + v \leq 1\) — et le test
+  <em>retourne les barycentriques du théorème 5.2 gratuitement</em>
+  (interpolation de normales et d'UV). Coût&nbsp;: ~20 flops, contre ~36 pour
+  l'intersection rayon-sphère&nbsp;; d'où la conversion universelle des
+  scènes en triangles.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.2 — Hiérarchies de volumes englobants (BVH)</span>
+  Une <strong>BVH</strong> est un arbre binaire dont chaque nœud porte la
+  boîte englobante (AABB) de ses triangles&nbsp;; le parcours d'un rayon
+  descend un nœud ssi sa boîte est touchée (slab test&nbsp;: intersection de
+  3 intervalles, ~12 comparaisons)&nbsp;; les feuilles testent leurs
+  triangles. Coût moyen&nbsp;: \(O(\log n)\) boîtes pour \(n\) triangles
+  (scènes bien réparties), contre \(O(n)\) en force brute&nbsp;; construction
+  \(O(n \log^2 n)\) (médiane) en pratique quasi \(O(n \log n)\). Les
+  alternatives&nbsp;: <strong>kd-trees</strong> (plans de coupe, optimaux pour
+  les scènes statiques, construction chère) et <strong>grilles</strong>
+  uniformes (scènes uniformes, «&nbsp;teapot in a stadium&nbsp;» les
+  détruit). La BVH gagne en animation&nbsp;: <em>rafiner</em> l'arbre
+  (refit) quand les boîtes bougent est quasi gratuit.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.3 — Heuristique SAH&nbsp;: l'aire commande la probabilité</span>
+  Pour un rayon de direction aléatoire uniforme, la probabilité de toucher
+  une AABB est proportionnelle à son aire surfacique&nbsp;;
+  $$P[\text{toucher } B] = \frac{A(B)}{A(B_{parent})}.$$ Il en découle
+  l'<strong>heuristique de surface</strong> (SAH) pour choisir une coupe&nbsp;:
+  $$\mathrm{cost}(x) = C_{trav} + P_L(x)\, C_L(x) + P_R(x)\, C_R(x),
+  \qquad P_{L,R} \propto A(B_{L,R}),$$
+  et l'on minimise \(\mathrm{cost}\) sur les positions candidates — le
+  partitionnement k-d/BVH optimal au premier ordre.
+  <div class="proof">
+    (Argument, en projection sur la sphère des directions.) Pour une boîte
+    convexe \(B\), l'ensemble des directions \(\omega\) telles qu'un rayon
+    lancé d'un point <em>uniforme dans \(B_{parent}\)</em> touche \(B\)
+    correspond, en projection sur la sphère unité, à l'aire projetée de
+    \(B\)&nbsp;; par le théorème de Cauchy (formule de l'aire projetée
+    moyenne), l'aire projetée moyenne d'un convexe est proportionnelle à son
+    aire surfacique \(A(B)\). En normalisant par l'aire projetée du parent,
+    \(P = A(B)/A(B_{parent})\). La formule de coût additionne alors les
+    espérances (linéarité)&nbsp;: traversée payée une fois, plus coût
+    d'intersection des enfants pondéré par leurs probabilités.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 7.4 — Choisir une coupe au SAH, chiffres ronds</span>
+  Boîte mère cubique d'arête 2 (aire \(A = 24\)), 8 triangles&nbsp;: 5 dans la
+  moitié gauche, 3 dans la droite. <strong>Coupe médiane \(x = 0\)</strong>&nbsp;:
+  deux cubes d'arête 1, aires 6 et 6 ⟹
+  \(\mathrm{cost} = C_{trav} + \tfrac{6}{24}\cdot 5\,c_i + \tfrac{6}{24}\cdot
+  3\,c_i = C_{trav} + 2\,c_i\). <strong>Coupe à \(x = -0{,}5\)</strong> (boîte
+  gauche \((0{,}5 \times 2 \times 2)\), aire 12, pour les 5 triangles&nbsp;;
+  boîte droite \((1{,}5 \times 2 \times 2)\), aire 20, pour les 3)&nbsp;:
+  \(\mathrm{cost} = C_{trav} + \tfrac{12}{24}\cdot 5\,c_i + \tfrac{20}{24}
+  \cdot 3\,c_i = C_{trav} + 5\,c_i\) — moins bonne <em>ici</em>. La médiane
+  équilibre les <em>triangles</em>, le SAH équilibre les <em>aires</em>&nbsp;;
+  sur des scènes réelles (triangles concentrés sur les surfaces, larges
+  volumes vides), la coupe SAH s'écarte de la médiane pour «&nbsp;couper le
+  vide&nbsp;» et gagne typiquement 20–40&nbsp;% au temps de traversée — la
+  différence se lit directement dans le temps de rendu.
+</div>
+
+<div class="note">
+  <span class="tag">En pratique&nbsp;: cohérence et SIMD</span>
+  Les rayons primaires d'une image sont <em>cohérents</em> (voisins, directions
+  proches)&nbsp;: les traverser par paquets de 4–64 (SIMD) maximise le rejet
+  de branches entières de l'arbre. Les rayons de diffusion (chapitre 6) sont
+  incohérents&nbsp;: on les traite un par un, ou par <em>regroupement</em>
+  dynamique. Ces détails d'implémentation font 10× en performance —
+  c'est là que se joue le «&nbsp;temps réel&nbsp;» du chapitre 10.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Précédent</span> Path tracing Monte Carlo</a><a class="next" href="ch8.html"><span class="dir">Suivant</span> Bruit, débruitage, tone mapping</a></nav>
+</main>
+</div>
+
+</body>
+</html>

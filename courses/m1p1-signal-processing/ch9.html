@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Processing — Les travaux de l'enseignant&nbsp;: du signal au transport optimal — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Signal Processing</a> › Les travaux de l'enseignant&nbsp;: du signal au transport optimal</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">APM_51055_EP</span>Signal Processing</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: séries de Fourier au sens L², Fubini</a>
+<a href="ch1.html">Signaux et systèmes linéaires</a>
+<a href="ch2.html">La série de Fourier</a>
+<a href="ch3.html">La transformée de Fourier</a>
+<a href="ch4.html">Échantillonnage&nbsp;: le théorème de Shannon</a>
+<a href="ch5.html">DFT, FFT et filtrage numérique</a>
+<a href="ch6.html">Analyse temps-fréquence et ondelettes</a>
+<a href="ch7.html">Signaux aléatoires et estimation spectrale</a>
+<a href="ch8.html">Le signal pour le ML moderne</a>
+<a href="ch9.html" class="active">Les travaux de l'enseignant&nbsp;: du signal au transport optimal</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Les travaux de l'enseignant&nbsp;: du signal au transport optimal</h2>
+
+<div class="note">
+  <span class="tag">Qui enseigne ce module, et pourquoi ce n'est pas un hasard</span>
+  Rémi Flamary (CMAP, École Polytechnique) est co-directeur du master LLGA et
+  co-créateur de la bibliothèque <a href="https://pythonot.github.io">POT — Python
+  Optimal Transport</a> (JMLR 2021)&nbsp;: l'un des outils les plus utilisés du
+  domaine. Sa recherche relie précisément les deux bouts de ce cours&nbsp;: des
+  signaux et images (télécommunications, imagerie cérébrale) aux distances entre
+  <em>distributions</em> de données — c'est-à-dire des spectrogrammes de ce module aux
+  pertes OT du module M1P2.
+</div>
+
+<div class="thm">
+  <span class="tag">POT&nbsp;: une bibliothèque pensée pour la pratique des TP</span>
+  Architecture (séance de présentation)&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Solveurs exacts</strong>&nbsp;: <code>ot.emd</code> (simplexe de réseau,
+    LP exact)&nbsp;; <strong>régularisés</strong>&nbsp;: <code>ot.sinkhorn</code> et sa
+    version stabilisée en log&nbsp;; <strong>structurés</strong>&nbsp;:
+    <code>ot.gromov</code> (GW, FGW)&nbsp;; <strong>barycentres</strong>&nbsp;;
+    <strong>domain adaptation</strong>&nbsp;: <code>ot.da.OTDA</code> — le classifieur
+    transporté du papier TPAMI 2016, empaqueté.</li>
+    <li><strong>Rétro-propagation native</strong>&nbsp;: les backends
+    NumPy/PyTorch/JAX — une perte OT (<em>spectral loss</em> incluse) s'insère dans
+    n'importe quelle boucle d'entraînement&nbsp;; le gradient du coût régularisé est le
+    potentiel dual (démontré au module OT, ch. 3).</li>
+    <li><strong>Impact</strong>&nbsp;: ~80 solveurs issus de la littérature, galerie
+    d'exemples, utilisée du médical à l'audio génératif&nbsp;: le «&nbsp;standard de
+    fait&nbsp;» de l'OT numérique.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">TP de liaison&nbsp;: transport optimal entre deux segments de spectrogramme</span>
+<pre class="code"><code>import numpy as np, ot
+import scipy.signal as sig
+
+fs = 8000; t = np.arange(2*fs)/fs
+x  = np.sin(2*np.pi*440*t) + 0.5*rng.random(2*fs)      # deux "notes" bruitees
+f, T, S = sig.stft(x, fs=fs, nperseg=512, window='hann')
+
+A = np.abs(S[:, T[0] &lt; 0.5]).ravel()                   # spectres t &lt; 0.5 s
+B = np.abs(S[:, T[0] &gt;= 0.5]).ravel()                  # spectres t &gt;= 0.5 s
+a, b = np.ones(len(A))/len(A), np.ones(len(B))/len(B)
+Ca = A[:, None]*A[:, None] + 1e-9                      # cout : spectres "proches"
+G  = ot.sinkhorn(a, b, ot.dist(A[:,None], B[:,None]), reg=0.05)
+# Visualisation matplotlib decrite : ot.plot.plot1D_mat(A, B, G, "plan de transport")
+# -- la masse relie les spectres de meme contour ; comparer a la correlation simple</code></pre>
+  On «&nbsp;transporte&nbsp;» la distribution des spectres d'une moitié vers l'autre&nbsp;:
+  c'est exactement la brique de base des pertes spectrales du ML génératif audio (ch. 8),
+  et le premier TP du module M1P2.
+</div>
+
+<div class="note">
+  <span class="tag">Un pont récent&nbsp;: projections, sliced OT et reconstruction</span>
+  Une partie des travaux récents de l'enseignant porte sur le transport
+  <em>sliced</em> (projections 1D aléatoires)&nbsp;: Tanguy, Flamary &amp; Delon,
+  «&nbsp;Reconstructing discrete measures from projections&nbsp;» (C.&nbsp;R.&nbsp;Mathématique,
+  2024&nbsp;— <a href="https://arxiv.org/abs/2304.12029">arXiv:2304.12029</a>) montrent
+  comment les projections d'une mesure discrète la déterminent, avec des conséquences
+  sur la distance de Wasserstein sliced empirique. Le vocabulaire est celui du cours&nbsp;:
+  projeter un nuage (une mesure de spectrogrammes) sur des directions, c'est calculer
+  des <em>spectres marginaux</em>&nbsp;; l'OT 1D par quantiles (ch. 8) fait le reste.
+  Les autres travaux de Flamary (FGW, adaptation de domaine, COOT) sont détaillés dans
+  le module <em>Computational Optimal Transport</em> (M1P2, ch. 7).
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Précédent</span> Le signal pour le ML moderne</a><a class="next" href="ex.html"><span class="dir">Suivant</span> Exercices</a></nav>
+</main>
+</div>
+
+</body>
+</html>

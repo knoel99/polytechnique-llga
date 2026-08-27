@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Graph Neural Networks — Graphes dynamiques et temporels — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Advanced Graph Neural Networks</a> › Graphes dynamiques et temporels</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · Advanced Graph Neural</span>Advanced Graph Neural Networks</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le socle message passing</a>
+<a href="ch1.html">Expressivité&nbsp;: le test de Weisfeiler-Lehman</a>
+<a href="ch2.html">Over-squashing et GNN profonds</a>
+<a href="ch3.html">Encodages de position et de structure</a>
+<a href="ch4.html">Graph transformers</a>
+<a href="ch5.html" class="active">Graphes dynamiques et temporels</a>
+<a href="ch6.html">Échelle&nbsp;: sampling, systèmes</a>
+<a href="ch7.html">Robustesse et privacy sur graphes</a>
+<a href="ch8.html">Travaux de l'équipe pédagogique</a>
+<a href="ch9.html">Passerelles LLGA&nbsp;: 3D, raisonnement algorithmique, GNN × LLM</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Graphes dynamiques et temporels</h2>
+
+<div class="def">
+  <span class="tag">Deux formalismes&nbsp;: snapshots vs événementiel</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>snapshots</strong>&nbsp;: \(G_1, G_2, \dots, G_T\) (graphe agrégé par fenêtre)&nbsp;;
+    modèles&nbsp;: GCN+RNN (encoder chaque snapshot, récurrenter)&nbsp;; simple, mais la
+    granularité perd l'ordre <em>dans</em> la fenêtre&nbsp;;</li>
+    <li><strong>événementiel</strong>&nbsp;: le flux d'interactions horodatées
+    \((u, v, t_1), (u, w, t_2), \dots\) — le «&nbsp;droit&nbsp;» du problème&nbsp;; c'est le
+    régime de la fraude (milliseconde) et de la recommandation séquentielle.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">5.1 — TGAT (Xu et al., 2020)&nbsp;: l'encodage du temps</span>
+  La première architecture événementielle notable injecte le temps dans l'attention&nbsp;:
+  encodage temporel sinusoïdal appris (dans l'esprit de Time2Vec)
+  $$\phi(\Delta t) = \big[\cos(\omega_1 \Delta t), \sin(\omega_1 \Delta t), \dots,
+  \cos(\omega_d \Delta t), \sin(\omega_d \Delta t)\big], \qquad \omega_i \text{ apprises},$$
+  concaténé aux features&nbsp;; l'attention se calcule sur le voisinage <em>strictement
+  passé</em> \(\mathcal{N}(v; t) = \{u : (u, v, t') \in E, t' \leq t\}\) — un GAT causal&nbsp;;
+  inductif par construction (nouveaux nœuds = nouveaux temps).
+</div>
+
+<div class="thm">
+  <span class="tag">5.2 — TGN (Rossi et al., 2020)&nbsp;: les modules et leurs équations</span>
+  TGN factorise la mémoire temporelle&nbsp;:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>mémoire</strong> \(s_i(t) \in \mathbb{R}^d\)&nbsp;: état récurrent par nœud,
+    résumant son histoire&nbsp;;</li>
+    <li><strong>message</strong>&nbsp;: à chaque événement \((i, j, t)\),
+    \(m_i^t = \mathrm{msg}(s_i(t^-), s_j(t^-), \Delta t, e_{ij})\) (idem pour \(j\),
+    symétrique)&nbsp;;</li>
+    <li><strong>update</strong>&nbsp;: \(s_i(t) = \mathrm{GRU}\big(s_i(t^-),\ \mathrm{agg}(\{m_i^{t'} : t' \leq t\})\big)\)
+    — seuls les nœuds <em>touchés par le batch</em> sont mis à jour&nbsp;; les nœuds «&nbsp;au
+    repos&nbsp;» reçoivent un message placeholder pour vieillir leur mémoire&nbsp;;</li>
+    <li><strong>embedding</strong>&nbsp;: \(z_i(t)\) calculé par un module de type TGAT sur
+    la mémoire \(\{s_u(t^-) : u \in \mathcal{N}(i; t)\}\) + encodage \(\phi\) du temps —
+    la mémoire est un <em>résumé compressé</em>, l'embedding une <em>lecture attentive</em>.</li>
+  </ol>
+  Entraînement&nbsp;: <em>strictement causal</em> — les batchs sont ordonnés par temps, et la
+  technique du <em>teacher forcing masqué</em> (mémoriser les états entre batchs sans
+  backprop à travers toute l'histoire, mais re-«&nbsp;rejouer&nbsp;» les états stockés) rend
+  le gradient praticable&nbsp;; loss de link prediction future&nbsp;: scorer
+  \((i, j, t)\) vs négatifs (M1, ch. 6, version temporelle). L'ablation du papier&nbsp;:
+  chaque module compte — retirez la mémoire, tout s'effondre sur les interactions distantes.
+</div>
+
+<div class="note">
+  <span class="tag">5.3 — Application LLGA&nbsp;: la fraude en temps réel</span>
+  Le graphe de transactions est événementiel par nature&nbsp;: une carte frauduleuse doit être
+  bloquée en secondes&nbsp;; le pipeline&nbsp;: (i)&nbsp;TGN encode les comptes (mémoire =
+  comportement passé)&nbsp;; (ii)&nbsp;un classifieur tête lit \(z_i(t)\) au moment de la
+  transaction&nbsp;; (iii)&nbsp;les <em>négatifs</em> sont d'anciennes transactions
+  légitimes — attention à la contamination temporelle (entraîner strictement avant
+  \(t\)&nbsp;: l'hygiène des splits temporels du module Emerging ML)&nbsp;; (iv)&nbsp;en
+  production&nbsp;: mise à jour incrémentale de la mémoire, dérive du modèle à surveiller.
+  Datasets TP&nbsp;: Wikipedia edits / Reddit (standards TGN), et les banques de transactions
+  anonymisées. Variantes&nbsp;: CAWN (attention par marches causales), memorisation
+  compressée&nbsp;; le survey de l'état de l'art vit côté temporal graph learning.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Précédent</span> Graph transformers</a><a class="next" href="ch6.html"><span class="dir">Suivant</span> Échelle&nbsp;: sampling, systèmes</a></nav>
+</main>
+</div>
+
+</body>
+</html>

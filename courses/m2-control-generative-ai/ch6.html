@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control in Generative AI — Watermarking&nbsp;: prouver l'origine d'un texte — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Control in Generative AI</a> › Watermarking&nbsp;: prouver l'origine d'un texte</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P1 (brochure)</span>Control in Generative AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: générer, conditionner, décoder</a>
+<a href="ch1.html">Pourquoi contrôler&nbsp;: sûreté, fidélité, propriété intellectuelle</a>
+<a href="ch2.html">Taxonomie&nbsp;: quatre familles de contrôle</a>
+<a href="ch3.html">Constrained decoding&nbsp;: grammaires, automates, masques</a>
+<a href="ch4.html">Steering&nbsp;: contrôler dans l'espace des activations</a>
+<a href="ch5.html">RLHF&nbsp;: le contrôle dans l'espace des comportements</a>
+<a href="ch6.html" class="active">Watermarking&nbsp;: prouver l'origine d'un texte</a>
+<a href="ch7.html">Contrôler les diffusions&nbsp;: CFG, ControlNet, inversion</a>
+<a href="ch8.html">Contrôler les générateurs de graphes</a>
+<a href="ch9.html">Évaluer le contrôle&nbsp;: fidélité contre diversité</a>
+<a href="ch10.html">Attaques du contrôle et robustesse</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Watermarking&nbsp;: prouver l'origine d'un texte</h2>
+
+<p>Contrainte de provenance (déf. 1.1 iii)&nbsp;: modifier <em>la génération</em> pour que les
+sorties portent une marque statistique secrète, vérifiable sans faux-fuyant. Le schéma
+vert/rouge de Kirchenbauer et al. (ICML 2023) est le plus enseigné car son test se démontre au
+niveau M2 — c'est aussi le pont avec le watermarking audio du module Signal Processing et le
+ch. 9 du module Explainability.</p>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Watermark vert/rouge (Kirchenbauer et al., 2023)</span>
+  <strong>Clé</strong>&nbsp;: \(k\) secrète. <strong>À chaque pas</strong>&nbsp;: on hache le
+  token <em>précédent</em> avec \(k\) (PRF \(h_k\)), le résultat sert de graine pseudo-aléatoire
+  pour partitionner le vocabulaire&nbsp;: une <em>liste verte</em> \(G_k(y_{t-1})\) de fraction
+  \(\gamma\) (typiquement \(\gamma = 0{,}5\)), le reste en liste rouge. <strong>Génération</strong>&nbsp;:
+  avant la softmax, on ajoute \(\delta\) aux logits verts (typ. \(\delta = 2\))&nbsp;:
+  $$\ell^{(t)}_v \leftarrow \ell^{(t)}_v + \delta \cdot \mathbf{1}\big[v \in G_k(y_{t-1})\big].$$
+  <strong>Détection</strong>&nbsp;: connaissant \(k\), on recompte les verts.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.2 — Le test z, démontré (H0&nbsp;: texte non marqué)</span>
+  Soit un texte suspect de \(T\) tokens, \(s = \sum_{t=1}^T \mathbf{1}[y_t \in G_k(y_{t-1})]\)
+  son nombre de verts, et la statistique
+  $$z \;=\; \frac{s - \gamma T}{\sqrt{T\, \gamma (1 - \gamma)}}.$$
+  Sous l'hypothèse nulle «&nbsp;texte écrit sans connaissance de \(k\)&nbsp;» (donc humain, ou
+  modèle non marqué), \(z\) converge en loi vers \(\mathcal{N}(0, 1)\) quand \(T \to \infty\), et
+  on rejette \(H_0\) au seuil \(\alpha\) si \(z &gt; \Phi^{-1}(1 - \alpha)\).
+  <div class="proof">
+  (i)&nbsp;<em>Loi sous H0</em>. La graine \(h_k(y_{t-1})\) est pseudo-aléatoire&nbsp;: pour un
+  texte qui n'a <em>pas</em> été généré en fonction des listes, l'appartenance de \(y_t\) à la
+  liste verte est un tirage Bernoulli(\(\gamma\)) — indépendant de \(k\) en pratique (c'est la
+  propriété cryptographique du PRF&nbsp;; une heuristique standard en information théorique).
+  Donc \(s \sim \mathrm{Bin}(T, \gamma)\) (en négligeant la dépendance séquentielle faible).
+  (ii)&nbsp;<em>Normalité</em>. \(\mathbb{E}[s] = \gamma T\), \(\mathrm{Var}(s) =
+  T\gamma(1-\gamma)\)&nbsp;; le théorème de De Moivre-Laplace (CLT binomial — module Refresher
+  Statistics) donne \(\frac{s - \gamma T}{\sqrt{T\gamma(1-\gamma)}} \Rightarrow
+  \mathcal{N}(0,1)\). (iii)&nbsp;<em>Seuil</em>. P(faux positif) \(= \alpha\)&nbsp;: avec
+  \(z_{\mathrm{seuil}} = 4\), \(\alpha \approx 3{,}2 \times 10^{-5}\) — un texte humain est
+  accusé une fois sur ~30&nbsp;000. (iv)&nbsp;<em>Puissance sous H1</em>. Pour un texte marqué,
+  chaque pas tire un vert avec probabilité \(p_\delta &gt; \gamma\) (le bump \(\delta\) favorise
+  les verts)&nbsp;; \(\mathbb{E}[z \mid H1] \approx (p_\delta - \gamma)\sqrt{T}/\sqrt{\gamma(1-\gamma)}\),
+  qui croît en \(\sqrt{T}\)&nbsp;: avec \(\gamma = 0{,}5\), \(\delta = 2\), \(p_\delta \approx
+  0{,}7-0{,}8\) en pratique, et \(T = 200\), \(\mathbb{E}[z] \approx 5{,}7\)-8{,}5 — la
+  détection est quasi certaine. <span class="qed">∎</span></div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 6.3 — Le test en chiffres (exercice 2 en entier)</span>
+  \(T = 200\), \(\gamma = 0{,}5\). Un texte marqué observe \(s = 150\) (75&nbsp;% de verts)&nbsp;:
+  \(z = (150 - 100)/\sqrt{200 \times 0{,}25} = 50/\sqrt{50} \approx 7{,}07\) — rejet massif de
+  H0. Un texte humain <em>typique</em> aurait \(s \in [87, 113]\) à 95&nbsp;% (\(z \in
+  [-1{,}96, 1{,}96]\)). Question subsidiaire&nbsp;: combien faut-il de tokens pour distinguer
+  \(\gamma = 0{,}5\) de \(p_\delta = 0{,}6\) avec une puissance de 0,9&nbsp;? Réponse&nbsp;:
+  \(T \approx \big(\Phi^{-1}(0{,}9)\sqrt{0{,}25} + \Phi^{-1}(0{,}975)\sqrt{0{,}24}\big)^2 /
+  0{,}01 \approx 340\) — la résolution croît quadratiquement avec la finesse du signal, la
+  taille nécessaire linéairement avec \((p_\delta - \gamma)^{-2}\)&nbsp;: c'est <em>la</em>
+  loi d'échelle du watermark.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.4 — La famille&nbsp;: distorsion, robustesse, indétectabilité</span>
+  Quatre descendants structurent le domaine. (i)&nbsp;<strong>Unigram</strong> (Zhao et al.,
+  2023)&nbsp;: la liste verte est <em>fixe</em> (indépendante du contexte) — robuste à la
+  paraphrase (les tokens survivent au réordonnancement), au prix d'une détectabilité plus
+  faible à \(T\) donné. (ii)&nbsp;<strong>Gumbel/Aaronson</strong>&nbsp;: le tirage du token
+  suit un rang inverse échantillonné par PRF — <em>sans distorsion</em> (la loi marginale par
+  pas est exactement celle du modèle)&nbsp;; le score devient une somme de logs. (iii)&nbsp;
+  <strong>Kuditipudi et al. (2023)</strong>&nbsp;: marquage par <em>séquence de clés</em>
+  re-paramétrisable, distorsion nulle et robuste aux éditions&nbsp;; (iv)&nbsp;
+  <strong>SynthID-Text</strong> (Dathathri et al., Nature 2024)&nbsp;: déployé en production à
+  l'échelle de Gemini — un <em>tournoi</em> de clés par pas, qualitativement préservé, test
+  agrégé sur corpus. En regard&nbsp;: le résultat négatif de Sadasivan et al. (2023) — contre
+  un paraphraseur <em>assez bon</em>, tout détecteur (watermark inclus) tend vers l'aveugle&nbsp;;
+  et Christ, Gunn &amp; Zamir (2024) prouvent la frontière théorique&nbsp;: un watermark
+  «&nbsp;indétectable&nbsp;» ne peut pas battre le compromis qualité-détection du schéma
+  vert/rouge en général. Le ch. 10 y revient en mode attaque.
+</div>
+
+<div class="note">
+  <span class="tag">Réglage&nbsp;: \(\gamma\), \(\delta\), et le triple compromis</span>
+  Augmenter \(\delta\) → détection facile (\(p_\delta \to 1\)) mais texte dégradé (le choix
+  est biaisé vers les verts même quand un rouge était le «&nbsp;bon&nbsp;» mot)&nbsp;;
+  diminuer \(\gamma\) → listes vertes rares, signal plus net mais contrainte plus raide sur
+  la qualité. En production on vise \(\gamma = 0{,}25-0{,}5\), \(\delta = 1{-}2\)&nbsp;:
+  perte de qualité imperceptible (évaluée par perplexité et tests humains), \(z &gt; 4\)
+  atteint dès \(T \approx 50{-}100\). Le même réglage bipolaire <em>qualité du signal /
+  fidélité de la loi</em> structure le watermarking <em>audio</em> (WavMark, AudioSeal —
+  cf. module Speech Technology ch. 9)&nbsp;: deux modalités, une théorie.
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> RLHF&nbsp;: le contrôle dans l'espace des comportements</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Contrôler les diffusions&nbsp;: CFG, ControlNet, inversion</a></nav>
+</main>
+</div>
+
+</body>
+</html>

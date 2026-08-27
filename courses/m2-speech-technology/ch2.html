@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech Technology for Conversational AI — CTC&nbsp;: la perte dérivée — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">Speech Technology for Conversational AI</a> › CTC&nbsp;: la perte dérivée</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>Speech Technology for Conversational AI</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: le signal de parole et ses représentations</a>
+<a href="ch1.html">ASR classique&nbsp;: le pipeline GMM-HMM</a>
+<a href="ch2.html" class="active">CTC&nbsp;: la perte dérivée</a>
+<a href="ch3.html">Encoder-décodeur&nbsp;: LAS, Conformer, RNN-T</a>
+<a href="ch4.html">Whisper&nbsp;: robustesse et multi-tâche</a>
+<a href="ch5.html">Streaming&nbsp;: chunking, VAD, latence contre qualité</a>
+<a href="ch6.html">Vocodeurs&nbsp;: de WaveNet à HiFi-GAN</a>
+<a href="ch7.html">TTS neuronal&nbsp;: Tacotron 2, VITS, diffusion et flow</a>
+<a href="ch8.html">Expressivité&nbsp;: prosodie, style tokens, SSML</a>
+<a href="ch9.html">Conversion et clonage de voix&nbsp;: éthique et watermarking</a>
+<a href="ch10.html">La boucle conversationnelle&nbsp;: VAD, turn-taking, full-duplex</a>
+<a href="ch11.html">Speech LLMs et multilinguisme</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. CTC&nbsp;: la perte dérivée</h2>
+
+<p>Le problème central de l'ASR neuronal&nbsp;: la sortie (suite de tokens \(y\)) est plus
+courte que l'entrée (\(T\) trames) et <em>non alignée</em> — on n'a pas d'étiquette par
+trame. La solution de Graves et al. (ICML 2006)&nbsp;: marginaliser sur <em>tous</em> les
+alignements possibles. On dérive tout&nbsp;: c'est le chapitre technique n°1 du module.</p>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Alignements et effondrement (collapse)</span>
+  Le réseau émet à chaque trame une distribution \(p_\theta(\cdot \mid x_{1:T}, t)\) sur
+  l'alphabet étendu \(\mathcal V \cup \{\epsilon\}\) (\(\epsilon\) = blanc). Un
+  <em>chemin</em> \(\pi \in (\mathcal V \cup \{\epsilon\})^T\) est une séquence de \(T\)
+  symboles, tirée indépendamment&nbsp;: \(p(\pi \mid x) = \prod_{t=1}^T p_\theta(\pi_t
+  \mid x, t)\). L'application <strong>collapse</strong> \(\mathcal B\) enlève d'abord les
+  blancs puis fusionne les répétitions consécutives&nbsp;:
+  \(\mathcal B(\texttt{hh ee ll ll o}) = \texttt{helo}\) (les trois l consécutifs, une fois
+  les blancs retirés, n'en font plus qu'un). Inversement, les doubles <em>séparés par un
+  blanc</em> survivent&nbsp;: \(\mathcal B(\texttt{l}\,\epsilon\,\texttt{l}) =
+  \texttt{ll}\) — c'est tout l'art du CTC. La perte CTC marginalise&nbsp;:
+  $$p_\theta(y \mid x) \;=\; \sum_{\pi \in \mathcal B^{-1}(y)} p(\pi \mid x), \qquad
+  \mathcal L_{\mathrm{CTC}} = -\log p_\theta(y \mid x).$$
+  <em>Pourquoi le blanc est indispensable</em>&nbsp;: sans lui, \(\texttt{ll}\) effondré ne
+  pourrait pas se distinguer de \(\texttt{l}\) — impossible d'écrire «&nbsp;bonne&nbsp;»
+  avec un n double. Le blanc porte l'information de frontière.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.2 — Compter à la main (T = 4, y = «&nbsp;ab&nbsp;»)</span>
+  Séquence étendue \(\ell = (\epsilon, a, \epsilon, b)\) (longueur \(S = 4\)). Les chemins
+  valides de longueur 4 sont&nbsp;: \(aa\epsilon b\)? Non — énumérons sérieusement&nbsp;:
+  \(\texttt{-a-b}\), \(\texttt{-ab-}\), \(\texttt{a--b}\), \(\texttt{a-b-}\),
+  \(\texttt{aa-b}\), \(\texttt{a-ab}\), \(\texttt{-aab}\), \(\texttt{ab--}\) (8 chemins).
+  Chacun contribue son produit de 4 probabilités&nbsp;: \(p(y|x)\) est la somme des 8&nbsp;;
+  l'exercice 3 la calcule pour des valeurs numériques, l'exercice 4 vérifie avec
+  l'implémentation. Le nombre de chemins croît exponentiellement (\(\sim |\mathcal V|^T\))&nbsp;:
+  la sommation directe est impossible — d'où le forward-backward.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.3 — Forward-backward CTC (récursions et gradient, démontrés)</span>
+  Notons \(p_t(k) = p_\theta(k \mid x, t)\), \(\ell\) la séquence étendue. Les
+  <em>variables forward</em> \(\alpha_t(s) = p(\ell_{1:s} \text{ atteints à la trame } t)\)
+  suivent
+  $$\alpha_t(s) = \Big[\alpha_{t-1}(s) + \alpha_{t-1}(s{-}1) +
+  \mathbf 1\{\ell_s \neq \epsilon,\ \ell_s \neq \ell_{s-2}\}\, \alpha_{t-1}(s{-}2)\Big]\cdot
+  p_t(\ell_s),$$
+  initialisées \(\alpha_1(1) = p_1(\epsilon)\), \(\alpha_1(2) = p_1(\ell_2)\), le reste à 0
+  (on ne peut pas «&nbsp;sauter&nbsp;» en avant). Symétriquement \(\beta_t(s)\) (backward,
+  depuis la fin). Alors
+  $$p(y \mid x) = \alpha_T(S) + \alpha_T(S{-}1), \qquad
+  \alpha_t(s)\,\beta_t(s) = p\big(y \mid x,\ \pi_t = \ell_s\big)\cdot p_t(\ell_s),$$
+  et le gradient de la perte s'écrit en forme fermée
+  $$\frac{\partial \mathcal L_{\mathrm{CTC}}}{\partial p_t(k)}
+  = -\,\frac{1}{p(y \mid x)}\ \frac{1}{p_t(k)} \sum_{s\,:\,\ell_s = k} \alpha_t(s)\, \beta_t(s).$$
+  <div class="proof">
+  <strong>Étape 1 (décomposition par l'état en \(t\)).</strong> La somme sur les chemins se
+  partitionne selon la position \(s\) occupée à la trame \(t\)&nbsp;: chaque chemin passant
+  par \(\ell_s\) en \(t\) se factorise en «&nbsp;préfixe atteignant \(\ell_s\) en
+  \(t\)&nbsp;» \(\times\) «&nbsp;\(p_t(\ell_s)\)&nbsp;» \(\times\) «&nbsp;suffixe depuis
+  \(\ell_s\) à \(t{+}1\) » — d'où \(\alpha_t(s)\beta_t(s) = p(y, \pi_t = \ell_s \mid x)\)
+  (attention&nbsp;: la définition de \(\beta\) inclut ou non le facteur \(p_t\) selon la
+  convention&nbsp;; avec celle ci-dessus, \(\alpha_t(s)\) contient \(p_t(\ell_s)\) et
+  \(\beta_t(s)\) pas). <strong>Étape 2 (récursion).</strong> Pour que le chemin soit en
+  \(\ell_s\) en \(t\), il était en \(s\), \(s{-}1\) ou \(s{-}2\) en \(t{-}1\)&nbsp;; le saut
+  de deux positions est interdit <em>sauf</em> si \(\ell_s\) est une vraie lettre différente
+  de \(\ell_{s-2}\) (sinon deux lettres identiques seraient fusionnées par le collapse&nbsp;;
+  et on ne saute jamais <em>au-dessus</em> d'une lettre). <strong>Étape 3 (gradient).</strong>
+  \(p(y|x) = \sum_{\pi} \prod_{t'} p_{t'}(\pi_{t'})\)&nbsp;; chaque terme utilisant
+  \(p_t(k)\) correspond aux chemins avec \(\pi_t = k \in \ell\), dont la somme totale vaut
+  \(\sum_{s:\ell_s = k}\alpha_t(s)\beta_t(s)\). En dérivant le log&nbsp;:
+  \(\partial \mathcal L/\partial p_t(k) = -\partial p(y|x)/\partial p_t(k) \cdot 1/p(y|x)\),
+  et \(\partial p(y|x)/\partial p_t(k) = \big[\sum_s \alpha\beta\big] / p_t(k)\) (chaque
+  chemin où \(\pi_t = k\) est linéaire en \(p_t(k)\)). <strong>Complexité</strong>&nbsp;:
+  \(\mathcal O(T \cdot S)\) — deux tables de \(T \times (2|y|+1)\), contre l'énumération
+  exponentielle. <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.4 — Inférence CTC et conditions du modèle</span>
+  (i)&nbsp;<em>Décodage glouton</em>&nbsp;: \(\hat y = \mathcal B(\arg\max_k p_t(k)\
+  \text{pour chaque } t)\) — rapide, sous-optimal&nbsp;; <em>beam search</em>&nbsp;: maintenir
+  \(K\) préfixes avec leurs scores \(\alpha\) tronqués, fusionner les préfixes égaux après
+  collapse, optionnellement rescorés par un LM. (ii)&nbsp;<em>Hypothèses de CTC</em>&nbsp;:
+  indépendance conditionnelle des trames (pas de modèle de langage interne — d'où le LM
+  externe) et distribution <em>monotone</em> (l'alignement va de gauche à droite)&nbsp;: parfait
+  pour la lecture, interdit pour la traduction (ch. 3 pour s'en affranchir).
+</div>
+
+<div class="note">
+  <span class="tag">Postérité du CTC</span>
+  CTC vit partout en 2026&nbsp;: alignement forcé (lab 1), pré-entraînement de wav2vec&nbsp;2
+  (objectif CTC), et — surtout — le <strong>RNN-T</strong> (ch. 3) est un CTC étendu au
+  temps réel, avec un blanc réinterprété en «&nbsp;avancer dans le temps&nbsp;». En revanche
+  Whisper n'est <em>pas</em> CTC (encoder-décodeur attention, ch. 4)&nbsp;: savoir dire
+  «&nbsp;celui-ci marginalise les alignements, celui-là les génère&nbsp;» est une question
+  d'oral classique.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Précédent</span> ASR classique&nbsp;: le pipeline GMM-HMM</a><a class="next" href="ch3.html"><span class="dir">Suivant</span> Encoder-décodeur&nbsp;: LAS, Conformer, RNN-T</a></nav>
+</main>
+</div>
+
+</body>
+</html>

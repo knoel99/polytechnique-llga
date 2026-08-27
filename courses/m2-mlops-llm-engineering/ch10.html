@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — Étude de cas et green ops — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 2 · Période 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">ML Ops and LLM Engineering Principles</a> › Étude de cas et green ops</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: du notebook au système</a>
+<a href="ch1.html">Cycle de vie&nbsp;: versionner données, features, modèles</a>
+<a href="ch2.html">CI/CD pour le ML&nbsp;: tester données et modèles</a>
+<a href="ch3.html">Serving des LLMs&nbsp;: batching continu, latence P99</a>
+<a href="ch4.html">Coûts&nbsp;: euros par million de tokens</a>
+<a href="ch5.html">Évaluation en production&nbsp;: drift et monitoring</a>
+<a href="ch6.html">RAG Ops&nbsp;: fraîcheur et évaluation continue</a>
+<a href="ch7.html">Fine-tuning Ops&nbsp;: LoRA versionnés</a>
+<a href="ch8.html">Agents en production&nbsp;: tracing et garde-fous</a>
+<a href="ch9.html">Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a>
+<a href="ch10.html" class="active">Étude de cas et green ops</a>
+<a href="ex.html">Exercices / Labs</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch10">
+<h2>10. Étude de cas et green ops</h2>
+
+<h3>10.1 La stack d'un assistant d'entreprise</h3>
+
+<p>Assemblons les briques. Cahier des charges&nbsp;: 2&nbsp;000 employés, SSO,
+corpus Confluence + SharePoint (~500&nbsp;ko documents), questions en français,
+réponses sourcées, aucune donnée hors périmètre, budget annuel de
+l'ordre de quelques dizaines de k€ d'inférence.</p>
+
+<table class="tbl">
+  <tr><th>Composant</th><th>Choix type</th><th>Chapitre</th><th>Points d'attention</th></tr>
+  <tr><td>Auth &amp; gateway</td><td>SSO OIDC, quotas par utilisateur</td><td>ch. 9</td><td>identité = clef des permissions agent</td></tr>
+  <tr><td> ingestion</td><td>CDC Confluence → chunks → embeddings</td><td>ch. 6</td><td>idempotence, SLA fraîcheur 15 min</td></tr>
+  <tr><td>Index</td><td>vectoriel + BM25 (hybride)</td><td>ch. 6</td><td>versionné, dual-boot en migration</td></tr>
+  <tr><td>Reranker</td><td>cross-encoder léger</td><td>ch. 6</td><td>+30&nbsp;ms, −20&nbsp;% d'erreurs de contexte typiques</td></tr>
+  <tr><td>Génération</td><td>API modèle front <em>ou</em> 8B self-host</td><td>ch. 3-4</td><td>routing selon sensibilité du document</td></tr>
+  <tr><td>Adaptation</td><td>LoRA «&nbsp;ton interne&nbsp;»</td><td>ch. 7</td><td>retour arrière = swap d'adaptateur</td></tr>
+  <tr><td>Agents</td><td>recherche + rédaction, permissions lecture</td><td>ch. 8</td><td>budgets, tracing, sandbox</td></tr>
+  <tr><td>Évaluation</td><td>golden set 500 Q/R + RAGAS hebdo + juge CI</td><td>ch. 2, 5, 6</td><td>jeu versionné, tranches par métier</td></tr>
+  <tr><td>Surveillance</td><td>Prometheus + OTel + alerting</td><td>ch. 3, 5, 8</td><td>P99 TTFT, PSI, coût/req, taux de refus</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Pourquoi pas GraphRAG&nbsp;?</span> Si l'usage dominant devient
+  «&nbsp;quelles équipes travaillent sur le sujet X&nbsp;?&nbsp;» (questions
+  <em>relationnelles</em>), le graphe d'entités (module Graph ML ch. 11&nbsp;;
+  GraphRAG d'Edge et al.) devient rentable malgré son coût d'indexation&nbsp;: la
+  réponse à la question «&nbsp;faut-il un graphe&nbsp;?&nbsp;» est un
+  <em>arbitrage mesuré</em> (éval RAGAS + ablation), pas une mode.
+</div>
+
+<h3>10.2 Green ops&nbsp;: mesurer l'énergie</h3>
+
+<p>Le coût énergétique des LLMs se concentre (i)&nbsp;au
+<strong>pré-entraînement</strong> — Patterson et al. (2021) formalisent la
+comptabilité carbone des grands entraînements (consommation, mix électrique
+régional, PUE)&nbsp;; Luccioni et al. (2022) font de même pour BLOOM y compris
+l'amortissement de l'entraînement&nbsp;; (ii)&nbsp;à l'<strong>inférence</strong>
+agrégée — des milliards de requêtes de quelques Wh chacune. Pour un
+<em>développeur</em>, l'unité utile est la consommation par requête&nbsp;: mesurable
+avec CodeCarbon (compteur CPU/GPU/PUE) autour de chaque point de service.</p>
+
+<pre class="code"><code>from codecarbon import EmissionsTracker
+
+with EmissionsTracker(measure_power_secs=1, log_level="warning") as tracker:
+    answer = rag_pipeline.answer(question)      # requete complete
+
+print(f"{tracker.total_energy_kWh * 1000:.1f} Wh pour cette requete",
+      f"({tracker.total_emissions * 1e3:.1f} gCO2e au mix local)")</code></pre>
+
+<div class="prop">
+  <span class="tag">Proposition 10.1 — Les quatre leviers verts, par ordre d'efficacité</span>
+  (1)&nbsp;<strong>Sobriété fonctionnelle</strong>&nbsp;: routage vers de petits
+  modèles, sorties plus courtes, cache (ch. 4) — divise l'énergie sans toucher au
+  matériel&nbsp;; (2)&nbsp;<strong>Quantification</strong>&nbsp;: ~2-4× sur le
+  débit énergétique par token (cf. LLMs ch. 6)&nbsp;; (3)&nbsp;<strong>Batching</strong>&nbsp;:
+  le même GPU fait plus de tokens/Wh en batch (ch. 3 — les deux propositions
+  4.1 et 10.1 sont la même équation, en euros et en Wh)&nbsp;; (4)&nbsp;<strong>Scheduling
+  géographique et temporel</strong>&nbsp;: déporter les batchs nocturnes vers les
+  régions à mix bas-carbone au moment opportun. L'ordre compte&nbsp;: on
+  n'achète pas de GPU verts avant d'avoir raccourci les sorties.
+</div>
+
+<div class="note">
+  <span class="tag">Position LLGA</span>
+  Ce module est volontairement transversal au cœur du master&nbsp;: le serving
+  (ch. 3) prolonge le module LLMs, le RAG graphique (ch. 6) prolonge le module
+  Graph ML, les agents (ch. 8) prolongent le module RL, et l'évaluation en
+  production (ch. 5) prépare le volet sûreté du module Explainability, Security,
+  Privacy. Les enseignants de ce cours proposé ne sont pas encore confirmés&nbsp;:
+  les standards et outils cités font foi&nbsp;; le groupe LLGA (LLMs &amp; Graphs)
+  de l'X est mobilisé quand c'est pertinent.
+</div>
+</section>
+<nav class="pager"><a href="ch9.html"><span class="dir">← Précédent</span> Sécurité opérationnelle&nbsp;: secrets, sandbox, supply chain</a><a class="next" href="ex.html"><span class="dir">Suivant</span> Exercices / Labs</a></nav>
+</main>
+</div>
+
+</body>
+</html>

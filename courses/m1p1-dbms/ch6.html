@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — Transactions et concurrence — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Supports de cours</div>
+        <div class="t2">Année 1 · Période 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Accueil</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Programme</a> › <a href="index.html">DataBase Management System</a> › Transactions et concurrence</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="index.html"><span class="code-mini">CSC_51053_EP</span>DataBase Management System</a>
+<nav class="sidebar-toc">
+<a href="ch0.html">Rappels&nbsp;: ensembles, relations, complexité</a>
+<a href="ch1.html">Le modèle relationnel et l'algèbre</a>
+<a href="ch2.html">SQL&nbsp;: requêtes, agrégats, fenêtrage</a>
+<a href="ch3.html">Conception&nbsp;: dépendances et formes normales</a>
+<a href="ch4.html">Stockage&nbsp;: pages, fichiers, tri externe</a>
+<a href="ch5.html">Index&nbsp;: arbres B+ et hachage</a>
+<a href="ch6.html" class="active">Transactions et concurrence</a>
+<a href="ch7.html">Journal et reprise sur panne</a>
+<a href="ch8.html">Optimisation de requêtes</a>
+<a href="ch9.html">Au-delà du relationnel&nbsp;: NoSQL, graphes, vecteurs</a>
+<a href="ch10.html">Données du web et intégration hétérogène</a>
+<a href="ch11.html">Travaux de l'équipe pédagogique</a>
+<a href="ex.html">Exercices</a>
+<a href="refs.html">Références</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Programme du master</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Transactions et concurrence</h2>
+
+<p>Plusieurs programmes accèdent en même temps aux mêmes données. La
+<strong>transaction</strong> est l'unité de cohérence&nbsp;: une séquence
+d'opérations de lecture (r) et d'écriture (w) qui doit s'exécuter <em>comme si</em>
+elle était seule. L'acronyme ACID résume le contrat&nbsp;: <em>Atomicité</em> (tout
+ou rien), <em>Cohérence</em> (les contraintes tiennent), <em>Isolation</em>
+(équivalence à une exécution série), <em>Durabilité</em> (un commit survit à la
+panne — objet du ch. 7).</p>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — Historiques, conflits, sérialisabilité</span>
+  Un <strong>historique</strong> (schedule) \(H\) est une séquence d'opérations de
+  plusieurs transactions, préserveant l'ordre interne de chacune. Deux opérations
+  sont <strong>en conflit</strong> si elles appartiennent à des transactions
+  différentes, portent sur le même objet, et si au moins une est une écriture.
+  \(H\) est <strong>sérialisable par conflits</strong> (CSR) s'il est équivalent par
+  conflits à un historique sériel&nbsp;; le <strong>graphe de sérialisation</strong>
+  \(GS(H)\) a un sommet par transaction et un arc \(T_i \to T_j\) dès qu'un couple
+  d'opérations en conflit place une opération de \(T_i\) avant une de \(T_j\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.2 — Critère du graphe de sérialisation</span>
+  \(H\) est sérialisable par conflits si et seulement si \(GS(H)\) est acyclique&nbsp;;
+  dans ce cas, tout ordre topologique de \(GS(H)\) donne une exécution sériel équivalente.
+  <div class="proof" style="margin-top:.5rem;">Si \(H\) est équivalent au sériel
+  \(T_{\sigma(1)} \dots T_{\sigma(k)}\), tout arc \(T_i \to T_j\) de \(GS(H)\) doit
+  être respecté par \(\sigma\) (l'équivalence par conflits conserve l'ordre de tous
+  les couples en conflit)&nbsp;: le graphe est plongé dans un ordre total, donc
+  acyclique. Réciproquement, si \(GS(H)\) est acyclique d'ordre topologique
+  \(\sigma\), on vérifie que le sériel associé a les mêmes couples en conflit dans
+  le même ordre&nbsp;: pour un couple donné, l'arc orienté dans \(GS(H)\) (qui
+  existe par définition) impose le même ordre relatif que \(\sigma\).
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 6.3 — Mise à jour perdue (lost update)</span>
+  Soit \(H = r_1(X)\, r_2(X)\, w_1(X)\, w_2(X)\, c_1\, c_2\) avec X compteur de stock
+  valant 100, \(T_1\) ajoutant 50 et \(T_2\) en retranchant 30. Sérialisée
+  (\(T_1;T_2\))&nbsp;: \(100 \to 150 \to 120\). Dans \(H\)&nbsp;: les deux lectures
+  voient 100, \(w_1\) écrit 150, puis \(w_2\) écrase avec 70&nbsp;: la mise à jour de
+  \(T_1\) est <em>perdue</em>. Conflits sur X&nbsp;:
+  \(r_1(X) &lt; w_2(X)\) donne \(T_1 \to T_2\), et \(r_2(X) &lt; w_1(X)\) donne
+  \(T_2 \to T_1\)&nbsp;: cycle, \(H\) n'est pas sérialisable — le graphe l'avait
+  annoncé avant même de lire les valeurs.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 6.4 — Verrouillage à deux phases (2PL)</span>
+  Une transaction suit le <strong>2PL</strong> si elle acquiert tous ses verrous
+  avant d'en relâcher un seul&nbsp;: phase croissante (acquisitions), point de
+  verrouillage, phase décroissante (libérations). Le <strong>2PL strict</strong>
+  (ou rigoureux) ne libère les verrous d'une écriture qu'après commit — il évite
+  les annulations en cascade. Les verrous peuvent être partagés (lecture) ou
+  exclusifs (écriture), avec compatibilité S-S seulement.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.5 — Toute exécution 2PL légale est sérialisable</span>
+  Si un historique \(H\) respecte le 2PL (chaque transaction, la légalité des
+  verrous étant assurée&nbsp;: aucun verrou acquis tant que le verrou conflictuel
+  n'est pas relâché), alors \(GS(H)\) est acyclique, donc \(H\) est CSR.
+  <div class="proof" style="margin-top:.5rem;">Raisonnons par l'absurde et supposons
+  un cycle \(T_1 \to T_2 \to \cdots \to T_k \to T_1\). Pour chaque arc
+  \(T_i \to T_j\) il existe un objet \(q\) et un couple en conflit
+  \(o_i[q] &lt; o_j[q]\)&nbsp;; comme au moins une des deux opérations est une
+  écriture, les verrous de \(T_i\) et \(T_j\) sur \(q\) sont incompatibles, donc ne
+  se chevauchent pas&nbsp;: la légalité impose
+  \(\text{unlock}_i(q) &lt; \text{lock}_j(q)\). Notons \(u_i\) l'instant où
+  \(T_i\) relâche son <em>premier</em> verrou (son point de verrouillage)&nbsp;;
+  alors \(u_i \leq \text{unlock}_i(q) &lt; \text{lock}_j(q) \leq u_j\), la dernière
+  inégalité venant du 2PL&nbsp;: \(T_j\) ne peut acquérir de verrou après \(u_j\),
+  donc \(\text{lock}_j(q) \leq u_j\). En enchaînant le long du cycle&nbsp;:
+  \(u_1 &lt; u_2 &lt; \cdots &lt; u_k &lt; u_1\) — contradiction.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.6 — Interblocage (deadlock) et niveaux d'isolation</span>
+  Le 2PL crée des cycles d'attente&nbsp;: \(T_1\) tient X et veut Y, \(T_2\) tient Y
+  et veut X. Les SGBD détectent (graphe d'attente, cycle = deadlock) et <em>annulent
+  une victime</em> (rollback puis reprise). Les niveaux standard offerts par
+  SQL&nbsp;:
+  <table class="tbl">
+    <tr><th>Niveau</th><th>Lecture sale</th><th>Non reproductible</th><th>Fantômes</th><th>Mécanisme</th></tr>
+    <tr><td>READ UNCOMMITTED</td><td>possible</td><td>possible</td><td>possibles</td><td>aucun verrou en lecture</td></tr>
+    <tr><td>READ COMMITTED</td><td>non</td><td>possible</td><td>possibles</td><td>verrous courts en lecture</td></tr>
+    <tr><td>REPEATABLE READ</td><td>non</td><td>non</td><td>possibles</td><td>verrous longs sur lignes</td></tr>
+    <tr><td>SERIALIZABLE</td><td>non</td><td>non</td><td>non</td><td>2PL complet / prédicats</td></tr>
+    <tr><td>SNAPSHOT (MVCC)</td><td>non</td><td>non</td><td>non*</td><td>lectures sur version datée, aucun verrou en lecture</td></tr>
+  </table>
+  (*) au prix de collisions à l'écriture détectées a posteriori (PostgreSQL&nbsp;:
+  erreur 40001, à rejouer). Le <strong>MVCC</strong> (contrôle par versions
+  multi-versions) garde plusieurs versions datées de chaque ligne&nbsp;: chaque
+  transaction lit une photographie cohérente du passé — les lecteurs ne bloquent
+  jamais les écrivains. C'est la stratégie par défaut de PostgreSQL et du moteur
+  InnoDB de MySQL.
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Précédent</span> Index&nbsp;: arbres B+ et hachage</a><a class="next" href="ch7.html"><span class="dir">Suivant</span> Journal et reprise sur panne</a></nav>
+</main>
+</div>
+
+</body>
+</html>
