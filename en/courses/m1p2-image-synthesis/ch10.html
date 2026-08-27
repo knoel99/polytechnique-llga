@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — Real time: GPU, hybrid, upscaling — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Synthesis: Theory and Practice</a> › Real time: GPU, hybrid, upscaling</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: probability, integrals, linear ODEs</a>
+<a href="ch1.html">Radiometry: radiance</a>
+<a href="ch2.html">The rendering equation</a>
+<a href="ch3.html">BRDFs and material models</a>
+<a href="ch4.html">Cameras: the pinhole model</a>
+<a href="ch5.html">Rasterization versus ray tracing</a>
+<a href="ch6.html">Monte Carlo path tracing</a>
+<a href="ch7.html">Acceleration: intersection and BVHs</a>
+<a href="ch8.html">Noise, denoising, tone mapping</a>
+<a href="ch9.html">Neural rendering: NeRF and 3D Gaussians</a>
+<a href="ch10.html" class="active">Real time: GPU, hybrid, upscaling</a>
+<a href="ch11.html">Research of the instructor</a>
+<a href="code.html">A complete path tracer in Python</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch10">
+<h2>10. Real time: GPU, hybrid, upscaling</h2>
+
+<div class="def">
+  <span class="tag">Definition 10.1 — The hardware graphics pipeline</span>
+  Hardware rasterization (OpenGL/Vulkan/DirectX) chains:
+  vertex shading (transformations, chapter 4) ⟹ assembly/clipping ⟹
+  rasterization (Theorem 5.2 in silicon) ⟹ pixel/fragment shading
+  (materials, chapter 3) ⟹ z-buffer ⟹ framebuffer. Coherence
+  exploited: triangles cover blocks of contiguous pixels —
+  massive parallelism (thousands of SIMT cores), hierarchies of early
+  depth rejection. Budget: 16.6 ms/frame (60 Hz) for
+  <em>everything</em> —
+  geometry, materials, shadows, post-effects. Pre-MC soft shadow
+  techniques remain essential: filtered shadow maps (PCF, variance
+  shadow maps), screen-space ambient occlusion (SSAO), precomputed
+  lightmaps — a hierarchy of bias/variance trade-offs.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 10.2 — RTX hybrid and upscaling</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Hardware ray tracing</strong> (RTX, 2018): units
+    dedicated to BVH traversal (chapter 7) — <em>rays on
+    demand</em>: reflections, soft shadows, GI at 1–2 sampled
+    bounces... then denoised (chapter 8) and recombined over
+    rasterization: the <em>hybrid</em>;</li>
+    <li><strong>Temporal upscaling</strong> (DLSS, FSR): render at
+    1080p, display at 4K; the network (or filter) receives the
+    low-resolution frame + the re-projected temporal history (motion) +
+    the geometric buffers; the formulation is a supervised inverse
+    problem — video super-resolution with the constraint set of
+    chapter 8;</li>
+    <li><strong>Game path tracing</strong> (Cyberpunk 2077, Alan Wake 2):
+    full MC at 1–4 spp + recurrent denoising + temporal
+    reconstruction: the theory of chapters 6 and 8, in 16 ms.</li>
+  </ul>
+</div>
+
+<table class="tbl">
+  <tr><th>Rendering</th><th>Samples</th><th>Bias/variance</th><th>Time/frame</th><th>Use</th></tr>
+  <tr><td>Pure rasterization</td><td>1 primary ray</td><td>structural bias</td><td>&lt; 8 ms</td><td>games, 3D UI</td></tr>
+  <tr><td>RTX hybrid</td><td>0.5–2 spp per effect</td><td>mixed, denoised</td><td>&lt; 16 ms</td><td>AAA games</td></tr>
+  <tr><td>Real-time path tracing</td><td>1–4 spp</td><td>variance → ML</td><td>~16 ms</td><td>high-end games</td></tr>
+  <tr><td>Production path tracing</td><td>256–4096 spp</td><td>unbiased</td><td>minutes–hours</td><td>film, architecture</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">What "real time" means for an engineer</span>
+  Real time is not a different theory: it is the <em>same</em>
+  set of equations (chapters 1–6) under a budget constraint — and
+  hence a spending strategy: where to accept bias (shadows,
+  approximate GI), where to keep variance (specular reflections, the
+  eye is sensitive there), where to learn (denoising, upscaling). The
+  design of a modern engine is an exercise in <em>managing bias and
+  variance per dollar of millisecond</em> — the same trade-offs as in
+  ML, transposed to rendering.
+</div>
+</section>
+<nav class="pager"><a href="ch9.html"><span class="dir">← Previous</span> Neural rendering: NeRF and 3D Gaussians</a><a class="next" href="ch11.html"><span class="dir">Next</span> Research of the instructor</a></nav>
+</main>
+</div>
+
+</body>
+</html>

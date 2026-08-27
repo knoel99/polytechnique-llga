@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Social Media and Communication: Probabilistic Models and Algorithms — Large-scale distributed systems — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Social Media and Communication: Probabilistic Models and Algorithms</a> › Large-scale distributed systems</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_51058_EP</span>Social Media and Communication: Probabilistic Models and Algorithms</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: probability and graphs</a>
+<a href="ch1.html">Random graphs: Erdős–Rényi</a>
+<a href="ch2.html">Prescribed degrees, small worlds, scale-free</a>
+<a href="ch3.html">Epidemic processes on graphs</a>
+<a href="ch4.html">Rumors, push-pull and influence</a>
+<a href="ch5.html">The stochastic block model</a>
+<a href="ch6.html">Community detection and applications</a>
+<a href="ch7.html" class="active">Large-scale distributed systems</a>
+<a href="ch8.html">Research of the teaching team</a>
+<a href="ch9.html">Hands-on: networkx simulations</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Large-scale distributed systems</h2>
+
+<p>Behind every feed: millions of requests per second, caches
+everywhere, load balancers. These systems consume exactly the same
+mathematics as the previous chapters — balls into bins, Poisson
+processes, random walks — and part of the advances come from the French school
+(Massoulié, ch. 8). This chapter gives its three building blocks: load balancing,
+caching, and resource sharing.</p>
+
+<div class="thm">
+  <span class="tag">Theorem 7.1 — Balls into bins: the power of two choices</span>
+  Throw \(n\) balls independently into \(n\) bins uniformly: the maximum
+  load is \(\frac{\ln n}{\ln \ln n}\big( 1 + o(1) \big)\) with high probability
+  (Azar, Broder, Karlin, Upfal, 1999; Mitzenmacher, 2001). If each ball
+  <strong>chooses two bins at random and goes to the less loaded one</strong>, the maximum
+  load drops to
+  $$\frac{\ln \ln n}{\ln 2} + O(1) \approx \log_2 \log_2 n + O(1),$$
+  an exponential gain for twice the information.
+  <div class="proof">
+  (Sketch — density differential equations, the mean-field method.)
+  Let \(u_j(t)\) be the fraction of bins of load at least \(j\) after \(t\) balls.
+  <strong>One choice:</strong> a ball lands on a bin of load \(j-1\) with
+  probability \(u_{j-1} - u_j\) (first time at level \(j\));
+  \(\frac{\mathrm{d} u_j}{\mathrm{d} t} \approx u_{j-1} - u_j\), hence
+  \(u_j \approx t^j / j!\) — and \(u_j \approx 1\) for \(j \approx \frac{\ln n}{\ln \ln n}\).
+  <strong>Two choices:</strong> the ball rises to level \(j\) only if
+  <em>both</em> sampled bins are at least \(j - 1\):
+  \(\frac{\mathrm{d} u_j}{\mathrm{d} t} \approx u_{j-1}^2 - u_j^2\); in the
+  stationary regime \(u_j \approx u_{j-1}^2\) — doubling at each level: \(k\)
+  levels reach \(u_k \approx 4^{-2^{k}} \cdot\)... and \(u_j\) reaches \(1/n\)
+  as soon as \(2^{k} \approx \log_2 n\), i.e. \(k \approx \log_2 \log_2 n\).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">From the model to the data center</span>
+  The "supermarket" model (queues + choice of the least loaded) is the
+  modeling of load balancers: at load \(\rho &lt; 1\), the typical waiting
+  delay goes from \(\Theta\big(\frac{1}{1 - \rho}\big)\) (one choice) to
+  \(\Theta\big(\log \frac{1}{1 - \rho}\big)\) (two choices) — the tail
+  behavior changes scale (Mitzenmacher; the JOIN-IDLE-QUEUE regime
+  handles giant systems, the "power-of-d choices" variant with
+  \(d &gt; 2\)). The same idea serves hash tables (cuckoo hashing); the book
+  by Mitzenmacher and Upfal covers it all.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 7.2 — Caching: LRU, LFU, and the hierarchy of contents</span>
+  A <strong>cache</strong> of capacity \(k\) stores \(k\) objects; requests
+  arrive according to a process (ideally Poisson), object \(i\) with probability
+  \(\lambda_i\) (popularity, typically power law — ch. 2); a <em>hit</em> if the
+  object is in the cache, a <em>miss</em> otherwise (cost: fetching it
+  from further away). Classical policies: <strong>LRU</strong> (evict the
+  least recently used — Che's approximation: the "characteristic
+  time" \(t_C\) gives \(\mathbb{P}(\text{hit}) = 1 - e^{-\lambda_i t_C}\));
+  <strong>LFU</strong> (evict the least frequently requested);
+  <strong>random</strong>
+  and <strong>FIFO</strong>. Structural result: against an online adversary, LRU
+  is \(k\)-competitive — its cost is at most \(k\) times that of the offline
+  optimum (Sleator–Tarjan); under i.i.d. popularities, Che's approximation makes it
+  analytic. The <em>distributed</em> question: who caches what,
+  when users serve one another — work of the team in ch. 8.
+</div>
+
+<div class="thm">
+  <span class="tag">7.3 — Bandwidth sharing and proportional fairness (Massoulié–Roberts, 1999-2002)</span>
+  Flows share links; \(x_r\) = rate of flow \(r\), capacity
+  constraints \(A x \leq c\). \(\alpha\)-fairness objectives: maximize
+  \(\sum_r \frac{x_r^{1 - \alpha}}{1 - \alpha}\) — \(\alpha = 1\) (limit) gives
+  <strong>proportional fairness</strong> \(\max \sum_r \log x_r\), \(\alpha \to \infty\)
+  gives max-min. The theorem of Massoulié and Roberts (INFOCOM 1999 / IEEE-ACM ToN
+  2002): networks stabilized by simple <em>distributed</em> algorithms
+  (AIMD window à la TCP, load evolving at the RTT timescale) converge to the
+  proportionally fair point — a bridge between the mechanics of protocols and
+  convex optimization: "TCP does decentralized optimization without
+  knowing it". This framework founded a whole literature (&gt; 900 citations) on the
+  stability of quality-of-service networks.
+</div>
+
+<div class="note">
+  <span class="tag">Gossip and distributed learning — the modern bridge</span>
+  The push-pull protocols of ch. 4 also compute <em>aggregates</em>: the
+  mean of a field of values by random-walk iterations (asymptotic
+  consensus), approximate quantiles, distinct counting
+  (HyperLogLog). The revival: <strong>asynchronous SGD on graphs</strong> —
+  workers exchange gradients via gossip instead of a central server;
+  convergence guarantees depend on the spectral gap of the communication graph
+  (recent work of the team, ch. 8). For an LLGA master: federated
+  learning is a constrained gossip protocol — the module's theory applies to it
+  directly.
+</div>
+
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Community detection and applications</a><a class="next" href="ch8.html"><span class="dir">Next</span> Research of the teaching team</a></nav>
+</main>
+</div>
+
+</body>
+</html>

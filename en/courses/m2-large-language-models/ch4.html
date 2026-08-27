@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Language Models — Post-training: SFT and alignment — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Large Language Models</a> › Post-training: SFT and alignment</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_53432_EP</span>Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: from word2vec to transformers</a>
+<a href="ch1.html">Tokenization</a>
+<a href="ch2.html">The architecture in depth</a>
+<a href="ch3.html">Pre-training</a>
+<a href="ch4.html" class="active">Post-training: SFT and alignment</a>
+<a href="ch5.html">RLHF, DPO, GRPO</a>
+<a href="ch6.html">Running an LLM: inference</a>
+<a href="ch7.html">RAG in depth</a>
+<a href="ch8.html">Agents, multimodality and perspectives</a>
+<a href="ch9.html">Evaluation and safety of LLMs</a>
+<a href="ch10.html">Research of the instructor</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Post-training: SFT and alignment</h2>
+
+<div class="def">
+  <span class="tag">Step 1 — Supervised Fine-Tuning (instruction tuning)</span>
+  Fine-tune the base model on quality (instruction, response) pairs — a few
+  tens/hundreds of thousands of examples suffice to turn an autocomplete into an
+  assistant. Engineering details: loss mask (the loss is computed only on the
+  response), chat templates, data "distilled" from a large model.
+</div>
+
+<div class="def">
+  <span class="tag">Templates and loss mask — the detail that matters</span>
+  The template serializes the turns:
+  <code>&lt;|system|&gt;…&lt;|user|&gt;…&lt;|assistant|&gt;</code>. The loss
+  masks the <em>prompt</em> tokens (system/user roles) and keeps only the
+  <em>completion</em> — otherwise the model learns to <em>imitate the user</em> and
+  prompt logging becomes noise:
+  $$\mathcal{L}_{\text{SFT}} = -\sum_{t\,\in\,\text{completion}} \log p_\theta(y_t\mid y_{&lt;t}, x).$$
+</div>
+
+<pre class="code"><code># SFT with loss masking (HF TRL pseudo-code)
+from trl import SFTTrainer
+
+def format(example):                    # chat template + masked labels
+    prompt  = f"&lt;|user|&gt;\n{example['question']}\n&lt;|assistant|&gt;\n"
+    completion = example["answer"]
+    return {"prompt": prompt, "completion": completion}
+# - the loss is computed ONLY on the completion tokens (TRL SFTTrainer
+#   does the masking automatically; in raw PyTorch: labels = -100 on the prompt)
+
+trainer = SFTTrainer(model="meta-llama/Llama-3.1-8B",
+                     train_dataset=dataset.map(format), ...)
+trainer.train()
+
+# pitfalls seen in the lab: template != inference template -> performance drop;
+# padding token confused with eos; overly long answers -> silent truncation</code></pre>
+
+<div class="def">
+  <span class="tag">Step 2 — Why alignment beyond SFT?</span>
+  SFT imitates demonstrations; it does not directly optimize "the best
+  response" and does not learn to avoid harmful responses. The central idea of
+  InstructGPT/ChatGPT: <strong>learn a human reward</strong>, then optimize the
+  policy against that reward (RL) — this is where the M1 RL module becomes
+  the M2's central tool.
+</div>
+
+<div class="note">
+  <span class="tag">Rejection sampling (best-of-n)</span>
+  An intermediate and indestructible step: generate \(n\) responses, keep those
+  that pass a filter (reward model, tests, heuristics), re-fine-tune on them
+  — the Llama 2 recipe between RLHF rounds (Touvron et al., 2023). This is
+  exactly "exploit the best of \(n\)", without policy
+  gradients; the link with bandits (RL module ch. 6) is direct:
+  each draw informs the policy for the next round.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Pre-training</a><a class="next" href="ch5.html"><span class="dir">Next</span> RLHF, DPO, GRPO</a></nav>
+</main>
+</div>
+
+</body>
+</html>

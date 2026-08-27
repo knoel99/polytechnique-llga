@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Graph Neural Networks — Graph transformers — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Advanced Graph Neural Networks</a> › Graph transformers</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · Advanced Graph Neural</span>Advanced Graph Neural Networks</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: the message passing foundation</a>
+<a href="ch1.html">Expressive power: the Weisfeiler-Lehman test</a>
+<a href="ch2.html">Over-squashing and deep GNNs</a>
+<a href="ch3.html">Positional and structural encodings</a>
+<a href="ch4.html" class="active">Graph transformers</a>
+<a href="ch5.html">Dynamic and temporal graphs</a>
+<a href="ch6.html">Scale: sampling, systems</a>
+<a href="ch7.html">Robustness and privacy on graphs</a>
+<a href="ch8.html">Research of the teaching team</a>
+<a href="ch9.html">LLGA bridges: 3D, algorithmic reasoning, GNN × LLM</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Graph transformers</h2>
+
+<div class="def">
+  <span class="tag">Idea: all-all attention + structural bias</span>
+  Global attention \(\mathcal{O}(n^2)\) removes bottlenecks and over-squashing
+  at once (ch. 2); but without an encoding of the graph, a transformer on
+  features alone is <em>blind to structure</em>: the topology must be
+  reinjected via (i) positional encodings (ch. 3) and (ii) additive
+  <em>attention biases</em> in the scores — structure steers attention rather
+  than masking it.
+</div>
+
+<div class="thm">
+  <span class="tag">4.1 — Graphormer (Ying et al., 2021) — the three structural encoders</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>centrality encoding</strong>: an embedding of the degree
+    (in/out if directed) added to the features — degree is the first "where
+    am I";</li>
+    <li><strong>spatial encoding</strong>: a bias learned per shortest-path
+    distance:
+    $$\mathrm{Attention}(Q, K)_{ij} = \frac{q_i^\top k_j}{\sqrt{d}} + b_{\phi(d_{ij})}, \qquad
+    d_{ij} = \mathrm{SPD}(i, j), \quad b_{\phi(\cdot)} \text{ learned (table)},$$
+    with a dedicated value for \(d_{ij} = \infty\) (disconnected nodes); the
+    bias is <em>additive before the softmax</em> — structure conditions
+    attention;</li>
+    <li><strong>edge encoding</strong>: on the shortest path \(i \rightsquigarrow
+    j\),
+    the mean of the embeddings of the crossed edges is added to the score —
+    for molecules, the type of the bonds along the path matters.</li>
+  </ol>
+  Plus a global virtual node (connected to all) for the readout. Result: 1<sup>st</sup>
+  rank on OGB-LSC PCQM4M (3.7M molecules) at its release. Implementation:
+<pre class="code"><code>import torch, torch.nn as nn
+from torch_geometric.utils import shortest_path_distance   # PyG >= 2.6 (or homemade BFS)
+
+class GraphormerLayer(nn.Module):
+    def __init__(self, d, h, max_spd=5):
+        super().__init__()
+        self.attn = nn.MultiheadAttention(d, h, batch_first=True)
+        self.bias = nn.Embedding(max_spd + 2, h)     # b_phi table: SPD -> h heads
+        self.ffn = nn.Sequential(nn.Linear(d, 2*d), nn.GELU(), nn.Linear(2*d, d))
+    def forward(self, x, spd):                       # spd: (n, n) integer distances
+        b = self.bias(spd.clamp(max=5).long()).permute(2, 0, 1)  # (h, n, n)
+        x = self.attn(x, x, x, attn_bias=b)[0] + x
+        return self.ffn(x) + x</code></pre>
+  <em>PyG trick</em>: the per-head bias is built with an embedding table indexed
+  by the distance matrix (exercise 5).
+</div>
+
+<div class="thm">
+  <span class="tag">4.2 — GPS (Rampasek et al., 2022): the two channels, layer by layer</span>
+  $$H^{(\ell+1)} = \mathrm{MLP}\Big( \mathrm{BN}\big(\underbrace{\mathrm{MSA}(H^{(\ell)} + \mathrm{PE})}_{\text{global channel}} \;+\; \underbrace{\mathrm{MPNN}(H^{(\ell)}, A)}_{\text{local channel}}\big) \Big)$$
+  — <em>global</em> attention (all-all; kills over-squashing) + <em>local</em>
+  message passing (locality bias, convolution); PE injected at the input
+  (ch. 3);
+  graph batches by concatenation-padding. Per-layer complexity:
+  \(\mathcal{O}(n^2 d)\) (attention) + \(\mathcal{O}(|E| d)\) (MPNN) — the
+  global channel dominates.
+  GPS is a <em>recipe</em>: any MPNN (GCN, GINE, GAT) and any PE (RWSE,
+  LapEig+SignNet) plug into it — hence its status as the reference framework.
+</div>
+
+<div class="note">
+  <span class="tag">4.3 — Efficient transformers: Exphormer and sampled attention</span>
+  For large \(n\) (ogbn-products…), \(\mathcal{O}(n^2)\) no longer fits;
+  <strong>Exphormer</strong> (Shirzad et al., 2023) replaces full attention
+  with a <em>sparse attention graph</em>: (i) the edges of the real graph;
+  (ii) the neighbors of a random \(d\)-regular <strong>expander graph</strong>
+  — an expander has logarithmic diameter: information crosses the graph in
+  \(\mathcal{O}(\log n)\) layers, precisely what ch. 2 demands (expansion!);
+  (iii) global virtual nodes. Complexity linear in \(n + |E|\); combined with
+  the local MPNN, this gives "Exphormer-GPS", the scalable state of the
+  art. Generalization: <em>sampled attention</em> (neighborhood, kernels,
+  hashing) — the same recipes as the long-context transformers of the M2 LLMs
+  module, transposed: the graph transformer and the LLM live the same
+  algorithmic life.
+</div>
+
+<div class="note">
+  <span class="tag">4.4 — When is an MPNN enough? (decision guide)</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><em>homophilous</em> graph, local dependencies (Cora, transactional
+    fraud): GCN/GAT 2-3 layers — no point paying \(n^2\);</li>
+    <li>motifs, distances, long-range dependencies (molecules, QA over KGs):
+    transformer or ESGNN (ch. 1) — structure exceeds the neighborhood;</li>
+    <li>large \(n\): MPNN + sampling (ch. 6) or Exphormer;</li>
+    <li>empirical benchmark rule (Dwivedi et al., 2023): at equal size, the
+    gain of the transformer over MPNN+PE is real but modest — the hybrid
+    (GPS) wins most often; the PE is the dominant factor, the architecture
+    second.</li>
+  </ul>
+  LLGA connection: "attention = complete dynamic graph" versus "GNN
+  = attention on a given graph" (M1, ch. 5); Graphormer is the synthesis — a
+  <em>given</em> <em>and</em> learned attention — the transformers ↔ GNN
+  convergence is THE guiding thread of the master.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Positional and structural encodings</a><a class="next" href="ch5.html"><span class="dir">Next</span> Dynamic and temporal graphs</a></nav>
+</main>
+</div>
+
+</body>
+</html>

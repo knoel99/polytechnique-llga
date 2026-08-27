@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — Monte Carlo path tracing — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Synthesis: Theory and Practice</a> › Monte Carlo path tracing</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: probability, integrals, linear ODEs</a>
+<a href="ch1.html">Radiometry: radiance</a>
+<a href="ch2.html">The rendering equation</a>
+<a href="ch3.html">BRDFs and material models</a>
+<a href="ch4.html">Cameras: the pinhole model</a>
+<a href="ch5.html">Rasterization versus ray tracing</a>
+<a href="ch6.html" class="active">Monte Carlo path tracing</a>
+<a href="ch7.html">Acceleration: intersection and BVHs</a>
+<a href="ch8.html">Noise, denoising, tone mapping</a>
+<a href="ch9.html">Neural rendering: NeRF and 3D Gaussians</a>
+<a href="ch10.html">Real time: GPU, hybrid, upscaling</a>
+<a href="ch11.html">Research of the instructor</a>
+<a href="code.html">A complete path tracer in Python</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Monte Carlo path tracing</h2>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — The rendering estimator</span>
+  <strong>Path tracing</strong> estimates the LTE (chapter 2) by sampling
+  <strong>paths</strong> \(\mathbf{x} = (x_0, \dots, x_k)\) from the eye toward
+  the sources, with density \(p(\mathbf{x})\), via
+  $$\hat{L} = \frac{L_e\, f_r\, \cos\theta\, f_r \cos\theta \cdots}{p(\mathbf{x})}
+  \quad \text{(product of transport factors / probability of the path)}.$$
+  A path is built bounce after bounce: at each bounce, draw an
+  outgoing direction according to a density \(p(\omega)\) (hemispherical
+  uniform, or <em>proportional to \(\cos\theta/\pi\)</em> — cosine
+  sampling), accumulate the contributions, terminate with Russian
+  roulette (Definition 6.4). It is an <em>unbiased</em> estimator of the
+  complete bounce series — in contrast with deterministic methods
+  (radiosity, photon mapping: biased but less noisy).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.2 — Unbiased, and variance in \(\sigma/\sqrt{N}\)</span>
+  (i) \(\mathbb{E}\big[f(X)/p(X)\big] = \int_D f\) as soon as \(p &gt; 0\) on the
+  support of \(f\). (ii) For \(N\) i.i.d. samples, the mean estimator
+  \(\hat{I}_N\) satisfies \(\mathrm{Var}(\hat{I}_N) = \mathrm{Var}(f(X)/p(X))/N\)
+  and \(\hat{I}_N \to I\) almost surely. To divide the typical error by
+  2, you need 4 times more samples — the curse of Monte Carlo
+  (and its salvation: the \(-1/2\) exponent is <em>independent of the
+  dimension</em>, hence the triumph of MC in rendering, with its infinite
+  dimension of paths).
+  <div class="proof">
+    (i) \(\mathbb{E}[f/p] = \int (f/p)\, p = \int f\). (ii) the variance of an
+    independent sum adding up, \(\mathrm{Var}(\hat I_N) = \frac{1}{N^2}
+    \sum \mathrm{Var} = \mathrm{Var}/N\) — and the strong law of large
+    numbers gives the convergence. For the <em>typical</em> error, the CLT gives
+    \(\hat I_N - I \approx \mathcal{N}(0, \mathrm{Var}/N)\):
+    standard deviation in \(\sqrt{\mathrm{Var}/N}\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.3 — Importance sampling: the zero-variance optimum</span>
+  Among the densities \(p\), the variance of \(f(X)/p(X)\) is minimal (zero)
+  for \(p^\ast \propto |f|\); in practice one chooses \(p\) close to
+  \(f\) where \(f\) is large. The module's perfect example: for
+  \(I = \int_{\Omega^+} \cos\theta\, d\omega = \pi\) (point-to-point form
+  factor), uniform sampling (\(p = 1/2\pi\)) gives the estimator
+  \(2\pi\cos\theta\), of variance \(\pi^2/3\); cosine
+  sampling (\(p = \cos\theta/\pi\)) gives the <em>constant</em> estimator
+  \(\pi\) — exactly zero variance.
+  <div class="proof">
+    \(p^\ast = |f|/\int|f|\): then \(f/p^\ast = \pm\int|f|\) is
+    constant ⟹ zero variance. For the uniform sampling computation:
+    \(\mathbb{E}[X^2] = \int (2\pi\cos\theta)^2 \frac{d\omega}{2\pi} =
+    2\pi \int_{\Omega^+}\cos^2\theta\, d\omega = 2\pi \cdot \frac{2\pi}{3} =
+    \frac{4\pi^2}{3}\), and \(\mathbb{E}[X]^2 = \pi^2\), hence
+    \(\mathrm{Var} = \frac{4\pi^2}{3} - \pi^2 = \frac{\pi^2}{3}\) (using
+    \(\int_{\Omega^+}\cos^2\theta\,d\omega =
+    \int_0^{2\pi}\!\!\int_0^{\pi/2} \cos^2\theta \sin\theta\, d\theta\,
+    d\varphi = \frac{2\pi}{3}\)). For the cosine: \(f/p =
+    \cos\theta / (\cos\theta/\pi) = \pi\) for every draw.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 6.4 — The three ingredients of a real path tracer</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Next Event Estimation (NEE)</strong>: at each bounce,
+    connect the point directly to the emissive sources (shadow ray)
+    instead of waiting for a path to hit them by chance —
+    <em>multiple importance sampling</em> (MIS, Veach):
+    combine the "BRDF" strategy and the "light" strategy with
+    balance weights;</li>
+    <li><strong>Russian roulette</strong>: terminate the path with
+    probability \(q\) (the albedo of the point), weighting the survivors by
+    \(1/(1-q)\): unbiased, expected length bounded by the
+    reflectance — the geometric series of Theorem 2.2, sampled;</li>
+    <li><strong>Sampling of extended lights</strong>: a \(1\,\mathrm{m}^2\)
+    panel seen from \(3\) m at oblique incidence
+    occupies only a few thousandths of a steradian — draw points
+    <em>on the source</em> (weighted by its area and the distance) rather than
+    directions; this is the factor of 100 between a render "noisy in
+    10 minutes" and "clean in 10 seconds".</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Connections with the rest of the curriculum</span>
+  Estimating the LTE is a high-dimensional integration problem —
+  exactly the setting of Wasserstein distances and their sampling
+  estimators (cf. Optimal Transport module: importance
+  sampling, concentration, curse of dimensionality); MIS is
+  a special case of combining estimators (variance minimization
+  under an unbiasedness constraint). The same proofs serve rendering
+  and learning; only the integrand changes.
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Rasterization versus ray tracing</a><a class="next" href="ch7.html"><span class="dir">Next</span> Acceleration: intersection and BVHs</a></nav>
+</main>
+</div>
+
+</body>
+</html>

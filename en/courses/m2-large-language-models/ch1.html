@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Language Models — Tokenization — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Large Language Models</a> › Tokenization</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_53432_EP</span>Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: from word2vec to transformers</a>
+<a href="ch1.html" class="active">Tokenization</a>
+<a href="ch2.html">The architecture in depth</a>
+<a href="ch3.html">Pre-training</a>
+<a href="ch4.html">Post-training: SFT and alignment</a>
+<a href="ch5.html">RLHF, DPO, GRPO</a>
+<a href="ch6.html">Running an LLM: inference</a>
+<a href="ch7.html">RAG in depth</a>
+<a href="ch8.html">Agents, multimodality and perspectives</a>
+<a href="ch9.html">Evaluation and safety of LLMs</a>
+<a href="ch10.html">Research of the instructor</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Tokenization</h2>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Byte-level BPE: the exact construction</span>
+  BPE (proved step by step in NLP ch. 1) starts here from the alphabet of 256
+  <em>bytes</em>: any Unicode string can be represented without an
+  "unknown" symbol. Learning loop:
+  $$\mathrm{merge}^{(k)} = \arg\max_{(a,b)}\; f(a,b),\qquad
+  f(a,b)=\sum_{w}\mathrm{freq}(w)\,n_{(a,b)}(w),$$
+  where \(n_{(a,b)}(w)\) counts the occurrences of the adjacent pair \((a,b)\) in
+  word \(w\) (counting weighted by word frequency); the merge is applied
+  everywhere and one starts again until \(|V|\) (32k-128k). <em>Encoding</em> a new
+  text replays the merges in the learned order (GPT-2/4, Llama); WordPiece
+  (BERT) maximizes \(\frac{f(x,y)}{f(x)f(y)}\), Unigram (T5) learns a generative
+  model by EM then segments with Viterbi (NLP ch. 1.2).
+</div>
+
+<div class="note">
+  <span class="tag">Vocabulary, compression, multilingual costs</span>
+  The compression rate (characters/token) depends on the vocabulary <em>and</em> the
+  language: vocabularies trained on English compress English well
+  (~4 characters/token) but degrade other languages. Orders of magnitude measured
+  in the lab: with GPT/Llama-type tokenizers, the same French text costs
+  typically <strong>15 to 25% more tokens</strong> than in English;
+  for poorly represented non-Latin scripts, the factor can reach
+  <strong>3× or more</strong> (each rarely seen character decomposes into bytes).
+  Direct consequences: API cost (billed per token), context
+  length consumed, and inequality of quality. Llama 3 raised the
+  vocabulary to 128k tokens — a large part of the gain serves non-English
+  languages; GPT-4o (o200k) claims up to ~1.4× to ~4× fewer tokens depending on
+  the language compared to the previous generation. Exercise 1 measures all
+  this on your own texts.
+</div>
+
+<div class="note">
+  <span class="tag">Special tokens and security</span>
+  Special tokens (<code>&lt;|endoftext|&gt;</code>, <code>&lt;|im_start|&gt;</code>,
+  template roles) delimit turns and documents. If the decoder
+  accepts them in user input, an attacker can <em>inject</em> a fake
+  dialogue turn or prematurely terminate a document (boundary
+  confusion) — defense: systematically re-encode input and neutralize special
+  tokens (<code>encode_ordinary</code>, the <code>allowed_special</code> flag of
+  <code>tiktoken</code>), never raw string concatenation around the prompt.
+  This class of attacks returns in ch. 9 (prompt injections).
+</div>
+
+<pre class="code"><code>import tiktoken
+enc = tiktoken.encoding_for_model("gpt-4o")
+okapi = tiktoken.encoding_for_model("gpt-3.5-turbo")   # cl100k vocabulary
+
+fr = "Les graphes pour les LLMs : une révolution pour la recherche d'information."
+de = "Donaudampfschifffahrtsgesellschaftskapitän"
+for s in (fr, de, "1234 + 5678 = ?"):
+    print(len(okapi.encode(s)), "vs", len(enc.encode(s)), "->", s[:40])
+
+# "safe" tokenization: special tokens are NOT decoded by default
+b = enc.encode("fin <|endoftext|> suite", allowed_special=set())
+print("ids :", b, "| decode round-trip ok :", enc.decode(b))</code></pre>
+
+<div class="note">
+  <span class="tag">Why it matters (M1 recall)</span>
+  Tokenization governs <em>cost</em> (length in tokens), <em>biases</em>
+  (fuzzy arithmetic because "123 + 456" tokenizes poorly),
+  <em>multilinguality</em> (the extra cost measured above) and real
+  vulnerabilities (special tokens). Systematic diagnosis in the lab with
+  <code>tiktoken</code> /
+  <code>tokenizers</code>. For adapting an LLM to a low-resource
+  language — vocabulary, template, data — ch. 10 presents the instructor's
+  work (Atlas-Chat, Nile-Chat).
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Background: from word2vec to transformers</a><a class="next" href="ch2.html"><span class="dir">Next</span> The architecture in depth</a></nav>
+</main>
+</div>
+
+</body>
+</html>

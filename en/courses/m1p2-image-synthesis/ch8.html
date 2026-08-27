@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — Noise, denoising, tone mapping — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Synthesis: Theory and Practice</a> › Noise, denoising, tone mapping</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: probability, integrals, linear ODEs</a>
+<a href="ch1.html">Radiometry: radiance</a>
+<a href="ch2.html">The rendering equation</a>
+<a href="ch3.html">BRDFs and material models</a>
+<a href="ch4.html">Cameras: the pinhole model</a>
+<a href="ch5.html">Rasterization versus ray tracing</a>
+<a href="ch6.html">Monte Carlo path tracing</a>
+<a href="ch7.html">Acceleration: intersection and BVHs</a>
+<a href="ch8.html" class="active">Noise, denoising, tone mapping</a>
+<a href="ch9.html">Neural rendering: NeRF and 3D Gaussians</a>
+<a href="ch10.html">Real time: GPU, hybrid, upscaling</a>
+<a href="ch11.html">Research of the instructor</a>
+<a href="code.html">A complete path tracer in Python</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Noise, denoising, tone mapping</h2>
+
+<div class="def">
+  <span class="tag">Definition 8.1 — The noise/time budget</span>
+  An MC render at \(N\) samples per pixel (spp) has noise \(\propto
+  1/\sqrt{N}\); the mean squared error decomposes as
+  bias² + variance; pure path tracing is <em>unbiased</em>
+  (variance only), truncated-bounce or photon mapping methods
+  trade a little bias for a lot of variance. Typical
+  numbers: interior with sky through the window — 256 spp:
+  visible noise in the corners; 4096 spp: "clean" for
+  cinema; 16–64 spp: the target of real-time engines — then
+  <em>denoising</em>.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 8.2 — Three families of denoising</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Geometric kernel filters</strong>: weighted average
+    by distances (position, normal, depth, albedo) — the
+    <em>bilateral</em> filter and its multi-scale "à-trous"
+    cascade (5 levels, increasing bias, decreasing variance); still the
+    standard of architectural rendering;</li>
+    <li><strong>Rendered signal decomposition</strong>: separate
+    albedo × lighting before filtering (the noise lives mostly in
+    the lighting); filter then recompose — free texture
+    edges gained;</li>
+    <li><strong>Learning</strong>: temporal recurrent
+    network (Chaitanya et al., 2017) accumulating the frames of an
+    interactive render; OIDN / OptiX denoiser: CNNs trained on
+    (noisy, reference) pairs with auxiliary buffers — ML denoising
+    is today <em>more accurate than 4096 spp</em> on diffuse
+    materials, and the essential link of real time (chapter 10).</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 8.3 — Measuring the gain</span>
+  Uniform patch of mean radiance \(\bar{L} = 0.5\), noise standard
+  deviation \(\sigma = 0.15\) at 16 spp (SNR ≈ 10.5 dB): at 64 spp,
+  \(\sigma = 0.075\) (SNR ≈ 16.5 dB, +6 dB at each quadrupling);
+  a bilateral filter over 9² neighbors <em>of the same normal and albedo</em>
+  divides the variance by ~81 (81 effective samples): SNR ≈ 29 dB
+  at 16 spp — the equivalent of 1300 spp. This is the weapon of real
+  time: the filter "knows" the patch is flat, MC does not. The
+  difficulty is at edges: different normals ⟹ fewer
+  valid neighbors ⟹ residual noise; hence the multi-scale
+  cascades.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 8.4 — Tone mapping and gamma</span>
+  Radiance is HDR (ratio 10⁴–10⁸ between shadow and sun); the screen
+  is LDR (8 bits, gamma 2.2); the eye is <em>relative</em>
+  (approximately logarithmic response). <strong>Tone mapping</strong> compresses
+  the scale: Reinhard operator \(L_d = L/(1 + L)\) (global),
+  local extensions (block-wise dodge and burn), or artistic
+  curves (filmic ACES). Then gamma correction:
+  \(V_{enc} = V_{lin}^{1/2.2}\).
+  Classic mistake: filtering (antialiasing, mipmaps, denoising) in
+  <em>sRGB</em> space — nonlinear: the averages are wrong;
+  the whole pipeline of this module works in linear space and converts
+  <em>only at the output</em>.
+</div>
+
+<div class="note">
+  <span class="tag">Aliasing is noise too</span>
+  Antialiasing by stochastic supersampling (per-pixel jitter,
+  code chapter) is an MC estimator of the pixel integral — same theory
+  as chapter 6; deterministic aliasing (sample at the center)
+  is a quadrature bias that turns into periodic moiré patterns.
+  Rule: as soon as an integral is difficult, <em>jitter it</em> —
+  Gaussian noise is visually preferred over structural moiré.
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Previous</span> Acceleration: intersection and BVHs</a><a class="next" href="ch9.html"><span class="dir">Next</span> Neural rendering: NeRF and 3D Gaussians</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Language Models — Pre-training — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Large Language Models</a> › Pre-training</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_53432_EP</span>Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: from word2vec to transformers</a>
+<a href="ch1.html">Tokenization</a>
+<a href="ch2.html">The architecture in depth</a>
+<a href="ch3.html" class="active">Pre-training</a>
+<a href="ch4.html">Post-training: SFT and alignment</a>
+<a href="ch5.html">RLHF, DPO, GRPO</a>
+<a href="ch6.html">Running an LLM: inference</a>
+<a href="ch7.html">RAG in depth</a>
+<a href="ch8.html">Agents, multimodality and perspectives</a>
+<a href="ch9.html">Evaluation and safety of LLMs</a>
+<a href="ch10.html">Research of the instructor</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Pre-training</h2>
+
+<div class="thm">
+  <span class="tag">Pre-training objectives</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Causal modeling (CLM)</strong> — GPT:
+    $$\mathcal{L} = -\sum_t \log p_\theta(x_t \mid x_{&lt;t})$$
+    — predict the next token; generative by construction;</li>
+    <li><strong>Masked modeling / denoising (MLM)</strong> — BERT (NLP ch. 7):
+    mask ~15% and predict (bidirectional); excellent for encoding
+    (classification, retrieval), does not generate;</li>
+    <li><strong>Span corruption / text-to-text</strong> — T5: mask spans
+    and regenerate them; everything is formulated as sequence→sequence.</li>
+  </ul>
+</div>
+
+<h3>3.1. The data pipeline: quality, filtering, deduplication</h3>
+
+<ul>
+  <li><strong>Curation</strong>: web → rule-based filtering (length,
+  code/punctuation ratio, languages), then <em>model-based</em> filtering
+  (quality classifiers trained on reference pages — e.g. distilled
+  judges); controlled mixture (web, code, books, articles, mathematics,
+  synthetic data generated then filtered);</li>
+  <li><strong>MinHash-LSH deduplication</strong> (proved in NLP ch. 8.3):
+  k-gram shingles → MinHash signatures (a min-hash collision has
+  probability equal to the Jaccard similarity) → LSH bands/ranks with
+  \(\mathbb{P}_{\text{detect}}(J)=1-(1-J^r)^b\) → remove near-duplicates
+  down to a threshold. At scale: tens of TB of text, approximately
+  linear clustering; measured effect: less memorization, better
+  benchmark (<em>deduplicating is regularizing</em> — LLMs learn
+  duplicates "twice");</li>
+  <li><strong>Mixtures and curriculum</strong>: per-domain proportions
+  (annealing: raise quality/lower web at the end of training);
+  <em>easy→hard</em> ordering (by perplexity) improves compute
+  efficiency — demonstrated at scale by the instructor (ch. 10,
+  "Beyond Random Sampling");</li>
+  <li><strong>Multilingual</strong>: balancing per language (otherwise the
+  tokenizer and the model drift toward English — cf. ch. 1 and 10).</li>
+</ul>
+
+<h3>3.2. Scaling laws: decomposition and the Chinchilla optimum</h3>
+
+<div class="thm">
+  <span class="tag">Combined law (Hoffmann et al. 2022, "Chinchilla")</span>
+  The loss of a model with \(N\) parameters trained on \(D\) tokens follows,
+  over decades of scale:
+  $$L(N,D) = E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}},$$
+  \(E\) = irreducible entropy of natural text; the other two terms =
+  under-capacity and exhausted data (fitted on ~400 training runs;
+  Kaplan et al. 2020 for the \(L(N)\)-only version). Reading: one must
+  grow <em>N and D together</em>.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.1 — The compute optimum \(D^\star \approx 20\,N\), derived</span>
+  At fixed budget \(C\), with \(\mathrm{FLOPs}(C) \approx 6ND\) (2 per parameter ×
+  forward + backward, × D tokens):
+  $$(N^\star, D^\star) = \arg\min_{N,D}\; L(N,D)\quad \text{s.t.}\quad 6ND = C.$$
+  <div class="proof">
+  Lagrangian \(\mathcal{J}=E+AN^{-\alpha}+BD^{-\beta}-\lambda(6ND-C)\):
+  $$\frac{\partial\mathcal{J}}{\partial N}= -\alpha A N^{-\alpha-1}-6\lambda D=0,
+  \qquad \frac{\partial\mathcal{J}}{\partial D}= -\beta B D^{-\beta-1}-6\lambda N=0.$$
+  Dividing side by side, \(\lambda\) cancels:
+  $$\frac{\alpha A\,N^{-\alpha-1}}{\beta B\,D^{-\beta-1}} = \frac{D}{N}
+  \;\Longrightarrow\; \frac{\alpha A}{\beta B}\,D^{\beta} = N^{\alpha}
+  \;\Longrightarrow\; \frac{N^{\alpha}}{D^{\beta}} = \frac{\alpha A}{\beta B}.$$
+  With Chinchilla's fitted constants (\(\alpha\approx0.34\),
+  \(\beta\approx0.28\), \(A\approx406\), \(B\approx411\)): the right-hand
+  side equals \(\approx 1.2\), and the condition together with
+  \(6ND=C\) gives
+  \(N^\star\propto C^{0.46}\), \(D^\star\propto C^{0.54}\) — <em>both grow
+  like \(\sqrt{C}\)</em>, and numerically \(D^\star/N^\star\approx 20\) tokens per
+  parameter. GPT-3 (300B tokens for 175B params, ratio 1.7) was therefore
+  "undertrained" at its budget. <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Compute and real costs (Llama 3, 2024)</span>
+  Orders of magnitude from the Llama 3 technical report (H100 training):
+  8B / 15T tokens ≈ 1.5M GPU-hours; 70B ≈ 7M;
+  405B / 15.6T tokens ≈ 30.8M GPU-hours (≈ 3.5 years of a single
+  H100 × 10⁴). At
+  ~2-3 $/GPU-hour, the 405B costs ~80-90M$ of compute — why one
+  "continues" from checkpoints rather than retraining (ch. 6:
+  distillation, LoRA); and why the post-Chinchilla ratio went up:
+  since inference costs daily, one deliberately <em>overtrains</em> small
+  models (Llama-3-8B: 15T tokens ≈ 1900 tokens per parameter, ~100×
+  Chinchilla)
+  — the optimum depends on what is being optimized: the <em>training
+  cost</em>
+  (Chinchilla) or the <em>total cost</em> including inference.
+</div>
+
+<div class="ex">
+  <span class="tag">Lab: training a mini-GPT</span>
+  On a Shakespeare-type corpus (~1 MB), train a ~10M-parameter transformer
+  (nanoGPT):
+  30 minutes of GPU suffice to generate credible text. Observe: the loss
+  curve,
+  the effect of context, the sampling temperature (ch. 6). Extend: do
+  exercise 4 (check the law \(L(N,D)\) by regression on the published
+  points).
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> The architecture in depth</a><a class="next" href="ch4.html"><span class="dir">Next</span> Post-training: SFT and alignment</a></nav>
+</main>
+</div>
+
+</body>
+</html>

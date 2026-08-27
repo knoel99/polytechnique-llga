@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — A complete path tracer in Python — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Synthesis: Theory and Practice</a> › A complete path tracer in Python</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: probability, integrals, linear ODEs</a>
+<a href="ch1.html">Radiometry: radiance</a>
+<a href="ch2.html">The rendering equation</a>
+<a href="ch3.html">BRDFs and material models</a>
+<a href="ch4.html">Cameras: the pinhole model</a>
+<a href="ch5.html">Rasterization versus ray tracing</a>
+<a href="ch6.html">Monte Carlo path tracing</a>
+<a href="ch7.html">Acceleration: intersection and BVHs</a>
+<a href="ch8.html">Noise, denoising, tone mapping</a>
+<a href="ch9.html">Neural rendering: NeRF and 3D Gaussians</a>
+<a href="ch10.html">Real time: GPU, hybrid, upscaling</a>
+<a href="ch11.html">Research of the instructor</a>
+<a href="code.html" class="active">A complete path tracer in Python</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="code">
+<h2>A complete path tracer in Python</h2>
+
+<p>The program below (~70 lines, NumPy only) implements
+chapters 4 (camera), 6 (cosine sampling, depth roulette),
+1–3 (radiance, Lambert, shadows) and 5/9 (bounces: the series of
+Theorem 2.2). Reduce <code>W, H, SPP</code> to test; at full
+resolution, expect ~1 minute (interpreter): each pixel is an
+independent MC estimator — parallelization is trivial.</p>
+
+<pre class="code"><code>import numpy as np
+
+W, H, SPP = 240, 180, 8
+def norm(v): return v / np.linalg.norm(v)
+
+# scene: spheres (center, radius, albedo, albedo rho)
+S = [(( 0.0, -100.0, -1.0), 100.0, (0.85, 0.80, 0.75), 0.6),   # ground
+     (( 0.0,    1.0, -5.0),   1.0, (0.75, 0.25, 0.20), 0.7),
+     ((-2.3,    0.7, -4.2),   0.7, (0.25, 0.70, 0.30), 0.7),
+     (( 2.3,    0.7, -4.2),   0.7, (0.25, 0.35, 0.90), 0.7)]
+Lp  = np.array([6.0, 9.0, 1.0])      # point light
+I   = np.array([180.0, 170.0, 150.0])
+SKY = np.array([0.45, 0.60, 0.85])   # sky radiance
+
+def intersect(o, d):
+    tbest, ibest = 1e9, -1           # first intersection (naive ch. 7)
+    for i, (c, r, _, _) in enumerate(S):
+        oc = o - c; b = oc @ d; disc = b*b - (oc @ oc - r*r)
+        if disc > 0:
+            t = -b - np.sqrt(disc)
+            if 1e-3 &lt; t &lt; tbest: tbest, ibest = t, i
+    return tbest, ibest
+
+def trace(o, d):
+    col, att = np.zeros(3), np.ones(3)          # L = sum of T^k Le (th. 2.2)
+    for depth in range(4):                      # ... + implicit roulette
+        t, i = intersect(o, d)
+        if i &lt; 0:
+            return col + att * SKY * max(0.1, d[1])
+        c, r, albedo, rho = S[i]
+        p = o + t*d; n = norm(p - c)
+        # next event estimation: point light + shadow ray (ch. 6)
+        Lv = Lp - p; dist = np.linalg.norm(Lv); L = Lv / dist
+        if intersect(p + 1e-3*n, L)[0] > dist:
+            col += att * rho * albedo * I / dist**2 * max(0.0, n @ L)
+        # diffuse bounce: cosine sampling (p = cos/pi, th. 6.3)
+        d = norm(n + np.random.normal(size=3))
+        o, att = p + 1e-3*n, att * rho * albedo
+    return col
+
+img = np.zeros((H, W, 3))
+for y in range(H):
+    for x in range(W):
+        acc = np.zeros(3)
+        for _ in range(SPP):                    # stochastic AA (ch. 8)
+            u = (x + np.random.rand()) / W  - 0.5
+            v = 0.5 - (y + np.random.rand()) / H
+            acc += trace(np.array([0.0, 1.2, 0.0]), norm([u, v, -1.0]))
+        img[y, x] = acc / SPP
+
+img = np.clip(img, 0, None) ** (1.0 / 2.2)      # gamma tone map (ch. 8)
+img = img / img.max()                           # exposure normalization
+with open("render.ppm", "wb") as f:
+    f.write(f"P6\n{W} {H}\n255\n".encode())
+    f.write((img * 255).astype(np.uint8).tobytes())
+</code></pre>
+
+<div class="note">
+  <span class="tag">Code reading exercises</span>
+  (1) The line <code>d = norm(n + gaussian)</code> is the cosine
+  sampling of Theorem 6.3 — why does this simple re-centering realize the
+  density \(\cos\theta/\pi\) (hint: distribution of the projection
+  of an isotropic Gaussian onto the hemisphere)? (2) The attenuation
+  <code>att</code> is the product of transport factors divided by
+  probabilities — identify each term of Definition 6.1.
+  (3) Replace the point light with an emissive sphere and
+  sample <em>its surface</em>: the shadow noise collapses
+  (NEE on an extended light, Definition 6.4).
+</div>
+</section>
+<nav class="pager"><a href="ch11.html"><span class="dir">← Previous</span> Research of the instructor</a><a class="next" href="ex.html"><span class="dir">Next</span> Exercises</a></nav>
+</main>
+</div>
+
+</body>
+</html>

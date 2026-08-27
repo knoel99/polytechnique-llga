@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — BRDFs and material models — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Image Synthesis: Theory and Practice</a> › BRDFs and material models</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52084_EP</span>Image Synthesis: Theory and Practice</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: probability, integrals, linear ODEs</a>
+<a href="ch1.html">Radiometry: radiance</a>
+<a href="ch2.html">The rendering equation</a>
+<a href="ch3.html" class="active">BRDFs and material models</a>
+<a href="ch4.html">Cameras: the pinhole model</a>
+<a href="ch5.html">Rasterization versus ray tracing</a>
+<a href="ch6.html">Monte Carlo path tracing</a>
+<a href="ch7.html">Acceleration: intersection and BVHs</a>
+<a href="ch8.html">Noise, denoising, tone mapping</a>
+<a href="ch9.html">Neural rendering: NeRF and 3D Gaussians</a>
+<a href="ch10.html">Real time: GPU, hybrid, upscaling</a>
+<a href="ch11.html">Research of the instructor</a>
+<a href="code.html">A complete path tracer in Python</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. BRDFs and material models</h2>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — BRDF</span>
+  The <strong>bidirectional reflectance distribution function</strong>
+  \(f_r(x,\ \omega_i \to \omega_o)\) relates incident and outgoing radiance:
+  $$L_o(x, \omega_o) = \int_{\Omega^+} L_i(\omega_i)\, f_r(\omega_i \to
+  \omega_o)\, \cos\theta_i\, d\omega_i \quad (\text{units } \mathrm{sr}^{-1}).$$
+  Two physical properties: (i) Helmholtz <strong>reciprocity</strong>:
+  \(f_r(\omega_i \to \omega_o) = f_r(\omega_o \to
+  \omega_i)\); (ii) <strong>energy conservation</strong>:
+  \( \int f_r(\omega_i \to \omega_o) \cos\theta_o\, d\omega_o \leq 1\) for
+  every \(\omega_i\) (the albedo of chapter 2), and \(f_r \geq 0\).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.2 — The Lambertian model is \(f_r = \rho/\pi\)</span>
+  A <em>perfectly diffuse</em> surface (identical outgoing radiance in
+  all directions) with albedo \(\rho \in [0, 1]\) has the constant BRDF
+  $$f_r = \frac{\rho}{\pi}.$$
+  <div class="proof">
+    By assumption \(L_o\) is constant; the exitance equals
+    \(M = \int_{\Omega^+} L_o \cos\theta_o\, d\omega_o = L_o \int_0^{2\pi}
+    \int_0^{\pi/2} \cos\theta \sin\theta\, d\theta\, d\varphi = L_o \pi\).
+    The received irradiance is \(E = \int L_i \cos\theta_i d\omega_i\), and
+    \(L_o = f_r E\). The definition of albedo (\(M = \rho E\)) gives
+    \(\pi f_r E = \rho E\), hence \(f_r = \rho/\pi\). The factor \(\pi\)
+    disappears: integrating a constant against \(\cos\theta\) over
+    the hemisphere produces \(\pi\) — it will return in the cosine
+    sampling of chapter 6. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.3 — Phong, Blinn-Phong, microfacets</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Phong</strong> (1975): \(f_r = \tfrac{\rho_d}{\pi} +
+    k_s\, \dfrac{n+2}{2\pi}\, \cos^n\alpha\) with \(\alpha\) the angle to the
+    mirror direction — the empirical specular; <em>Blinn-Phong</em>
+    replaces \(\alpha\) by the angle to the half vector
+    \(\mathbf{h} = \mathrm{norm}(\omega_i + \omega_o)\);</li>
+    <li><strong>Microfacets</strong> (Cook–Torrance, 1982): the surface
+    is a field of micro-mirrors;
+    $$f_r = \frac{D(\mathbf{h})\, G(\omega_i, \omega_o)\, F(\omega_i)}
+    {4\, \cos\theta_i\, \cos\theta_o},$$
+    with \(D\) the distribution of normals (GGX/Trowbridge-Reitz:
+    heavy tails = realistic "blurry" reflections), \(G\) a
+    masking-shadowing factor (Smith) and \(F\) the Fresnel coefficient.
+    This is the family of standard PBR materials (film and games);
+    <em>layered</em> models (Disney/Burley 2012) add a
+    "sheen" component and a retroreflection lobe to it.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 3.4 — Schlick's Fresnel, in numbers</span>
+  Schlick's approximation: \(F(\theta) = F_0 + (1 - F_0)(1 -
+  \cos\theta)^5\), with \(F_0\) the reflectance at normal incidence. Typical
+  dielectric (\(F_0 = 0.04\)): \(F(0°) = 0.04\), \(F(45°) \approx
+  0.05\), \(F(60°) = 0.04 + 0.96 \times 0.5^5 \approx 0.07\),
+  \(F(85°) = 0.04 + 0.96 \times (1 - 0.087)^5 \approx 0.65\). Physical
+  reading: all surfaces become mirrors at grazing incidence — hence the
+  shiny edges of water or varnish. For gold
+  (\(F_0 \approx (1.00,\ 0.71,\ 0.29)\)), even at normal incidence the
+  reflected light is already tinted: the metal "colors"
+  its reflection, a dielectric does not.
+</div>
+
+<table class="tbl">
+  <tr><th>Model</th><th>Parameters</th><th>Reciprocity</th><th>Energy</th><th>Use</th></tr>
+  <tr><td>Lambert</td><td>\(\rho\)</td><td>yes</td><td>exact (\(\rho \leq 1\))</td><td>matte, spectral</td></tr>
+  <tr><td>Phong / Blinn-Phong</td><td>\(\rho_d, k_s, n\)</td><td>Phong: no*</td><td>violated if miscalibrated</td><td>historical, mobile</td></tr>
+  <tr><td>Cook–Torrance (GGX)</td><td>\(F_0\), roughness, metal.</td><td>yes</td><td>built for it</td><td>PBR, film and games</td></tr>
+  <tr><td>Measured (MERL 1000)</td><td>4D table</td><td>approx.</td><td>data</td><td>validation, standards</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">*A subtlety that became a quality criterion</span>
+  The "classical" Phong specular lobe (around the mirror
+  direction of \(\omega_o\)) is not symmetric in \((\omega_i,
+  \omega_o)\); the variant around the half vector \(\mathbf{h}\)
+  is. Modern engines require reciprocity and conservation:
+  they guarantee that swapping the light/camera positions does not change
+  the image — indispensable for path tracing (paths are traced
+  <em>backwards</em>, from the eye toward the light!). A
+  non-reciprocal BRDF makes inverse rendering physically inconsistent.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> The rendering equation</a><a class="next" href="ch4.html"><span class="dir">Next</span> Cameras: the pinhole model</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Graph Neural Networks — Positional and structural encodings — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Advanced Graph Neural Networks</a> › Positional and structural encodings</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · Advanced Graph Neural</span>Advanced Graph Neural Networks</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: the message passing foundation</a>
+<a href="ch1.html">Expressive power: the Weisfeiler-Lehman test</a>
+<a href="ch2.html">Over-squashing and deep GNNs</a>
+<a href="ch3.html" class="active">Positional and structural encodings</a>
+<a href="ch4.html">Graph transformers</a>
+<a href="ch5.html">Dynamic and temporal graphs</a>
+<a href="ch6.html">Scale: sampling, systems</a>
+<a href="ch7.html">Robustness and privacy on graphs</a>
+<a href="ch8.html">Research of the teaching team</a>
+<a href="ch9.html">LLGA bridges: 3D, algorithmic reasoning, GNN × LLM</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Positional and structural encodings</h2>
+
+<div class="def">
+  <span class="tag">Problem: GNNs "do not know where they are"</span>
+  Message passing is equivariant (M1, ch. 2): two nodes with isomorphic
+  neighborhoods have the same embedding — correct… but insufficient: the
+  <em>global position</em>
+  (distance to the center, membership in a cycle, bridge role) is informative.
+  Transformers had the same problem (token order) and solved it with positional
+  encodings — we re-import the idea (and its pathologies).
+</div>
+
+<table class="tbl">
+<thead><tr><th>Encoding</th><th>Principle</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><strong>LapEig</strong></td><td>eigenvectors of \(L\)</td><td>graph Fourier (M1, ch. 4); sign/base ambiguities</td></tr>
+<tr><td><strong>RWPE / RWSE</strong></td><td>return probabilities of the walk</td><td>simple, robust, computed by hand below</td></tr>
+<tr><td><strong>SE(3)-invariant</strong></td><td>distances, angles, areas (3D molecules)</td><td>ch. 9; Geometric DL module</td></tr>
+<tr><td>Learned / <em>anchor</em></td><td>distances to anchor nodes</td><td>inductive — recommended in production</td></tr>
+</tbody>
+</table>
+
+<div class="thm">
+  <span class="tag">3.1 — LapEig: the ambiguities, and SignNet to lift them</span>
+  Taking \(p_v = [u_2(v), \dots, u_k(v)]\) (coordinates of \(v\) on the
+  eigenvectors)
+  suffers from three pathologies: (i) <em>sign</em>: \(-u_i\) is also an
+  eigenvector — two runs give opposite encodings; (ii) <em>basis</em>:
+  if \(\lambda_i\) is multiple, any rotation of the basis is admissible;
+  (iii) <em>instability</em>: a small perturbation of the graph crosses the
+  eigenvalues and makes the basis jump. <strong>SignNet</strong> (Lim et al.,
+  2022)
+  builds functions invariant to sign and basis:
+  $$\rho(V) = h\Big( \sum_{i=1}^{k} \phi(v_i) + \phi(-v_i) \Big),$$
+  with \(\phi, h\) MLPs: enforcing the parity \(\phi(v) + \phi(-v)\) makes
+  \(\rho\) even
+  (sign invariance), and the sum over the basis gives invariance under
+  rotation; the completeness theorem (in the spirit of results on orbit
+  invariants):
+  SignNet <em>universally</em> represents the continuous functions invariant in
+  the eigenvectors — the exact analogue of Deep Sets' "sort before
+  sum" (ch. 1).
+  In practice: LapEig + SignNet is the default PE of spectral graph
+  transformers.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 3.2 — RWPE computed by hand (and why it matters)</span>
+  The <em>random-walk positional encoding</em> (RWSE, Dwivedi et al., 2020) of a
+  node \(v\)
+  is the vector of return probabilities
+  \(\big[ (P)_{vv}, (P^2)_{vv}, \dots, (P^K)_{vv} \big]\), \(P = D^{-1} A\).
+  Computation:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>node of a triangle: \((P^2)_{vv} = \frac{1}{2}\cdot\frac{1}{2} +
+      \frac{1}{2}\cdot\frac{1}{2} = \frac12\) (back-and-forths);
+      \((P^3)_{vv} = 2 \times (\frac12)^3 = \frac14\) (going around the
+      triangle,
+      in both directions);</li>
+    <li>node of a hexagon C6: \((P^2)_{vv} = \frac12\) — <em>identical</em>
+      (same back-and-forths); but \((P^3)_{vv} = 0\): a return of odd length
+      requires an odd cycle, and C6 has none; the first "full tour"
+      appears only at \(k = 6\), with \((P^6)_{vv} = 2 \times (1/2)^6 =
+      \frac{1}{32}\).</li>
+  </ul>
+  Now C3 and C6 are exactly the pair that 1-WL cannot distinguish (Example
+  1.4): the RWSE — a single scalar, \(p_3\), suffices here (\(\frac14\) versus
+  \(0\)) — separates them <em>immediately</em>. Structural PEs
+  "buy"
+  expressive power at cost \(\mathcal{O}(|E| K)\); this is why the winning
+  models of positional benchmarks (ch. 4) systematically carry a PE.
+</div>
+
+<div class="thm">
+  <span class="tag">3.3 — SE(3) invariants for molecules, and the theory of positions</span>
+  In 3D (ch. 9), the encoding must respect rotations/translations/reflections:
+  invariants
+  = interatomic distances \(\|x_i - x_j\|\), angles, dihedrals; it is the
+  continuous version of the principle "use only what is invariant". The
+  theoretical question: <em>how many</em> coordinates to inject without
+  breaking isomorphism invariance? A perfect positional encoding should
+  distinguish the nodes of a <em>regular</em> graph (where 1-WL is constant)
+  while remaining invariant under automorphism — <em>canonical</em> encodings
+  (canonical numbering) make the learning variance explode; the practical
+  compromise: <em>relative</em> encodings (RWSE, anchor distances, the SPD bias
+  of ch. 4) — never absolute coordinates.
+</div>
+
+<div class="note">
+  <span class="tag">The inductive vs expressive debate</span> Positional
+  encodings partially "break" equivariance — a delicate choice between
+  positional information and invariance guarantees. In industry (evolving
+  graphs), one favors <em>inductive</em> PEs (generalizable to new
+  nodes/graphs — RWSE, anchoring); in chemistry, exact invariants dominate.
+  Cross-reference: Graphormer's SPD bias (ch. 4) is a <em>relative</em> PE —
+  the only category that survives both constraints.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Over-squashing and deep GNNs</a><a class="next" href="ch4.html"><span class="dir">Next</span> Graph transformers</a></nav>
+</main>
+</div>
+
+</body>
+</html>

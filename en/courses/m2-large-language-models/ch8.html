@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Language Models — Agents, multimodality and perspectives — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Large Language Models</a> › Agents, multimodality and perspectives</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_53432_EP</span>Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: from word2vec to transformers</a>
+<a href="ch1.html">Tokenization</a>
+<a href="ch2.html">The architecture in depth</a>
+<a href="ch3.html">Pre-training</a>
+<a href="ch4.html">Post-training: SFT and alignment</a>
+<a href="ch5.html">RLHF, DPO, GRPO</a>
+<a href="ch6.html">Running an LLM: inference</a>
+<a href="ch7.html">RAG in depth</a>
+<a href="ch8.html" class="active">Agents, multimodality and perspectives</a>
+<a href="ch9.html">Evaluation and safety of LLMs</a>
+<a href="ch10.html">Research of the instructor</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Agents, multimodality and perspectives</h2>
+
+<h3>8.1. The ReAct loop, with a real trace</h3>
+
+<div class="def">
+  <span class="tag">Definition 8.1 — LLM agent (ReAct, Yao et al., 2022)</span>
+  Perception-action loop (RL module ch. 7):
+  <strong>Thought</strong> (reason) → <strong>Action</strong> (call a tool)
+  → <strong>Observation</strong> (read the result) → iterate, until
+  <em>Final Answer</em>. The LLM decides <em>when</em> and <em>how</em> to act;
+  the tools bound its capabilities (exact computation, search, code).
+</div>
+
+<pre class="code"><code>Question : quel module du M1 couvre les HMM ?
+
+Thought: je dois chercher dans le programme du master.
+Action: search["programme M1 NLP HMM"]
+Observation: ... CSC_52082_EP "Introduction to Text Mining and NLP",
+             ch. 6 "Sequences: NER, HMM, CRF" ...
+Thought: la réponse est dans la liste des chapitres.
+Action: finish["Le module NLP (CSC_52082_EP), chapitre 6"]
+
+# modern function calling: JSON typed by the chat engine
+tools = [{"type": "function", "name": "search",
+          "parameters": {"query": "str", "k": "int"}}]
+# the model emits {"name": "search", "arguments": {"query": "...", "k": 5}}
+# -> the runtime executes, reinjects the result, and the loop continues</code></pre>
+
+<div class="note">
+  <span class="tag">Planning and multi-agents</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Tree-of-Thoughts</strong> (Yao et al., 2023): search a
+    <em>tree</em> of reasoning steps, evaluate the nodes with the LLM,
+    backtrack — beyond the linear chain (CoT);</li>
+    <li><strong>Multi-agents</strong>: orchestrate a <strong>DAG</strong>
+    of specialized agents (planner → retriever/coder → verifier →
+    synthesis), LangGraph-type frameworks; each agent = an LLM with
+    its own prompt/tools/memory; patterns: supervisor, debate,
+    generator-critic. RL link ch. 7: policy decomposition;
+    Graph ML link: <em>orchestration is an executed graph</em>;</li>
+    <li><strong>Memory</strong>: scratchpad (the current context),
+    <em>vector</em> memory (RAG over past exchanges), <em>episodic</em>
+    memory (structured session summaries), external working memory
+    (files) — it is the ch. 7 RAG reused on oneself.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Evaluating (and billing) an agent</span>
+  Benchmarks: GAIA (generalist assistant), SWE-bench (real GitHub
+  tickets), WebArena/tau-bench (tools and dialogues). Metrics:
+  end-to-end success rate, <em>token cost per task</em> (a multi-turn
+  agent easily consumes 10⁵-10⁶ tokens — hence the importance of
+  ch. 6: a small model for routine steps, a large one for
+  decisions), safety (rate of injections suffered — ch. 9). Agent
+  evaluation is an open research topic — and a major career path of the
+  master.
+</div>
+
+<h3>8.2. Multimodality: how an image enters a context</h3>
+
+<ul>
+  <li><strong>Vision</strong>: a ViT encoder cuts the image into 16×16
+  patches → <em>one token per patch</em> (Deep Learning module ch. 5 for
+  ViT); a <strong>projector</strong> (MLP or Q-Former) aligns these tokens
+  onto the LLM's embedding space → the image becomes "text"
+  inside the context (LLaVA scheme); the encoder is often pre-trained
+  contrastively image-text — the common latent space recalls CLIP
+  (Multimodal GenAI module ch. 5);</li>
+  <li><strong>Audio</strong>: mel spectrograms → encoder
+  (Whisper-style) → tokens; the "transcription + style" output
+  feeds the LLM (voice assistant = encoder → LLM → synthesis
+  pipeline);</li>
+  <li><strong>Video</strong>: sampled images (1-4/s) + temporal pooling —
+  very high token cost: the sampling step choice <em>is</em> a
+  compression choice;</li>
+  <li><strong>Documents</strong>: pages = images + interleaved OCR text
+  (the number 1 enterprise use case — contracts, reports).</li>
+</ul>
+
+<h3>8.3. Perspectives</h3>
+
+<ul>
+  <li><strong>Alternative architectures</strong>: attention+SSM hybrids
+  (ch. 2), xLSTM, latent transformers (deraising diffusion LMs —
+  cf. ch. 10); the transformer does not have a monopoly;</li>
+  <li><strong>Small Language Models &amp; distillation</strong>: the
+  quality/cost/latency trade-off governs enterprise deployment
+  (ch. 6);</li>
+  <li><strong>Open research</strong>: reasoning (ch. 5), long-term
+  memory, LLMs <em>on graphs</em> (linearization vs structured embeddings —
+  ch. 10.3 and the Graph ML/Advanced GNN modules), evaluation
+  (ch. 9).</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Final lab</span> Build a documentation-assistant:
+  technical corpus → RAG pipeline (chunks, embeddings, reranking);
+  measure faithfulness (verifiable citations) for vector RAG versus a
+  <em>GraphRAG</em> version; cost report (tokens, latency). Extension:
+  an agentic version (ch. 8) that chooses between vector retrieval and
+  a graph query depending on the question type.
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Previous</span> RAG in depth</a><a class="next" href="ch9.html"><span class="dir">Next</span> Evaluation and safety of LLMs</a></nav>
+</main>
+</div>
+
+</body>
+</html>

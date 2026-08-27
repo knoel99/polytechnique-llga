@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Language Models — RLHF, DPO, GRPO — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Large Language Models</a> › RLHF, DPO, GRPO</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_53432_EP</span>Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Background: from word2vec to transformers</a>
+<a href="ch1.html">Tokenization</a>
+<a href="ch2.html">The architecture in depth</a>
+<a href="ch3.html">Pre-training</a>
+<a href="ch4.html">Post-training: SFT and alignment</a>
+<a href="ch5.html" class="active">RLHF, DPO, GRPO</a>
+<a href="ch6.html">Running an LLM: inference</a>
+<a href="ch7.html">RAG in depth</a>
+<a href="ch8.html">Agents, multimodality and perspectives</a>
+<a href="ch9.html">Evaluation and safety of LLMs</a>
+<a href="ch10.html">Research of the instructor</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. RLHF, DPO, GRPO</h2>
+
+<div class="thm">
+  <span class="tag">RLHF — the classic pipeline (Ouyang et al., 2022)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Reward model</strong>: train \(r_\phi(x, y)\) on
+    <em>human preferences</em> (response pairs); Bradley-Terry loss:
+    $$\mathcal{L} = -\log \sigma\big(r_\phi(x, y^+) - r_\phi(x, y^-)\big).$$</li>
+    <li><strong>Policy optimization</strong> with PPO (RL module, ch. 4):
+    $$\max_\theta\ \mathbb{E}\big[r_\phi(x, y)\big] - \beta\, \mathrm{KL}\big(\pi_\theta \| \pi_{\mathrm{SFT}}\big)$$
+    — the KL term prevents <em>reward hacking</em> and out-of-distribution drift.</li>
+  </ol>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.1 — Bradley-Terry, derived</span>
+  If humans compare pairs \((y^+,y^-)\) with a probability of
+  preferring \(y^+\) increasing in the "strength" difference, the
+  axiomatics (transitive binary choice, invariance) imposes a logistic
+  model on the <em>difference</em> of latent scores:
+  $$\mathbb{P}(y^+ \succ y^- \mid x) = \sigma\big(r(x,y^+)-r(x,y^-)\big),$$
+  and the log-likelihood of the observed preferences gives the loss above —
+  only the <em>difference</em> of rewards is identifiable (adding a function
+  of \(x\) changes nothing); hence the need for the KL penalty to pin down
+  the zero.
+  <div class="proof">
+  Derivative in \(r^+\): \(-\big(1-\sigma(r^+-r^-)\big)\) — the penalty is
+  maximal when the pair is misclassified, zero when the margin is amply
+  positive; it is a logistic regression on reward differences.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">PPO for LLMs — the concrete protocol</span>
+  Four models in memory: policy \(\pi_\theta\), reference
+  \(\pi_{\mathrm{SFT}}\) (frozen, for the KL), reward \(r_\phi\) (frozen),
+  critic (value head). Sensitive hyperparameters: \(\beta\in[0.01,\,0.2]\);
+  <em>low</em> learning rate (≈ 10× smaller than in SFT); PPO clip
+  \(\epsilon\sim0.2\); prompt batch > completion batch. Classic
+  symptoms: KL explodes (β too small); degenerate responses (hacked
+  reward); drifting length (RM verbosity bias). This is chapter 4
+  of the RL module applied word for word — the prerequisite reading.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.2 — DPO (Rafailov et al., 2023): complete derivation</span>
+  The loss
+  $$\mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Big(\beta \log\tfrac{\pi_\theta(y^+ \mid x)}{\pi_{\mathrm{SFT}}(y^+\mid x)}
+  - \beta \log\tfrac{\pi_\theta(y^- \mid x)}{\pi_{\mathrm{SFT}}(y^-\mid x)}\Big)$$
+  optimizes <em>the policy directly</em> on preferences — without a reward
+  model or rollouts.
+  <div class="proof">
+  <strong>Step 1 (closed-form solution of the KL-penalized problem).</strong> For fixed
+  \(x\), maximizing \(\mathbb{E}_{y\sim\pi}[r(y)] - \beta\,\mathrm{KL}(\pi\|\pi_{\mathrm{SFT}})\)
+  rewrites as
+  $$\max_\pi \int \pi(y)\Big[r(y) - \beta\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)}\Big]dy
+  = -\beta\int \pi\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)e^{r(y)/\beta}}\,dy,$$
+  which is \(-\beta\,\mathrm{KL}\big(\pi\,\big\|\,\tfrac{1}{Z}\pi_{\mathrm{SFT}}e^{r/\beta}\big)+\beta\log Z\);
+  the KL is minimal at zero, so
+  \(\;\pi^\star(y\mid x) = \frac{1}{Z(x)}\,\pi_{\mathrm{SFT}}(y\mid x)\,e^{r(x,y)/\beta}\).
+  <strong>Step 2 (implicit reward).</strong> Inverting:
+  \(r(x,y) = \beta\log\frac{\pi^\star(y|x)}{\pi_{\mathrm{SFT}}(y|x)} + \beta\log Z(x)\).
+  <strong>Step 3 (injection into Bradley-Terry).</strong> In
+  \(\sigma(r^+-r^-)\), the term \(Z(x)\) — the same for \(y^+\) and \(y^-\) —
+  <em>cancels</em>: only the difference of log-ratios matters; maximizing
+  the likelihood of the preferences gives \(\mathcal{L}_{\mathrm{DPO}}\) above
+  (with \(\theta\) in place of \(\pi^\star\)).
+  <strong>Gradient</strong>: \(-\beta\,\sigma(-\hat r)\,\nabla_\theta\big[\log\pi(y^+|x)-\log\pi(y^-|x)\big]\)
+  with implicit reward \(\hat r = \beta\log\frac{\pi_\theta(y^+)}{\pi_{\mathrm{SFT}}(y^+)}
+  -\beta\log\frac{\pi_\theta(y^-)}{\pi_{\mathrm{SFT}}(y^-)}\): the log-ratio margin of the
+  preferred responses is increased, all the more strongly as the pair is misclassified.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.3 — GRPO (Shao et al., DeepSeekMath 2024): derivation</span>
+  Generate a <em>group</em> of \(G\) responses \(\{y_i\}\) per prompt;
+  rewards \(\{r_i\}\); advantages <em>within the group</em>:
+  $$A_i = \frac{r_i - \mathrm{mean}(r_{1..G})}{\mathrm{std}(r_{1..G})},\qquad
+  \nabla_\theta J = \mathbb{E}\Big[\frac{1}{G}\sum_i \frac{1}{|y_i|}\sum_t
+  \nabla_\theta\log\pi_\theta(y_{i,t}\mid x)\,A_i\Big] - \beta\,\nabla_\theta \widehat{\mathrm{KL}},$$
+  with \(\widehat{\mathrm{KL}}\) an unbiased, low-variance estimator
+  \(\;\mathbb{E}\big[\frac{\pi_{\mathrm{ref}}}{\pi_\theta}-\log\frac{\pi_{\mathrm{ref}}}{\pi_\theta}-1\big]\).
+  <div class="proof">
+  <strong>Variance.</strong> REINFORCE:
+  \(\nabla\mathbb{E}[r]=\mathbb{E}[r\,\nabla\log\pi]\) is unbiased for any
+  <em>baseline</em> independent of the action:
+  \(\mathbb{E}[b\,\nabla\log\pi]=b\,\nabla\!\int\pi=0\); subtracting
+  \(b=\mathrm{mean}(r)\) divides the variance (better than \(b=0\) or a learned
+  baseline); normalizing by the standard deviation makes the gradient scale
+  invariant across prompts (easy ones: small spreads → amplified; hard
+  ones: damped).
+  <strong>No more critic.</strong> Unlike PPO, the baseline comes from
+  <em>the group itself</em> — the value network (and its memory/training)
+  disappears; it is the Monte-Carlo estimation of
+  \(A(s,a)=Q(s,a)-V(s)\) by multiple sampling.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">RLVR and reasoning (2024-2026)</span>
+  When quality is <strong>verifiable</strong> (a passing unit test, an exact
+  mathematical answer), the reward no longer needs to be learned:
+  <em>RL with Verifiable Rewards</em>. GRPO is the engine of DeepSeek-R1: by
+  optimizing verifiable correctness, <em>long chains of thought</em>
+  emerge (self-verification, backtracking, "aha" moments) — the
+  "o1" style. <strong>Self-consistency</strong> at inference (Wang et al.,
+  2023): sample \(n\) reasonings, answer by <em>majority vote</em>
+  — accuracy climbing at \(\Theta(\sqrt n)\)-ish as long as errors are
+  weakly correlated. Costs: 10× more tokens; recent works regularize
+  length (ch. 10: "Shorter but not Worse"). Exploration (bandits, RL
+  module ch. 6) becomes central: the GRPO group <em>is</em> structured
+  exploration.
+</div>
+
+<div class="note">
+  <span class="tag">Overview</span>
+  SFT (imitate) → RLHF (optimize preferences) → DPO (preferences without RL) →
+  RLVR/GRPO (optimize verifiable truth). A "modern" LLM chains:
+  base → SFT → rejection sampling → DPO/GRPO; this is exactly the plan of the
+  official course ("post-training methods"). In the lab: toy DPO
+  (exercise 7) then GRPO (exercise 8).
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Post-training: SFT and alignment</a><a class="next" href="ch6.html"><span class="dir">Next</span> Running an LLM: inference</a></nav>
+</main>
+</div>
+
+</body>
+</html>
