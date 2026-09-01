@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Topics in Large Language Models — Evaluation: contamination, judge bias — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Advanced Topics in Large Language Models</a> › Evaluation: contamination, judge bias</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Advanced Topics in Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap and how to use the seminar</a>
+<a href="ch1.html">Reasoning: chain-of-thought, RLVR</a>
+<a href="ch2.html">Long context: RoPE, ring attention, RAG or LC?</a>
+<a href="ch3.html">Memory: episodic, vector stores, GraphRAG</a>
+<a href="ch4.html">Mixture-of-Experts</a>
+<a href="ch5.html">Alternative architectures: SSM, Mamba, RWKV</a>
+<a href="ch6.html">Efficiency: speculative decoding, quantization</a>
+<a href="ch7.html">LLMs × graphs: the LLGA crossroads</a>
+<a href="ch8.html">Agents: planning, tools, multi-agents</a>
+<a href="ch9.html" class="active">Evaluation: contamination, judge bias</a>
+<a href="ch10.html">Open problems</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Evaluation: contamination, judge bias</h2>
+
+<div class="ex">
+  <span class="tag">Today's readings</span>
+  C. Xu, S. Guan, D. Greene, M.-T. Kechadi, <em>Benchmark Data Contamination
+  of Large Language Models: A Survey</em>, 2024 (arXiv:2406.04244);
+  L. Zheng et al., <em>Judging LLM-as-a-Judge with MT-Bench and Chatbot
+  Arena</em>, NeurIPS 2023 (arXiv:2306.05685);
+  P. Wang et al., <em>Large Language Models are not Fair Evaluators</em>,
+  ACL 2024 (arXiv:2305.17926);
+  P. Liang et al., <em>Holistic Evaluation of Language Models</em> (HELM),
+  TMLR 2023 (arXiv:2211.09110).
+</div>
+
+<h3>9.1. Contamination: when the test leaks into training</h3>
+
+<div class="def">
+  <span class="tag">Definition 9.1 — Benchmark data contamination (BDC)</span>
+  The pollution of a benchmark when its data (questions <em>and/or</em>
+  answers) have been seen during pre-training — accidental (the web contains
+  the solutions), or even deliberate (training <em>on</em> the test's
+  variant). Signals: n-gram overlaps with the corpus, embedding
+  similarity, abnormally low test perplexity, the ability to complete
+  the items without their instruction, "random"
+  performance on renamed variants (changing the figures of a math problem).
+  Responses: canaries ("do not train on this string"),
+  <em>dynamic</em> benchmarks refreshed (e.g. LiveBench), private
+  sets, kept-current evaluations (challenges with a cutoff date).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 9.2 — What a contaminated score estimates (and what it does not)</span>
+  A benchmark measures performance on a task distribution
+  \(P_{\text{test}}\). If the model has seen \(n\) examples of
+  \(P_{\text{test}}\) during training, the score observes a mixture
+  \(\rho \cdot \text{memory} + (1-\rho) \cdot \text{generalization}\):
+  the estimand has shifted — the score overestimates <em>and</em> distorts
+  comparisons (the models trained more recently, on larger
+  corpora, are more contaminated: the bias advances with time). The
+  methodological remedy: report jointly (i) the raw score,
+  (ii) the score on re-generated variants, (iii) an overlap measure — and
+  treat the (i)-(ii) gap as an interval, not
+  as noise.
+</div>
+
+<h3>9.2. LLM judges: useful, biased, calibratable</h3>
+
+<p>MT-Bench (Zheng et al., 2023) validates the LLM judge: agreement with
+human preferences is high (GPT-4 as judge ≈ 80%+ of inter-human
+agreement level), which legitimizes its industrial use (ML Ops module ch. 5). But
+the biases are systematic: <strong>position</strong> (favoring the
+first answer — corrected by alternating order), <strong>verbosity</strong>
+(long answers win), <strong>self-preference</strong> (the judge
+favors the answers of its own model family). Wang et al. (ACL
+2024) show that a simple order swap flips a substantial
+share of verdicts — "not fair evaluators". HELM (Liang et
+al.) answers with the <em>holistic</em>: same models, dozens of
+scenarios, multiple metrics (accuracy, calibration, robustness,
+bias, toxicity…), published protocol — evaluation as a slow science
+versus the leaderboard as a fast sport.</p>
+
+<div class="note">
+  <span class="tag">Critical analysis — the "methods" session</span>
+  (i) <em>Goodhart</em>: every public benchmark becomes a training
+  objective — the value of a score decays with its popularity;
+  (ii) <em>Variance</em>: a leaderboard at ±0.5 points with 500
+  questions ranks nothing (cf. ML Ops module ch. 2, Hoeffding);
+  (iii) <em>Judge the judge</em>: calibrate each judge on a human
+  golden set <em>before</em> using it (measured biases, alternating
+  orders, rubrics); (iv) <em>Saturation</em>: when everyone
+  exceeds 90% accuracy, the benchmark measures noise — move to the
+  dynamic/adversarial evaluations (red teaming of the Security module ch. 10,
+  agents of ch. 8). LLGA rule: <strong>no evaluation number without
+  its protocol</strong> — neither in the papers you read, nor in your
+  own.
+</div>
+
+<pre class="code"><code># N-gram contamination detection (sketch, thresholds to calibrate)
+def ngrams(s, n=13):  return {" ".join(s.split()[i:i+n]) for i in range(len(s.split())-n+1)}
+
+def overlap(test_item, pretrain_index):     # pretrain_index: set of shingles
+    q = ngrams(test_item.question) | ngrams(test_item.answer)
+    return len(q &amp; pretrain_index) / max(len(q), 1)
+
+# measurement: overlap distribution per benchmark -- a non-negligible mass
+# above 0.8 on "public" items (GSM8K-like) = contamination signal</code></pre>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Previous</span> Agents: planning, tools, multi-agents</a><a class="next" href="ch10.html"><span class="dir">Next</span> Open problems</a></nav>
+</main>
+</div>
+
+</body>
+</html>

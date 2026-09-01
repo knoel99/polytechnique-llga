@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Advanced Topics in Large Language Models — Alternative architectures: SSM, Mamba, RWKV — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Advanced Topics in Large Language Models</a> › Alternative architectures: SSM, Mamba, RWKV</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Advanced Topics in Large Language Models</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap and how to use the seminar</a>
+<a href="ch1.html">Reasoning: chain-of-thought, RLVR</a>
+<a href="ch2.html">Long context: RoPE, ring attention, RAG or LC?</a>
+<a href="ch3.html">Memory: episodic, vector stores, GraphRAG</a>
+<a href="ch4.html">Mixture-of-Experts</a>
+<a href="ch5.html" class="active">Alternative architectures: SSM, Mamba, RWKV</a>
+<a href="ch6.html">Efficiency: speculative decoding, quantization</a>
+<a href="ch7.html">LLMs × graphs: the LLGA crossroads</a>
+<a href="ch8.html">Agents: planning, tools, multi-agents</a>
+<a href="ch9.html">Evaluation: contamination, judge bias</a>
+<a href="ch10.html">Open problems</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Alternative architectures: SSM, Mamba, RWKV</h2>
+
+<div class="ex">
+  <span class="tag">Today's readings</span>
+  A. Gu, K. Goel, C. Ré, <em>Efficiently Modeling Long Sequences with
+  Structured State Spaces</em> (S4), ICLR 2022 (arXiv:2111.00396);
+  A. Gu &amp; T. Dao, <em>Mamba: Linear-Time Sequence Modeling with Selective
+  State Spaces</em>, 2023 (arXiv:2312.00752);
+  B. Peng et al., <em>RWKV: Reinventing RNNs for the Transformer Era</em>,
+  Findings of EMNLP 2023 (arXiv:2305.13048);
+  S. De et al., <em>Griffin: RecurrentGating Linear Networks</em> (Hawk /
+  Griffin), ICML 2024 (arXiv:2402.19427);
+  AI21, <em>Jamba: A Hybrid Transformer-Mamba Language Model</em>, 2024
+  (arXiv:2403.19887).
+</div>
+
+<h3>5.1. From RNNs to state space models</h3>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — Discrete SSM</span>
+  A state space model maps the input \(u_t\) to the output \(y_t\) via
+  a linear hidden state \(x_t \in \mathbb{R}^d\):
+  $$x_{t} = \bar A\, x_{t-1} + \bar B\, u_t, \qquad
+  y_t = C\, x_t,$$
+  where \((\bar A, \bar B)\) come from the (zero-order) discretization of
+  the continuous system \(\dot x = A x + B u\) with step \(\Delta\):
+  \(\bar A = \exp(\Delta A)\), \(\bar B = (\Delta A)^{-1}\bigl(\exp(\Delta A)
+  - I\bigr)\,\Delta B\). The classic RNN reappears with a
+  <em>structured</em> state matrix (S4: diagonal + low-rank terms, inherited
+  from HiPPO to memorize the long history).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.2 — LTI ⇒ convolution (S4)</span>
+  If \((\bar A, \bar B, C)\) are <em>constant</em> (independent of time
+  and input — LTI), then the system is a convolution product:
+  $$y_t = \sum_{s=0}^{t} \overline{K}_s\, u_{t-s}, \qquad
+  \overline{K} = \bigl(C\bar B,\; C\bar A \bar B,\; C\bar A^2 \bar B,\;
+  \dots\bigr),$$
+  computable in \(\mathcal{O}(L \log L)\) via FFT (Signal
+  Processing module): parallel training over the whole sequence, like a
+  transformer.
+</div>
+
+<div class="proof">
+Let us unroll the recurrence from \(x_{-1} = 0\) (zero initial state):
+\(x_0 = \bar B u_0\); \(x_1 = \bar A \bar B u_0 + \bar B u_1\);
+by immediate induction,
+\(x_t = \sum_{s=0}^{t} \bar A^{\,t-s}\, \bar B\, u_s\). Then
+\(y_t = C x_t = \sum_{s=0}^{t} (C \bar A^{\,t-s} \bar B)\, u_s
+= \sum_{s=0}^{t} \overline K_{t-s}\, u_s\) — a discrete convolution with kernel
+\(\overline K_s = C \bar A^s \bar B\), where the structure of \(\bar A\)
+(diagonal) makes each term computable in \(\mathcal{O}(d)\). <span class="qed">∎</span>
+</div>
+
+<h3>5.2. Mamba: making the state <em>selective</em></h3>
+
+<p>The LTI SSM is a <em>fixed filter</em>: it cannot choose to
+memorize or forget depending on the content. <strong>Mamba</strong> (Gu &amp; Dao,
+2023) makes \(\Delta_t, \bar B_t, C_t\) <em>functions of the input</em>
+(small MLPs on \(u_t\)): the selection. Cascade consequence:
+the convolution (prop. 5.2) is destroyed (the kernel depends on position) →
+back to a recurrence, but <em>parallelizable</em> via the <strong>prefix
+scan</strong> (associativity of \((\bar A_t, \bar B_t)\) — Blelloch's
+algorithm; cf. Refresher CS) with fused GPU
+kernels ("hardware-aware"):
+\(\mathcal{O}(L)\) training, \(\mathcal{O}(1)\) inference per token and
+<em>constant</em> state memory — the selling point against the transformer's
+KV cache (cf. ML Ops module ch. 3). Finally, Mamba embeds the SSM
+<em>inside</em> a <em>gated</em> MLP-style block. Mamba-2 (SSD) will reformulate the
+SSM × linear attention duality — the loop comes full circle with ch. 6.</p>
+
+<h3>5.3. RWKV and the hybrids</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 5.3 — RWKV: linearizing attention into an RNN (Peng et al., 2023)</span>
+  RWKV rewrites attention as a recurrence with <em>per-channel</em>
+  decay (time-mixing):
+  $$w_t = \sigma(W_t)\odot w_{t-1} + k_t,
+  \qquad y_t = r_t \odot \frac{v_t}{w_t + \epsilon},$$
+  (schematic form): the state \(w_t\) accumulates past values channel-wise
+  with a learned exponential decay (\(r_t\) =
+  <em>receptance</em>, \(v_t\) the step's value) — a linear attention
+  <em>normalized over time</em>, trainable in parallel (like a
+  transformer), executable as an RNN (constant memory). At scale:
+  models up to 14B — the largest RNNs ever trained at its
+  publication.
+</div>
+
+<p><strong>Hybrids</strong>: pure SSMs lose on
+<strong>exact recall</strong> tasks (copying an association seen a long time ago:
+the compressed state has no room to keep everything — a recurring
+critique, cf. the associative recall studies); hence mixed architectures:
+Jamba (AI21, 2024) interleaves attention + Mamba + MoE blocks (1:7:1) and
+shows that ~one attention layer in eight suffices to restore
+recall; Griffin/De et al. (2024) alternate recurrence (RG-LRU) and
+local attention. The 2024-2026 consensus: <em>attention is
+irreplaceable for precise retrieval; the SSM excels at long context on a
+constant memory budget; the hybrid beats both</em>.</p>
+
+<div class="note">
+  <span class="tag">Critical analysis</span>
+  (i) The "Mamba matches transformers at X times less
+  memory" curves are established <em>at calibrated data and compute
+  sizes</em>; transformers have an ecosystem (serving, quantization,
+  ch. 6) that SSMs lack — the real adoption cost exceeds the paper.
+  (ii) Exact recall is a <em>limit case</em> (one key among
+  millions): needle-in-a-haystack-style benchmarks are highly
+  sensitive to it, comprehension tasks far less so. (iii) RWKV
+  illustrates the virtue of deployable simplicity (no KV cache, no
+  keys/values); Mamba that of algorithmic design (the scan). (iv)
+  A favorite exam question: "why is the transformer KV cache
+  a <em>feature</em> and not just a cost?" —
+  because it stores the history <em>exactly</em> (perfect recall), where
+  the SSM state <em>summarizes</em> it.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Mixture-of-Experts</a><a class="next" href="ch6.html"><span class="dir">Next</span> Efficiency: speculative decoding, quantization</a></nav>
+</main>
+</div>
+
+</body>
+</html>
