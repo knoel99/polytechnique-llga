@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reinforcement Learning and Autonomous Agents — Policy gradients and actor-critic — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Reinforcement Learning and Autonomous Agents</a> › Policy gradients and actor-critic</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52081_EP</span>Reinforcement Learning and Autonomous Agents</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: Markov chains, martingales, dynamic programming</a>
+<a href="ch1.html">Markov decision processes</a>
+<a href="ch2.html">Dynamic programming</a>
+<a href="ch3.html">Learning: TD, SARSA, Q-learning</a>
+<a href="ch4.html" class="active">Policy gradients and actor-critic</a>
+<a href="ch5.html">Deep RL: DQN, Rainbow, DDPG/SAC, offline RL</a>
+<a href="ch6.html">Bandits and exploration</a>
+<a href="ch7.html">Autonomous agents in the era of LLMs</a>
+<a href="ch8.html">Research of the teaching team: Jesse Read</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Policy gradients and actor-critic</h2>
+<h3>4.1. REINFORCE: the proof step by step</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 4.1 — REINFORCE (Williams, 1992), complete proof</span>
+  Let \(\pi_\theta\) be differentiable, \(\tau = (S_0, A_0, \dots, S_{T})\)
+  a trajectory of return \(G(\tau) = \sum_{t=0}^T \gamma^t R_t\), and
+  \(J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[G(\tau)]\). Then
+  $$\nabla_\theta J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\Big[\Big(\sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(A_t \mid S_t)\Big) G(\tau)\Big].$$
+  <div class="proof">
+  <strong>Step 1 (law of the trajectory).</strong> By the chain rule of
+  probabilities (each transition depends only on \((S_t, A_t)\) — Markov):
+  $$p_\theta(\tau) = \mu(S_0) \prod_{t=0}^{T-1} \pi_\theta(A_t \mid S_t)\, P(S_{t+1} \mid S_t, A_t).$$
+  <strong>Step 2 (log-derivative).</strong> We differentiate
+  \(J = \int p_\theta(\tau) G(\tau)\, d\tau\) permuting derivative and
+  integral (domination):
+  $$\nabla_\theta J = \int G(\tau)\, \nabla_\theta p_\theta(\tau)\, d\tau
+  = \int p_\theta(\tau)\, G(\tau)\, \nabla_\theta \log p_\theta(\tau)\, d\tau,$$
+  using the identity \(\nabla p = p\, \nabla \log p\) — the
+  <em>log-derivative trick</em>. This is an expectation under
+  \(\pi_\theta\): it can be estimated by Monte-Carlo with trajectories
+  <em>sampled by the current policy</em>.
+  <strong>Step 3 (the dynamics vanish).</strong>
+  $$\log p_\theta(\tau) = \log \mu(S_0) + \sum_t \log \pi_\theta(A_t \mid S_t)
+  + \sum_t \log P(S_{t+1} \mid S_t, A_t),$$
+  and the first and last terms <em>do not depend on \(\theta\)</em>: their
+  gradient is zero. Only the action scores remain:
+  $$\nabla_\theta J = \mathbb{E}\Big[G(\tau) \sum_t \nabla_\theta \log \pi_\theta(A_t \mid S_t)\Big].
+  \qquad \blacksquare$$
+  <em>Reading:</em> raise the probability of rich trajectories (large
+  \(G\)), lower the poor ones — the world model is useless, only the actions
+  are accountable.
+  </div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Unbiased baseline: demonstration</span>
+  For every function \(b : \mathcal{S} \to \mathbb{R}\) (not depending on
+  the action):
+  $$\mathbb{E}_{\tau \sim \pi_\theta}\Big[b(S_t)\, \nabla_\theta \log \pi_\theta(A_t \mid S_t)\Big] = 0
+  \qquad \text{for each } t,$$
+  so subtracting \(b\) does not change \(\nabla_\theta J\).
+  <div class="proof">
+  Condition on \(S_t = s\) (with law \(d_t(s)\) under \(\pi_\theta\)):
+  $$\mathbb{E}\big[b(S_t)\, \nabla \log \pi_\theta(A_t \mid S_t)\big]
+  = \sum_s d_t(s)\, b(s) \sum_a \pi_\theta(a \mid s)\, \nabla_\theta \log \pi_\theta(a \mid s).$$
+  Now \(\pi_\theta(a|s)\, \nabla_\theta \log \pi_\theta(a|s) =
+  \nabla_\theta \pi_\theta(a|s)\) (same identity as in step 2), so the inner
+  sum equals \(\nabla_\theta \sum_a \pi_\theta(a \mid s) = \nabla_\theta 1
+  = 0\).
+  <span class="qed">∎</span>
+  </div>
+  <em>Variance analysis.</em> The empirical gradient
+  \((G - b)\nabla\log\pi\) has variance
+  \(\mathrm{Var}[G \nabla\log\pi] + \mathrm{Var}[b\nabla\log\pi] -
+  2\,\mathrm{Cov}\): choosing \(b(s)\) close to
+  \(\mathbb{E}[G \mid S_t = s]\) makes the covariance maximal and almost
+  cancels the first order. The optimal <em>constant</em> baseline (minimizing
+  the variance of the estimator for a given state) equals
+  \(b^\star = \mathbb{E}\big[G^2 \|\nabla \log \pi\|^2\big] /
+  \mathbb{E}\big[\|\nabla \log \pi\|^2\big]\) — and the natural choice
+  \(b(s) = V^\pi(s)\) turns \(G - b\) into the <strong>advantage</strong>
+  \(A^\pi(s,a) = Q^\pi(s,a) - V^\pi(s)\): same expectation, drastically
+  reduced variance (policy gradient theorem, Sutton et al. 1999:
+  \(\nabla J = \mathbb{E}_{s \sim d^\pi, a \sim \pi}[\nabla\log\pi(a|s)\, Q^\pi(s,a)]\),
+  where \(Q^\pi\) can replace \(G\)).
+</div>
+
+<h3>4.2. Actor-critic</h3>
+
+<div class="thm">
+  <span class="tag">Algorithm 4.3 — A2C: semi-gradients</span>
+  Two networks: the <strong>actor</strong> \(\pi_\theta\) and the
+  <strong>critic</strong> \(V_w\). At each transition:
+  $$\delta_t = R_{t+1} + \gamma V_w(S_{t+1}) - V_w(S_t) \quad (\text{TD error, chapter 3}),$$
+  $$w \leftarrow w + \alpha_w\, \delta_t\, \nabla_w V_w(S_t) \quad (\text{critic: TD(0) semi-gradient}),$$
+  $$\theta \leftarrow \theta + \alpha_\theta\, \delta_t\, \nabla_\theta \log \pi_\theta(A_t \mid S_t)
+  \quad (\text{actor: REINFORCE with } \delta_t \text{ as advantage}).$$
+  We say <em>semi</em>-gradient because the target \(V_w(S_{t+1})\) depends
+  on \(w\) but is not differentiated (the true gradient of the TD loss would
+  bring the unstable "double sampling" — cf. deadly triad, ch. 3). Two step
+  scales \(\alpha_w \gg \alpha_\theta\) (the critic must keep up); the
+  estimated advantage \(\hat A_t = \delta_t\) is replaced in practice by GAE
+  (Proposition 3.4). <strong>A3C</strong> (Mnih et al., 2016): parallel
+  actors explore independent environments and push their gradients to a
+  shared parameter — asynchronous hence without replay; <strong>A2C</strong>
+  is its synchronized (batched) variant, simpler and equivalent in
+  performance.
+</div>
+
+<h3>4.3. From trust region to PPO</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.4 — Natural gradient and TRPO (sketch)</span>
+  The relevant <em>geometry</em> on policies is the KL divergence, not the
+  Euclidean distance on \(\theta\) (a reparameterization changes the
+  algorithm). The <strong>natural gradient</strong> corrects this:
+  \(\tilde\nabla J = G(\theta)^{-1} \nabla_\theta J\), where
+  \(G(\theta) = \mathbb{E}[\nabla\log\pi_\theta \nabla\log\pi_\theta^\top]\)
+  is the Fisher matrix. Kakade &amp; Langford (2002) prove a <em>monotone
+  improvement</em>: the gain of any new policy \(\pi'\) is lower-bounded by
+  the one-step <em>surrogate</em> gain
+  \(\mathbb{E}_{s \sim d^\pi, a \sim \pi}\big[
+  \tfrac{\pi'(a|s)}{\pi(a|s)} Q^\pi(s,a)\big]\) minus a penalty term in
+  \(\max_s \mathrm{KL}(\pi(\cdot|s) \,\|\, \pi'(\cdot|s))\).
+  <strong>TRPO</strong> (Schulman et al., 2015) maximizes this surrogate
+  under a KL constraint (trust region), solved by interior point + conjugate
+  natural gradient — effective but heavy.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.5 — PPO-clip (Schulman et al., 2017): a pessimistic bound of the surrogate</span>
+  With the importance ratio \(r_t(\theta) =
+  \frac{\pi_\theta(a_t \mid s_t)}{\pi_{\theta_\text{old}}(a_t \mid s_t)}\)
+  and the advantage \(\hat A_t\) (GAE):
+  $$L^{\mathrm{CLIP}}(\theta) = \mathbb{E}_t\big[\min\big(r_t(\theta)\, \hat A_t,\ \
+  \mathrm{clip}(r_t(\theta), 1{-}\epsilon, 1{+}\epsilon)\, \hat A_t\big)\big].$$
+  <div class="proof">
+  <strong>PPO-clip lower-bounds the importance surrogate</strong>
+  \(L^{\mathrm{IS}} = \mathbb{E}[r_t \hat A_t]\), point by point:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>if \(\hat A_t &gt; 0\) (good action):
+    \(\min(r \hat A, \mathrm{clip}(r)\hat A) \leq r \hat A\) trivially, and
+    the clip caps the incentive at \(1 + \epsilon\): no motivation to blow up
+    the probability of an already rewarded action;</li>
+    <li>if \(\hat A_t &lt; 0\) (bad action): if \(r_t \geq 1 - \epsilon\),
+    the min equals \(r_t \hat A_t\) (equality); if
+    \(r_t &lt; 1 - \epsilon\), the min equals
+    \((1-\epsilon)\hat A_t \leq r_t \hat A_t\) (since \(\hat A_t &lt; 0\)
+    and \(1 - \epsilon &gt; r_t\)): the gradient vanishes — one does not
+    "over-punish" beyond the region.</li>
+  </ul>
+  So \(L^{\mathrm{CLIP}} \leq L^{\mathrm{IS}}\): maximizing the
+  <em>pessimistic</em> bound of a valid approximation of the true gain
+  (Proposition 4.4) — an improvement of the lower bound cannot destroy the
+  policy, hence the <em>monotone improvement intuition</em> without explicit
+  KL constraint or second derivative; the clipping suffices to keep the
+  ratios in the region where the surrogate is faithful.
+  <span class="qed">∎</span>
+  </div>
+  Implementation details: a few epochs of gradient ascent per batch of
+  trajectories, normalized advantages, entropy bonus, masking of truncated
+  trajectories. PPO is <em>the</em> method behind LLM alignment (RLHF/PPO,
+  then GRPO — cf. M2 Large Language Models module, post-training chapter;
+  the importance ratio there is exactly the same object, applied to tokens).
+</div>
+
+<pre class="code"><code># REINFORCE with baseline skeleton (PyTorch, CartPole problem)
+logits = policy_net(states)                 # (B, n_actions)
+dist = torch.distributions.Categorical(logits=logits)
+actions = dist.sample()
+logp = dist.log_prob(actions)
+returns = compute_returns(rewards, gamma)   # G_t
+advantage = returns - value_net(states).squeeze(-1)   # learned baseline
+loss = -(logp * advantage.detach()).mean() + 0.5 * advantage.pow(2).mean()
+loss.backward(); optimizer.step()
+# PPO: replace the 'loss' line with
+#   ratio = torch.exp(logp - logp_old.detach())
+#   l1 = ratio * adv; l2 = torch.clamp(ratio, 1-eps, 1+eps) * adv
+#   loss = -torch.min(l1, l2).mean() + 0.5 * adv.pow(2).mean() - 0.01 * dist.entropy().mean()</code></pre>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Learning: TD, SARSA, Q-learning</a><a class="next" href="ch5.html"><span class="dir">Next</span> Deep RL: DQN, Rainbow, DDPG/SAC, offline RL</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reinforcement Learning and Autonomous Agents — Learning: TD, SARSA, Q-learning — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Reinforcement Learning and Autonomous Agents</a> › Learning: TD, SARSA, Q-learning</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52081_EP</span>Reinforcement Learning and Autonomous Agents</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: Markov chains, martingales, dynamic programming</a>
+<a href="ch1.html">Markov decision processes</a>
+<a href="ch2.html">Dynamic programming</a>
+<a href="ch3.html" class="active">Learning: TD, SARSA, Q-learning</a>
+<a href="ch4.html">Policy gradients and actor-critic</a>
+<a href="ch5.html">Deep RL: DQN, Rainbow, DDPG/SAC, offline RL</a>
+<a href="ch6.html">Bandits and exploration</a>
+<a href="ch7.html">Autonomous agents in the era of LLMs</a>
+<a href="ch8.html">Research of the teaching team: Jesse Read</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Learning: TD, SARSA, Q-learning (unknown model)</h2>
+
+<p>In practice we know neither \(P\) nor \(r\): we <em>interact</em>.
+<strong>Temporal-difference learning</strong> learns by correcting each
+prediction toward the observation:</p>
+
+<div class="thm">
+  <span class="tag">Algorithm 3.1 — TD(0), SARSA, Q-learning</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>TD(0)</strong> (evaluation):
+    \(V(S_t) \leftarrow V(S_t) + \alpha\big[R_{t+1} + \gamma V(S_{t+1}) - V(S_t)\big]\);
+    the bracket is the <strong>TD error</strong> \(\delta_t\).</li>
+    <li><strong>SARSA</strong> (on-policy):
+    \(Q(S_t, A_t) \leftarrow Q(S_t,A_t) + \alpha\big[R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t,A_t)\big]\).</li>
+    <li><strong>Q-learning</strong> (off-policy):
+    $$Q(S_t, A_t) \leftarrow Q(S_t, A_t) + \alpha\Big[R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a') - Q(S_t, A_t)\Big].$$</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.2 — Convergence of TD(0) and Q-learning (sketch via Robbins-Monro)</span>
+  Under sufficient exploration (every pair \((s,a)\) visited infinitely often)
+  and steps \(\alpha_t(s,a) \in (0,1)\) with \(\sum_t \alpha_t = \infty\),
+  \(\sum_t \alpha_t^2 &lt; \infty\):
+  \(V_t \to V^\pi\) (TD(0), Tsitsiklis 1994) and \(Q_t \to Q^\star\)
+  (Q-learning, Watkins &amp; Dayan 1992) almost surely.
+  <div class="proof">
+  <strong>TD(0) is a Robbins-Monro recursion.</strong> The update writes
+  \(V(s) \leftarrow V(s) + \alpha\,\delta_t\) with
+  \(\delta_t = r + \gamma V(S') - V(s)\). With the state
+  \((S_t, S_{t+1})\) fixed, the expectation of \(\delta_t\) given \(V\)
+  equals \(r(S_t) + \gamma \sum_{s'} P^\pi(s'|S_t) V(s') - V(S_t)
+  = (T_\pi V - V)(S_t)\) — the TD error is <em>unbiased noise around the
+  Bellman residual</em>. The target equation is therefore
+  \(h(V) = T_\pi V - V = 0\), whose unique zero is \(V^\pi\) (Theorem 1.5).
+  The remainder satisfies the hypotheses of Theorem 0.5: the contraction of
+  \(T_\pi\) (modulus \(\gamma\)) provides the monotonicity
+  \((V - V^\pi)^\top (T_\pi V - V) \leq -(1-\gamma)\|V - V^\pi\|^2_2\)... we
+  normalize by the visit frequency of \(s\), and Theorem 0.4
+  (Robbins-Siegmund) concludes.
+  <strong>Q-learning: same scheme with two extra ingredients.</strong>
+  (i) the operator \(\mathcal{T}\) (with max) remains a contraction of
+  modulus \(\gamma\) (Theorem 1.6); (ii) the max introduces a bias
+  <em>conditional on the sample</em>, but not asymptotically: in the limit,
+  the argmax is stable and the iteration converges to the unique fixed point
+  \(Q^\star\). Hence the result: Q-learning converges <em>whatever the
+  exploration policy</em> (as long as it visits everything) — this is the
+  off-policy property. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.3 — n-step returns and eligibility traces</span>
+  The \(n\)-step return mixes bootstrapping and Monte-Carlo:
+  $$G_t^{(n)} = R_{t+1} + \gamma R_{t+2} + \dots + \gamma^{n-1} R_{t+n}
+  + \gamma^{n} V(S_{t+n}).$$
+  <strong>TD(\(\lambda\)), "forward" view</strong>: geometrically average the
+  n-step returns:
+  $$G_t^\lambda = (1-\lambda) \sum_{n=1}^{\infty} \lambda^{n-1} G_t^{(n)}.$$
+  <strong>"Backward" view</strong>, implementable online with one
+  <em>eligibility trace</em> per state:
+  $$e_t(s) = \gamma \lambda\, e_{t-1}(s) + \mathbb{1}[S_t = s], \qquad
+  V_{t+1}(s) = V_t(s) + \alpha\, \delta_t\, e_t(s) \quad \forall s.$$
+  The trace accumulates the states "responsible" for the current reward and
+  fades as \((\gamma\lambda)^k\). <em>Equivalence theorem</em> (Sutton &amp;
+  Barto, ch. 12): for tabular evaluation with fixed steps, the two views
+  realize the same cumulative update over an episode — equivalence stated
+  here without proof.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.4 — GAE: derivation of the generalized advantage estimator</span>
+  Set the TD error for the critic \(V\):
+  \(\delta_t = R_{t+1} + \gamma V(S_{t+1}) - V(S_t)\). Then:
+  <div class="proof">
+  <strong>Step 1 (telescoping).</strong> By immediate recursion,
+  $$G_t^{(n)} - V(S_t) = \sum_{l=0}^{n-1} \gamma^l\, \delta_{t+l}
+  \qquad (\text{n-step advantage, } A_t^{(n)}).$$
+  <strong>Step 2 (geometric mixing).</strong> The GAE estimator is the
+  combination \((1-\lambda)\sum_n \lambda^{n-1} A_t^{(n)}\) — the same as
+  TD(\(\lambda\)) — and the telescoping propagates to the sum:
+  $$\hat A_t^{\mathrm{GAE}(\gamma,\lambda)}
+  = \sum_{l=0}^{\infty} (\gamma\lambda)^l\, \delta_{t+l}.$$
+  <strong>Bias-variance reading.</strong> \(\lambda = 0\) gives
+  \(\hat A_t = \delta_t\): one bootstrap step, strong bias (if \(V\) is
+  poor), low variance. \(\lambda = 1\) gives
+  \(\hat A_t = G_t - V(S_t)\): Monte-Carlo, no bootstrap bias, maximal
+  variance. GAE allows positioning oneself between the two — it is the
+  standard estimator of the algorithms of chapters 4 and 5 (Schulman et al.,
+  2016). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.5 — Q-learning overestimation: the bias of the max, demonstrated</span>
+  For all real random variables \(X, Y\) with finite expectations:
+  $$\mathbb{E}[\max(X, Y)] \;\geq\; \max\big(\mathbb{E}[X], \mathbb{E}[Y]\big),$$
+  with <em>strict</em> inequality as soon as \(X \neq Y\) with positive
+  probability.
+  <div class="proof">
+  We write \(\max(x,y) = \tfrac12\big(x + y + |x - y|\big)\). The function
+  \((x,y) \mapsto |x - y|\) is convex, so by Jensen
+  \(\mathbb{E}|X - Y| \geq |\mathbb{E}X - \mathbb{E}Y|\). Hence:
+  $$\mathbb{E}[\max(X,Y)] = \tfrac12\big(\mathbb{E}X + \mathbb{E}Y + \mathbb{E}|X-Y|\big)
+  \geq \tfrac12\big(\mathbb{E}X + \mathbb{E}Y + |\mathbb{E}X - \mathbb{E}Y|\big)
+  = \max(\mathbb{E}X, \mathbb{E}Y),$$
+  strict if \(\mathbb{E}|X-Y| &gt; |\mathbb{E}X - \mathbb{E}Y|\), i.e. if
+  \(X - Y\) is not a.s. constant. Moreover
+  \(\mathbb{E}[\max(X,Y)] \leq \max(\mathbb{E}X, \mathbb{E}Y) +
+  \tfrac12\sqrt{\mathbb{E}[(X - Y)^2]}\): the bias grows with the
+  <em>noise</em>. <span class="qed">∎</span>
+  </div>
+  <em>Application:</em> the Q-learning target,
+  \(y = r + \gamma \max_{a'} Q(s', a')\), takes the expectation of a max of
+  <em>noisy</em> Q-values (network, sampling): the max preferentially selects
+  overestimates, and the bootstrap propagates the bias — hence systematically
+  optimistic values and overexcited policies.
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithm 3.6 — Double Q-learning: the correction</span>
+  Maintain <em>two</em> independent estimators \(Q_A, Q_B\) (each updated on
+  half of the transitions, or randomly swapped), and <strong>decouple
+  selection and evaluation</strong>:
+  $$a^\star = \arg\max_a Q_A(s', a), \qquad
+  y = r + \gamma\, Q_B(s', a^\star), \qquad
+  Q_A(s,a) \leftarrow Q_A(s,a) + \alpha\big[y - Q_A(s,a)\big]$$
+  (and symmetrically by swapping \(A \leftrightarrow B\)). Since
+  \(\mathbb{E}[Q_B(s', a^\star)]\) is taken <em>without</em> a max over the
+  noise of \(Q_B\), the positive bias of Theorem 3.5 disappears (the argmax
+  is still computed on \(Q_A\), but the evaluation no longer "picks the noise
+  that suits it"). This is the tabular version of van Hasselt (2010); the
+  deep version (Double DQN, chapter 5) uses the current network and the
+  target network as the two estimators.
+</div>
+
+<div class="def">
+  <span class="tag">Exploration: \(\varepsilon\)-greedy policy</span>
+  With probability \(\varepsilon\): random action; otherwise
+  \(\arg\max_a Q(s, a)\). Without exploration, the learning signal dies out;
+  decreasing \(\varepsilon\) is the standard setting — chapter 6
+  systematizes this choice.
+</div>
+
+<div class="note">
+  <span class="tag">The deadly triad</span> Function approximation (networks)
+  + bootstrapping (TD targets) + off-policy (Q-learning): combining the three
+  can make the iteration <em>diverge</em> (Baird's counterexample, 1995). The
+  convergence proof of Theorem 3.2 collapses as soon as the operator is no
+  longer a contraction <em>within the approximation class</em>. The whole of
+  chapter 5 is an art of living with this triad: replay, target networks,
+  clipping, double Q.
+</div>
+
+<div class="note">
+  <span class="tag">Q-learning ≠ SARSA in one sentence</span> Q-learning
+  learns the optimal policy <em>whatever</em> the exploration policy
+  (off-policy); SARSA evaluates the policy <em>actually</em> followed
+  (including exploration) — more cautious near cliffs! (Classic lab: Cliff
+  Walking, exercise 4.)
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Dynamic programming</a><a class="next" href="ch4.html"><span class="dir">Next</span> Policy gradients and actor-critic</a></nav>
+</main>
+</div>
+
+</body>
+</html>

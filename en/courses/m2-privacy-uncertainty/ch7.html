@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy and Uncertainty Quantification — Calibration: diagrams, ECE, Brier — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Privacy and Uncertainty Quantification</a> › Calibration: diagrams, ECE, Brier</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>Privacy and Uncertainty Quantification</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: probability, concentration, DP as seen in M1</a>
+<a href="ch1.html">Differential privacy: the foundation</a>
+<a href="ch2.html">Mechanisms: Laplace, Gaussian, exponential</a>
+<a href="ch3.html">Composition: advanced and Rényi DP</a>
+<a href="ch4.html">Local versus global, and DP-SGD</a>
+<a href="ch5.html">DP in industry and attacks</a>
+<a href="ch6.html">Uncertainty: sources and vocabulary</a>
+<a href="ch7.html" class="active">Calibration: diagrams, ECE, Brier</a>
+<a href="ch8.html">Bayesian deep learning: MC dropout versus ensembles</a>
+<a href="ch9.html">Conformal prediction: theorem and algorithm</a>
+<a href="ch10.html">Quantile and conformalized regression</a>
+<a href="ch11.html">UQ for LLMs</a>
+<a href="ch12.html">Applications: deciding under uncertainty</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Calibration: diagrams, ECE, Brier</h2>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — Reliability diagram, bins, ECE</span>
+  Partition \([0, 1]\) into \(B\) bins; bin \(b\) = predictions with
+  mean confidence \(\mathrm{conf}_b\), observed accuracy
+  \(\mathrm{acc}_b\), count \(n_b\). The <strong>reliability
+  diagram</strong> plots \(\mathrm{acc}_b\) against
+  \(\mathrm{conf}_b\) (the diagonal = perfect calibration); the
+  <strong>expected calibration error</strong>:
+  $$\mathrm{ECE} = \sum_{b=1}^{B} \frac{n_b}{n} \big| \mathrm{acc}_b - \mathrm{conf}_b \big|.$$
+  Precautions on binning: the partition influences the measure (10 bins
+  is the de facto standard); kernel / isotonic-regression variants
+  preferable in research (Naeini et al. 2015; see also the Machine
+  Learning module ch. 9 for evaluation curves).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.2 — ECE computed by hand</span>
+  100 binary predictions, 5 bins (mean confidences are given):
+  <table class="tbl">
+  <thead><tr><th>Bin (confidence)</th><th>\(n_b\)</th><th>\(\mathrm{conf}_b\)</th><th>correct</th><th>\(\mathrm{acc}_b\)</th><th>\(|acc - conf|\)</th><th>contribution</th></tr></thead>
+  <tbody>
+  <tr><td>[0.5; 0.6)</td><td>10</td><td>0.55</td><td>5</td><td>0.50</td><td>0.05</td><td>0.005</td></tr>
+  <tr><td>[0.6; 0.7)</td><td>20</td><td>0.65</td><td>12</td><td>0.60</td><td>0.05</td><td>0.010</td></tr>
+  <tr><td>[0.7; 0.8)</td><td>30</td><td>0.75</td><td>20</td><td>0.667</td><td>0.083</td><td>0.025</td></tr>
+  <tr><td>[0.8; 0.9)</td><td>25</td><td>0.85</td><td>18</td><td>0.72</td><td>0.13</td><td>0.0325</td></tr>
+  <tr><td>[0.9; 1.0]</td><td>15</td><td>0.95</td><td>12</td><td>0.80</td><td>0.15</td><td>0.0225</td></tr>
+  </tbody>
+  </table>
+  $$\mathrm{ECE} = 0.005 + 0.010 + 0.025 + 0.0325 + 0.0225 = \mathbf{0.095}.$$
+  Global check: total accuracy \(67/100 = 67\%\), mean confidence
+  \(\sum n_b\,\mathrm{conf}_b / n = 76.5\%\) — a gap of \(9.5\)
+  points, consistent: the model is <strong>systematically
+  overconfident</strong> by ~10 points, and the reliability diagram
+  would be a curve below the diagonal bending downward. This is the
+  signature measured by Guo et al. (2017) on modern networks: more
+  depth/capacity ⇒ more overconfidence, not less.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 7.3 — Brier score and its decomposition (Brier 1950; Murphy 1973)</span>
+  $$\mathrm{BS} = \frac{1}{n}\sum_i (\hat p_i - y_i)^2, \qquad \text{decomposition:} \quad \mathrm{BS} = \underbrace{\text{reliability}}_{\text{calibration}} - \underbrace{\text{resolution}}_{\text{discrimination}} + \underbrace{\text{uncertainty}}_{\text{irreducible}}.$$
+  The reliability term \(= \sum_b \frac{n_b}{n}(\mathrm{conf}_b -
+  \mathrm{acc}_b)^2\) (the squared, weighted ECE); resolution measures
+  the deviation of the \(\mathrm{acc}_b\) from the prevalence;
+  uncertainty \(= \bar y (1 - \bar y)\) does not depend on the model.
+  BS rewards <em>both</em> calibration and discrimination — it is a
+  quadratic Brier distance; not to be confused with the log-loss
+  (cross-entropy), which infinitely punishes wrong certainties.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.4 — Brier computed, and the mirage of confidence</span>
+  Four predictions: \((0.9; y{=}1)\), \((0.9; y{=}1)\),
+  \((0.9; y{=}0)\), \((0.3; y{=}1)\):
+  $$\mathrm{BS} = \frac{0.1^2 + 0.1^2 + 0.9^2 + 0.7^2}{4} = \frac{0.01 + 0.01 + 0.81 + 0.49}{4} = 0.33.$$
+  The <em>constant</em> predictor equal to the prevalence \(3/4 =
+  0.75\) achieves \(\mathrm{BS} = 0.75 \times 0.25 = 0.1875 &lt;
+  0.33\): without information, it is better to state the base rate than
+  to assert 90% — exactly the problem of overenthusiastic models.
+</div>
+
+<div class="thm">
+  <span class="tag">Procedure 7.5 — Temperature scaling (Guo, Pleiss, Sun, Weinberger, 2017)</span>
+  A single scalar \(T &gt; 0\) recalibrates the logits:
+  \(\hat p_T(y \mid x) = \mathrm{softmax}(z/T)\); \(T\) fitted by NLL
+  on a validation set (a 1D optimization — which does not change the
+  argmax, hence not the accuracy). <strong>Computed.</strong> Two
+  classes, logits \(z = (4; 0)\): \(\mathrm{softmax}(z) = (0.982;
+  0.018)\); \(T = 2\): \(\mathrm{softmax}(2, 0) = (0.881; 0.119)\);
+  \(T = 4\): \(\mathrm{softmax}(1, 0) = (0.731; 0.269)\). If the true
+  frequency of class 1 in this neighborhood is ~75%, \(T \approx 4\) is
+  the right calibration — the ranking of the predictions is intact,
+  only the confidence scale is corrected. Limits: \(T\) is global,
+  calibrated on a fixed distribution; local recalibration: isotonic,
+  Platt per bin, or conformalized calibration (ch. 9-10).
+</div>
+
+<pre class="code"><code>import numpy as np
+def ece(conf, y, bins=15):
+    edges = np.linspace(0, 1, bins + 1); idx = np.digitize(conf, edges[1:-1])
+    n = len(conf); total = 0.0
+    for b in range(bins):
+        m = idx == b
+        if m.sum() == 0: continue
+        total += (m.sum()/n) * abs(y[m].mean() - conf[m].mean())
+    return total
+
+def fit_temperature(logits, y, grid=np.linspace(0.5, 10, 200)):
+    # NLL on validation, one dimension, non-parametric and sufficient for labs
+    best_T, best = 1.0, np.inf
+    for T in grid:
+        z = logits / T
+        p = np.exp(z - z.max(1, keepdims=True))
+        p /= p.sum(1, keepdims=True)
+        nll = -np.log(np.clip(p[np.arange(len(y)), y], 1e-12, None)).mean()
+        if nll &lt; best: best, best_T = nll, T
+    return best_T</code></pre>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Uncertainty: sources and vocabulary</a><a class="next" href="ch8.html"><span class="dir">Next</span> Bayesian deep learning: MC dropout versus ensembles</a></nav>
+</main>
+</div>
+
+</body>
+</html>

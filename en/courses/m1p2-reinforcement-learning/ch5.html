@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reinforcement Learning and Autonomous Agents — Deep RL: DQN, Rainbow, DDPG/SAC, offline RL — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Reinforcement Learning and Autonomous Agents</a> › Deep RL: DQN, Rainbow, DDPG/SAC, offline RL</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52081_EP</span>Reinforcement Learning and Autonomous Agents</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: Markov chains, martingales, dynamic programming</a>
+<a href="ch1.html">Markov decision processes</a>
+<a href="ch2.html">Dynamic programming</a>
+<a href="ch3.html">Learning: TD, SARSA, Q-learning</a>
+<a href="ch4.html">Policy gradients and actor-critic</a>
+<a href="ch5.html" class="active">Deep RL: DQN, Rainbow, DDPG/SAC, offline RL</a>
+<a href="ch6.html">Bandits and exploration</a>
+<a href="ch7.html">Autonomous agents in the era of LLMs</a>
+<a href="ch8.html">Research of the teaching team: Jesse Read</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Deep RL: DQN, Rainbow, continuous methods and offline RL</h2>
+
+<div class="thm">
+  <span class="tag">Algorithm 5.1 — DQN (Mnih et al., 2015)</span>
+  Q-learning where \(Q(s, a; \theta)\) is a network; stabilized by:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>experience replay</strong>: resampling past transitions
+    (breaks the temporal correlation and approaches the i.i.d. assumption of
+    SGD);</li>
+    <li><strong>target network</strong> \(\theta^-\) frozen and periodically
+    synchronized: target \(y = r + \gamma \max_{a'} Q(s', a'; \theta^-)\)
+    (avoids chasing a moving target — the deadly triad, ch. 3);</li>
+    <li>loss \(\big(y - Q(s, a; \theta)\big)^2\).</li>
+  </ul>
+</div>
+
+<pre class="code"><code># Minimal DQN (PyTorch) -- the three stabilizers in evidence
+replay = deque(maxlen=100_000)            # 1. experience replay
+def train_step(batch=128, gamma=0.99):
+    s, a, r, s2, done = sample(replay, batch)
+    with torch.no_grad():                 # 2. target network (frozen theta^-)
+        y = r + gamma * (1 - done) * target_net(s2).max(1).values
+    q = policy_net(s).gather(1, a).squeeze(1)
+    loss = F.smooth_l1_loss(q, y)         # 3. TD loss (Huber, more robust)
+    optimizer.zero_grad(); loss.backward()
+    torch.nn.utils.clip_grad_norm_(policy_net.parameters(), 10)
+    optimizer.step()
+# Double DQN (algorithm 3.6): replace the 'y' line with
+#   a2 = policy_net(s2).argmax(1, keepdim=True)          # selection: current network
+#   y = r + gamma * (1 - done) * target_net(s2).gather(1, a2).squeeze(1)  # evaluation: target</code></pre>
+
+<div class="thm">
+  <span class="tag">Algorithm 5.2 — Rainbow (Hessel et al., 2018): six ingredients</span>
+  Rainbow combines six independent improvements of DQN, each attacking a
+  precise weakness:
+  <table class="tbl">
+    <tr><th>Ingredient</th><th>Idea</th><th>Fixes</th></tr>
+    <tr><td>Double Q-learning</td><td>decouple selection/evaluation (Algorithm 3.6)</td><td>overestimation bias (Th. 3.5)</td></tr>
+    <tr><td>Prioritized replay</td><td>sample transitions proportionally to the TD error \(|\delta|\)</td><td>uniform replay</td></tr>
+    <tr><td>Dueling architecture</td><td>two heads \(V(s)\) and \(A(s,a)\), recombined
+    \(Q = V + A - \mathrm{avg}_a A\)</td><td>similar actions, state/value generalization</td></tr>
+    <tr><td>Multi-step (n-step)</td><td>target with the \(G^{(n)}\) return (Def. 3.3), typically \(n=3\)</td><td>slow reward propagation</td></tr>
+    <tr><td>Distributional (C51)</td><td>predict the <em>distribution</em> of \(Z(s,a)\) over 51 atoms, Wasserstein loss</td><td>signal variance, richer learning</td></tr>
+    <tr><td>Noisy nets</td><td>noisy biases/weights, explored by the learned noise itself</td><td>crude \(\varepsilon\)-greedy</td></tr>
+  </table>
+  Rainbow's main contribution is to show that the gains <em>compose</em>: the
+  combination reaches median human level on 57 Atari games in ~7M frames —
+  44M frames fewer than DQN.
+</div>
+
+<h3>5.1. Continuous actions: DDPG and SAC</h3>
+
+<div class="thm">
+  <span class="tag">Algorithm 5.3 — DDPG (Lillicrap et al., 2016)</span>
+  The \(\max_a\) is impossible in continuous spaces; DDPG learns <em>two</em>
+  networks: a critic \(Q_w(s,a)\) and a <em>deterministic</em> actor
+  \(\mu_\theta(s)\) trained by the <em>deterministic policy gradient</em>
+  \(\nabla_\theta J = \mathbb{E}\big[\nabla_a Q_w(s, a)\big|_{a = \mu_\theta(s)}\,
+  \nabla_\theta \mu_\theta(s)\big]\) — the max of Q-learning is replaced by
+  gradient ascent of \(Q\) through the actor. Off-policy (replay + targets),
+  but fragile: the \(Q\)/actor pair can settle on erroneous maxima of \(Q\)
+  (overestimation, again); TD3 adds double Q and noisy targets.
+</div>
+
+<div class="thm">
+  <span class="tag">Algorithm 5.4 — SAC: maximum entropy, derivation</span>
+  SAC (Haarnoja et al., 2018) maximizes the return <em>and</em> the entropy:
+  $$J(\pi) = \mathbb{E}\Big[\sum_t \gamma^t \big(r_t + \alpha\, \mathcal{H}(\pi(\cdot \mid S_t))\big)\Big],
+  \qquad \mathcal{H}(\pi) = -\mathbb{E}_{a \sim \pi}[\log \pi(a \mid s)].$$
+  <div class="proof">
+  <strong>Optimal softmax policy.</strong> For a fixed \(Q\), let us maximize
+  \(F(\pi) = \mathbb{E}_{a\sim\pi}[Q(s,a)] + \alpha \mathcal{H}(\pi(\cdot|s))\)
+  over distributions. Set
+  \(\pi^\star(a|s) \propto \exp(Q(s,a)/\alpha)\), with normalization
+  constant \(Z(s) = \sum_a e^{Q(s,a)/\alpha}\). Then:
+  $$F(\pi) = -\alpha\, \mathbb{E}_\pi\Big[\log \frac{\pi(a|s)}{\pi^\star(a|s)}\Big]
+  + \alpha \log Z(s) = -\alpha\, \mathrm{KL}(\pi \,\|\, \pi^\star) + \alpha\log Z(s),$$
+  (identification by expanding \(\log \pi^\star = Q/\alpha - \log Z\)). The
+  unique maximum is attained at \(\pi = \pi^\star\), with value
+  \(\alpha \log Z(s)\): the optimal policy weights the actions by a
+  <strong>softmax of temperature \(\alpha\)</strong> of the Q-values —
+  exploring is literally optimal in this criterion.
+  <strong>"Soft" Bellman operator.</strong> The target equation becomes
+  \(Q^\star(s,a) = r(s,a) + \gamma\, \mathbb{E}_{s'}[V(s')]\) with the
+  <em>soft value</em>
+  \(V(s') = \alpha \log \sum_{a'} e^{Q(s',a')/\alpha}\) — the max is replaced
+  by a log-sum-exp of temperature \(\alpha\); the log-sum-exp is 1-Lipschitz
+  for \(\|\cdot\|_\infty\), so \(\mathcal{T}_{\mathrm{soft}}\) remains a
+  \(\gamma\)-contraction: the whole theory of chapter 1 survives.
+  <span class="qed">∎</span>
+  </div>
+  <strong>Auto-learned temperature \(\alpha\).</strong> \(\alpha\) tunes the
+  exploration/exploitation trade-off; SAC treats it by a Lagrangian:
+  minimize \(J(\alpha) = \mathbb{E}[-\alpha \log \pi(a|s)] - \alpha\,
+  \bar{\mathcal{H}}\), where \(\bar{\mathcal{H}}\) is the target entropy:
+  \(\alpha\) rises when the actual entropy falls below the target (forced
+  exploration), falls otherwise. Implementation: three networks (actor + two
+  critics, min against overestimation), reparameterization to
+  backpropagate through sampling, GAE useless (off-policy). SAC is the
+  standard for continuous environments (robotics, control).
+</div>
+
+<h3>5.2. Offline RL and sim-to-real</h3>
+
+<div class="prop">
+  <span class="tag">Offline RL (batch learning): the distribution shift</span>
+  Data: a fixed dataset \(\mathcal{D}\) of transitions (teleoperator, logs,
+  simulator); no interaction. The danger: \(Q\) is evaluated on
+  <em>out-of-distribution</em> actions (never tried in \(\mathcal{D}\)); the
+  \(\max_{a'}\) of Q-learning queries the network where it has seen nothing —
+  uncorrected overestimation (Theorem 3.5, aggravated).
+  <strong>Conservative Q-Learning</strong> (Kumar et al., 2020, sketch):
+  regularize \(Q\) so that it is <em>low</em> on out-of-dataset actions and
+  <em>high</em> on dataset actions:
+  $$\mathcal{L}(\theta) = \mathbb{E}_{\mathcal{D}}\big[(y - Q_\theta)^2\big]
+  + \alpha\Big(\mathbb{E}_{a' \sim \pi, s' \sim \mathcal{D}}[Q_\theta(s', a')]
+  - \mathbb{E}_{(s,a) \sim \mathcal{D}}[Q_\theta(s,a)]\Big).$$
+  The policy is then extracted from the regularized \(Q\) — it no longer
+  dares to leave the support of the data. Other approaches: BCQ (restricting
+  to actions close to the data), IQL (expectile regression, no
+  out-of-support query). Offline RL is the bridge toward RLHF: learning a
+  reward/policy from <em>fixed</em> preferences is an offline problem (cf. M2
+  LLMs module).
+</div>
+
+<div class="note">
+  <span class="tag">Sim-to-real</span> In robotics, training happens in a
+  simulator (cheap, parallelizable) then transfers to the real robot — whose
+  dynamics differ (friction, latency, sensors). Tools: <em>domain
+  randomization</em> (randomizing mass/friction/texture to make the policy
+  robust to discrepancies, Tobin et al., 2017), system identification,
+  online adaptation (short real fine-tuning). The unifying theme: robustness
+  to <em>model</em> errors — the same tension as the \(1/(1-\gamma)\) error
+  propagation of Proposition 2.4.
+</div>
+
+<div class="note">
+  <span class="tag">LLGA cross-references</span> Off-policy vs on-policy (DQN
+  reuses the whole past, PPO discards after one batch): exactly the
+  sample-efficiency/stability trade-off found again in LLM post-training —
+  cf. M2 Large Language Models module. Multi-worker distributed RL (A3C,
+  IMPALA) is a special case of distributed SGD — cf. Emerging Subjects in ML
+  module, chapter 2. High-dimensional exploration (count-based, RND) is
+  treated in chapter 6.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Policy gradients and actor-critic</a><a class="next" href="ch6.html"><span class="dir">Next</span> Bandits and exploration</a></nav>
+</main>
+</div>
+
+</body>
+</html>

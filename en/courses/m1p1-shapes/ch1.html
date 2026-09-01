@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Representation and Analysis of Shapes — Representing a shape: meshes and half-edges — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Digital Representation and Analysis of Shapes</a> › Representing a shape: meshes and half-edges</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51074_EP</span>Digital Representation and Analysis of Shapes</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: convexity, least squares, eigenvalues</a>
+<a href="ch1.html" class="active">Representing a shape: meshes and half-edges</a>
+<a href="ch2.html">Voronoi diagrams and duality</a>
+<a href="ch3.html">Delaunay triangulations: the empty circle criterion</a>
+<a href="ch4.html">Sampling and reconstruction of surfaces</a>
+<a href="ch5.html">Smoothing: from uniform to cotangent Laplacian</a>
+<a href="ch6.html">Simplification and remeshing</a>
+<a href="ch7.html">Discrete curvature and Gauss–Bonnet</a>
+<a href="ch8.html">The spectrum of shapes</a>
+<a href="ch9.html">Combinatorial topology: Euler, Betti, persistence</a>
+<a href="ch10.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Representing a shape: meshes and half-edges</h2>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Four families of representations</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Explicit — point cloud</strong>: \(\{p_i\}_{i=1}^n \subset
+    \mathbb{R}^3\), the natural output of sensors (LiDAR, depth); no connections,
+    no reliable normals;</li>
+    <li><strong>Explicit — mesh</strong>: vertices \(V\), edges \(E\), faces \(F\)
+    (most often triangles); this is the lingua franca of rendering;</li>
+    <li><strong>Implicit</strong>: the shape is \(\{x : f(x) = 0\}\) for a scalar
+    field \(f\) (SDF, potential, indicator); union/intersection trivial, sampling
+    non-trivial (chapter 4);</li>
+    <li><strong>Volumetric / parametric</strong>: voxels (grids) and parametric
+    surfaces \(u \mapsto x(u, v)\) — NURBS patches of modelers, chart atlases of
+    remeshing (chapter 6).</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.2 — Clean meshes (manifold, watertight, orientable)</span>
+  A triangulated mesh is a <strong>manifold surface</strong> if:
+  (i) each edge is shared by at most 2 faces; (ii) the faces around each vertex
+  form a single cycle (the "umbrella"). It is <strong>watertight</strong> (closed)
+  if each edge has exactly 2 faces — it then bounds a volume; <strong>orientable</strong>
+  if the face normals can be chosen consistently (any watertight mesh embedded
+  without self-intersection is). These properties are <em>prerequisites</em> for
+  the operators of chapters 5 to 9; real clouds violate them — hence chapter 4.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — The half-edge structure</span>
+  The <strong>half-edge</strong> data structure orients each edge into two
+  half-edges \((u \to v)\) and \((v \to u)\) and stores, for each half-edge
+  \(h\): its opposite (\(\mathrm{opp}(h)\)), the face to its left
+  (\(\mathrm{face}(h)\)), the next half-edge of that face
+  (\(\mathrm{next}(h)\)) and its origin vertex (\(\mathrm{org}(h)\)). Then:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>the tour of a face is obtained by following \(\mathrm{next}\); the tour of
+    a vertex (its <em>umbrella</em>) by composing
+    \(\mathrm{opp} \circ \mathrm{next}\);</li>
+    <li>the <strong>1-ring neighborhood</strong> of a vertex — the basis of
+    smoothing (ch. 5), curvature (ch. 7) and the convolutions of Geometric Deep
+    Learning — is traversed in \(O(\deg)\);</li>
+    <li>memory cost: 2 half-edges per edge × 3 pointers ≈ 48 bytes/edge — versus
+    ~4 bytes/edge for the raw "faces" table; this is the price of constant-time
+    neighbor traversal.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 1.4 — The tetrahedron in tables</span>
+  \(V = 4\), \(E = 6\), \(F = 4\). Face tables:
+  \((0,1,2), (0,3,1), (1,3,2), (2,3,0)\) — checking the orientation: the normal
+  \((p_1 - p_0) \times (p_2 - p_0)\) points outward for each face.
+  Half-edges: 12 in total, each pair \((i,j)/(j,i)\) matched. Euler parity:
+  \(V - E + F = 4 - 6 + 4 = 2 = 2 - 2g\) ⟹ genus \(g = 0\) — the tetrahedron is
+  topologically a sphere (chapter 9). Lab reflex: after every mesh load, check
+  \(V - E + F\), edges with 1 face (boundaries) and with 3+ faces (non-manifold) —
+  two lines with hash tables.
+</div>
+
+<div class="note">
+  <span class="tag">On the right side of the boundary</span>
+  In industrial practice (CGAL, libigl, OpenMesh), one distinguishes the
+  <em>combinatorial</em> mesh (tables, half-edges) from the <em>geometric</em> mesh
+  (3D positions); two isomorphic meshes share the whole theory of chapters 5–9,
+  independently of the positions. The algorithms of this module are first written
+  on the combinatorics (topology), then <em>embedded</em> in the positions — the
+  same discipline as for the graphs of the Machine Learning module.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Refresher: convexity, least squares, eigenvalues</a><a class="next" href="ch2.html"><span class="dir">Next</span> Voronoi diagrams and duality</a></nav>
+</main>
+</div>
+
+</body>
+</html>

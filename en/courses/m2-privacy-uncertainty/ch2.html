@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy and Uncertainty Quantification — Mechanisms: Laplace, Gaussian, exponential — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Privacy and Uncertainty Quantification</a> › Mechanisms: Laplace, Gaussian, exponential</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>Privacy and Uncertainty Quantification</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: probability, concentration, DP as seen in M1</a>
+<a href="ch1.html">Differential privacy: the foundation</a>
+<a href="ch2.html" class="active">Mechanisms: Laplace, Gaussian, exponential</a>
+<a href="ch3.html">Composition: advanced and Rényi DP</a>
+<a href="ch4.html">Local versus global, and DP-SGD</a>
+<a href="ch5.html">DP in industry and attacks</a>
+<a href="ch6.html">Uncertainty: sources and vocabulary</a>
+<a href="ch7.html">Calibration: diagrams, ECE, Brier</a>
+<a href="ch8.html">Bayesian deep learning: MC dropout versus ensembles</a>
+<a href="ch9.html">Conformal prediction: theorem and algorithm</a>
+<a href="ch10.html">Quantile and conformalized regression</a>
+<a href="ch11.html">UQ for LLMs</a>
+<a href="ch12.html">Applications: deciding under uncertainty</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Mechanisms: Laplace, Gaussian, exponential</h2>
+
+<div class="thm">
+  <span class="tag">Theorem 2.1 — The Laplace mechanism (Dwork et al., 2006)</span>
+  Let \(f\) have sensitivity \(\Delta_1\). The mechanism
+  $$M(x) = f(x) + (Z_1, \dots, Z_k), \qquad Z_i \sim \mathrm{Laplace}\big(0, \tfrac{\Delta_1}{\varepsilon}\big)\ \text{i.i.d.}$$
+  is \(\varepsilon\)-DP. The Laplace law with parameter \(b\) has density
+  \(p(z) = \frac{1}{2b} e^{-|z|/b}\).
+  <div class="proof">
+  For an output \(z \in \mathbb{R}^k\), the ratio of densities equals
+  $$\frac{p_x(z)}{p_{x'}(z)} = \prod_{i=1}^k \exp\!\Big( -\frac{\varepsilon}{\Delta_1}\big( |z_i - f_i(x)| - |z_i - f_i(x')| \big) \Big) = \exp\!\Big( \frac{\varepsilon}{\Delta_1} \sum_i \big( |z_i - f_i(x')| - |z_i - f_i(x)| \big) \Big).$$
+  By the triangle inequality,
+  \(\sum_i \big( |z_i - f_i(x')| - |z_i - f_i(x)| \big) \leq \sum_i |f_i(x) - f_i(x')|
+  \leq \Delta_1\), hence \(p_x(z)/p_{x'}(z) \leq e^{\varepsilon}\) for <em>all</em>
+  \(z\) — integrating over \(S\) gives the definition (and symmetrically by
+  exchanging \(x, x'\)).
+  <span class="qed">∎</span>
+  </div>
+  <strong>Utility, computed.</strong> For a counting query
+  (\(\Delta_1 = 1\)): \(\mathbb{P}(|Z| \geq t) = e^{-\varepsilon t}\).
+  With \(\varepsilon = \ln 20 \approx 3.0\) and \(b = 1/\varepsilon \approx
+  0.33\): the published answer is shifted by at least 1 unit with
+  probability \(e^{-\varepsilon} = 5\%\), by at least 3 units with
+  probability \(20^{-3} \approx 0.01\%\) — a modest noise at the scale of
+  the single individual one seeks to mask.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 2.2 — The Gaussian mechanism, analytic form</span>
+  For \(f\) with \(\ell_2\) sensitivity \(\Delta_2\),
+  \(M(x) = f(x) + \mathcal{N}(0, \sigma^2 I_k)\) is
+  \((\varepsilon, \delta)\)-DP as soon as
+  $$\sigma \;\geq\; \Delta_2\, \frac{\sqrt{2 \ln(1.25/\delta)}}{\varepsilon} \qquad (\varepsilon \leq 1).$$
+  Numerically, for \(\varepsilon = 1\), \(\delta = 10^{-6}\):
+  \(\sqrt{2\ln(1.25 \times 10^6)} = \sqrt{28.1} \approx 5.3\), hence
+  \(\sigma \approx 5.3\,\Delta_2\). Why prefer Gaussian over Laplace in
+  ML: (i) Gaussian noise <strong>composes</strong> very well (Rényi DP,
+  ch. 3); (ii) it is isotropic and gradient-compatible; (iii) the
+  Gaussian tail is lighter for large \(k\). Proof: computation of the
+  ratio of Gaussian densities bounded by \(e^{\varepsilon}\) except on a
+  set of probability \(\delta\) — analysis in Dwork &amp; Roth (2014),
+  lemma A.1 (the factor 1.25 is a convenience constant of the
+  upper bound).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 2.3 — The exponential mechanism (McSherry-Talwar, 2007)</span>
+  For a <em>non-numeric</em> response (choosing a median, an item, a
+  model): a score function \(u(x, h)\) (to be maximized) with sensitivity
+  \(\Delta_u = \max_h \max_{x \sim x'} |u(x, h) - u(x', h)|\), and the
+  output law
+  $$\mathbb{P}(M(x) = h) \;\propto\; \exp\!\Big( \frac{\varepsilon\, u(x, h)}{2\Delta_u} \Big).$$
+  <strong>Utility guarantee</strong>: if \(h^* = \arg\max_h u(x, h)\) and
+  \(u(x, h^*) - u(x, h) \geq \mathrm{GAP}\), then
+  \(\mathbb{P}(u(x, M(x)) \leq u(x, h^*) - \mathrm{GAP}) \leq |\mathcal H|
+  \exp(-\varepsilon\, \mathrm{GAP}/2\Delta_u)\) — the gap to the optimum
+  decreases exponentially with \(\varepsilon\) and the gap. This is the
+  mechanism of discrete choices: model selection, private top-k, auction
+  mechanisms.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.4 — Private median: publishing a robust statistic</span>
+  A "median age" query has unbounded sensitivity (shifting the median by
+  one row can make it jump far if the data are concentrated). The
+  exponential mechanism with \(u(x, h) = -\|x - h\|_0\) (minus the number
+  of individuals on the wrong side) publishes an \(\varepsilon\)-DP median
+  with controlled utility: this is the canonical example of the
+  <em>structural</em> choice of mechanism according to the query — the
+  privacy engineer spends most of their time here, not on the noise
+  itself.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Previous</span> Differential privacy: the foundation</a><a class="next" href="ch3.html"><span class="dir">Next</span> Composition: advanced and Rényi DP</a></nav>
+</main>
+</div>
+
+</body>
+</html>

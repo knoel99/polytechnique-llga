@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reinforcement Learning and Autonomous Agents — Autonomous agents in the era of LLMs — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Reinforcement Learning and Autonomous Agents</a> › Autonomous agents in the era of LLMs</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52081_EP</span>Reinforcement Learning and Autonomous Agents</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: Markov chains, martingales, dynamic programming</a>
+<a href="ch1.html">Markov decision processes</a>
+<a href="ch2.html">Dynamic programming</a>
+<a href="ch3.html">Learning: TD, SARSA, Q-learning</a>
+<a href="ch4.html">Policy gradients and actor-critic</a>
+<a href="ch5.html">Deep RL: DQN, Rainbow, DDPG/SAC, offline RL</a>
+<a href="ch6.html">Bandits and exploration</a>
+<a href="ch7.html" class="active">Autonomous agents in the era of LLMs</a>
+<a href="ch8.html">Research of the teaching team: Jesse Read</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Autonomous agents in the era of LLMs</h2>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — POMDP: when the state is not observable</span>
+  A <strong>POMDP</strong> is a tuple \((\mathcal{S}, \mathcal{A},
+  \mathcal{O}, P, \Omega, r, \gamma)\): like an MDP, but the agent only
+  observes \(O_t \sim \Omega(\cdot \mid S_{t+1}, A_t)\) — not the latent
+  state. The central object is the <strong>belief</strong>
+  \(b_t(s) = \mathbb{P}[S_t = s \mid O_1, \dots, O_t, A_1, \dots, A_{t-1}]\),
+  updated by Bayes at each observation. <em>Fundamental result</em>: the
+  POMDP rewrites as an MDP over the (continuous) space of beliefs, with
+  reward \(\bar r(b, a) = \sum_s b(s) r(s, a)\) — optimality preserved, but a
+  continuous state space and a PSPACE-hard problem in general. <em>Every
+  real agent is a POMDP</em>: perception is always partial (noisy sensors,
+  screen, text).
+</div>
+
+<ul>
+  <li><strong>Defining an agent</strong>: perceive → decide → act → observe,
+  in a loop (the agent = policy \(\pi\) over a POMDP); perception = context
+  (text, memory), action = <em>tool calls</em>, APIs, code. The
+  <strong>memory/state estimation</strong> of the POMDP materializes as:
+  context window (short-term memory — bounded), vector memories (similarity
+  retrieval = approximate belief estimation),
+  recurrent networks/hidden state (literally a learned filter);</li>
+  <li><strong>LLM + tools</strong>: the LLM is the decision engine; the
+  "prompt" = observation; function calling = action space. The
+  <strong>ReAct</strong> loop (Yao et al., 2023) alternates explicit
+  reasoning and actions:</li>
+</ul>
+
+<pre class="code"><code># ReAct trace (excerpt, translated) -- question: "Did the stock price of X
+# go up after supplier Y's latest flagship product?"
+Thought: I must identify Y's latest flagship product, then the release
+  date, then compare the price of X around that date.
+Action: search[Y's recent products]
+Observation: Y launched product P on March 14, 2026.
+Thought: I now look up the price of X around March 14, 2026.
+Action: lookup[stock X price March 2026]
+Observation: X traded at 102.4 on March 13; 109.9 on March 15.
+Thought: I have both data points, I can conclude (+7.3% in two sessions).
+Action: finish[yes, up ~7%]</code></pre>
+
+<p>The <strong>function calling / tool use</strong> format declares the
+action space (JSON structuring, validated schemas):</p>
+
+<pre class="code"><code>{
+  "name": "get_stock_price",
+  "description": "Closing price of a stock",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "ticker": {"type": "string"},
+      "date":   {"type": "string", "format": "date"}
+    },
+    "required": ["ticker"]
+  }
+}
+// agent's reply: {"ticker": "X", "date": "2026-03-15"}
+// -> the orchestrator executes, reinjects the result as an observation</code></pre>
+
+<ul>
+  <li><strong>Memory and RAG</strong>: the state exceeds the context window
+  ⇒ external memory (vector stores). <em>GraphRAG</em>: index knowledge as a
+  graph (entity-relation) and query by neighborhood/multi-hop — retrieval
+  becomes a query over a knowledge graph; exact intersection of the master's
+  program: NLP × Graph ML × LLM (cf. Graph Machine and Deep Learning for
+  Generative AI module, chapter 8, and the NLP module for
+  retrieval-conditioned generation);</li>
+  <li><strong>Multi-agent</strong>: agent systems = <strong>graphs</strong> —
+  nodes: specialized agents (each with its own context and prompt), edges:
+  information flows, DAG or cyclic topology (orchestrator-workers, debates,
+  verifiers). <strong>Self-play</strong> (the agent learns against itself —
+  AlphaGo/AlphaZero, Silver et al.) is the training version; LLM agent teams
+  (generator/critic/verifier) are its inference version. Current "deep
+  research" workflows orchestrate &gt;100 agents in parallel phases; this
+  "graph engineering" is one of the career paths of the master's program
+  (cf. LangGraph, AutoGen); orchestration is itself a policy — a
+  meta-level sequential decision (cross-reference chapter 4);</li>
+  <li><strong>Distribution, robustness, confidentiality of multi-agent
+  systems</strong>: when workers are distributed (or malicious), aggregating
+  their outputs raises the same questions as aggregating gradients — cf.
+  Emerging Subjects in ML module, chapters 2 (distributed) and 4
+  (Byzantine);</li>
+  <li><strong>Evaluating agents</strong>: environments (tool-use benchmarks),
+  verifiable rewards (test programs, formal constraints — RLVR link,
+  chapter 6), costs (tokens, calls, latency — an agent = an MDP whose every
+  step is costly: optimize the <em>return per token</em>);</li>
+  <li><strong>Safety</strong>: per-tool permissions (whitelist of allowed
+  actions = action space restriction), execution sandboxing (code, network),
+  human supervision at critical points (human-in-the-loop = policy with
+  interruption), full trajectory logging for audit.</li>
+</ul>
+
+<div class="ex">
+  <span class="tag">Guiding lab</span> Code a mini "deep research" agent: an
+  orchestrator (LLM) that decomposes a question into subtasks, workers that
+  search and summarize, a verifier that demands sources, a writer that
+  compiles — the whole represented and executed as a <strong>DAG of
+  agents</strong> (cf. Refresher CS, topological sort); measure success rate,
+  token cost, depth of the DAG.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Bandits and exploration</a><a class="next" href="ch8.html"><span class="dir">Next</span> Research of the teaching team: Jesse Read</a></nav>
+</main>
+</div>
+
+</body>
+</html>

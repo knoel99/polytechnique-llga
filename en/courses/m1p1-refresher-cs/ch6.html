@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refresher in Computer Science — NumPy: numerical linear algebra — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch1.html">Refresher in Computer Science</a> › NumPy: numerical linear algebra</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch1.html"><span class="code-mini">CSC_51440_EP</span>Refresher in Computer Science</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch1.html">Python for data science</a>
+<a href="ch2.html">Complexity analysis</a>
+<a href="ch3.html">Fundamental data structures</a>
+<a href="ch4.html">Sorting, search, recursion</a>
+<a href="ch5.html">Graph algorithms</a>
+<a href="ch6.html" class="active">NumPy: numerical linear algebra</a>
+<a href="ch7.html">Minimal software engineering (OOP, tests, git)</a>
+<a href="ch8.html">Geometric algorithms and the instructor's research</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. NumPy: numerical linear algebra</h2>
+
+<p>All of deep learning is batched linear algebra. A review of the operations and their
+costs, then the three pitfalls that cost the most in labs: broadcasting, views/copies,
+dtypes.</p>
+
+<pre class="code"><code>import numpy as np
+
+A = np.random.randn(1000, 500)
+x = np.random.randn(500)
+
+A @ x               # matrix-vector product: O(n^2)
+A.T @ A             # matrix-matrix product: O(n^3) — via BLAS, highly optimized
+
+np.linalg.norm(x)                       # Euclidean norm
+np.linalg.solve(A.T @ A, A.T @ x)       # solve (better than inv() @ b!)
+w, V = np.linalg.eigh(np.array([[2,1],[1,2]]))   # eigenvalues/eigenvectors (symmetric)</code></pre>
+
+<h3>6.1. Broadcasting: the rules, demonstrated on examples</h3>
+
+<div class="prop">
+  <span class="tag">Rules (to know by heart)</span>
+  Two arrays of shapes \(s\) and \(s'\) are made compatible by (1) aligning the
+  dimensions <em>on the right</em>; (2) for each axis, equal sizes, or one of them is 1
+  (the size-1 array is then <em>virtually replicated</em>). Any other
+  combination: error.
+  <table class="tbl">
+  <thead><tr><th>Shapes</th><th>Result</th><th>Mechanism</th></tr></thead>
+  <tbody>
+  <tr><td>\((n,) + (1,)\)</td><td>\((n,)\)</td><td>scalar replicated</td></tr>
+  <tr><td>\((n, d) + (d,)\)</td><td>\((n, d)\)</td><td>the vector applies to each row (centering!)</td></tr>
+  <tr><td>\((n, 1) + (m,)\)</td><td>\((n, m)\)</td><td>column + row = table of all pairs (pairwise distances!)</td></tr>
+  <tr><td>\((n, m) + (n,)\)</td><td><em>error</em></td><td>right alignment: \((n,1)\) is needed</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<pre class="code"><code># Center a data matrix: X (n, d) -&gt; X - mean (d,) + (n,d)
+Xc = X - X.mean(axis=0)              # rule 2: (n,d) + (d,)
+
+# All squared differences between two sets of points:
+a = rng.random((5, 3)); b = rng.random((7, 3))
+d2 = ((a[:, None, :] - b[None, :, :])**2).sum(-1)   # (5,1,3)-(1,7,3) -&gt; (5,7,3) -&gt; (5,7)
+# The same pattern encodes the distance matrices of K-means, kNN,
+# and the attention score (Q @ K^T: "every query against every key").
+
+# The (n,) vs (n,1) vector trap:
+v = np.ones(5); w = v[:, None]        # w: (5,1)
+v + w                                 # -&gt; (5,5)!! and not (5,1): right alignment</code></pre>
+
+<h3>6.2. Views versus copies</h3>
+
+<div class="note">
+  <span class="tag">Pitfall No. 1 of labs</span>
+  <code>y = x[2:5]</code> is a <strong>view</strong>: same memory buffer, modifying
+  <code>y</code> modifies <code>x</code>. These are views: basic slicing,
+  <code>reshape</code> (when possible without a copy), transposes. These are
+  <strong>copies</strong>: advanced indexing (<code>x[mask]</code>,
+  <code>x[[1,7,2]]</code>), arithmetic operations. Diagnosis:
+  <code>np.shares_memory(x, y)</code> and <code>y.base is not None</code>. Consequences:
+  (i) views are free — iterating by slices costs nothing; (ii) but an "extract"
+  modified in place corrupts the source. Lab safety rule:
+  after a slice destined to be transformed, write <code>chunk = x[i:i+B].copy()</code>
+  if the result must survive.
+</div>
+
+<h3>6.3. axis, reshape, reductions</h3>
+
+<pre class="code"><code>X = rng.random((4, 3))
+X.sum(axis=0)        # collapse axis 0 (rows) -&gt; (3,)   : per column
+X.sum(axis=1)        # collapse axis 1 (columns) -&gt; (4,) : per row
+X.mean(axis=0, keepdims=True)   # (1,3): keeps the number of axes (broadcast-friendly)
+X.reshape(2, 6); X.reshape(-1)  # -1 = "infer this dimension" (reads the strides)
+X.ravel()[::2]                   # flattened view, every other element</code></pre>
+
+<h3>6.4. Algebra: solve, lstsq, SVD and PCA in ten lines</h3>
+
+<pre class="code"><code># Rule: NEVER inv(). solve(A, b) factorizes then solves: 2x faster,
+# numerically more stable (conditioning), and lstsq handles rank deficiency.
+w = np.linalg.solve(A, B)                       # A w = B
+beta, res, rank, sv = np.linalg.lstsq(X, y, rcond=None)   # least squares
+
+# PCA by SVD (centered data): X = U S V^t, components = rows of V^t
+Xc = X - X.mean(axis=0)
+U, S, Vt = np.linalg.svd(Xc, full_matrices=False)
+Z = U * S                       # projections (scores) onto the components
+explained = S**2 / (S**2).sum() # variance explained per component
+k = int(np.searchsorted(np.cumsum(explained), 0.95) + 1)   # keep 95%
+Zk = Z[:, :k]                   # reduced data: sklearn's "PCA(n_components=0.95)"</code></pre>
+
+<div class="prop">
+  <span class="tag">Essential review</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>\(\langle u, v\rangle = u^\top v\), \(\|u\| = \sqrt{u^\top u}\);
+    \(u \perp v \iff u^\top v = 0\);</li>
+    <li>symmetric matrices: diagonalizable in an orthonormal basis, real eigenvalues — the spectral foundation of the Graph ML module (the Laplacian!);</li>
+    <li>singular value decomposition \(M = U \Sigma V^\top\): the basis of PCA and embeddings, generalized inverse (lstsq), rank;</li>
+    <li>diffusion: \((I - \alpha A)^{-1}\), Neumann series \(\sum_k \alpha^k A^k\) — this is PageRank and random walks;</li>
+    <li>numerical stability: never invert a matrix (<code>np.linalg.solve</code>), subtract the max before <code>exp</code> (softmax), work in <code>float64</code> for scientific computing and <code>float32</code> for deep learning.</li>
+  </ul>
+</div>
+
+<h3>6.5. dtypes, precision and promotion</h3>
+
+<pre class="code"><code>a = np.array([1, 2, 3])             # int64 by default
+a.dtype, (a / 2).dtype              # int64, float64: division promotes
+np.array([1, 2], dtype=np.int32) + np.array([3.0])   # -&gt; float64 (promotion)
+np.int8(127) + np.int8(1)           # -128: silent overflow!
+np.float32(1e8) + 1.0 == np.float32(1e8)   # True: 1 is below the precision
+# Lab rules: float64 for analysis, float32 for the GPU (2x memory
+# and bandwidth saved), never integers to accumulate means.</code></pre>
+
+<h3>6.6. Vectorization: an annotated benchmark</h3>
+
+<pre class="code"><code># python -m timeit on a reference machine (orders of magnitude):
+#   triple loop C[i,j] += A[i,k]*B[k,j]     ~ 2500 ms
+#   three loops with np.dot per row          ~  120 ms
+#   A @ B (BLAS, float64)                    ~    8 ms   # ~300x the naive loop
+# Moral: in NumPy, the loop that stays in Python is the performance bug.</code></pre>
+
+<h3>6.7. scipy.sparse: COO, CSR, matvec</h3>
+
+<pre class="code"><code>from scipy import sparse
+# COO: (row, column, value) triplets — the natural constructor (per edge)
+S = sparse.coo_matrix((data, (rows, cols)), shape=(n, m))
+S = S.tocsr()                        # CSR: fast row traversal, arithmetic
+y = S @ x                            # matvec: O(nnz), not O(n*m)
+S.T @ S                              # sparse co-occurrence counts (X^t X) — NLP
+# Combine with chapter 5: graph A in CSR, degrees = A @ np.ones(n),
+# normalization D^-1/2 A D^-1/2: a GNN's propagation is a sparse matvec.</code></pre>
+
+<div class="recap">
+  <p class="recap-title">Key takeaways — chapter 6</p>
+  <ul>
+    <li>Broadcasting: right alignment, size-1 dimensions replicated —
+    \((n,1)+(m,) \to (n,m)\) is the "pairwise" pattern.</li>
+    <li>Views (slices, reshape) vs copies (advanced indexing);
+    <code>np.shares_memory</code> to diagnose.</li>
+    <li><code>solve</code>/<code>lstsq</code> rather than <code>inv</code>; PCA in ten
+    lines by SVD; float64 analysis / float32 GPU.</li>
+    <li>Sparse: COO to build, CSR to compute; a GNN = sparse product.</li>
+  </ul>
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Graph algorithms</a><a class="next" href="ch7.html"><span class="dir">Next</span> Minimal software engineering (OOP, tests, git)</a></nav>
+</main>
+</div>
+
+</body>
+</html>

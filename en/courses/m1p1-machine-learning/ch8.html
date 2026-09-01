@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Machine Learning — Research of the teaching team — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Machine Learning</a> › Research of the teaching team</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">MDC_51006_EP</span>Machine Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: optimization and concentration</a>
+<a href="ch1.html">The statistical framework of learning</a>
+<a href="ch2.html">Linear regression and regularization</a>
+<a href="ch3.html">Classification: logistic and SVM</a>
+<a href="ch4.html">Kernels and RKHS</a>
+<a href="ch5.html">Trees, forests, boosting</a>
+<a href="ch6.html">Unsupervised: k-means, EM, PCA</a>
+<a href="ch7.html">Generalization theory</a>
+<a href="ch8.html" class="active">Research of the teaching team</a>
+<a href="ch9.html">Evaluation, big data and pipelines</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Research of the teaching team</h2>
+<p>This module is taught by two researchers whose work directly extends its
+program: multi-label classification (Jesse Read) and the aggregation of estimators
+(Erwan Le Pennec). Two topics where the ingredients of the previous chapters will be
+found again.</p>
+
+<h3>8.1. Jesse Read: learning sets of labels (multi-label, streams, extreme)</h3>
+<div class="def">
+  <span class="tag">Definition 8.1 — Multi-label problem</span>
+  Each example \(x\) is associated with a <em>set</em> of labels
+  \(Y \subseteq \{1, \dots, L\}\), viewed as a vector of \(\{0,1\}^L\). One learns
+  \(h : \mathcal{X} \to \{0,1\}^L\). Usual losses:
+  <strong>Hamming</strong> (error rate per label,
+  \(\frac1L\sum_j \mathbf{1}\{h_j(x) \neq y_j\}\)) and <strong>subset
+  accuracy</strong> (<em>subset accuracy</em>: the whole vector must be correct).
+  Applications: text tagging, genomics, recommendation — cf. the running project
+  (exercise&nbsp;12) and the NLP module.
+</div>
+<p>The <strong>taxonomy</strong> popularized by Jesse Read's thesis (<em>Scalable
+Multi-label Classification</em>, Waikato, 2010) and by the classifier chains paper
+separates methods into two families: <em>problem transformation</em> (bring multi-label
+back to standard binary/multiclass problems) and <em>algorithm adaptation</em>
+(modify kNN, trees, SVMs... to directly ingest label vectors). Three canonical
+transformations:</p>
+<table class="tbl">
+<thead><tr><th>Method</th><th>Principle</th><th>Strength / weakness</th></tr></thead>
+<tbody>
+<tr><td>Binary Relevance (BR)</td><td>\(L\) independent binary classifiers \(h_j(x)\)</td><td>simple, parallelizable; ignores dependencies between labels</td></tr>
+<tr><td>Label Powerset (LP)</td><td>each observed combination = one class of a single multiclass problem</td><td>captures all dependencies; explosion of rare classes (\(\leq 2^L\))</td></tr>
+<tr><td>Classifier Chains (CC)</td><td>\(h_j\) predicts \(y_j\) from \((x, y_1, \dots, y_{j-1})\)</td><td>captures conditional dependencies; sensitive to order and to cascading errors</td></tr>
+</tbody>
+</table>
+
+<div class="ex">
+  <span class="tag">Example 8.2 — Classifier chains on a mini-corpus</span>
+  Three labels: \(S\) (science), \(P\) (politics), \(s\) (health). Corpus:
+  <table class="tbl">
+  <thead><tr><th>Document</th><th>\(S\)</th><th>\(P\)</th><th>\(s\)</th></tr></thead>
+  <tbody>
+  <tr><td>article 1 (climate)</td><td>1</td><td>0</td><td>1</td></tr>
+  <tr><td>article 2 (election)</td><td>0</td><td>1</td><td>0</td></tr>
+  <tr><td>article 3 (research budget)</td><td>1</td><td>1</td><td>0</td></tr>
+  <tr><td>article 4 (sports)</td><td>0</td><td>0</td><td>0</td></tr>
+  </tbody>
+  </table>
+  The pattern "\(S = 1, P = 0 \Rightarrow s = 1\)" (non-politicized science
+  articles: health) is invisible to BR, each of whose binary classifiers sees only
+  \(x\). For a chain of order \((S, P, s)\), the last link learns
+  \(h_s(x, S, P)\) — the dependency becomes a simple additional <em>feature</em>, and the
+  classifier of chapter&nbsp;3 applies as is. At prediction time, one propagates:
+  \(\hat S = h_S(x)\), then \(\hat P = h_P(x, \hat S)\), then
+  \(\hat s = h_s(x, \hat S, \hat P)\).
+  Two remedies to the arbitrary order and to cascading error: <strong>ensembles of
+  chains</strong> (random orders, average vote — the bagging of chapter&nbsp;5, again)
+  and the probabilistic route (predict the expectation over the \(2^L\) paths or
+  sample).
+</div>
+
+<div class="note">
+  <span class="tag">From multi-label to massive data: streaming and extreme</span>
+  Three extensions carried by Jesse Read and his co-authors, which join
+  chapter&nbsp;9:
+  <strong>(i) Multi-label streams</strong> (Read, Bifet, Pfahringer, Holmes,
+  <em>Scalable and Efficient Multi-label Classification for Evolving Data Streams</em>,
+  Machine Learning, 2012):
+  data arrive continuously, a single pass, bounded memory — one learns incremental
+  multi-output regression trees (iSOUP-Tree) and one predicts score vectors label by
+  label. Concept drift is treated there as a temporal structure: <em>Concept-drifting
+  data streams are time series</em> (arXiv:1810.02266).
+  <strong>(ii) Extreme classification</strong>: \(L\) on the order of \(10^5\) to
+  \(10^6\) (labels = Wikipedia articles, listings; cf. Emerging ML module);
+  BR (one-vs-rest) becomes relevant again because label embeddings factorize the
+  sparse matrix — reviewed in <em>Deep Learning for Multi-label Classification</em>
+  (arXiv:1502.05988).
+  <strong>(iii) Tools</strong>: the <em>River</em> library — machine learning for
+  streams in Python (Montiel, Halford, Salles, ..., Read et al., JMLR 22(110), 2021)
+  implements these methods; the meta-challenge there is the evaluation protocol
+  (prequential, sliding window), cf. Refresher CS module for the engineering.
+</div>
+
+<h3>8.2. Erwan Le Pennec: aggregating estimators rather than choosing one</h3>
+<p>Facing a family \(f_1, \dots, f_M\) of candidate estimators (different kernels,
+different wavelet bases, different values of \(\lambda\)...), the classical statistician
+<em>selects</em> one. The alternative carried by Erwan Le Pennec and his co-authors is
+to <em>aggregate</em> them: predict with a weighted combination
+\(f_{\hat\pi} = \sum_m \hat\pi_m f_m\), the weights being learned from data — typically
+<strong>exponential weights</strong> (Gibbs measure)
+$$\hat\pi_m \ \propto\ \exp\big(-\lambda\, n\, \hat{\mathcal{R}}_n(f_m)\big), \qquad \sum_m \hat\pi_m = 1.$$
+The risk of the aggregate is then controlled by an <em>oracle inequality</em>: pay the
+price of the <em>best</em> candidate up to a \(\log M\) term, with no assumption on
+which one is best.</p>
+
+<div class="ex">
+  <span class="tag">Example 8.3 — Two estimators, exponential weights</span>
+  \(M = 2\), empirical risks \(\hat{\mathcal{R}}_n(f_1) = 0{,}30\) and
+  \(\hat{\mathcal{R}}_n(f_2) = 0{,}38\), \(n = 100\), \(\lambda = 1\):
+  \(\hat\pi_1/\hat\pi_2 = \exp\big(n\lambda(0{,}38 - 0{,}30)\big) = e^{8} \approx 3000\);
+  the aggregate ≈ \(f_1\). With \(n = 10\): ratio \(e^{0{,}8} \approx 2{,}2\), an almost
+  uniform mixture. Moral: \(\lambda\) tunes the <em>selectivity</em> according to the
+  amount of data — exactly the role of the temperature in Gibbs mechanisms, and we
+  recover the softmax formula of chapter&nbsp;3. If a third candidate emerges on fresh
+  data, the aggregate will rebalance — a robustness that a hard selection
+  (argmin) does not have.
+</div>
+
+<div class="prop">
+  <span class="tag">Typical result (Montuelle &amp; Le Pennec, 2014/2019)</span>
+  In the fixed-design regression model, for a <em>generic</em> collection
+  of <em>linear</em> estimators (projections, ridge, thresholding algorithms,
+  wavelet thresholding estimators...), the PAC-Bayesian aggregation procedure with
+  exponential weights satisfies an oracle inequality <em>in probability</em>: with
+  probability \(1 - \delta\),
+  the risk of the aggregate is less than the risk of the best estimator of the
+  collection plus an explicit remainder in \(\sqrt{\log(M/\delta)/n}\) (and no longer
+  only in expectation — the in-probability guarantee, a finer one, is the specific
+  contribution of this work; long version: <em>PAC-Bayesian aggregation of linear
+  estimators</em>, Nonparametric Statistics, 2019; preprint arXiv:1410.0661).
+  Aggregation is <em>robust to the worst case</em>: one never bets on a single
+  candidate.
+</div>
+
+<div class="note">
+  <span class="tag">Connection with the rest of the course</span>
+  The guiding thread is the same: <strong>bagging</strong> (theorem&nbsp;5.2) =
+  aggregation with uniform weights of bootstrap versions of one estimator;
+  <strong>boosting</strong>
+  (5.3) = <em>iterative</em> construction of the dictionary, each tree receiving a
+  weight; <strong>exponential weights</strong> = the update mechanism of AdaBoost and
+  Gibbs algorithms; <strong>regularization</strong> (7.5) = why the aggregate
+  generalizes better than the best <em>empirical</em> candidate. On this last point,
+  Erwan Le Pennec's nonparametric statistics provides the guardrails: optimal kernel
+  selection for density estimation, <em>needlet</em> thresholding for models with
+  random coefficients (with É. Gautier), estimation of copula densities by thresholding
+  (with F. Autin and K. Tribouley, 2010) — always the same grammar: a
+  <em>dictionary</em>, a <em>penalty</em>, an <em>oracle inequality</em>. NL-Means
+  image denoising can be reread this way as a local aggregation of kernel estimators
+  (Salmon &amp; Le Pennec, 2009).
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Previous</span> Generalization theory</a><a class="next" href="ch9.html"><span class="dir">Next</span> Evaluation, big data and pipelines</a></nav>
+</main>
+</div>
+
+</body>
+</html>

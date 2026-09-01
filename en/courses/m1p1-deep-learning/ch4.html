@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Convolutional networks (CNN) — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Deep Learning</a> › Convolutional networks (CNN)</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: matrix differential calculus and numerical stability</a>
+<a href="ch1.html">From the neuron to the deep network</a>
+<a href="ch2.html">Backpropagation</a>
+<a href="ch3.html">Optimization in practice</a>
+<a href="ch4.html" class="active">Convolutional networks (CNN)</a>
+<a href="ch5.html">Sequences: RNN, LSTM</a>
+<a href="ch6.html">Attention and transformers</a>
+<a href="ch7.html">Generative models: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning and fine-tuning</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ch10.html">Training in practice</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Convolutional networks (CNN)</h2>
+
+<h3>4.1. Discrete convolution: general definition and dimension arithmetic</h3>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — 1D convolution with stride, padding, dilation</span>
+  For an input \(x\) of length \(I\), a kernel \(k\) of length \(K\), stride
+  \(s \in \mathbb{N}^*\), padding \(p\) (zeros added on each side) and dilation
+  \(d\) (gap between the kernel taps):
+  $$(x * k)(u) = \sum_{j=0}^{K-1} x(u + d j - d(K-1))\; k(K{-}1{-}j),$$
+  the output being sampled at positions \(u = u_0 + s\,t\), \(t = 0, 1, 2, \dots\)
+  In 2D, the same formula applies on each axis (kernel \(K_1 \times K_2\)). The same
+  filter is applied at every point: <strong>shared weights</strong> ⇒ translation
+  invariance and a parameter count independent of the image size —
+  \(\#\)params \(= C_{\mathrm{in}} K_1 K_2 C_{\mathrm{out}} + C_{\mathrm{out}}\).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.2 — Output dimension formula (and proof)</span>
+  $$O = \left\lfloor \frac{I + 2p - d(K-1) - 1}{s} \right\rfloor + 1.$$
+</div>
+
+<div class="proof">
+With padding \(p\), the effective input has valid indices in
+\([-p,\, I - 1 + p]\). An output position \(t\) places the kernel's <em>first</em> tap
+at \(u = s\,t - p\) and the last at \(u + d(K-1)\); the convolution is
+defined only if <em>all</em> the taps fall within the valid indices:
+\(s t - p \ge 0\) and \(s t - p + d(K-1) \le I - 1\). The number of allowed steps
+\(t\) is therefore the number of integers in
+\(\big[0,\; \frac{I - 1 + p - d(K-1)}{s}\big]\), that is
+\(\lfloor (I + 2p - d(K-1) - 1)/s \rfloor + 1\) (length of a discrete interval
+\([0, n]\) = \(n + 1\), with a floor for stride alignment).
+<span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 4.3 — Immediate checks</span>
+  Conv 3×3, padding 1, stride 1 (\(I=I'\)): \(\lfloor (I + 2 - 2 - 1)/1 \rfloor + 1 = I\).
+  Downsampling /2 with 3×3, padding 1: \(\lfloor (I + 2 - 2 - 1)/2 \rfloor + 1 = \lfloor (I-1)/2 \rfloor + 1\)
+  (for \(I = 224\) (ImageNet): 112). Two 3×3 convs (stride 1) have the same
+  receptive field as a 5×5 conv for ~2.7× fewer parameters and more nonlinearity —
+  VGG's argument.
+</div>
+
+<h3>4.2. Receptive field</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.4 — Receptive field, formula by induction</span>
+  For convolutional layers with kernels \(k_\ell\), strides \(s_\ell\) (dilation 1),
+  the receptive field of a unit of layer \(\ell\) equals
+  $$\mathrm{RF}_1 = k_1, \qquad \mathrm{RF}_\ell = \mathrm{RF}_{\ell-1} + (k_\ell - 1)\prod_{i &lt; \ell} s_i.$$
+</div>
+
+<div class="proof">
+By induction. <em>Initialization</em>: a unit of layer 1 reads \(k_1\) pixels.
+<em>Heredity</em>: let \(\Delta_{\ell}\) be the distance (in input pixels) between
+the receptive fields of two <em>adjacent</em> units of layer \(\ell\).
+Clearly \(\Delta_1 = s_1\) (shifting the output by one unit shifts the window by
+\(s_1\)), and \(\Delta_\ell = s_\ell \Delta_{\ell-1} = \prod_{i \le \ell} s_i\). A unit
+of layer \(\ell\) aggregates \(k_\ell\) <em>contiguous</em> units of layer
+\(\ell - 1\): its field covers the field of one unit (RF\(_{\ell-1}\)) plus the gap
+between the centers of the first and last aggregated neighbors,
+\((k_\ell - 1)\Delta_{\ell-1}\).
+Hence the formula.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Two stacked 3×3 convs</span>
+  RF \(= 3 + 2\times 1 = 5\): stacking beats a large kernel — depth again.
+  In practice the theoretical receptive fields quickly exceed the image, but the
+  <em>effective</em> field (visualized by occlusion or Cadieu et al.) grows much
+  more slowly; low layers encode edges, high layers concepts.
+</div>
+
+<h3>4.3. Transposed conv (deconvolution)</h3>
+
+<p>The gradient of the convolution with respect to the <em>input</em> is itself a
+convolution, by the flipped kernel and with adjusted padding — called transposed
+convolution, and used as is to upsample (GANs, segmentation,
+autoencoders). Case with no stride, no dilation: a "valid" conv
+(\(p=0\)) maps \(I \to O = I - K + 1\); its transpose maps
+\(O \to I = O + K - 1\) by inserting \(K-1\) border zeros and convolving with the
+flipped kernel (proof: write \(\mathrm{conv}\) as a linear map
+\(y = Cx\) by blocks; then \(\nabla_x = C^\top \nabla_y\), and \(C^\top\) is the
+matrix of the transposed conv). With stride and padding, the general formula:
+$$I' = s\,(O - 1) - 2p + d(K-1) + \mathrm{op} + 1,$$
+where \(\mathrm{op}\) is an optional extra padding — the exact mirror image of
+theorem 4.2.
+Tap overlap when \(s &gt; 1\) creates "checkerboard" artifacts,
+fixed by upsample + conv.</p>
+
+<h3>4.4. Historical architectures, parameters on the counter</h3>
+
+<table class="tbl">
+<thead><tr><th>Network</th><th>Year</th><th>Key idea</th><th>Parameters</th></tr></thead>
+<tbody>
+<tr><td>LeNet-5</td><td>1998</td><td>conv + pooling + FC, gradient by backpropagation</td><td>\(\sim\)60&nbsp;k</td></tr>
+<tr><td>AlexNet</td><td>2012</td><td>ReLU, dropout, GPU, augmentation — wins ImageNet</td><td>\(\sim\)60&nbsp;M</td></tr>
+<tr><td>VGG-16</td><td>2014</td><td>uniformity: only 3×3, depth 16-19</td><td>\(\sim\)138&nbsp;M</td></tr>
+<tr><td>ResNet-50</td><td>2015</td><td>residual connections, 50 layers and more</td><td>\(\sim\)25.6&nbsp;M</td></tr>
+</tbody>
+</table>
+
+<div class="ex">
+  <span class="tag">Example 4.5 — Counting VGG-16 parameters (a computation to redo)</span>
+  A 3×3 block from \(C_{\mathrm{in}} \to C_{\mathrm{out}}\) channels costs
+  \(9\,C_{\mathrm{in}} C_{\mathrm{out}} + C_{\mathrm{out}}\). The first (3 → 64):
+  \(9 \times 3 \times 64 + 64 = 1\,792\). A 64 → 64 block:
+  \(9 \times 64^2 + 64 = 36\,928\). Summing the five stages (64, 128, 256, 512, 512),
+  the convolutions total \(\approx 14{,}7\) M — but the three fully
+  connected layers (after flattening \(7 \times 7 \times 512 = 25\,088\) features)
+  weigh \(25\,088 \times 4\,096 + 4\,096 \times 4\,096 + 4\,096 \times 1\,000 \approx 123\) M:
+  90% of the parameters live in the classifier! Hence global
+  pooling (GoogLeNet) then residual blocks: ResNet-50 does better with 25.6 M — of
+  which ~23 M in 1×1/3×3 bottleneck convs.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.6 — Why residuals allow depth</span>
+  A residual block learns \(h^{(\ell+1)} = h^{(\ell)} + F(h^{(\ell)})\) (then
+  activation/normalization). 1) <em>Trivial identity</em>: the choice
+  \(F \equiv 0\) realizes the exact identity — with standard initialization, \(F\)
+  is small, so every added block starts "close to the identity": adding
+  layers no longer degrades the initial model. 2) <em>Gradient without
+  attenuation</em>: by the chain rule,
+  $$\frac{\partial \mathcal{L}}{\partial h^{(\ell)}} = \frac{\partial \mathcal{L}}{\partial h^{(\ell+1)}}\Big( I + \frac{\partial F}{\partial h^{(\ell)}} \Big),$$
+  the \(I\) term transports the gradient as is, whatever the depth — direct
+  contrast with the product of \(L\) factors \(&lt;1\) of RNNs (chapter 5).
+  3) Landscape: loss-function visualizations (Li et al., 2018)
+  show markedly smoother valleys along the residual directions.
+</div>
+
+<div class="note">
+  <span class="tag">Residuals everywhere</span>
+  We will find <em>exactly</em> these skip connections in transformers
+  (\(x + \mathrm{Attention}(\mathrm{LN}(x))\), chapter 6) and GNNs (skip
+  connections of message passing, Graph ML module): everywhere one stacks
+  blocks, the identity path protects the gradient.
+</div>
+
+<pre class="code"><code>import torch.nn as nn
+
+conv = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+# parameters: 3*3*3*32 + 32 = 896, independent of the H x W size
+x = torch.randn(16, 3, 64, 64)        # batch of 16 RGB 64x64 images
+print(conv(x).shape)                   # [16, 32, 64, 64]  (theorem 4.2 formula)
+
+class ResBlock(nn.Module):
+    def __init__(self, c):
+        super().__init__()
+        self.conv1 = nn.Conv2d(c, c, 3, padding=1)
+        self.conv2 = nn.Conv2d(c, c, 3, padding=1)
+        self.norm1, self.norm2 = nn.BatchNorm2d(c), nn.BatchNorm2d(c)
+    def forward(self, x):
+        h = torch.relu(self.norm1(self.conv1(x)))
+        return torch.relu(x + self.norm2(self.conv2(h)))   # skip connection</code></pre>
+
+<div class="note">
+  <span class="tag">CNNs and graphs</span>
+  A convolution is a filter applied to a regular neighborhood (a grid). The GNNs of
+  the Graph ML module generalize this idea to <em>irregular</em> neighborhoods: the
+  filter becomes a function of the aggregated neighbors. Same DNA: weight sharing +
+  local aggregation. For the full link with signal processing (circular
+  convolution, convolution theorem, spectral graph filters), cf. the Signal
+  Processing module and the Graph ML module.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Optimization in practice</a><a class="next" href="ch5.html"><span class="dir">Next</span> Sequences: RNN, LSTM</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainability, Security, Privacy of LLMs — Privacy I: memorization and extraction — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Explainability, Security, Privacy of LLMs</a> › Privacy I: memorization and extraction</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Explainability, Security, Privacy of LLMs</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: the black box and its three questions</a>
+<a href="ch1.html">Internal interpretability: probing and control</a>
+<a href="ch2.html">Reading the layers: logit lens, attention and its limits</a>
+<a href="ch3.html">Superposition and sparse autoencoders</a>
+<a href="ch4.html">Explaining an output: SHAP, LIME, gradients</a>
+<a href="ch5.html">Security: taxonomy of attacks</a>
+<a href="ch6.html">Defenses in depth</a>
+<a href="ch7.html" class="active">Privacy I: memorization and extraction</a>
+<a href="ch8.html">Privacy II: membership inference and DP</a>
+<a href="ch9.html">Anonymization and watermarking</a>
+<a href="ch10.html">Evaluating safety: red teaming, AI Act</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Privacy I: memorization and extraction</h2>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — Memorization</span>
+  A model <em>memorizes</em> a sequence \(s\) of the corpus if \(s\) can be
+  extracted from its outputs with a reasonable query budget — the operational
+  definition (Carlini et al.) is in <em>attack terms</em>, not perplexity.
+  <em>Unintentional</em> memorization (canaries inserted deliberately to
+  measure it) is distinguished from legitimate learning: retaining "Paris is
+  the capital of France" is not a leak; giving back a social security number
+  is.
+</div>
+
+<h3>7.1. Measuring: the canary and exposure</h3>
+
+<div class="prop">
+  <span class="tag">Metric 7.2 — Exposure (Carlini &amp; Mitzhenko, 2018)</span>
+  Insert a canary \(c\) ("My card number is 4132…", random) \(k\) times in
+  the corpus. After training, if \(\mathrm{ppl}(c)\) is the model's perplexity
+  for \(c\) and \(\mathrm{ppl}(r)\) that of a random variant \(r\):
+  $$\mathrm{exposure}(c) \;=\; \log_2 \frac{2^{\mathrm{ppl}(c)}}
+  {2^{\mathrm{ppl}(r)}} \;=\; \mathrm{ppl}(r) - \mathrm{ppl}(c)
+  \;\;\text{(in log2)}.$$
+  Exposure measures the <em>search shortcut</em> offered to the attacker:
+  +20 bits ≈ the search space reduced by a factor of one million. It grows
+  with \(k\) (repetitions), with model size and with overfitting.
+</div>
+
+<h3>7.2. Attacking: the GPT-2 extraction</h3>
+
+<div class="ex">
+  <span class="tag">Experiment 7.3 — Carlini et al., USENIX Security 2021</span>
+  With the open-weight GPT-2 (1.5B), the authors generate ~200,000 outputs at
+  high temperature, filter by a "surprise" score (memorized sequences are
+  abnormally <em>fluent</em> — efficient compression), and extract
+  <strong>several hundred sequences verbatim from the training corpus</strong>:
+  names-phone-numbers-addresses, profile URLs, looping radio content... No
+  "hack": just a model queried and sorted. The aggravating factor: the
+  <strong>duplicates</strong> — sequences seen many times come out; corpus
+  deduplication is the first mitigation.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.4 — Bigger ⇒ more memorization (at equal data)</span>
+  Carlini et al. (ICLR 2023) quantify on models from 160M to 12B trained on
+  the same corpus: the rate of recoverable sequences grows with model size,
+  and explodes with the number of duplicates of the sequence (tens of
+  occurrences ⇒ near-systematic recovery). Engineer's reading:
+  (i) deduplicate (train <em>and</em> eval); (ii) scrub PII at the source;
+  (iii) the bigger and more specialized a model (fine-tuning on a restricted
+  private corpus), the higher the privacy risk — corporate fine-tuning is the
+  most exposed use case.
+</div>
+
+<pre class="code"><code># Mini-extraction: recover the canaries planted in a small LM (lab 6)
+def extract(model, prompt, n=500, temp=1.2):
+    cands = [model.generate(prompt, do_sample=True, temperature=temp,
+                            max_new_tokens=48) for _ in range(n)]
+    # "fluency" score: zlib compression ratio (memorized sequences
+    # compress better) normalized by length
+    ranked = sorted(cands, key=lambda s: len(zlib.compress(s.encode())) / len(s))
+    return ranked[:20]                  # -> check the intersection with the canaries</code></pre>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Defenses in depth</a><a class="next" href="ch8.html"><span class="dir">Next</span> Privacy II: membership inference and DP</a></nav>
+</main>
+</div>
+
+</body>
+</html>

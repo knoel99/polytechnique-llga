@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainability, Security, Privacy of LLMs — Superposition and sparse autoencoders — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Explainability, Security, Privacy of LLMs</a> › Superposition and sparse autoencoders</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Explainability, Security, Privacy of LLMs</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: the black box and its three questions</a>
+<a href="ch1.html">Internal interpretability: probing and control</a>
+<a href="ch2.html">Reading the layers: logit lens, attention and its limits</a>
+<a href="ch3.html" class="active">Superposition and sparse autoencoders</a>
+<a href="ch4.html">Explaining an output: SHAP, LIME, gradients</a>
+<a href="ch5.html">Security: taxonomy of attacks</a>
+<a href="ch6.html">Defenses in depth</a>
+<a href="ch7.html">Privacy I: memorization and extraction</a>
+<a href="ch8.html">Privacy II: membership inference and DP</a>
+<a href="ch9.html">Anonymization and watermarking</a>
+<a href="ch10.html">Evaluating safety: red teaming, AI Act</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Superposition and sparse autoencoders</h2>
+
+<h3>3.1. The problem: more concepts than dimensions</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — Superposition (Elhage et al., 2022)</span>
+  A \(d\)-dimensional network can store more than \(d\) "nearly orthogonal"
+  features: the directions interfere weakly instead of excluding each other.
+  Observed consequence: <strong>poly-semantic neurons</strong> (the same neuron
+  fires for "Python code", "recipe" and "DNA") — the object "concept = neuron"
+  collapses. The <em>toy models of superposition</em> (Anthropic, 2022)
+  reproduce the phenomenon: a 2-dimensional autoencoder learns to represent up
+  to ~5 features depending on their rarity and the importance of interference,
+  with phase transitions (triangle, hexagon geometries...).
+</div>
+
+<h3>3.2. The answer: overcomplete dictionaries with SAEs</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.2 — Sparse autoencoder (SAE)</span>
+  An SAE learns, on the activations \(h \in \mathbb{R}^d\) of a layer, an
+  overcomplete dictionary of \(m \gg d\) features:
+  $$z = \sigma_{\mathrm{ReLU}}\!\bigl(W_{\mathrm{enc}}\,h - b_e\bigr) \in
+  \mathbb{R}^m, \qquad
+  \hat h = W_{\mathrm{dec}}\,z + b_d,$$
+  trained to minimize
+  $$\mathcal{L} \;=\; \underbrace{\|h - \hat h\|_2^2}_{\text{reconstruction}}
+  \;+\; \lambda\, \underbrace{\|z\|_1}_{\text{sparsity}}.$$
+  With \(m \gg d\) and \(z\) sparse, each active feature tends toward a
+  <em>single concept</em> (mono-semantic): superposition is "undone" at the
+  price of a larger space.
+</div>
+
+<p>Bricken et al. (<em>Towards Monosemanticity</em>, 2023) obtain interpretable
+and manipulable features on a one-layer model; Templeton et al.
+(<em>Scaling Monosemanticity</em>, 2024) scale up: SAEs trained on the residual
+stream of Claude&nbsp;3 Sonnet, dictionaries on the order of a million to tens
+of millions of latents, abstract features (the Golden Gate Bridge, code
+security, irony...), and the demonstration that <strong>forcing</strong> a
+feature (<em>steering</em>: amplifying its activation) modifies the model's
+behavior in a targeted way — the correlation → intervention loop of ch. 1
+closes.</p>
+
+<div class="note">
+  <span class="tag">Critical analysis (to be read before believing)</span>
+  (i) <em>What is a "true" feature?</em> — SAEs find <em>one</em> sparse basis
+  among other possible ones; there is no ground truth. (ii)
+  <em>Shrinkage</em>: the SAE underestimates activations (sparsity bias), and
+  dead latents proliferate if \(\lambda\) is poorly tuned. (iii)
+  <em>Cost</em>: training and curating SAEs at scale is expensive, and
+  evaluation remains artisanal (human self-evaluation of features). (iv)
+  <em>Scope</em>: an SAE describes features <em>of one layer, one model, one
+  corpus</em>. It remains the closest object to an "MRI of the transformer" —
+  to be used as such: an exploration tool, not a certificate.
+</div>
+
+<pre class="code"><code># Training of a toy SAE on the activations of a layer (free-form schema)
+import torch
+d, m, lmbda = 768, 8192, 1e-3
+Wenc = torch.nn.Parameter(torch.randn(m, d) / d**0.5)
+benc = torch.nn.Parameter(torch.zeros(m))
+Wdec = torch.nn.Parameter(torch.randn(d, m) / m**0.5)
+bdec = torch.nn.Parameter(torch.zeros(d))
+
+def sae_loss(h):                       # h: batch of activations (frozen)
+    z = torch.relu(h @ Wenc.T + benc)  # sparse code
+    rec = z @ Wdec.T + bdec
+    return ((h - rec)**2).mean() + lmbda * z.abs().mean(), z
+
+# After training: sort the columns by activation frequency, read the
+# top-k examples per feature -> human annotation -> feature dashboard</code></pre>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Reading the layers: logit lens, attention and its limits</a><a class="next" href="ch4.html"><span class="dir">Next</span> Explaining an output: SHAP, LIME, gradients</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refresher in Statistics — Bayesian statistics — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch1.html">Refresher in Statistics</a> › Bayesian statistics</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch1.html"><span class="code-mini">APM_51438_EP</span>Refresher in Statistics</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch1.html">The language of probability</a>
+<a href="ch2.html">Random variables</a>
+<a href="ch3.html">Common probability distributions</a>
+<a href="ch4.html">Convergence and limit theorems</a>
+<a href="ch5.html">Parametric estimation</a>
+<a href="ch6.html">Confidence intervals and tests</a>
+<a href="ch7.html">Linear regression</a>
+<a href="ch8.html" class="active">Bayesian statistics</a>
+<a href="ch9.html">Missing data and the instructor's research</a>
+<a href="ch10.html">From statistics to machine learning</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch8">
+<h2>8. Bayesian statistics</h2>
+
+<p>The frequentist framework treats \(\theta\) as an unknown constant. The
+<strong>Bayesian</strong> framework treats it as a random variable whose prior knowledge we
+encode, then update with data. This chapter — new compared to a standard L3 course — is
+indispensable for the program: VAEs, diffusion and LLM calibration are Bayesian machines
+in disguise.</p>
+
+<div class="def">
+  <span class="tag">Definition 8.1 — Prior, posterior</span>
+  $$\pi(\theta \mid X_1, \dots, X_n) \;=\; \frac{L(\theta)\,\pi(\theta)}
+  {\int L(u)\,\pi(u)\,du} \qquad (\text{posterior} \propto \text{likelihood} \times
+  \text{prior}).$$
+  The denominator (evidence) does not depend on \(\theta\): one often works up to a
+  constant. Today's posterior is tomorrow's prior: inference is <em>sequential</em> by
+  nature.
+</div>
+
+<h3>8.1. Conjugacy: Bernoulli-Beta</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 8.2</span>
+  If \(\theta \sim \mathrm{Beta}(a, b)\) (prior) and \(X_i \mid \theta \sim
+  \mathrm{Bernoulli}(\theta)\) iid, then
+  $$\theta \mid X_1, \dots, X_n \;\sim\; \mathrm{Beta}\big(a + k,\; b + n - k\big),
+  \qquad k = \sum_i X_i.$$
+</div>
+
+<div class="proof">
+  Prior density: \(\pi(\theta) \propto \theta^{a-1}(1-\theta)^{b-1}\) on \([0,1]\).
+  Likelihood: \(L(\theta) = \theta^k (1-\theta)^{n-k}\). Product:
+  $$\pi(\theta \mid x) \propto \theta^{a + k - 1}(1-\theta)^{b + n - k - 1},$$
+  recognized as the (unnormalized) density of a \(\mathrm{Beta}(a+k, b+n-k)\) — the
+  normalizing constant is provided by Euler's beta function. No integral computation:
+  the Beta family is <em>closed</em> under the operation "multiply by the Bernoulli
+  likelihood"; this is <strong>conjugacy</strong>.
+  <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 8.3 — Sequential updating, with numbers</span>
+  Prior \(\mathrm{Beta}(1,1)\) (= uniform, "we know nothing"). We observe 8 successes
+  in 10 trials: posterior \(\mathrm{Beta}(9, 3)\). Posterior mean:
+  \(\frac{9}{12} = 0{,}75\) (vs MLE \(0{,}8\): the prior pulls slightly toward \(1/2\)).
+  95% credible interval: the 2.5% and 97.5% quantiles of \(\mathrm{Beta}(9,3)\),
+  roughly \([0{,}43 ; 0{,}94]\). Each new trial updates \((a,b)\): this is exactly
+  the structure of the spam counters of example 1.9 and of Bayesian bandits (RL module,
+  Thompson sampling).
+<pre class="code"><code>from scipy import stats
+post = stats.beta(9, 3)
+print(post.mean().round(3), post.ppf([0.025, 0.975]).round(3))</code></pre>
+</div>
+
+<h3>8.2. Gaussian-Gaussian conjugacy</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 8.4</span>
+  Model: \(X_i \mid \mu \sim \mathcal{N}(\mu, \sigma^2)\) (\(\sigma\) known), prior
+  \(\mu \sim \mathcal{N}(\mu_0, \tau^2)\). Then
+  $$\mu \mid \bar X_n \;\sim\; \mathcal{N}\!\left(\frac{\mu_0/\tau^2 + n\bar X_n/\sigma^2}
+  {1/\tau^2 + n/\sigma^2},\;\; \frac{1}{1/\tau^2 + n/\sigma^2}\right).$$
+</div>
+
+<div class="proof">
+  Writing \(p = 1/\tau^2\), \(q = n/\sigma^2\) (the <strong>precisions</strong>), the joint
+  density in \((\mu, \text{data})\) viewed as a function of \(\mu\) is proportional to
+  \(\exp\big(-\frac{p}{2}(\mu - \mu_0)^2 - \frac{q}{2}(\mu - \bar X_n)^2\big)\).
+  <em>Complete the square</em>: the sum of the two quadratic terms in \(\mu\) equals
+  \(-\frac{p+q}{2}\Big(\mu - \frac{p\mu_0 + q\bar X_n}{p+q}\Big)^2 + \text{const.}(\mu)\),
+  where the constant does not depend on \(\mu\). We recognize a Gaussian kernel with
+  precision \(p + q\) and mean the <em>precision-weighted average</em> — a harmonic
+  posterior mean between prior and data.
+  <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Precisions add up</span>
+  The posterior variance is smaller than each: \(1/(p+q) \lt 1/p\). As \(n \to
+  \infty\), \(q = n/\sigma^2\) overwhelms \(p\): the posterior mean tends to \(\bar X_n\),
+  the variance to \(\sigma^2/n\) — the Bayesian <em>recovers</em> the frequentist (and the
+  z CI of theorem 6.2). The prior only matters for small \(n\). This sentence — "the
+  prior is a virtual data point of precision \(1/\tau^2\)" — is the best way to
+  parameterize a prior honestly.
+</div>
+
+<h3>8.3. Credible interval vs confidence interval</h3>
+
+<div class="def">
+  <span class="tag">Definition 8.5 — Credible interval</span>
+  A \(1-\alpha\) credible interval is a set \(C\) such that
+  \(\mathbb{P}(\theta \in C \mid \text{data}) = 1 - \alpha\) — a probability <em>about
+  \(\theta\)</em>, conditional on the observed data. The confidence interval
+  (definition 6.1) is a probability <em>about the data</em>, before observation, for a
+  fixed \(\theta\).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 8.6 — The same experiment, two readings</span>
+  \(\sigma = 1\) known, \(n = 1\) observation \(x = 0{,}7\), flat prior.
+  <em>Frequentist</em>: the interval \([x - 1{,}96, x + 1{,}96] = [-1{,}26, 2{,}66]\) has a
+  <em>procedural</em> property: over 100 repetitions of the experiment, ~95 of the
+  constructed intervals will contain the fixed \(\mu\). Saying "\(\mu\) has a 95% chance
+  of being in <em>this particular one</em>" has no frequentist meaning (\(\mu\) is not
+  random). <em>Bayesian</em> (flat prior): \(\mu \mid x \sim \mathcal{N}(x, 1)\) and
+  \([-1{,}26, 2{,}66]\) genuinely satisfies \(\mathbb{P}(\mu \in C \mid x) = 0{,}95\) — it
+  is a statement of rationalized belief. The <em>numbers</em> coincide here (flat prior +
+  pivot), but the <em>semantics</em> differ, and they differ as soon as the prior is no
+  longer flat or the model non-Gaussian. In industrial practice, the question being asked
+  ("what is the probability that the parameter lies in this range, given what I have
+  seen?") is Bayesian; knowing which of the two you are computing is a program-level
+  skill.
+</div>
+
+<h3>8.4. MAP vs MLE</h3>
+
+<div class="def">
+  <span class="tag">Definition 8.7 — MAP estimator</span>
+  The <strong>maximum a posteriori</strong> maximizes \(\pi(\theta)L(\theta)\) instead of
+  \(L(\theta)\) alone: \(\hat\theta_{\mathrm{MAP}} = \arg\max_\theta
+  \big[\log L(\theta) + \log \pi(\theta)\big]\). The MLE is the MAP of a uniform prior.
+  <strong>Example</strong>: Beta(2,2) and 3 successes in 4 trials: MAP \(= \frac{3+1}{4+2}
+  = \frac23\) versus MLE \(= \frac34\).
+</div>
+
+<div class="note">
+  <span class="tag">MAP = regularized MLE</span>
+  \(\log \pi(\theta)\) behaves like a <em>penalty</em> added to the log-likelihood.
+  Gaussian prior on \(\theta\) \(\Leftrightarrow\) \(\ell_2\) penalty (ridge); Laplace
+  prior \(\Leftrightarrow\) \(\ell_1\) penalty (lasso). All the regularization of the
+  Machine Learning module can be reread Bayesianly: regularizing = expressing a prior.
+  This double reading is systematically exploited in deep learning (weight decay =
+  Gaussian prior on the weights).
+</div>
+
+<h3>8.5. The Bayesian approach in generation</h3>
+
+<div class="note">
+  <span class="tag">Bridge toward the advanced modules</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>VAE</strong> (Deep Learning module): the posterior \(\pi(z \mid x)\) is
+    intractable; it is approximated by a Gaussian \(q_\phi(z\mid x)\) and the ELBO is
+    maximized — an approximate version of the Bayesian update of theorem 8.4, performed
+    by a neural network.</li>
+    <li><strong>Diffusion</strong>: Gaussian prior on the noise, chain of Gaussian
+    conditionings (theorem 3.2 applied in cascade).</li>
+    <li><strong>Calibration and uncertainty</strong>: credible intervals quantify
+    <em>epistemic</em> uncertainty (reducible by data) — the subject of the Emerging ML
+    module.</li>
+  </ul>
+</div>
+
+<div class="recap">
+  <p class="recap-title">Key takeaways — chapter 8</p>
+  <ul>
+    <li>Posterior \(\propto\) likelihood × prior; conjugacy: Beta-Bernoulli and
+    Gaussian-Gaussian (both to know how to prove).</li>
+    <li>Additive precisions: the prior is a virtual data point; asymptotically the data
+    win.</li>
+    <li>Credible (probability about \(\theta\)) ≠ confidence (probability about the
+    procedure).</li>
+    <li>MAP = MLE + penalty; ridge/lasso are MAPs.</li>
+  </ul>
+</div>
+</section>
+<nav class="pager"><a href="ch7.html"><span class="dir">← Previous</span> Linear regression</a><a class="next" href="ch9.html"><span class="dir">Next</span> Missing data and the instructor's research</a></nav>
+</main>
+</div>
+
+</body>
+</html>

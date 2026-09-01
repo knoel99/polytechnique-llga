@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech Technology for Conversational AI — Encoder-decoder: LAS, Conformer, RNN-T — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Speech Technology for Conversational AI</a> › Encoder-decoder: LAS, Conformer, RNN-T</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Speech Technology for Conversational AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: the speech signal and its representations</a>
+<a href="ch1.html">Classical ASR: the GMM-HMM pipeline</a>
+<a href="ch2.html">CTC: the loss, derived</a>
+<a href="ch3.html" class="active">Encoder-decoder: LAS, Conformer, RNN-T</a>
+<a href="ch4.html">Whisper: robustness and multi-task</a>
+<a href="ch5.html">Streaming: chunking, VAD, latency vs quality</a>
+<a href="ch6.html">Vocoders: from WaveNet to HiFi-GAN</a>
+<a href="ch7.html">Neural TTS: Tacotron 2, VITS, diffusion and flow</a>
+<a href="ch8.html">Expressivity: prosody, style tokens, SSML</a>
+<a href="ch9.html">Voice conversion and cloning: ethics and watermarking</a>
+<a href="ch10.html">The conversational loop: VAD, turn-taking, full-duplex</a>
+<a href="ch11.html">Speech LLMs and multilingualism</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Encoder-decoder: LAS, Conformer, RNN-T</h2>
+
+<div class="thm">
+  <span class="tag">Theorem 3.1 — LAS: Listen, Attend and Spell (Chan et al., ICASSP 2016)</span>
+  <strong>Listen</strong>: a pyramidal BLSTM (then transformer) encoder compacts
+  the frames \(x_{1:T}\) into states \(h_j\). <strong>Attend</strong>: at each
+  output step \(i\), an additive attention computes
+  $$e_{ij} = v^\top \tanh\big(W_s s_{i-1} + W_h h_j\big), \qquad
+  \alpha_{ij} = \frac{\exp e_{ij}}{\sum_{j'} \exp e_{ij'}}, \qquad
+  c_i = \sum_j \alpha_{ij}\, h_j,$$
+  (<em>location-sensitive</em> attention in practice: the past weights
+  \(a_{i-1}\) enter \(e_{ij}\) to make it monotone and avoid skipped/repeated
+  words). <strong>Spell</strong>: an autoregressive decoder emits \(y_i\)
+  from \((s_{i-1}, y_{i-1}, c_i)\), trained by teacher forcing and
+  cross-entropy. The loss is no longer a marginalization: the attention
+  <em>learns</em> the alignment — and can reorder it (used for speech
+  translation). Two inherited weaknesses: <em>exposure bias</em> (trained on
+  the reference, tested on its own errors) and the impossibility of strict
+  streaming (all of \(x\) is read before the first token).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.2 — Conformer: local convolution + global attention (Gulati et al., Interspeech 2020)</span>
+  The Conformer block chains ("macaron" style) two feed-forward networks with
+  a 1/2 factor around <em>(i)</em> a multi-head attention with
+  <em>relative</em> positional encoding (captures long context — sentences
+  span hundreds of frames) and <em>(ii)</em> a deep convolutional module
+  (pointwise convolution \( \to \) depthwise with dilation, GLU/SiLU,
+  LayerNorm) that captures local phonetics (formants, transitions). The
+  takeaway intuition: attention alone is bad at the fine local patterns of
+  speech, convolution alone does not see the context — the sandwich of the
+  two dominated industrial ASR 2021-2024 (before being absorbed by the
+  foundation models of ch. 4: wav2vec&nbsp;2, HuBERT, Whisper encoder).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.3 — RNN-T (Graves, 2012): the CTC that speaks in real time</span>
+  The RNN-transducer combines an <em>encoder</em> \(f_t\) (frame \(\to\)
+  state, causal — processed on the fly) and a <em>prediction network</em>
+  \(g_u\) (tokens already emitted \(\to\) state); a joint network produces
+  $$P(k \mid t, u) = \mathrm{softmax}\big(W\, f_t + W'\, g_u + b\big)_{k},
+  \qquad k \in \mathcal V \cup \{\epsilon\},$$
+  and the likelihood sums over all paths of the \((t, u)\) grid — it is the
+  forward-backward of Theorem 2.3, transposed onto a \(T \times U\) trellis
+  where \(\epsilon\) = "advance in \(t\) without emitting". Decisive
+  property: the encoder is <em>causal</em>, each \(f_t\) is computable as
+  soon as the frame arrives — RNN-T is the queen architecture of
+  <strong>streaming</strong> ASR (ch. 5), notably on device. Cost: an
+  \(\mathcal O(TU)\) lattice at training and the CTC monotonicity assumption
+  (no reordering).
+</div>
+
+<table class="tbl">
+  <tr><th>Architecture</th><th>Alignment</th><th>Loss</th><th>Streaming</th><th>Internal LM?</th><th>Typical use</th></tr>
+  <tr><td>GMM-HMM (ch. 1)</td><td>explicit states</td><td>EM (Baum-Welch)</td><td>yes</td><td>no (n-gram)</td><td>legacy, old telephony</td></tr>
+  <tr><td>CTC (ch. 2)</td><td>marginalized, monotone</td><td>forward-backward</td><td>partial</td><td>no</td><td>forced alignment, pre-training</td></tr>
+  <tr><td>LAS (ch. 3)</td><td>learned (attention)</td><td>cross-entropy</td><td>no</td><td>yes (AR decoder)</td><td>offline, max quality</td></tr>
+  <tr><td>RNN-T (ch. 3)</td><td>monotone trellis</td><td>2D forward-backward</td><td>yes</td><td>partial (prediction net)</td><td> assistants, mobile</td></tr>
+  <tr><td>Whisper (ch. 4)</td><td>generated (attention)</td><td>multi-task cross-entropy</td><td>no (30 s windows)</td><td>yes</td><td>general transcription</td></tr>
+</table>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> CTC: the loss, derived</a><a class="next" href="ch4.html"><span class="dir">Next</span> Whisper: robustness and multi-task</a></nav>
+</main>
+</div>
+
+</body>
+</html>

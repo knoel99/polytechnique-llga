@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — RAG Ops: freshness and continuous evaluation — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">ML Ops and LLM Engineering Principles</a> › RAG Ops: freshness and continuous evaluation</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: from notebook to system</a>
+<a href="ch1.html">Lifecycle: versioning data, features, models</a>
+<a href="ch2.html">CI/CD for ML: testing data and models</a>
+<a href="ch3.html">LLM serving: continuous batching, P99 latency</a>
+<a href="ch4.html">Costs: euros per million tokens</a>
+<a href="ch5.html">Evaluation in production: drift and monitoring</a>
+<a href="ch6.html" class="active">RAG Ops: freshness and continuous evaluation</a>
+<a href="ch7.html">Fine-tuning Ops: versioned LoRAs</a>
+<a href="ch8.html">Agents in production: tracing and guardrails</a>
+<a href="ch9.html">Operational security: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Case study and green ops</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. RAG Ops: freshness and continuous evaluation</h2>
+
+<div class="recap">
+  <div class="recap-title">Reminder — LLMs module ch. 7 (RAG)</div>
+  Pipeline: chunking → embeddings → vector index → retrieval (hybrid BM25 +
+  dense, cf. NLP ch. 2 and 7) → reranking → conditioned generation. This
+  chapter treats that pipeline as a <em>data system</em> with freshness and
+  evaluation contracts — not as a demo.
+</div>
+
+<h3>6.1. Incremental indexing and freshness</h3>
+
+<p>The enterprise corpus moves: Confluence pages edited, contracts signed,
+FAQs enriched. The index must follow with an explicit <strong>freshness
+SLA</strong> ("a published document is queryable within 15 minutes"). The
+standard pattern: <em>change data capture</em> (webhooks/API of the document
+repository) → event queue → incremental <em>upsert</em> into the index, key
+= (source, doc_id, version). Subtleties:</p>
+
+<ul style="padding-left:1.2rem;">
+  <li><strong>Idempotence</strong>: replaying the same event twice must
+  create only one batch of vectors; deduplicate by key, mark obsolete
+  chunks (soft delete) so as not to break the evaluation links;</li>
+  <li><strong>Per-document atomicity</strong>: the chunks of a document v2
+  replace those of v1 <em>as a block</em> (otherwise retrieval mixes the
+  versions);</li>
+  <li><strong>Embeddings ↔ index coupling</strong>: changing the embedding
+  model requires <em>re-embedding</em> the whole corpus (the spaces are
+  mutually incompatible); dual-boot of the index during the migration, then
+  switchover — the index is a versioned artifact in the sense of ch. 1;</li>
+  <li><strong>Freshness ≠ total reindexing</strong>: measure the cost
+  (summary tokens, GPU time) and aim for incremental everywhere
+  possible.</li>
+</ul>
+
+<h3>6.2. Evaluating a RAG without humans: RAGAS</h3>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — RAGAS metrics (Es et al., 2023)</span>
+  Four <em>reference-free</em> metrics, computed by LLM decomposition:
+  <strong>faithfulness</strong> (is every claim of the answer attested by
+  the context? — anti-hallucination), <strong>answer relevancy</strong>
+  (does the answer answer the question?), <strong>context precision</strong>
+  (are the relevant chunks indeed ranked first?) and <strong>context
+  recall</strong> (are the necessary chunks retrieved? — requires a
+  reference answer). The last two isolate the <em>retrieval</em>, the first
+  two the <em>generation</em>: this is the diagnostic grid missing from a
+  global F1.
+</div>
+
+<pre class="code"><code>from ragas import evaluate
+from ragas.metrics import (faithfulness, answer_relevancy,
+                           context_precision, context_recall)
+from datasets import Dataset
+
+ds = Dataset.from_dict({
+    "question":     q_list,          # golden set (ch. 1: version this set!)
+    "answer":       answers,         # outputs of the candidate pipeline
+    "contexts":     retrieved_chunks,
+    "ground_truth": ref_answers,     # for context_recall
+})
+report = evaluate(ds, metrics=[faithfulness, answer_relevancy,
+                               context_precision, context_recall])
+# CI gate: faithfulness >= 0.85; weekly panel: the 4 time series</code></pre>
+
+<div class="note">
+  <span class="tag">Reading a RAGAS report like an engineer</span>
+  <em>Low recall, high faithfulness</em>: retrieval is failing — improve
+  chunking, hybrid, reranker. <em>High recall, low faithfulness</em>: the
+  model invents despite the context — prompt, stronger model, forced
+  citation. <em>Low relevancy</em>: off-topic or verbose answer. The trap of
+  <em>reference-free</em> metrics: their judge has the biases of ch. 5 —
+  one calibrates them on a hand-annotated sample before making them CI
+  thresholds.
+</div>
+
+<h3>6.3. The graph to the rescue of RAG</h3>
+
+<p>Vector RAG fails on <em>global</em> questions ("what are the recurring
+themes of the 2025 reports?") that require aggregating the whole corpus;
+GraphRAG (Edge et al., 2024; cf. Graph ML module ch. 11) builds an entity
+graph (LLM extraction), partitions it into communities (Leiden) and
+summarizes each community — the global answer becomes a <em>map-reduce</em>
+over the summaries. The ops cost: LLM indexing is expensive (every document
+goes through extraction calls), hence <em>incremental by necessity</em>;
+communities are recomputed periodically. The arbitration (vector vs graph
+vs hybrid) belongs in the system's ablation table — and must be re-measured
+at every model migration (ch. 2).</p>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Evaluation in production: drift and monitoring</a><a class="next" href="ch7.html"><span class="dir">Next</span> Fine-tuning Ops: versioned LoRAs</a></nav>
+</main>
+</div>
+
+</body>
+</html>

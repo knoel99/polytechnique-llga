@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — Evaluating rigorously: MMD, validity, FCD — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › Evaluating rigorously: MMD, validity, FCD</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: generating graphs in M1</a>
+<a href="ch1.html">The problem, formalized</a>
+<a href="ch2.html">Autoregressive models: DeepGMG and GraphRNN in depth</a>
+<a href="ch3.html">VAEs: GraphVAE, NeVAE and valence constraints</a>
+<a href="ch4.html">Normalizing flows: change of variables and GraphAF</a>
+<a href="ch5.html">Discrete diffusion: DiGress in detail</a>
+<a href="ch6.html" class="active">Evaluating rigorously: MMD, validity, FCD</a>
+<a href="ch7.html">Conditional generation and text-to-graph</a>
+<a href="ch8.html">Applications: drugs, materials, synthetic networks</a>
+<a href="ch9.html">Research of the LLGA team</a>
+<a href="ch10.html">Open problems</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Evaluating rigorously: MMD, validity, FCD</h2>
+
+<p>A graph generator is not scored image by image but <em>distribution against
+distribution</em> (M1 recap); at the M2 level, we require: the <strong>formulas</strong>,
+their <strong>biases</strong>, and their <strong>attacks</strong>. Why so much rigor?
+because evaluation <em>drives</em> research: a truncated metric produces truncated
+models (ch. 10).</p>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — MMD (Maximum Mean Discrepancy) on graph features</span>
+  For a kernel \(k\) on \(\mathbb{R}^d\) (e.g. Gaussian
+  \(k(u,v) = e^{-\|u-v\|^2/2\sigma^2}\)) and a feature \(\phi : \mathcal{G} \to
+  \mathbb{R}^d\) (degree histogram, clustering coefficients, orbit counts...):
+  $$\mathrm{MMD}^2\big(\{G_i\}_{i\leq n}, \{G'_j\}_{j\leq m}\big)
+  = \Big\|\frac{1}{n}\sum_i k(\phi(G_i), \cdot) - \frac{1}{m}\sum_j k(\phi(G'_j), \cdot)\Big\|^2_{\mathcal{H}}
+  = \frac{1}{n^2}\sum_{i,i'} k_{ii'} + \frac{1}{m^2}\sum_{j,j'} k_{jj'}
+  - \frac{2}{nm}\sum_{i,j} k_{ij},$$
+  computable in \(\mathcal{O}(n^2 + m^2)\); the estimator is <em>unbiased</em> if one
+  removes the diagonals (\(\frac{1}{n(n-1)}\)). In practice: three canonical features
+  (degrees, clustering, orbits) and a Gaussian kernel with median bandwidth.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — Orbits: the right scale of motifs</span>
+  <em>Orbit counts</em> count the occurrences of each orbit of a small graph
+  \(F\) (4-5 nodes: triangles, squares, paws...) <em>modulo automorphisms</em>: the
+  number of orbits of 4-node graphs is 15 (not the number of graphs, 6); each
+  node of \(G\) is classified into the orbit of its pattern neighborhood. Raw
+  <em>subgraph</em> counts (without quotient by \(\mathrm{Aut}\)) over-count: a
+  complete triangle counts 3 times as "closed paths"; the quotient corrects this
+  constant factor per pattern. The theoretical link: these features are exactly
+  empirical \(t(F, \cdot)\)'s of Theorem 1.4 — comparing orbit MMDs = comparing the
+  graphons in the limiting sense (up to motif size).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.3 — FCD: the Fréchet ChemNet distance (Preuer et al., 2018)</span>
+  Let \(e : \text{molecule} \to \mathbb{R}^d\) be the embedding of an activity-predictor
+  network (ChemNet, pre-trained) assumed approximately Gaussian on each family;
+  $$\mathrm{FCD}(\mathcal{D}_{gén}, \mathcal{D}_{réf}) = \|\mu_1 - \mu_2\|^2 +
+  \mathrm{tr}\big(\Sigma_1 + \Sigma_2 - 2(\Sigma_1 \Sigma_2)^{1/2}\big),$$
+  with \((\mu_k, \Sigma_k)\) the means/covariances of the embeddings of the two sets —
+  exactly the \(d^2_{\mathcal{W}_2}\) metric of two Gaussians (the analogue of the
+  FID; Multimodal GenAI module ch. 8); the matrix square root is computed via
+  eigenvalues. Key property: the FCD <em>penalizes invalid molecules</em> (no
+  embedding → infinite distance or fixed penalty): it integrates validity <em>and</em>
+  distributional similarity of properties — why it became the reference metric of
+  molecular benchmarks (GuacaMol, MOSES).
+</div>
+
+<div class="note">
+  <span class="tag">The pitfalls of evaluation (to be known by heart)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Validity ≠ quality</strong>: 100% validity is obtained by
+    <em>memorizing</em> the dataset (perfect validity, 0 novelty); always report
+    validity <em>and</em> uniqueness <em>and</em> novelty <em>and</em> FCD;</li>
+    <li><strong>MMD sensitive to sample size</strong>: the bias of the estimator
+    grows like \(\mathcal{O}(1/n)\); comparing two models with different numbers of
+    generated \(n\) is invalid — protocol: same \(n\), same seeds, several trials;
+    significance is tested by bootstrap;</li>
+    <li><strong>Chosen features = favored families</strong>: degrees + clustering
+    ignore the motif-position correlation; a generator can pass the exam on
+    marginal distributions and fail on the <em>joints</em> (molecules whose
+    fragments are right but assembled absurdly); hence the addition of orbits,
+    FCD, and transport distances (Gromov-Wasserstein, Optimal Transport
+    module);</li>
+    <li><strong>Metric overfitting</strong>: optimizing against the FCD
+    (e.g. by guidance) eventually inflates it — honest evaluation keeps one
+    metric <em>kept secret</em> (the held-out principle, cf. healthy benchmarking:
+    Dwivedi et al., JMLR 2023, recalled in the Advanced GNN module ch. 6).</li>
+  </ol>
+</div>
+
+<table class="tbl">
+  <tr><th>Metric</th><th>Granularity</th><th>Cost</th><th>Captures</th><th>Main limitation</th></tr>
+  <tr><td>Validity / uniqueness / novelty</td><td>per molecule</td><td>RDKit, \(\mathcal{O}(n)\)</td><td>syntactic legality, memorization</td><td>blind to the distribution</td></tr>
+  <tr><td>MMD degrees / clustering</td><td>marginal</td><td>\(\mathcal{O}(n^2)\) kernel</td><td>local structure</td><td>ignores joints</td></tr>
+  <tr><td>MMD orbits</td><td>motifs (4-5 nodes)</td><td>enum. costly</td><td>motifs modulo automorphisms</td><td>bounded size</td></tr>
+  <tr><td>FCD</td><td>chemical properties</td><td>1 ChemNet pass</td><td>property distribution + validity</td><td>depends on the predictor</td></tr>
+  <tr><td>Gromov-Wasserstein</td><td>whole graphs</td><td>OT \(\mathcal{O}(n^3)\)</td><td>structure without correspondence</td><td>cost, choice of intra distance</td></tr>
+</table>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Discrete diffusion: DiGress in detail</a><a class="next" href="ch7.html"><span class="dir">Next</span> Conditional generation and text-to-graph</a></nav>
+</main>
+</div>
+
+</body>
+</html>

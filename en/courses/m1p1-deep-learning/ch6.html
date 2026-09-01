@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Attention and transformers — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Deep Learning</a> › Attention and transformers</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: matrix differential calculus and numerical stability</a>
+<a href="ch1.html">From the neuron to the deep network</a>
+<a href="ch2.html">Backpropagation</a>
+<a href="ch3.html">Optimization in practice</a>
+<a href="ch4.html">Convolutional networks (CNN)</a>
+<a href="ch5.html">Sequences: RNN, LSTM</a>
+<a href="ch6.html" class="active">Attention and transformers</a>
+<a href="ch7.html">Generative models: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning and fine-tuning</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ch10.html">Training in practice</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. Attention and transformers</h2>
+
+<h3>6.1. Scaled dot-product: why \(\sqrt{d_k}\)</h3>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — Scaled dot-product attention (Vaswani et al., 2017)</span>
+  For tokens \(i = 1..n\) with embeddings \(x_i\), one computes
+  $$q_i = W_q x_i,\quad k_i = W_k x_i,\quad v_i = W_v x_i,$$
+  $$\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\!\Big(\frac{Q K^\top}{\sqrt{d_k}}\Big) V, \qquad
+  \alpha_{ij} = \frac{\exp(q_i^\top k_j / \sqrt{d_k})}{\sum_{j'} \exp(q_i^\top k_{j'} / \sqrt{d_k})}.$$
+  <strong>Multi-head</strong>: \(h\) attention heads in parallel (projections
+  \(W^q_m, W^k_m, W^v_m\), dimensions \(d_k = d/h\)), concatenated then projected —
+  several independent "communication channels".
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — The variance of the scores grows like \(d_k\)</span>
+  If the components of \(q\) and \(k\) are iid, centered, with variance 1, then
+  \(q^\top k = \sum_{\ell=1}^{d_k} q_\ell k_\ell\) is centered with variance
+  exactly \(d_k\). Without normalization, the standard deviation of the scores is
+  \(\sqrt{d_k}\)
+  (32 for \(d_k = 1024\)): the softmax becomes a one-hot argmax, its gradients
+  vanish — saturation, cf. chapter 0, proposition 0.3. Dividing by
+  \(\sqrt{d_k}\) brings the variance back to 1, independent of the dimension.
+</div>
+
+<div class="proof">
+Centering: \(\mathbb{E}[q_\ell k_\ell] = \mathbb{E}[q_\ell]\,\mathbb{E}[k_\ell] = 0\)
+(independence). Variance: the terms \(q_\ell k_\ell\) are mutually iid, so
+\(\mathrm{Var}(\sum_\ell q_\ell k_\ell) = \sum_\ell \mathrm{Var}(q_\ell k_\ell) =
+d_k\, \mathbb{E}[q_\ell^2]\mathbb{E}[k_\ell^2] = d_k\). After dividing by
+\(\sqrt{d_k}\), the variance of the normalized score equals \(1\). Consequence for
+saturation: the typical gaps between normalized scores are \(\mathcal{O}(1)\),
+the exponential ratios \(\exp(s_i - s_j)\) stay in a reasonable range and
+the softmax keeps a nonzero gradient; without scaling, gaps of order
+\(\sqrt{d_k} \gg 1\) produce a near one-hot distribution, whose gradient
+(\(\hat y_k(\delta_{kj} - \hat y_j)\)) tends to 0.
+<span class="qed">∎</span>
+</div>
+
+<h3>6.2. Block architecture: pre-norm, RoPE</h3>
+
+<ul>
+  <li><strong>Post-norm</strong> (Vaswani et al., original):
+  \(y = \mathrm{LN}(x + \mathrm{Att}(x))\) — the residual connection passes
+  <em>through</em>
+  the normalization. <strong>Pre-norm</strong> (GPT-2 and after):
+  \(y = x + \mathrm{Att}(\mathrm{LN}(x))\) — the identity path is <em>intact</em>
+  (proposition 4.6): the gradient reaches the input without attenuation, which makes
+  training stable at large depth and reduces the need for warmup; a
+  final LayerNorm compensates for the absence of output normalization. The current
+  standard.</li>
+  <li><strong>RoPE</strong> (rotary position embedding, Su et al., 2021): instead
+  of <em>adding</em> a positional code, one <em>rotates</em> each pair of
+  coordinates \((q_{2i}, q_{2i+1})\) by an angle \(m\,\theta_i\) depending on the
+  position \(m\) of the token (and on \(i\)), with \(\theta_i = b^{-2i/d}\). Proof of
+  the "relative" character: planar rotations commute and
+  \(R(m)^\top R(n) = R(n - m)\), so
+  $$\langle R(m)\, q,\; R(n)\, k \rangle = q^\top R(m)^\top R(n)\, k = q^\top R(n-m)\, k,$$
+  the score depends only on the gap \(n - m\): position is encoded
+  <em>within</em> the interaction, with unbounded length support — this is the encoding
+  of modern LLMs (cf. LLMs module, M2).</li>
+</ul>
+
+<h3>6.3. Costs and efficient attention</h3>
+
+<ul>
+  <li><strong>Complexity</strong>: \(\mathcal{O}(n^2 d)\) time and
+  \(\mathcal{O}(n^2)\) memory (\(QK^\top\) matrix of size \(n \times n\) per
+  head) — the LLM bottleneck. The MLP is \(\mathcal{O}(n d^2)\): attention
+  dominates as soon as \(n \gtrsim d\).</li>
+  <li><strong>FlashAttention</strong> (Dao et al., 2022): <em>exact</em>, but
+  IO-aware — it tiles the computation of softmax(QK^T)V into blocks loaded into SRAM
+  (the GPU's fast memory) and <em>never</em> writes the \(n \times n\) matrix to HBM,
+  maintaining online log-sum-exp statistics (proposition 0.3 makes the
+  softmax incremental: blocks are merged with \(m\) and the partial sum).
+  Result: same FLOPs, \(\mathcal{O}(n)\) memory, ×2 to ×4 speed in
+  practice.</li>
+  <li><strong>Approximations</strong>: sparse, linear, sliding window
+  (cf. LLMs module, M2).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">"Graph" reading (Karpathy, 2025-2026) — the bridge to the Graph ML module</span>
+  A transformer is a <strong>neural network on a dynamic graph</strong>:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>each <strong>token = a node</strong> carrying a vector;</li>
+    <li>attention computes <strong>weighted edges</strong> \(\alpha_{ij}\) <em>from the
+    data</em> (dynamic graph, unlike GNNs);</li>
+    <li>\(\sum_j \alpha_{ij} v_j\) is a <strong>message passing</strong>: the nodes
+    exchange their "values";</li>
+    <li>the <strong>MLP block = the local computation</strong> of each node;
+    residual + LayerNorm = plumbing so that the "graph" stays trainable;</li>
+    <li>a transformer layer = <em>communication</em> (attention) then
+    <em>computation</em> (MLP), exactly the alternation of a GNN.</li>
+  </ul>
+  The LLGA program exploits this double reading: the same mathematical object seen
+  "from inside the LLM" (M2 module) and "on structured data" (Graph ML module).
+</div>
+
+<h3>6.4. A complete block in PyTorch</h3>
+
+<pre class="code"><code>import torch, torch.nn as nn, torch.nn.functional as F
+
+class Block(nn.Module):
+    """A pre-norm transformer block: multi-head causal attention + MLP."""
+    def __init__(self, d, n_heads, p_drop=0.1):
+        super().__init__()
+        self.ln1, self.ln2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.n_heads, self.d_head = n_heads, d // n_heads
+        self.qkv = nn.Linear(d, 3 * d)
+        self.proj = nn.Linear(d, d)
+        self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+        self.drop = nn.Dropout(p_drop)
+
+    def forward(self, x):                          # x: (B, n, d)
+        B, n, d = x.shape
+        q, k, v = self.qkv(self.ln1(x)).chunk(3, -1)
+        # multi-head: (B, n, d) -> (B, n, h, d_head) -> (B, h, n, d_head)
+        def split(t): return t.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
+        q, k, v = split(q), split(k), split(v)
+        mask = torch.tril(torch.ones(n, n, device=x.device))     # causal mask
+        att = F.scaled_dot_product_attention(q, k, v,            # softmax(QK^T/sqrt(d_head))V
+                                             attn_mask=mask, dropout_p=0.0)
+        att = att.transpose(1, 2).reshape(B, n, d)               # merge the heads back
+        x = x + self.drop(self.proj(att))                        # residual 1 (pre-norm)
+        x = x + self.drop(self.mlp(self.ln2(x)))                 # residual 2
+        return x
+
+torch.manual_seed(0)
+x = torch.randn(2, 16, 128)
+model = nn.Sequential(*[Block(128, 4) for _ in range(4)])
+print(model(x).shape)                              # [2, 16, 128]
+
+# Position: the transformer is permutation-invariant -> RoPE or encoding added to x
+max_n, d = 512, 128</code></pre>
+
+<ul>
+  <li><strong>Position</strong>: attention does not know the order → <em>positional
+  encodings</em> (sinusoidal, learned, or RoPE, 6.2) — and on graphs: the analogue
+  is the problem of <em>positional/structural encodings</em>, at the heart of chapter 9
+  and of the Advanced GNN module (M2);</li>
+  <li><strong>MLP</strong>: two layers with GELU, expansion ratio ~4 — this is where
+  most of the parameters live (~2/3);</li>
+  <li><strong>Causal mask</strong>: forbid \(j &gt; i\) for autoregression —
+  exactly the factorization \(\mathbb{P}(x) = \prod_t \mathbb{P}(x_t \mid x_{&lt;t})\)
+  of chapter 7.</li>
+</ul>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Sequences: RNN, LSTM</a><a class="next" href="ch7.html"><span class="dir">Next</span> Generative models: AE, VAE, GAN</a></nav>
+</main>
+</div>
+
+</body>
+</html>

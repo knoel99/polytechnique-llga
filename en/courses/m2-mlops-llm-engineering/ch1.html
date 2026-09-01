@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — Lifecycle: versioning data, features, models — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">ML Ops and LLM Engineering Principles</a> › Lifecycle: versioning data, features, models</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: from notebook to system</a>
+<a href="ch1.html" class="active">Lifecycle: versioning data, features, models</a>
+<a href="ch2.html">CI/CD for ML: testing data and models</a>
+<a href="ch3.html">LLM serving: continuous batching, P99 latency</a>
+<a href="ch4.html">Costs: euros per million tokens</a>
+<a href="ch5.html">Evaluation in production: drift and monitoring</a>
+<a href="ch6.html">RAG Ops: freshness and continuous evaluation</a>
+<a href="ch7.html">Fine-tuning Ops: versioned LoRAs</a>
+<a href="ch8.html">Agents in production: tracing and guardrails</a>
+<a href="ch9.html">Operational security: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Case study and green ops</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Lifecycle: versioning data, features, models</h2>
+
+<p>The ML lifecycle extends well beyond training:
+<strong>collection → labeling → features → training → evaluation → registry →
+deployment → monitoring → (re)training</strong>. Every arrow in this cycle is
+an artifact that must be <em>identified immutably</em>; failing that, no
+metric is reproducible — neither for debugging, nor for audits, nor in front
+of a client.</p>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Artifact and lineage</span>
+  An <strong>artifact</strong> is any object produced or consumed by the
+  cycle: dataset, feature schema, weights, tokenizer, prompt template, vector
+  index, configuration, container image. The <strong>lineage</strong> is the
+  graph of artifact → artifact dependencies. A training is
+  <em>reproducible</em> when code + data + configuration + environment are all
+  identified by fingerprints (hashes) and replayable.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — The triple fingerprint</span>
+  A training run is reproducible only if one can replay the triplet
+  \((\text{code}, \text{data}, \text{config})\). In practice:
+  <code>git</code> versions the code (commit hash), <strong>DVC</strong>
+  versions the data and the weights (content fingerprint, the living file
+  staying out of the repository), and <code>params.yaml</code> links the two.
+  Every published metric references the three fingerprints — otherwise it is
+  not a measurement, it is a rumor.
+</div>
+
+<pre class="code"><code># Bulky data versioned by content (DVC) -- only the pointer goes into git
+$ dvc add data/faq_2026.parquet          # creates data/faq_2026.parquet.dvc (hash + size)
+$ git add data/faq_2026.parquet.dvc &amp;&amp; git commit -m "faq v3 (dedup + PII scrub)"
+
+# Declarative pipeline: stages re-run if and only if their inputs change
+# dvc.yaml
+stages:
+  prepare:
+    cmd: python src/prepare.py data/raw/ data/train.parquet
+    deps: [data/raw/, src/prepare.py]
+    outs: [data/train.parquet]
+  finetune:
+    cmd: python src/train_lora.py --config params.yaml
+    deps: [data/train.parquet, src/train_lora.py, params.yaml]
+    outs: [artifacts/lora_faq_v3/]
+  evaluate:
+    cmd: python src/evaluate.py --run artifacts/lora_faq_v3/
+    deps: [artifacts/lora_faq_v3/, data/eval_v3.parquet]
+    metrics: [artifacts/lora_faq_v3/metrics.json:
+              {cache: false}]
+
+$ dvc exp run            # replays the chain, records the experiment
+$ dvc metrics diff       # compares v2 -> v3</code></pre>
+
+<h3>1.1. Feature stores and registries</h3>
+
+<p>For tabular ML, a <strong>feature store</strong> (e.g. Feast) serves the
+same feature definition <em>offline</em> (training, batch) and
+<em>online</em> (serving, low-latency), eliminating training/inference skew —
+the sneakiest class of bug in industrial ML. For LLMs, the functional
+equivalent is twofold: the <strong>prompt cache</strong> (shared prefixes;
+cf. ch. 4) and the <strong>embedding bank</strong> of the RAG (ch. 6), whose
+schema (chunk type, embedding model, index version) must be managed like a
+feature: identified, versioned, replayable.</p>
+
+<p>The <strong>model registry</strong> (MLflow, or a privatized
+<code>hf_hub</code> directory) records for each version: the fingerprints of
+the triplet, the qualification metrics, the signature (inputs/outputs), and
+the status (<em>staging / production / archived</em>). A deployment never
+references "the latest training" but a frozen version of the registry.</p>
+
+<div class="note">
+  <span class="tag">LLM specificity: prompts and evals are artifacts</span>
+  In an LLM application, three families of artifacts add to the classic
+  triplet: (i) <strong>prompt templates</strong> (versioned like code, with
+  tests — ch. 2); (ii) <strong>evaluation sets</strong> (golden sets question
+  → expected answer / relevant documents); (iii) the <strong>embedding models
+  and index</strong> of the RAG, coupled: changing the embedding model
+  invalidates the whole index (ch. 6). Forgetting to version a prompt is
+  equivalent to not versioning the weights.
+</div>
+
+<table class="tbl">
+  <tr><th>Step</th><th>Artifact</th><th>Typical tool</th><th>Fingerprint</th></tr>
+  <tr><td>Data</td><td>train/eval sets</td><td>DVC, lakeFS</td><td>content hash</td></tr>
+  <tr><td>Features / embeddings</td><td>definitions, index</td><td>Feast, vector database</td><td>schema version</td></tr>
+  <tr><td>Training</td><td>run + weights + LoRA</td><td>MLflow, HF Hub</td><td>run id + commit</td></tr>
+  <tr><td>Evaluation</td><td>reports, metrics</td><td>MLflow, RAGAS</td><td>eval set hash</td></tr>
+  <tr><td>Deployment</td><td>container image</td><td>OCI registry</td><td>sha256 digest</td></tr>
+  <tr><td>Serving</td><td>logs, traces</td><td>OTel, Langfuse</td><td>model + prompt + index</td></tr>
+</table>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Reminders: from notebook to system</a><a class="next" href="ch2.html"><span class="dir">Next</span> CI/CD for ML: testing data and models</a></nav>
+</main>
+</div>
+
+</body>
+</html>

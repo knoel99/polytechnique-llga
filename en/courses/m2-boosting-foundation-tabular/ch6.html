@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Boosting to Foundation Models: learning with Tabular Data — TabPFN: learning tables in-context — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">From Boosting to Foundation Models: learning with Tabular Data</a> › TabPFN: learning tables in-context</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>From Boosting to Foundation Models: learning with Tabular Data</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: trees, forests, boosting</a>
+<a href="ch1.html">Why GBDTs (still) dominate tabular data</a>
+<a href="ch2.html">Boosting: functional gradient descent</a>
+<a href="ch3.html">XGBoost, LightGBM, CatBoost: three engineering approaches</a>
+<a href="ch4.html">Encoding columns: categorical and numerical</a>
+<a href="ch5.html">Deep tabular: regularized MLPs and FT-Transformer</a>
+<a href="ch6.html" class="active">TabPFN: learning tables in-context</a>
+<a href="ch7.html">LLMs and tables: serialization, text-to-SQL</a>
+<a href="ch8.html">Synthetic tabular data</a>
+<a href="ch9.html">Honest benchmarking</a>
+<a href="ch10.html">Choosing your method: guide and open questions</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch6">
+<h2>6. TabPFN: learning tables in-context</h2>
+
+<p>The 2023-2025 paradigm shift: no longer train a model <em>on</em>
+the table, but train a transformer <em>once and for all</em> on
+millions of synthetic tables, then predict <em>in-context</em> — the
+tabular analogue of LLM few-shot learning.</p>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — Prior-fitted network (PFN)</span>
+  Let a <strong>prior</strong> \(\mathfrak{p}\) over datasets: a
+  law over functions \(f\) (and noises, features, sizes) from which
+  synthetic datasets \(\mathcal{D}_{sim}\) are drawn. A PFN is a
+  transformer \(q_\theta\) trained to predict, for an example \(x\)
+  presented next to a set \(\mathcal{D}_{train}\) <em>inside its
+  input window</em>, the law \(p(y \mid x, \mathcal{D}_{train})\).
+  Müller et al. (ICLR 2022) show that such a network approximates
+  the <strong>Bayesian posterior predictive</strong>
+  $$ p(y \mid x, \mathcal{D}) = \int p(y \mid x, \theta)\, p(\theta \mid \mathcal{D})\,
+  d\theta $$
+  in <em>a single forward pass</em>: the transformer's in-context
+  learning is a form of amortized Bayesian inference. Cf. LLMs
+  module (M2) ch. 3 for in-context learning on the language side.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 6.2 — TabPFN's causal prior</span>
+  TabPFN (Hollmann et al., ICLR 2023; v2: Nature 2025) draws its
+  synthetic tables from random <strong>structural causal
+  models</strong>: random DAG over \(p\) variables, nonlinear
+  mechanisms (networks, piecewise transformations), heterogeneous
+  noises, then monotone marginal transformations — mimicking the
+  "irregular distributions" of ch. 5 — and adding uninformative
+  features and missing values. By training on millions of such
+  tables, the model learns <em>to learn:</em> in use, one deposits
+  train + the row to predict in the context; no gradient descent is
+  run on the user's table.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.3 — What in-context buys</span>
+  (i) <strong>Zero pipeline hyperparameters</strong> (no trees,
+  rates, or depths): the "tuning" is amortized in pre-training; (ii)
+  <strong>seconds</strong> of inference for tables up to
+  \(\sim\!10,000\) rows (v2), classification <em>and</em> regression,
+  missing values and outliers tolerated; (iii) <strong>free
+  uncertainty</strong>: \(q_\theta(y \mid x, \mathcal{D})\) is a
+  predictive law — usable for abstention. Trade-offs: a context
+  window (beyond \(\sim\!10,000\) rows, fall back to "classical"
+  training minibatches), limited types (no rich textual columns; cf.
+  ch. 7), and a dependence on the proximity between the real table
+  and the prior of def. 6.2.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 6.4 — A shifting benchmark</span> On the
+  reference suites of medium-sized datasets, v2 (Nature 2025) beats
+  tuned GBDTs on average — the first credible "deep" victory in this
+  regime, three years after Grinsztajn et al. Ch. 9 nonetheless
+  requires reading these results with a symmetric protocol (GBDT
+  tuning budget, same folds, same seeds): the "trees vs foundations"
+  debate remains open for large \(n\), textual columns, and
+  industrial constraints.
+</div>
+</section>
+<nav class="pager"><a href="ch5.html"><span class="dir">← Previous</span> Deep tabular: regularized MLPs and FT-Transformer</a><a class="next" href="ch7.html"><span class="dir">Next</span> LLMs and tables: serialization, text-to-SQL</a></nav>
+</main>
+</div>
+
+</body>
+</html>

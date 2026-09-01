@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — Discrete diffusion: DiGress in detail — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › Discrete diffusion: DiGress in detail</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: generating graphs in M1</a>
+<a href="ch1.html">The problem, formalized</a>
+<a href="ch2.html">Autoregressive models: DeepGMG and GraphRNN in depth</a>
+<a href="ch3.html">VAEs: GraphVAE, NeVAE and valence constraints</a>
+<a href="ch4.html">Normalizing flows: change of variables and GraphAF</a>
+<a href="ch5.html" class="active">Discrete diffusion: DiGress in detail</a>
+<a href="ch6.html">Evaluating rigorously: MMD, validity, FCD</a>
+<a href="ch7.html">Conditional generation and text-to-graph</a>
+<a href="ch8.html">Applications: drugs, materials, synthetic networks</a>
+<a href="ch9.html">Research of the LLGA team</a>
+<a href="ch10.html">Open problems</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Discrete diffusion: DiGress in detail</h2>
+
+<p>Continuous diffusion (Multimodal GenAI module ch. 3) noises with Gaussians — pointless
+for categorical atom types. DiGress (Vignac et al., ICLR 2023) transposes the machinery
+to the <em>categorical</em>, via the D3PM framework (Austin et al., 2021): noising =
+Markov chains on the categories, denoising = closed-form Bayesian posterior. Goal of
+this chapter: master <em>all</em> the equations.</p>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — Forward process by transition matrices</span>
+  A type \(x\) (atom among \(K\)) is represented as a one-hot \(X \in \{0,1\}^K\). The
+  noising is a Markov chain <em>independent per node and per edge</em>:
+  $$q(X_t \mid X_{t-1}) = \mathrm{Cat}\big(X_t;\ Q_t X_{t-1}\big),$$
+  where \(Q_t \in [0,1]^{K \times K}\) is stochastic (rows summing to 1): row
+  \(k\) is the law of the new type given the old one \(k\). The usual cases:
+  <strong>uniform</strong> \(Q_t = (1 - \beta_t) I + \beta_t \frac{1}{K}\mathbf{1}\mathbf{1}^\top\)
+  (with probability \(\beta_t\), forget and redraw uniformly); <strong>absorbing</strong>
+  (toward a mask state <code>[MASK]</code> — the analogue of BERT's MLM, cf. LLMs
+  module M2 ch. 3); <strong>discretized Gaussian</strong> (transition toward
+  neighboring types). The composition is exact: \(q(X_t \mid X_s) =
+  \mathrm{Cat}(X_t\,;\ \bar Q_s^t X_s)\) with \(\bar Q_s^t = Q_{s+1} \dots Q_t\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.2 — Stationary marginal (proven in the uniform case)</span>
+  For the uniform kernel above, \(q(X_t \mid X_0) = \mathrm{Cat}\big((1-\bar\beta_t) X_0 +
+  \bar\beta_t\, \mathbf{u}\big)\) with \(\mathbf{u}\) the uniform law and
+  \(\bar\beta_t = 1 - \prod_{s \leq t}(1 - \beta_s)\): at large \(t = T\), the law is
+  (almost) uniform — independent of \(X_0\), the condition for "total" noising.
+  <div class="proof">
+  By recursion: let \(p_t = q(X_t \mid X_0)\) (row vector);
+  \(p_t^\top = Q_t\, p_{t-1}^\top = \big[(1-\beta_t) I + \frac{\beta_t}{K}\mathbf{1}\mathbf{1}^\top\big] p_{t-1}^\top
+  = (1-\beta_t)\,p_{t-1}^\top + \beta_t\, \mathbf{u}^\top\) since
+  \(\mathbf{1}^\top p_{t-1}^\top = 1\) (mass law); unrolling,
+  \(p_t^\top = \big(\prod_s (1-\beta_s)\big) X_0^\top + \big(1 - \prod_s(1-\beta_s)\big)\mathbf{u}^\top\).
+  At \(t = T\), the weight of \(X_0\) is \(\prod_s (1-\beta_s) \approx 0\) (schedule
+  \(\beta_s \to 1\)): the <em>dataset</em> marginal law is also accessible — one can
+  make it converge toward the empirical marginal \(\mathbf{m} = \frac{1}{N}\sum_i X_0^{(i)}\)
+  rather than the uniform, by replacing \(\mathbf{u}\) with \(\mathbf{m}\): DiGress
+  uses this option ("no bond" edges dominate, reflecting them in the final law helps
+  the denoising). <span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.3 — Posterior \(q(X_{t-1} \mid X_t, X_0)\) in closed form (the heart of DiGress)</span>
+  $$q(X_{t-1} = j \mid X_t = i,\ X_0 = k) =
+  \frac{(Q_{t-1})_{k j}\,(\bar Q_{t})_{j i}}
+  {(\bar Q_{t-1})_{k i}},$$
+  all quantities being rows/columns of the transition matrices — direct computation,
+  no network is involved; the network only serves to estimate \(\hat X_0\).
+  <div class="proof">
+  Bayes on the chain: \(q(X_{t-1} \mid X_t, X_0) \propto q(X_t \mid X_{t-1})\,
+  q(X_{t-1} \mid X_0)\) (Markov: \(X_t \perp X_0 \mid X_{t-1}\)). In one-hot,
+  \(q(X_t = i \mid X_{t-1} = j) = (Q_t)_{j i}\) and \(q(X_{t-1} = j \mid X_0 = k) =
+  (\bar Q_{t-1})_{k j}\); the denominator is the marginal \(q(X_t = i \mid X_0 = k) =
+  \sum_j (Q_t)_{j i} (\bar Q_{t-1})_{k j} = (\bar Q_t)_{k i}\) (matrix product — this is
+  exactly the composition of Definition 5.1). <span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.4 — DiGress: architecture, losses and topology perturbations</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Denoising network</strong>: a hybrid GNN (MPNN + global attention
+    layers, graph-transformer style — cf. Advanced GNN module ch. 4) predicts
+    \(\hat X_0, \hat E_0 = \mathrm{softmax}_K\big(\mathrm{GNN}(X_t, E_t)\big)\);
+    training maximizes the likelihood of the <em>clean</em> types at the drawn steps
+    \(t\):
+    $$\mathcal{L} = \mathbb{E}_{t, G_0}\;\mathbb{E}_{q(X_t, E_t \mid X_0, E_0)}
+    \big[-\log p_\theta(\hat X_0 = X_0) - \log p_\theta(\hat E_0 = E_0)\big]\,;$$</li>
+    <li><strong>Chemical auxiliary losses</strong>: penalties on derived
+    features — valence violations, bond lengths, angles: weighted by
+    \(\lambda\)'s; they do not change the likelihood but steer the denoising
+    toward chemically plausible regions (same lesson as NeVAE ch. 3,
+    transposed);</li>
+    <li><strong>Noised topology</strong>: edges also <em>appear/disappear</em>:
+    at each step, a fraction of edges is redrawn (added/removed) around the
+    density diagonal — without this, the number of edges would be frozen by the
+    conditioning; exchangeability is <em>exact</em>: no node order exists in the
+    process (unlike GraphRNN);</li>
+    <li><strong>Sampling</strong>: from \((X_T, E_T)\) (marginal law), iterate
+    \(\hat X_0 \to q(X_{t-1} \mid X_t, \hat X_0)\) (Theorem 5.3); cost: \(T\)
+    GNN passes (typically \(T\) reduced by discrete DDIM), each
+    \(\mathcal{O}(n^2)\) — parallel over all nodes: the contrast with the
+    \(\Theta(n^2)\) <em>sequential</em> steps of GraphRNN;</li>
+    <li><strong>Guidance</strong>: classifier-free conditioning (recap from the
+    Multimodal GenAI module ch. 4): DiGress trains the network with a conditional
+    descriptor \(c\) sometimes masked; at sampling,
+    \(\hat X_0^{cfg} \propto \hat X_0^{uncond}\cdot\big(\hat X_0^{cond}/\hat X_0^{uncond}\big)^{w}\)
+    — the "guided" sample sequences follow the target property (e.g.
+    \(QED\), logP penalty) at a measured cost in diversity (the trade-off of ch. 6
+    of the Control in Generative AI module);</li>
+    <li><strong>Inpainting</strong>: freeze a scaffold (known types and edges),
+    noise the rest, generate: the posterior 5.3 is constrained trivially (the
+    frozen positions are not denoised) — conditional generation by partial
+    graph without retraining.</li>
+  </ol>
+</div>
+
+<div class="note">
+  <span class="tag">Cousins and descendants</span>
+  <strong>EDP-GNN</strong> (Niu et al., 2020): <em>continuous</em> score matching on
+  the permuted adjacency (with permutation annealing); <strong>GDSS</strong> (Jo et al.,
+  ICML 2022): a coupled node/edge SDE system, solved as a joint continuous
+  diffusion; <strong>EDM/EDT</strong> (3D): equivariant positions in addition to
+  types — the geometric entry point (cf. Geometric Deep Learning M2 module for
+  equivariance); <strong>NGG</strong> (ch. 9): the recipe moved into a
+  <em>latent space</em> of graph features. The diffusion family dominates the
+  2023-2026 molecular state of the art on the quality/exchangeability trade-off —
+  autoregressive models keep the exact likelihood, flows the gradient
+  guidance: ch. 6 shows how to compare them fairly.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Normalizing flows: change of variables and GraphAF</a><a class="next" href="ch6.html"><span class="dir">Next</span> Evaluating rigorously: MMD, validity, FCD</a></nav>
+</main>
+</div>
+
+</body>
+</html>

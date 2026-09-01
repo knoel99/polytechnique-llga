@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Boosting to Foundation Models: learning with Tabular Data — XGBoost, LightGBM, CatBoost: three engineering approaches — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">From Boosting to Foundation Models: learning with Tabular Data</a> › XGBoost, LightGBM, CatBoost: three engineering approaches</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>From Boosting to Foundation Models: learning with Tabular Data</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: trees, forests, boosting</a>
+<a href="ch1.html">Why GBDTs (still) dominate tabular data</a>
+<a href="ch2.html">Boosting: functional gradient descent</a>
+<a href="ch3.html" class="active">XGBoost, LightGBM, CatBoost: three engineering approaches</a>
+<a href="ch4.html">Encoding columns: categorical and numerical</a>
+<a href="ch5.html">Deep tabular: regularized MLPs and FT-Transformer</a>
+<a href="ch6.html">TabPFN: learning tables in-context</a>
+<a href="ch7.html">LLMs and tables: serialization, text-to-SQL</a>
+<a href="ch8.html">Synthetic tabular data</a>
+<a href="ch9.html">Honest benchmarking</a>
+<a href="ch10.html">Choosing your method: guide and open questions</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. XGBoost, LightGBM, CatBoost: three engineering approaches to gradient</h2>
+
+<h3>3.1. XGBoost: the second derivative and explicit regularization</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — XGBoost's regularized objective</span>
+  At iteration \(t\), with \(g_i = \partial_{\hat{y}^{(t-1)}_i} L(y_i,
+  \hat{y}^{(t-1)}_i)\) and \(h_i = \partial^2_{\hat{y}^{(t-1)}_i} L(y_i, \hat{y}^{(t-1)}_i)\), one
+  minimizes
+  $$ \sum_{i=1}^{n}\Big[ g_i\, f_t(x_i) + \tfrac{1}{2} h_i\, f_t(x_i)^2 \Big] + \Omega(f_t),
+  \qquad \Omega(f) = \gamma\, T + \tfrac{\lambda}{2}\sum_{j=1}^{T} w_j^2, $$
+  where \(f_t\) is a tree with \(T\) leaves of weights \(w_1, \dots,
+  w_T\). This is the second-order Taylor expansion of the loss, exact
+  for the quadratic loss, very good for the log-loss.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.2 — Optimal weights and split gain (XGBoost)</span>
+  For a fixed tree, write \(G_j = \sum_{i \in \text{leaf } j} g_i\)
+  and \(H_j = \sum_{i \in \text{leaf } j} h_i\). Then
+  $$ w_j^\star = -\frac{G_j}{H_j + \lambda}, \qquad
+  \mathcal{L}^\star = -\frac{1}{2}\sum_{j=1}^{T}\frac{G_j^2}{H_j + \lambda} + \gamma T, $$
+  and splitting a parent node \(P\) into \(L, R\) improves the
+  objective by
+  $$ \mathrm{Gain} = \frac{1}{2}\left[\frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda}
+  - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda}\right] - \gamma. $$
+  <div class="proof">
+  The objective factorizes per leaf: \(\sum_j [\,w_j G_j +
+  \tfrac{1}{2} w_j^2 (H_j + \lambda)\,] + \gamma T\) (the \(\lambda\)
+  completes the square). Each term is a trinomial in \(w_j\) with
+  minimum \(w_j^\star = -G_j/(H_j + \lambda)\), of value
+  \(-\tfrac{1}{2}G_j^2/(H_j + \lambda)\). Hence
+  \(\mathcal{L}^\star\). A split replaces leaf \(P\) (sums \(G_P =
+  G_L + G_R\), \(H_P = H_L + H_R\)) with two leaves: the gain is
+  \(\mathcal{L}^\star_P - \mathcal{L}^\star_{\{L,R\}}\), i.e. the
+  stated expression; one splits only if Gain &gt; 0, i.e. beyond the
+  "price" \(\gamma\).&nbsp;<span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">The other pieces of XGBoost</span>
+  <strong>Weighted quantile sketch</strong>: proposing split
+  thresholds via quantiles weighted by the \(h_i\) (points with high
+  curvature count more), with an approximation guarantee.
+  <strong>Sparsity-aware</strong>: each node learns a "default
+  direction" for missing values. <strong>Column/row sampling</strong>:
+  random-forest-style bagging applied to boosting. The whole made
+  XGBoost (2016) the reference engine of tabular competitions from
+  2015 onward.
+</div>
+
+<h3>3.2. LightGBM: histograms, GOSS, EFB</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.3 — Histogram-based splits</span>
+  Each numerical feature is pre-discretized into \(B\) bins (typically
+  255); the \((g_i, h_i)\) are accumulated per bin, and the candidate
+  thresholds are the bin boundaries. Cost per feature: \(O(n)\) to
+  build the histogram, instead of \(O(n \log n)\) for sorting; in
+  memory, the child histogram is derived from the parent by
+  subtraction. The approximation error is bounded by the bin width —
+  imperceptible in practice.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.4 — GOSS (Gradient-based One-Side Sampling)</span>
+  Examples with <em>small</em> gradients are well predicted; one keeps
+  the \(a \cdot n\) examples with the largest \(|g_i|\) (set \(A\)),
+  randomly samples \(b \cdot n\) examples from the rest (\(B'\)), and
+  amplifies their gradients by a factor \((1-a)/b\). The split gain is
+  computed on this weighted selection.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.5 — GOSS (approximately) preserves the gain</span>
+  With the weights \(\tilde{g}_i = \frac{1-a}{b}\, g_i\) on \(B'\),
+  the estimator \(\tilde{G}_j = \sum_{i \in A \cap j} g_i + \sum_{i
+  \in B' \cap j} \tilde{g}_i\) is an (approximately) unbiased
+  estimator of \(G_j = \sum_{i \in j} g_i\), and likewise for the
+  \(H_j\) — hence the gain of theorem 3.2 is estimated consistently.
+  <div class="proof">
+  Write \(G_j = G_j^{A} + G_j^{\bar{A}}\). Uniform sampling of
+  \(B'\) in \(\bar{A}\) gives \(\mathbb{E}[\sum_{i \in B' \cap j}
+  \tilde{g}_i] = \frac{1-a}{b}\, \mathbb{E}[\sum_{i \in B' \cap j}
+  g_i] = \frac{1-a}{b} \cdot \frac{b}{1-a} G_j^{\bar{A}} =
+  G_j^{\bar{A}}\), hence the expectation \(G_j^{A} + G_j^{\bar{A}} =
+  G_j\). The rest follows by replacing the sums with their estimators
+  in the gain formula (second-order bias, negligible compared to the
+  gain itself).&nbsp;<span class="qed">∎</span></div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.6 — EFB (Exclusive Feature Bundling)</span>
+  In sparse data (massive one-hot), two columns are rarely nonzero
+  simultaneously: they can share a "merged" bin. One builds a
+  conflict graph (edge if frequent co-nonzero), greedily colors it to
+  form groups of exclusive features; each bundle becomes a single
+  histogram column. Combined with GOSS, this is the pair that gives
+  LightGBM its speed gains.
+</div>
+
+<h3>3.3. CatBoost: oblivious trees and ordered statistics</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.7 — Oblivious trees</span>
+  An oblivious tree applies the <em>same</em> split to all nodes of a
+  given level: depth \(d\) gives exactly \(d\) tests \((j_1, t_1),
+  \dots, (j_d, t_d)\) and the result is indexed like an array of size
+  \(2^d\). Advantages: evaluation in \(O(d)\), trivially vectorized
+  execution, and strong regularization (higher bias, lower variance —
+  the same logic as the limited depth of ch. 2).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.8 — Ordered target statistics</span>
+  For a categorical \(c\) and a random permutation \(\sigma\) of the
+  rows, the encoded value of row \(i\) uses only <em>earlier</em>
+  rows:
+  $$ \hat{x}_i = \frac{\sum_{\sigma(k) &lt; \sigma(i)} \mathbf{1}[c_k = c_i]\, y_k +
+  a\, p}{\sum_{\sigma(k) &lt; \sigma(i)} \mathbf{1}[c_k = c_i] + a}, $$
+  with \(p\) a global prior (target mean) and \(a\) a smoothing
+  weight. This is target encoding (ch. 4) <em>without leakage</em>:
+  row \(i\) is never encoded with its own target. <strong>Ordered
+  boosting</strong> generalizes the idea to residuals: each example is
+  scored only by models that have not seen it — correcting the
+  "prediction shift" of classical GBDTs (Prokhorenkova et al.,
+  2018).
+</div>
+
+<table class="tbl">
+  <tr><th></th><th>XGBoost</th><th>LightGBM</th><th>CatBoost</th></tr>
+  <tr><td>Split</td><td>exact / approximate quantiles (2nd order)</td><td>histogram, leaf by leaf (leaf-wise)</td><td>oblivious, level by level</td></tr>
+  <tr><td>Acceleration</td><td>quantile sketch, sparsity-aware</td><td>GOSS + EFB (defs 3.4-3.6)</td><td>symmetric trees, native GPU</td></tr>
+  <tr><td>Categoricals</td><td>one-hot / provided encodings</td><td>partition of categories by gradient statistics</td><td>native ordered TS (def. 3.8)</td></tr>
+  <tr><td>Inductive bias</td><td>regularization \(\gamma, \lambda\)</td><td>leaf-wise growth (beware overfitting on small \(n\))</td><td>anti-leakage + symmetry</td></tr>
+</table>
+
+<pre class="code"><code># The same problem seen by the three engines (nearly identical APIs)
+import xgboost as xgb, lightgbm as lgb, catboost as cb
+from sklearn.model_selection import train_test_split
+Xtr, Xva, ytr, yva = train_test_split(X, y, test_size=0.2, random_state=0)
+
+m1 = xgb.XGBClassifier(n_estimators=2000, learning_rate=0.02, max_depth=6,
+                       early_stopping_rounds=100).fit(Xtr, ytr, eval_set=[(Xva, yva)])
+m2 = lgb.LGBMClassifier(n_estimators=2000, learning_rate=0.02, num_leaves=63,
+                        subsample=0.8, colsample_bytree=0.8).fit(
+                        Xtr, ytr, eval_set=[(Xva, yva)],
+                        callbacks=[lgb.early_stopping(100)])
+m3 = cb.CatBoostClassifier(iterations=2000, learning_rate=0.02, depth=8,
+                           cat_features=cat_idx, early_stopping_rounds=100).fit(
+                           Xtr, ytr, eval_set=(Xva, yva), verbose=False)</code></pre>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Boosting: functional gradient descent</a><a class="next" href="ch4.html"><span class="dir">Next</span> Encoding columns: categorical and numerical</a></nav>
+</main>
+</div>
+
+</body>
+</html>

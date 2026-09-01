@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control in Generative AI — Exercises / Labs — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Control in Generative AI</a> › Exercises / Labs</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>Control in Generative AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: generating, conditioning, decoding</a>
+<a href="ch1.html">Why control: safety, fidelity, intellectual property</a>
+<a href="ch2.html">Taxonomy: four families of control</a>
+<a href="ch3.html">Constrained decoding: grammars, automata, masks</a>
+<a href="ch4.html">Steering: controlling in activation space</a>
+<a href="ch5.html">RLHF: control in behavior space</a>
+<a href="ch6.html">Watermarking: proving the origin of a text</a>
+<a href="ch7.html">Controlling diffusions: CFG, ControlNet, inversion</a>
+<a href="ch8.html">Controlling graph generators</a>
+<a href="ch9.html">Evaluating control: fidelity versus diversity</a>
+<a href="ch10.html">Attacks on control and robustness</a>
+<a href="ex.html" class="active">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="exercises" id="ex">
+<h3>Exercises / Labs</h3>
+<ol>
+  <li><strong>Lab: constrained decoding on regex (the module's lab).</strong>
+  (a) Build the DFA of <code>^\d{2}/\d{2}/\d{4}$</code> by hand (states,
+  co-accessible pruning), table \(\mathrm{Adm}(q)\) on a mini-vocabulary
+  including the multi-character tokens <code>"12/"</code>, <code>"19"</code>;
+  (b) implement <code>DfaMask</code> (code of ch. 3) with a small GPT's
+  tokenizer; (c) plug in as a HuggingFace <code>LogitsProcessor</code> and
+  generate 1,000 dates; (d) measure the pass rate with/without mask and the
+  time overhead compared to free generation.
+  <div class="proof">
+  Guidance (expected results): without constraint, the pass rate of a small
+  model on the exact requested date plateaus (<code>2026-08-26</code>,
+  <code>26/08/2026</code> formats mixed); with mask: 100% — including
+  <em>false</em> but syntactically valid dates (<code>31/02/2026</code>):
+  semantics requires one more layer (bounds validation), the conclusion of
+  ch. 10 experienced in the lab. Overhead: ~0% (the mask is negligible next
+  to the transformer pass); the real cost is the <em>precomputation</em> of
+  the index, paid once. <span class="qed">∎</span></div></li>
+
+  <li><strong>The z-test in full.</strong> With \(\gamma = 0.5\), \(\delta = 2\):
+  (a) simulate 10,000 human texts (iid uniform tokens) and empirically verify
+  \(\mathbb{P}(z &gt; 4) \approx 3 \times 10^{-5}\); (b) estimate
+  \(p_\delta\) empirically by simulating the biased softmax at temperature 1;
+  (c) plot the power of the test as a function of \(T \in [20, 500]\); (d)
+  derive the minimal \(T\) for power 0.9 (compare with example 6.3); (e)
+  repeat with \(\gamma = 0.25\) and conclude on the tuning.
+  <div class="proof">
+  Guidance: (a) the distribution of \(z\) sticks to \(\mathcal N(0,1)\) from
+  \(T \geq 50\) (De Moivre-Laplace); (b) \(p_\delta\) depends on the standard
+  deviation of the logits; with logits \(\mathcal N(0,1)\),
+  \(p_\delta \approx 0.75\); (c) sigmoidal power in \(\sqrt{T}\); (d)
+  \(T \approx 30\)-50 for \((0.5, 2)\); (e) \(\gamma = 0.25\) divides the
+  variance under H0 (\(\times 0.75\)) and concentrates the signal — slightly
+  better at fixed \(\delta\), but lower text quality: the triple trade-off of
+  ch. 6 is <em>verified numerically</em>. <span class="qed">∎</span></div></li>
+
+  <li><strong>Steering step by step.</strong> On GPT-2 small: build \(v =
+  h^{(l)}(\texttt{Love}) - h^{(l)}(\texttt{Hate})\) for \(l \in \{2, 5, 8,
+  10\}\); sweep \(\alpha \in \{-2, -1, -0.5, 0, 0.5, 1, 2\}\); measure (i)
+  frequency of "marriage" words, (ii) perplexity, (iii) intra-batch diversity
+  (self-BLEU).
+  <div class="proof">
+  Guidance: the topic effect is clear and quasi-linear in \(\alpha\) at small
+  \(\alpha\) (prop. 4.3), perplexity moves little up to \(\alpha \approx 2\)
+  then derails; diversity drops as \(|\alpha|\) grows — the same
+  fidelity/diversity curve as CFG (ch. 9), again. Discuss: why does steering
+  "succeed" on broad latent concepts and fail to impose a precise format
+  (answer: full support — ch. 2). <span class="qed">∎</span></div></li>
+
+  <li><strong>Theoretical fidelity/diversity frontier.</strong> Prove the
+  entropy bound 9.2 (Gibbs), then generalize example 9.4: arbitrary initial
+  law, score \(c\), plot \((\mathrm{Fid}(w), H(w))\) for \(w \in [0, 10]\)
+  and verify that the curve converges to the corner \((\max c, 0)\). What
+  happens to the curve if \(c\) is noisy?
+  <div class="proof">
+  Guidance: normalize \(p_w \propto p\, e^{w c}\) (exponential family);
+  \(H(w)\) decreases (derive \(dH/dw = -w\,\mathrm{Var}_w(c)\) — a classic
+  identity: the derivative of the log-partition gives the variance, that of
+  the entropy its weighted variance); with noise, a plateau appears before
+  the collapse: the analyst chooses the elbow. <span class="qed">∎</span></div></li>
+
+  <li><strong>Zero-convolution: the gradient under the magnifier.</strong>
+  For the ControlNet branch of theorem 7.2 at initialization: (a) show that
+  the output is exactly zero; (b) compute \(\partial y / \partial W_2\) and
+  show it is nonzero; (c) show that \(\partial y / \partial \Theta_c = 0\) at
+  initialization and explain why this is <em>not</em> a deadlock; (d) compare
+  with random initialization (branching \(F_c\) without \(Z\)): simulate 10
+  descent steps on a toy task and compare the initial losses.
+  <div class="proof">
+  Guidance: (a) \(Z_2 = W_2 h = 0\); (b) \(\partial y/\partial W_2 = h_c
+  \neq 0\) (activations of the copy initialized at \(\Theta\)); (c) chain
+  rule through \(W_2 = 0\), unlocked as soon as \(W_2\)'s first update
+  happens; (d) the variant without zero-conv starts from a high loss and
+  destroys the frozen model's output — the experiment reproduces the
+  motivation figure of the ControlNet paper.
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Attacking your own watermark (bonus).</strong> After lab 2:
+  paraphrase the marked texts (via an LLM, instruction "rewrite with the same
+  ideas"), measure the drop in \(z\) as a function of the rate of replaced
+  tokens, and estimate the rate needed to fall below \(z = 2\). Conclude on
+  the sentence "a watermark is a marker, not a proof".
+  <div class="proof">
+  Guidance: each green→red replacement shifts \(\mathbb E[z]\) by about
+  \((p_\delta - \gamma)\big/\sqrt{T\gamma(1-\gamma)}\); going from
+  \(\mathbb E[z] = 7\) to 2 requires rewriting the majority of tokens — the
+  text that survives the attack is so transformed that <em>content</em>
+  traceability (plagiarism) becomes the issue again, not that of <em>the
+  machine</em>. Loop closed with ch. 10.
+  <span class="qed">∎</span></div></li>
+</ol>
+</section>
+<nav class="pager"><a href="ch10.html"><span class="dir">← Previous</span> Attacks on control and robustness</a><a class="next" href="refs.html"><span class="dir">Next</span> References</a></nav>
+</main>
+</div>
+
+</body>
+</html>

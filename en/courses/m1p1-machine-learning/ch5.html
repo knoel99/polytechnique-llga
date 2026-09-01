@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Machine Learning — Trees, forests, boosting — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Machine Learning</a> › Trees, forests, boosting</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">MDC_51006_EP</span>Machine Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: optimization and concentration</a>
+<a href="ch1.html">The statistical framework of learning</a>
+<a href="ch2.html">Linear regression and regularization</a>
+<a href="ch3.html">Classification: logistic and SVM</a>
+<a href="ch4.html">Kernels and RKHS</a>
+<a href="ch5.html" class="active">Trees, forests, boosting</a>
+<a href="ch6.html">Unsupervised: k-means, EM, PCA</a>
+<a href="ch7.html">Generalization theory</a>
+<a href="ch8.html">Research of the teaching team</a>
+<a href="ch9.html">Evaluation, big data and pipelines</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Trees, forests, boosting</h2>
+
+<h3>5.1. Decision trees (CART)</h3>
+<p>Recursive partition of \(\mathcal{X}\) by axis-aligned cuts (binary questions
+"\(x_j \leq t\)?"). At each leaf, one predicts the mean (regression) or the majority
+class (classification). Growth: at each node, choose \((j, t)\) maximizing the impurity
+gain; then <strong>pruning</strong> to avoid overfitting. The exact impurity criteria,
+for a node \(D\) containing the classes in proportions \(p_1, \dots, p_K\):</p>
+<div class="def">
+  <span class="tag">Definition 5.1 — Usual impurities</span>
+  $$\text{entropy: } H(D) = -\sum_{k=1}^K p_k \log_2 p_k, \qquad \text{Gini: } G(D) = 1 - \sum_{k=1}^K p_k^2 = \sum_k p_k(1 - p_k).$$
+  In regression, one uses the squared error \(Q(D) = \frac{1}{|D|}\sum_{i \in D}(y_i - \bar y_D)^2\).
+  For a split \(D = D_L \cup D_R\), the <strong>gain</strong> is
+  $$\Delta(j, t) = I(D) - \frac{|D_L|}{|D|} I(D_L) - \frac{|D_R|}{|D|} I(D_R).$$
+</div>
+<div class="note">
+  <span class="tag">Gini and entropy are nearly interchangeable</span>
+  With two classes (\(p = p_1 = 1 - p_2\)): \(G(p) = 2p(1-p)\) and
+  \(H(p) = -p\log_2 p - (1-p)\log_2(1-p)\). Both are maximal at \(p = 1/2\), zero at
+  \(0\) and \(1\), and their expansion around \(1/2\) coincides to first order:
+  \(H(p) = 1 - \frac{2}{\ln 2}(p - \tfrac12)^2 + o\big((p-\tfrac12)^2\big)\) and
+  \(G(p) = \frac12 - 2(p - \tfrac12)^2\). CART uses Gini (no logarithm, direct
+  computation); ID3/C4.5 use entropy (information gain). The choice is rarely decisive —
+  <em>pruning</em> is. CART's cost-complexity pruning minimizes
+  \(R_\alpha(T) = R(T) + \alpha\,|\text{leaves}(T)|\) over the family of subtrees:
+  yet another fit/complexity trade-off (chapter&nbsp;7).
+</div>
+
+<h3>5.2. Random forests (bagging)</h3>
+<div class="thm">
+  <span class="tag">Theorem 5.2 — Bagging reduces variance</span>
+  Let \(T_1, \dots, T_B\) be predictors with the same variance \(\sigma^2\), pairwise
+  correlation \(\rho\). The average \(A_B = \frac1B\sum_b T_b\) satisfies
+  $$\mathrm{Var}(A_B) = \rho\,\sigma^2 + \frac{1 - \rho}{B}\,\sigma^2.$$
+  <div class="proof">
+  \(\mathrm{Var}(A_B) = \frac{1}{B^2}\big[\sum_b \mathrm{Var}(T_b) + \sum_{b \neq b'} \mathrm{Cov}(T_b, T_{b'})\big]
+  = \frac{1}{B^2}\big[B\sigma^2 + B(B-1)\rho\sigma^2\big] = \frac{\sigma^2}{B} + \frac{B-1}{B}\rho\sigma^2\),
+  which rewrites as announced.
+  <em>iid case</em> (\(\rho = 0\), for example Gaussian variables with the same law):
+  \(\mathrm{Var} = \sigma^2/B\) — divide the variance by \(B\) by averaging independent
+  replicates.<span class="qed">∎</span>
+  </div>
+</div>
+<div class="note">
+  <span class="tag">Why it works so well for trees</span>
+  As \(B \to \infty\), the residual variance tends toward the floor \(\rho\sigma^2\):
+  the whole art consists in lowering \(\rho\). Random forests combine two
+  mechanisms: (i) the <strong>bootstrap</strong> (resampling the rows); (ii) the random
+  selection of \(m_{\text{try}} &lt; d\) candidate variables at each split
+  (<em>decorrelation</em>), which forces the trees to differ structurally. Unpruned
+  trees have low bias and high variance — exactly the profile that bagging can
+  correct. Bonus: each tree leaves out on average \(e^{-1} \approx 37\%\) of the data
+  (out-of-bag), a <em>free</em> risk estimate — we return to this in chapter&nbsp;9.
+  Forests remain a hard-to-beat <em>tabular</em> baseline.
+</div>
+
+<h3>5.3. Boosting: gradient descent in function space</h3>
+<div class="def">
+  <span class="tag">Definition 5.3 — The functional problem</span>
+  One seeks \(f : \mathcal{X} \to \mathbb{R}\) minimizing
+  $$\Phi(f) = \frac1n \sum_{i=1}^n \ell\big(y_i, f(x_i)\big),$$
+  where \(\ell\) is convex and differentiable in its second variable (quadratic,
+  logistic...). One builds \(f\) as a sum \(f_M = \sum_{m=0}^M \eta\, h_m\) of simple
+  functions (typically small trees), chosen one at a time — a stagewise <em>additive
+  model</em>.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.4 — Boosting is functional gradient descent</span>
+  Assume \(f_{m-1}\) built and set
+  \(g_i = \frac{\partial\, \ell}{\partial f}(y_i, f_{m-1}(x_i))\) (<em>pseudo-residuals</em>,
+  up to opposite sign). Then, to first order in \(\eta\):
+  $$\Phi(f_{m-1} + \eta h) = \Phi(f_{m-1}) - \frac{\eta}{n}\sum_{i=1}^n h(x_i)\,\underbrace{(-g_i)}_{\text{pseudo-residuals}} + o(\eta),$$
+  so the direction \(h\) that lowers \(\Phi\) the most is the one aligned with the
+  pseudo-residuals \(-g_i\). Gradient boosting fits \(h_m\) by regression (trees) on the
+  pairs \((x_i, -g_i)\).
+  <div class="proof">
+  This is a Taylor expansion of the one-variable function
+  \(s \mapsto \ell(y_i, f_{m-1}(x_i) + s\,h(x_i))\) around \(s = 0\), summed over \(i\)
+  and divided by \(n\) (with \(s = \eta\)):
+  \(\ell(y_i, f_{m-1}(x_i) + \eta h(x_i)) = \ell(y_i, f_{m-1}(x_i)) + \eta\, h(x_i)\, \frac{\partial \ell}{\partial f}(y_i, f_{m-1}(x_i)) + o(\eta)\).
+  <em>Quadratic case</em> \(\ell(y, f) = \frac12(y - f)^2\):
+  \(g_i = f_{m-1}(x_i) - y_i\), hence \(-g_i = y_i - f_{m-1}(x_i)\) — the <em>true</em>
+  residuals: each tree predicts the residuals of the previous ones, and
+  \(\Phi(f + \eta h)\) is exact (no remainder) for \(h\) = residuals.
+  <em>Logistic case</em> \(\ell(y, p) = -y\log p - (1-y)\log(1-p)\) composed with the
+  sigmoid: \(\frac{\partial \ell}{\partial f} = \sigma(f) - y\) (computation of
+  chapter&nbsp;3); pseudo-residuals \(y_i - p_i\).<span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Learning rate and early stopping</span>
+  The step \(\eta\) (typically \(0.01\)–\(0.1\)) is not the optimal descent constant:
+  one gives up exact line search for a small step that (i) limits the variance of each
+  tree, (ii) lets the following trees correct the previous ones — hence more iterations
+  needed. The number \(M\) of iterations plays the role of <em>effective capacity</em>:
+  \(\Phi(f_M)\) decreases mechanically with \(M\), but the generalization risk decreases
+  then rises again; <strong>early stopping</strong> (choosing \(M\) on validation) is the
+  true regularization of boosting — same logic as the norm \(\|\theta\|\) in ridge
+  (chapter&nbsp;7): an increasing \(M\) corresponds to a growing dictionary of
+  directions. Friedman (2001) formalized this paradigm; XGBoost/LightGBM made it
+  industrial (second order, leaf regularization, histograms); the M2 module "From
+  Boosting to Foundation Models" starts from there.
+</div>
+
+<pre class="code"><code>from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
+from sklearn.model_selection import cross_val_score
+rf  = RandomForestClassifier(n_estimators=300, min_samples_leaf=2, oob_score=True)
+gbt = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.06)
+print(cross_val_score(rf, X, y, cv=5).mean(), cross_val_score(gbt, X, y, cv=5).mean())
+print("forest OOB error:", 1 - rf.fit(X, y).oob_score_)  # free validation</code></pre>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Kernels and RKHS</a><a class="next" href="ch6.html"><span class="dir">Next</span> Unsupervised: k-means, EM, PCA</a></nav>
+</main>
+</div>
+
+</body>
+</html>

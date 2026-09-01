@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Generative Models and Applications — VAEs: GraphVAE, NeVAE and valence constraints — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Graph Generative Models and Applications</a> › VAEs: GraphVAE, NeVAE and valence constraints</div>
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Graph Generative Models and Applications</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: generating graphs in M1</a>
+<a href="ch1.html">The problem, formalized</a>
+<a href="ch2.html">Autoregressive models: DeepGMG and GraphRNN in depth</a>
+<a href="ch3.html" class="active">VAEs: GraphVAE, NeVAE and valence constraints</a>
+<a href="ch4.html">Normalizing flows: change of variables and GraphAF</a>
+<a href="ch5.html">Discrete diffusion: DiGress in detail</a>
+<a href="ch6.html">Evaluating rigorously: MMD, validity, FCD</a>
+<a href="ch7.html">Conditional generation and text-to-graph</a>
+<a href="ch8.html">Applications: drugs, materials, synthetic networks</a>
+<a href="ch9.html">Research of the LLGA team</a>
+<a href="ch10.html">Open problems</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. VAEs: GraphVAE, NeVAE and valence constraints</h2>
+
+<h3>3.1. The graph VAE: ELBO and one-shot decoder</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 3.1 — GraphVAE (Simonovsky &amp; Komodakis, 2018) and the matching problem</span>
+  GNN encoder \(q_\phi(z \mid G) = \mathcal{N}(\mu_\phi(G), \mathrm{diag}(\sigma^2_\phi(G)))\),
+  <em>one-shot</em> decoder: \(p_\theta(G \mid z) = p(n \mid z) \cdot
+  p_\theta(\hat A, \hat X \mid z)\) with continuous adjacency \(\hat A \in [0,1]^{n\times n}\)
+  (independent sigmoids) and features \(\hat X\). The likelihood is written against the
+  data via a <strong>correspondence matrix</strong> (Hungarian matching, an
+  \(\mathcal{O}(n^3)\) algorithm): the decoder does not emit in a canonical order, its
+  nodes must be matched to those of \(G\) — the price of one-shot decoding. The ELBO:
+  $$\log p_\theta(G) \geq \mathbb{E}_{q_\phi(z \mid G)}[\log p_\theta(G \mid z)]
+  - \mathrm{KL}\big(q_\phi(z\mid G)\,\|\,\mathcal{N}(0, I)\big),$$
+  proven in the M1 (Multimodal GenAI module ch. 1); here the reconstruction term is
+  not a simple sum of Bernoullis because of the matching — it is <em>lower-bounded</em>
+  by the optimal matching (sum of the log-probabilities over the retained pairs),
+  which preserves the validity of the ELBO.
+</div>
+
+<h3>3.2. NeVAE in detail: valence as the architect</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 3.2 — NeVAE (Samanta et al., AAAI 2019): granular VAE with constrained decoding</span>
+  Four ingredients, to be known precisely:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Sparse encoder</strong>: one embedding per atom
+    \(z_i \in \mathbb{R}^d\), MPNN messages between <em>neighboring</em> atoms only —
+    \(\mathcal{O}(n + m)\) memory instead of \(\mathcal{O}(n^2)\): the molecular
+    graph is sparse, exploiting this divides memory by \(\Theta(n)\);
+    the posterior law is a product of local Gaussians
+    \(q(z_i \mid G) = \mathcal{N}(\mu_i, \sigma_i^2)\);</li>
+    <li><strong>Remaining valence</strong> as state: let
+    \(r_v^{(t)} \in \{0, \dots, 4\}\) denote the <em>available</em> valence of atom
+    \(v\) at step \(t\) (4 for C, 2 for O, 1 for H...). Each decoding head is
+    <em>conditioned</em> on this state:
+    $$p\big(\text{bond }(u, v, b)\big) = \mathrm{softmax}\big(f\,[\,z_u, z_v, r_u, r_v\,]\big),$$
+    where the mask forbids any \(b\) with \(b &gt; r_u\) or \(b &gt; r_v\) — a saturated
+    carbon (r = 0) can <em>no longer</em> receive a bond, by construction;</li>
+    <li><strong>Aromaticity</strong>: aromatic rings are not alternating
+    single/double bonds but a dedicated type; specific heads sample ring
+    membership — otherwise the model massively underestimates benzene cores;</li>
+    <li><strong>Noise correction</strong>: during training, if a sampled bond
+    violates valence, it is resampled among the legal ones <em>before</em> the loss
+    is computed — the penalty on forbidden bonds is softened and the gradient does
+    not break; measured result: chemical validity &gt; 90% <em>without</em> RDKit
+    sanitization, versus a few percent for unconstrained GraphVAE.</li>
+  </ol>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.3 — Why is the valence mask a good statistical idea?</span>
+  Masking the forbidden outputs amounts to replacing \(p_\theta\) by its
+  <em>renormalization on the legal subset</em> \(\mathcal{L}\):
+  $$\tilde p_\theta(y \mid x) = \frac{p_\theta(y \mid x)\,\mathbf{1}[y \in \mathcal{L}]}
+  {\sum_{y' \in \mathcal{L}} p_\theta(y' \mid x)}.$$
+  <div class="proof">
+  Two effects. (i) <em>Support correction</em>: the forbidden mass (typically
+  \(\varepsilon\) per step, but \(1 - (1-\varepsilon)^T \to 1\) over \(T\) steps) is
+  redistributed; the support of \(\tilde p\) is included in the valid molecules
+  <em>by construction</em>, which no post-processing guarantees (post-processing
+  <em>repairs</em>, it does not guarantee that the repaired law is close to the target
+  law). (ii) <em>Bias</em>: if the model estimates the <em>ratios</em> of the legal
+  options well, \(\tilde p_\theta \approx p_\star(\cdot \mid \mathcal{L})\) — now
+  molecular datasets are (almost) entirely in \(\mathcal{L}\), so
+  \(p_\star(\cdot \mid \mathcal{L}) \approx p_\star\): the mask is nearly free in bias
+  and massive in validity gain. The same analysis holds for all the decoding masks of
+  the Control in Generative AI module (ch. 3). <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">From GraphVAE to NeVAE: the general lesson</span>
+  Injecting domain knowledge <em>into the architecture</em> (valence, aromaticity)
+  beats post-processing; this lesson will repeat: DiGress auxiliary losses (ch. 5),
+  chemically valid fragments of junction trees (ch. 2), valence constraints of the
+  Control module (ch. 8). Trade-off: the model becomes specific to one domain
+  (organic chemistry) — for general graphs (social networks), the "hard constraint"
+  analogue does not exist, and that is precisely one of the open problems of ch. 10.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 3.4 — NeVAE decoder step by step (by hand)</span>
+  Prefix: C—C—O (remaining valences C: 3, C: 2, O: 1). Next step: choose the next
+  atom and its bond. Heads: \(p(\text{atom}) = (\text{C}: 0.6,\ \text{O}: 0.3,\
+  \text{N}: 0.1)\); suppose C is drawn, attached to the O (the only usable
+  \(r_v \neq 0\) with high probability); bond masked to \(\{0, 1\}\) (O has
+  \(r=1\)); after fixing C—O, the O has \(r = 0\) — it is <em>closed</em> forever.
+  To be written as a table over 4-5 steps: each row = a draw, the applied mask, the
+  new \(r_v\); exercise 2 schedules it.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Autoregressive models: DeepGMG and GraphRNN in depth</a><a class="next" href="ch4.html"><span class="dir">Next</span> Normalizing flows: change of variables and GraphAF</a></nav>
+</main>
+</div>
+
+</body>
+</html>

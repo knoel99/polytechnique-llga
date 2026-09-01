@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Machine Learning — Classification: logistic and SVM — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Machine Learning</a> › Classification: logistic and SVM</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">MDC_51006_EP</span>Machine Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: optimization and concentration</a>
+<a href="ch1.html">The statistical framework of learning</a>
+<a href="ch2.html">Linear regression and regularization</a>
+<a href="ch3.html" class="active">Classification: logistic and SVM</a>
+<a href="ch4.html">Kernels and RKHS</a>
+<a href="ch5.html">Trees, forests, boosting</a>
+<a href="ch6.html">Unsupervised: k-means, EM, PCA</a>
+<a href="ch7.html">Generalization theory</a>
+<a href="ch8.html">Research of the teaching team</a>
+<a href="ch9.html">Evaluation, big data and pipelines</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Classification: logistic regression and SVM</h2>
+
+<h3>3.1. Logistic regression</h3>
+<div class="def">
+  <span class="tag">Definition 3.1</span>
+  For \(Y \in \{0, 1\}\), one directly models
+  $$\mathbb{P}(Y = 1 \mid X = x) = \sigma(\langle \theta, x\rangle) = \frac{1}{1 + e^{-\langle \theta, x\rangle}},$$
+  where \(\sigma\) is the sigmoid. The log-odds is linear:
+  \(\log \tfrac{p}{1-p} = \langle\theta, x\rangle\) — hence an interpretable reading of the
+  coefficients (odds ratio \(\approx e^{\theta_j}\) for \(x_j\) increased by one unit).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.2 — Likelihood and cross-entropy</span>
+  Maximizing the likelihood \(\prod_i \sigma(\theta^\top x_i)^{y_i}(1 - \sigma(\theta^\top x_i))^{1 - y_i}\)
+  is equivalent to minimizing the <strong>cross-entropy</strong>
+  $$\hat\theta = \arg\min_\theta \ \frac1n \sum_{i=1}^n \log\!\big(1 + e^{-y'_i \langle\theta, x_i\rangle}\big), \qquad y'_i \in \{-1, +1\}.$$
+  <div class="proof">
+  \(-\log\)-likelihood = \(\sum_i -y_i\log p_i - (1 - y_i)\log(1 - p_i)\) with
+  \(p_i = \sigma(\theta^\top x_i)\). Writing \(y'_i = 2y_i - 1\), one checks
+  \(-y_i \log p_i - (1-y_i)\log(1-p_i) = \log(1 + e^{-y'_i \theta^\top x_i})\): for
+  \(y_i = 1\), \(1 - p_i = \sigma(-\theta^\top x_i)\) and \(1/(1-p_i) = 1 + e^{\theta^\top x_i}\).<span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.3 — Convexity, gradient, Hessian</span>
+  Set \(p_i(\theta) = \sigma(\theta^\top x_i)\) and
+  \(L(\theta) = \tfrac1n\sum_i \log(1 + e^{-y'_i\theta^\top x_i})\). Then:
+  <strong>(i)</strong> \(L\) is convex, and strictly convex if \(\ker X = \{0\}\);
+  <strong>(ii)</strong> \(\nabla L(\theta) = \tfrac1n X^\top(p(\theta) - y)\);
+  <strong>(iii)</strong> \(\nabla^2 L(\theta) = \tfrac1n X^\top \mathrm{diag}\big(w_i(\theta)\big) X\)
+  with \(w_i = p_i(1 - p_i) \in \,]0, 1/4]\).
+  <div class="proof">
+  <strong>(i)</strong> Let \(g(z) = \log(1 + e^{-z})\). Then
+  \(g'(z) = \tfrac{-e^{-z}}{1 + e^{-z}} = -\sigma(-z)\) and
+  $$g''(z) = \sigma(-z)\big(1 - \sigma(-z)\big) = \frac{e^{-z}}{(1 + e^{-z})^2} &gt; 0,$$
+  (the rate of change of \(\sigma'\) — or direct differentiation of \(\sigma' = \sigma(1-\sigma)\)).
+  Hence \(g\) is convex; each \(g(\pm\theta^\top x_i)\) is convex in \(\theta\)
+  (composition with an affine map), and \(L\), a sum, is convex.
+  <strong>(ii)</strong> \(\nabla_\theta\, g(-y'_i\theta^\top x_i) = -y'_i x_i\, \sigma(y'_i \theta^\top x_i)\)
+  (chain rule with \(g'\) above); noting that
+  \(y'_i \sigma(y'_i\theta^\top x_i) \in \{p_i,\ p_i - 1\}\) depending on \(y_i\), everything
+  compacts into \(\tfrac1n\sum_i x_i(p_i - y_i)\).
+  <strong>(iii)</strong> The Jacobian of \(p(\theta)\) is
+  \(\mathrm{diag}(w_i)X\) (since \(\sigma' = \sigma(1 - \sigma)\)), giving the announced
+  Hessian, which is a positive scalar times \(X^\top X \succeq 0\); it is positive definite
+  if the columns of \(X\) are independent.<span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Practical consequences</span>
+  Convex + smooth ⇒ a unique global optimum, reached by gradient descent or Newton. The
+  Newton method here reads
+  \(\theta \leftarrow \theta + (X^\top W X)^{-1} X^\top(y - p)\): this is exactly the
+  iteratively reweighted regression (IRLS) well known from GLMs. This is <em>the</em>
+  classification loss of neural networks (Deep Learning module) and of LLMs (softmax
+  output = multiclass generalization \(\log\sum_k e^{s_k} - s_{y}\)).
+</div>
+
+<h3>3.2. Margin SVM</h3>
+<div class="def">
+  <span class="tag">Definition 3.4 — SVM (soft margin, primal)</span>
+  $$\min_{\theta, b, \xi} \ \tfrac12 \|\theta\|^2 + C \sum_{i=1}^n \xi_i \quad \text{s.t.} \quad y'_i(\langle\theta, x_i\rangle + b) \geq 1 - \xi_i, \quad \xi_i \geq 0.$$
+  Maximize the margin \(\gamma = 1/\|\theta\|\) while tolerating the violations \(\xi_i\)
+  (soft constraints, \(C\) = unit penalty). The classifier is
+  \(x \mapsto \mathrm{sign}(\langle\theta, x\rangle + b)\).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.5 — Dual of the SVM</span>
+  The primal above has the same solution as the dual problem
+  $$\max_{\alpha} \ \sum_{i=1}^n \alpha_i - \frac12 \sum_{i,j} \alpha_i\alpha_j y'_i y'_j \langle x_i, x_j\rangle \quad \text{s.t.} \quad 0 \leq \alpha_i \leq C, \ \sum_i \alpha_i y'_i = 0,$$
+  and the primal solution is reconstructed via \(\theta = \sum_i \alpha_i y'_i x_i\).
+  <div class="proof">
+  <strong>Lagrangian.</strong> Associate a multiplier \(\alpha_i \geq 0\) with each margin
+  constraint and \(\mu_i \geq 0\) with \(\xi_i \geq 0\):
+  $$\mathcal{L} = \tfrac12\|\theta\|^2 + C\textstyle\sum_i \xi_i - \sum_i \alpha_i\big[y'_i(\theta^\top x_i + b) - 1 + \xi_i\big] - \sum_i \mu_i \xi_i.$$
+  <strong>Stationary conditions (KKT).</strong>
+  \(\partial_\theta \mathcal{L} = 0 \Rightarrow \theta = \sum_i \alpha_i y'_i x_i\) (the
+  predictor is a combination of the data!);
+  \(\partial_b \mathcal{L} = 0 \Rightarrow \sum_i \alpha_i y'_i = 0\);
+  \(\partial_{\xi_i} \mathcal{L} = 0 \Rightarrow C = \alpha_i + \mu_i\), i.e.
+  \(\alpha_i \leq C\). Substitute back: the term \(\theta^\top\theta\) against
+  \(-\sum\alpha_i y'_i\theta^\top x_i\) gives \(-\tfrac12\|\theta\|^2\), then replacing
+  \(\|\theta\|^2\) by the double sum; the \(\xi_i\) disappear exactly
+  (\((C - \alpha_i - \mu_i)\xi_i = 0\)); what remains is the announced dual function with
+  \(0 \leq \alpha_i \leq C\). The primal is convex with affine constraints: Slater
+  (strictly feasible, \(C\) large enough or \(\xi\) large enough) guarantees strong
+  duality — dual optimum = primal optimum, and the KKT conditions are necessary and
+  sufficient.<span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Reading the complementarity conditions — who are the support vectors?</span>
+  The KKT complementarity conditions \(\alpha_i\,[y'_i(\theta^\top x_i + b) - 1 + \xi_i] = 0\)
+  and \((C - \alpha_i)\,\xi_i = 0\) sort the points into three families:
+  <table class="tbl">
+  <thead><tr><th>Case</th><th>Position of the point</th><th>Role</th></tr></thead>
+  <tbody>
+  <tr><td>\(\alpha_i = 0\)</td><td>outside the margin band, well classified</td><td>none — any data point</td></tr>
+  <tr><td>\(0 &lt; \alpha_i &lt; C\)</td><td>exactly <em>on</em> the margin \((\xi_i = 0)\)</td><td>"free" support vector</td></tr>
+  <tr><td>\(\alpha_i = C\)</td><td>inside the band or misclassified \((\xi_i &gt; 0)\)</td><td>"paying" support vector</td></tr>
+  </tbody>
+  </table>
+  The solution depends <em>only</em> on the points with \(\alpha_i &gt; 0\) (dual sparsity):
+  this is the robustness of SVMs to distant data, and the \(\mathcal{O}(n_{\text{supp}})\)
+  prediction cost. The constant \(b\) is recovered from any point on the margin:
+  \(b = y'_i - \theta^\top x_i\).
+</div>
+
+<div class="prop">
+  <span class="tag">Theorem 3.6 — Margin generalization bounds (sketch)</span>
+  Let \(\mathcal{F}_R = \{x \mapsto \langle\theta, x\rangle : \|\theta\| \leq R,\ \|x\| \leq 1\}\).
+  Its Rademacher complexity (definition in chapter&nbsp;7) satisfies
+  \(\mathcal{R}_n(\mathcal{F}_R) \leq R/\sqrt{n}\), independently of the dimension of
+  \(\mathcal{X}\). It follows, with high probability, for any score function with margin
+  \(\gamma\) (losses dominated by the hinge):
+  $$\mathcal{R}(f) \ \leq\ \hat{\mathcal{R}}_{n,\gamma}(f) + \frac{2R}{\gamma\sqrt{n}} + \sqrt{\tfrac{\log(2/\delta)}{2n}}.$$
+  <em>Sketch.</em> (i) The hinge \((1 - t)_+\) is 1-Lipschitz: the contraction lemma
+  brings the loss back to the score. (ii) For the class of bounded scores,
+  \(\mathbb{E}_\sigma \sup_{\|\theta\| \leq R} \tfrac1n\theta^\top\sum_i \sigma_i x_i
+  = \tfrac{R}{n}\,\mathbb{E}_\sigma\big\|\sum_i \sigma_i x_i\big\|
+  \leq \tfrac{R}{n}\sqrt{\mathbb{E}\big\|\sum_i\sigma_ix_i\big\|^2} = \tfrac{R}{n}\sqrt{n} = \tfrac{R}{\sqrt n}\)
+  (Cauchy-Schwarz, then orthogonality of the \(\sigma_ix_i\) and \(\|x_i\| \leq 1\)).<span class="qed">∎</span>
+  This "margin, not dimension" viewpoint watches over overfitting; it is
+  developed in chapter&nbsp;7 and in the Statistical Learning Theory module (P1 option).
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Linear regression and regularization</a><a class="next" href="ch4.html"><span class="dir">Next</span> Kernels and RKHS</a></nav>
+</main>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — Evaluation in production: drift and monitoring — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">ML Ops and LLM Engineering Principles</a> › Evaluation in production: drift and monitoring</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: from notebook to system</a>
+<a href="ch1.html">Lifecycle: versioning data, features, models</a>
+<a href="ch2.html">CI/CD for ML: testing data and models</a>
+<a href="ch3.html">LLM serving: continuous batching, P99 latency</a>
+<a href="ch4.html">Costs: euros per million tokens</a>
+<a href="ch5.html" class="active">Evaluation in production: drift and monitoring</a>
+<a href="ch6.html">RAG Ops: freshness and continuous evaluation</a>
+<a href="ch7.html">Fine-tuning Ops: versioned LoRAs</a>
+<a href="ch8.html">Agents in production: tracing and guardrails</a>
+<a href="ch9.html">Operational security: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Case study and green ops</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Evaluation in production: drift and monitoring</h2>
+
+<h3>5.1. Data drift, concept drift</h3>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — Drift</span>
+  <strong>Data drift</strong>: the distribution of inputs changes
+  (\(P(X)\) moves — new topics, new user population, new documentary
+  source). <strong>Concept drift</strong>: the input → correct answer
+  relation changes (\(P(Y\mid X)\) moves — yesterday's "good" answer
+  becomes wrong: regulation, company merger, vocabulary). For a RAG, a
+  third drift: the <strong>corpus</strong> changes (ch. 6).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.2 — PSI = Jeffreys divergence</span>
+  The population stability index (PSI), summed over the bins \(i\) of a
+  histogram:
+  $$\mathrm{PSI}(p, q) \;=\; \sum_i \bigl(p_i - q_i\bigr)\,
+  \ln\frac{p_i}{q_i}
+  \;=\; \mathrm{KL}(p \,\|\, q) + \mathrm{KL}(q \,\|\, p),$$
+  is exactly the Jeffreys divergence: symmetric, zero iff \(p = q\).
+  Usual thresholds in credit risk: PSI &lt; 0.1 stable; 0.1-0.25 to watch;
+  &gt; 0.25 alert.
+</div>
+
+<div class="proof">
+Let us expand:
+\(\mathrm{KL}(p\|q) = \sum_i p_i \ln(p_i/q_i)\) and
+\(\mathrm{KL}(q\|p) = \sum_i q_i \ln(q_i/p_i)\). The sum equals
+\(\sum_i (p_i - q_i)\ln(p_i/q_i)\) — precisely the PSI. Each term is
+positive (the two factors \(p_i - q_i\) and \(\ln(p_i/q_i)\) have the same
+sign); zero if and only if \(p_i = q_i\) for all \(i\). Symmetry is
+obvious from the summed form. <span class="qed">∎</span>
+</div>
+
+<p>The classic detectors: PSI/KL per feature (interpretable, bin by bin),
+Kolmogorov-Smirnov test (comparison of continuous distributions, cf.
+Refresher Statistics), MMD distance (ML module), and stream detectors
+(ADWIN) for online signals. For an LLM, the "features" to monitor are:
+prompt length, language, topics (lightweight classifier), presence of
+injected documents, truncation rate — <em>and</em> output proxies: refusal
+rate, "I don't know" rate, median answer length, JSON parse failure rate.
+Without online labels, one monitors <em>symptoms</em>; the true metrics
+come from feedback and sampling.</p>
+
+<h3>5.2. Monitoring: three time loops</h3>
+
+<table class="tbl">
+  <tr><th>Loop</th><th>Latency</th><th>Signals</th><th>Action</th></tr>
+  <tr><td>Reactive</td><td>second-minute</td><td>latency, 5xx errors, 429, KV saturation, cost/req</td><td>autoscale, throttle, rollback</td></tr>
+  <tr><td>Daily</td><td>day</td><td>PSI per feature, refusal rate, feedback 👎, sampled RAGAS eval</td><td>ticket, investigation, prompt fix</td></tr>
+  <tr><td>Strategic</td><td>week-month</td><td>concept drift (refreshed golden set eval), cost drift, adoption</td><td>retraining/fine-tune, model migration</td></tr>
+</table>
+
+<p>The metrics of an LLM application stack up: infra (GPU, memory);
+serving (ch. 3); <strong>quality</strong> (explicit feedback, sampled
+evals); <strong>safety</strong> (guardrail trigger rate, injection
+attempts — cf. ch. 8 and the Explainability/Security module). The
+structural watchpoint: the <strong>feedback loop</strong> — the data
+collected in production (real questions, feedback) become tomorrow's
+training data: the model steers the distribution it will later see
+(selection bias, rich-get-richer). Documenting this loop is part of the
+audit (ch. 9; Emerging ML module ch. 6 on fairness).</p>
+
+<h3>5.3. The LLM judge in CI and production</h3>
+
+<div class="note">
+  <span class="tag">Judge: how, and with which biases</span>
+  A judge model evaluates (question, answer) pairs against a rubric
+  (fidelity to context, completeness, tone); Zheng et al. (MT-Bench,
+  NeurIPS 2023) show agreement with humans &gt; 80% on conversation tasks —
+  <em>but</em> with documented biases: preference for the first position,
+  for long answers, and <em>self-preference</em> (the judge favors its own
+  style). Good practices: alternated order, explicit rubric, reference
+  provided, human golden set to calibrate the judge, judge version frozen
+  in CI (ch. 1). The judge is a <em>noisy sensor</em> — one uses it to
+  detect regressions, not to certify.
+</div>
+
+<pre class="code"><code># Mini regression judge in CI: compares prod vs candidate on the golden set
+def judge_pair(question, ref, ans_prod, ans_cand, judge):
+    rub = "Expected answer (reference): {ref}\nA: {a}\nB: {b}\n" \
+          "Which one is more faithful to the reference? Answer A, B, or EQUAL."
+    out = judge(f"Q: {question}\n" + rub.format(ref=ref, a=ans_prod, b=ans_cand))
+    out_sw = judge(f"Q: {question}\n" + rub.format(ref=ref, a=ans_cand, b=ans_prod))
+    pair = {out.strip()[:4], out_sw.strip()[:4]}      # alternated order, anti-bias
+    return "cand" if pair == {"A", "B"} else ("prod" if pair == {"B", "A"} else "equal")
+
+# gate: no significant regression (cf. prop. 2.2 for the minimal margin)
+wins = sum(judge_pair(**ex) == "cand" for ex in golden)
+assert wins &gt;= 0.45 * len(golden), f"judge regression: {wins}/{len(golden)}"</code></pre>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Costs: euros per million tokens</a><a class="next" href="ch6.html"><span class="dir">Next</span> RAG Ops: freshness and continuous evaluation</a></nav>
+</main>
+</div>
+
+</body>
+</html>

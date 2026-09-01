@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Backpropagation — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Deep Learning</a> › Backpropagation</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: matrix differential calculus and numerical stability</a>
+<a href="ch1.html">From the neuron to the deep network</a>
+<a href="ch2.html" class="active">Backpropagation</a>
+<a href="ch3.html">Optimization in practice</a>
+<a href="ch4.html">Convolutional networks (CNN)</a>
+<a href="ch5.html">Sequences: RNN, LSTM</a>
+<a href="ch6.html">Attention and transformers</a>
+<a href="ch7.html">Generative models: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning and fine-tuning</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ch10.html">Training in practice</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Backpropagation</h2>
+
+<h3>2.1. The theorem and its proof</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 2.1 — Backpropagation (chain rule on a computation graph)</span>
+  Consider an acyclic computation graph whose nodes \(v\) carry tensors, each
+  node being a differentiable function of its predecessors, and \(L\) the loss node.
+  For every node \(v\) other than \(L\), with successors \(s_1, \dots, s_k\):
+  $$\frac{\partial L}{\partial v} = \sum_{i=1}^{k} \frac{\partial L}{\partial s_i}\, \frac{\partial s_i}{\partial v},$$
+  with base case \(\partial L/\partial L = 1\). In particular, for an MLP where
+  \(a^{(\ell)} = W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\) and
+  \(\delta^{(\ell)} = \partial \mathcal{L}/\partial a^{(\ell)}\):
+  $$\delta^{(L)} = \nabla_{a^{(L)}} \mathcal{L}, \qquad
+  \delta^{(\ell)} = \big(W^{(\ell+1)\top} \delta^{(\ell+1)}\big) \odot \sigma'(a^{(\ell)}), \qquad
+  \frac{\partial \mathcal{L}}{\partial W^{(\ell)}} = \delta^{(\ell)} \, h^{(\ell-1)\top}, \qquad
+  \frac{\partial \mathcal{L}}{\partial b^{(\ell)}} = \delta^{(\ell)}.$$
+</div>
+
+<div class="proof">
+By descending induction along a reverse topological order (from outputs toward inputs).
+<strong>Base.</strong> \(\partial L/\partial L = 1\). <strong>Heredity.</strong> Fix \(v\)
+and assume the formula true for all its successors \(s_i\). Since the graph is
+acyclic, \(L\) depends on \(v\) only through the values of \(s_1, \dots, s_k\);
+writing \(L = \Psi(s_1(v), \dots, s_k(v))\) locally, the multivariate chain rule
+gives exactly \(\frac{dL}{dv} = \sum_i \frac{\partial L}{\partial s_i}\frac{ds_i}{dv}\).
+The MLP matrix formulas are merely the coordinate-by-coordinate application of
+this identity; the product \(W^{(\ell+1)\top}\delta^{(\ell+1)}\) transposes the
+linearity \(a^{(\ell+1)} = W^{(\ell+1)}h^{(\ell)} + \dots\), and the term
+\(\odot\,\sigma'(a^{(\ell)})\) comes from \(h^{(\ell)} = \sigma(a^{(\ell)})\) applied
+component by component.
+<span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.2 — Backprop by hand on a 5-node graph</span>
+  Take \(f(w_1, w_2) = \tfrac12\big(w_2 \tanh(w_1 x) - t\big)^2\) with
+  \(x = 1{,}5\), \(w_1 = 0{,}3\), \(w_2 = -0{,}8\), \(t = 1\). Intermediate nodes:
+  \(a = w_1 x\), \(h = \tanh(a)\), \(y = w_2 h\), \(\mathcal{L} = \tfrac12(y-t)^2\).
+  <table class="tbl">
+  <thead><tr><th>Forward pass</th><th>value</th><th>Local derivatives</th></tr></thead>
+  <tbody>
+  <tr><td>\(a = w_1 x\)</td><td>\(0{,}45\)</td><td>\(\partial a/\partial w_1 = x = 1{,}5\), \(\partial a/\partial x = w_1\)</td></tr>
+  <tr><td>\(h = \tanh(a)\)</td><td>\(0{,}4219\)</td><td>\(\partial h/\partial a = 1-h^2 = 0{,}8220\)</td></tr>
+  <tr><td>\(y = w_2 h\)</td><td>\(-0{,}3375\)</td><td>\(\partial y/\partial w_2 = h\), \(\partial y/\partial h = w_2\)</td></tr>
+  <tr><td>\(\mathcal{L} = \tfrac12(y-t)^2\)</td><td>\(0{,}8944\)</td><td>\(\partial \mathcal{L}/\partial y = y - t = -1{,}3375\)</td></tr>
+  </tbody>
+  </table>
+  Backward pass (products of local derivatives):
+  $$\frac{\partial \mathcal{L}}{\partial w_2} = -1{,}3375 \times 0{,}4219 = -0{,}5643, \qquad
+  \frac{\partial \mathcal{L}}{\partial w_1} = \underbrace{(-1{,}3375)(-0{,}8)}_{\partial\mathcal{L}/\partial h = 1{,}0700} \times\; 0{,}8220 \times 1{,}5 = 1{,}3193.$$
+  The message \(\partial\mathcal{L}/\partial h = 1{,}07\) is literally the gradient
+  "passing backward" through the multiplication — same structure as the message
+  passing of GNNs, but on the computation graph.
+</div>
+
+<h3>2.2. Cost: memory, compute, and how to reduce them</h3>
+
+<ul>
+  <li><strong>Complexity.</strong> A single forward pass + one backward pass cost
+  \(\mathcal{O}(|\theta|)\) operations (up to a constant factor): the gradient of
+  <em>all</em> the weights for the price of about two evaluations — this is the decisive
+  contribution of reverse mode (Linnainmaa, 1970; Rumelhart, Hinton &amp; Williams,
+  1986) over forward-mode differentiation, which would require \(|\theta|\) passes.</li>
+  <li><strong>Memory.</strong> The backward pass needs the activations <em>of every
+  layer</em>: memory grows like the batch size \(\times\) the number of
+  activations, not like \(|\theta|\). For a transformer, this is the limiting factor.</li>
+  <li><strong>Checkpointing</strong> (Griewank; Chen, 2016): store only one layer out of
+  \(\sqrt L\) and recompute the missing intermediates during the backward
+  pass — \(\mathcal{O}(\sqrt L)\) memory instead of \(\mathcal{O}(L)\), for ~33%
+  extra compute. <code>torch.utils.checkpoint</code>.</li>
+  <li><strong>Mixed precision</strong>: store/compute in float16 or bfloat16
+  (2× memory and tensor throughput), while keeping float32 master copies of the weights
+  and scaling up the loss (<em>loss scaling</em>) to prevent small
+  gradients from canceling in fp16. bfloat16 has the same exponent range as fp32 — more
+  robust.</li>
+</ul>
+
+<pre class="code"><code>import torch
+
+x, y = torch.randn(8), torch.randn(2)
+W1 = torch.randn(64, 8, requires_grad=True)   # autograd tracks the operations
+W2 = torch.randn(2, 64, requires_grad=True)
+
+loss = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+loss.backward()          # automatic backprop
+print(W1.grad.shape, W2.grad.shape)           # same shapes as W1, W2
+
+# Verification by finite difference (do this for every new custom gradient)
+eps = 1e-6
+with torch.no_grad():
+    W2[0, 0] += eps; lp = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+    W2[0, 0] -= 2 * eps; lm = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+    W2[0, 0] += eps
+print((lp - lm) / (2 * eps), W2.grad[0, 0])   # ~ -0.0723 twice</code></pre>
+
+<div class="note">
+  <span class="tag">Computation graph</span>
+  <code>autograd</code> dynamically builds the graph of operations (vertices = tensors,
+  edges = operations) and applies the chain rule in reverse-mode differentiation.
+  Deep learning <em>is</em> computation on a graph — the same idea will be applied to
+  the data themselves in the Graph ML module. And since the graph is acyclic by
+  construction, the induction of theorem 2.1 always runs without deadlock;
+  RNNs (chapter 5) are "unrolled" in time precisely to recover an acyclic
+  graph.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Previous</span> From the neuron to the deep network</a><a class="next" href="ch3.html"><span class="dir">Next</span> Optimization in practice</a></nav>
+</main>
+</div>
+
+</body>
+</html>

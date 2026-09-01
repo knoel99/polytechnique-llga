@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy and Uncertainty Quantification — Differential privacy: the foundation — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Privacy and Uncertainty Quantification</a> › Differential privacy: the foundation</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>Privacy and Uncertainty Quantification</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: probability, concentration, DP as seen in M1</a>
+<a href="ch1.html" class="active">Differential privacy: the foundation</a>
+<a href="ch2.html">Mechanisms: Laplace, Gaussian, exponential</a>
+<a href="ch3.html">Composition: advanced and Rényi DP</a>
+<a href="ch4.html">Local versus global, and DP-SGD</a>
+<a href="ch5.html">DP in industry and attacks</a>
+<a href="ch6.html">Uncertainty: sources and vocabulary</a>
+<a href="ch7.html">Calibration: diagrams, ECE, Brier</a>
+<a href="ch8.html">Bayesian deep learning: MC dropout versus ensembles</a>
+<a href="ch9.html">Conformal prediction: theorem and algorithm</a>
+<a href="ch10.html">Quantile and conformalized regression</a>
+<a href="ch11.html">UQ for LLMs</a>
+<a href="ch12.html">Applications: deciding under uncertainty</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Differential privacy: the foundation</h2>
+
+<p>The historical motivation (reconstructed by Dinur-Nissim, 2003):
+publishing "anonymized" statistics about a database is often enough to
+<em>reconstruct</em> the individual data by cross-referencing enough
+queries — naive anonymization (removing name/SSN) does not resist. The
+answer of Dwork, McSherry, Nissim, Smith (2006): define protection as a
+property of the <em>mechanism</em> (the randomized algorithm), not of the
+data.</p>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Neighboring and differential privacy</span>
+  Two databases \(x, x'\) are <strong>neighboring</strong> if they differ
+  in the data of a single individual (one row added/removed, or modified:
+  one of the two conventions will be specified). A randomized mechanism
+  \(M\) is <strong>\(\varepsilon\)-DP</strong> if for every pair of
+  neighboring databases and every subset \(S\) of outputs:
+  $$\mathbb{P}(M(x) \in S) \;\leq\; e^{\varepsilon}\, \mathbb{P}(M(x') \in S).$$
+  <strong>\((\varepsilon, \delta)\)</strong> version: the inequality may
+  be violated with probability \(\leq \delta\) (a figure to be read as
+  "cryptographically improbable", \(\delta \ll 1/n\)). Reading: changing
+  the data of <em>one</em> person changes the distribution of the
+  published conclusions by at most (multiplicatively) \(e^\varepsilon\) —
+  so these conclusions reveal little about that person, whatever the
+  adversary's side knowledge.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — Three structural properties</span>
+  <strong>(i) Post-processing:</strong> if \(M\) is \(\varepsilon\)-DP,
+  any \(g \circ M\) (subsequent analysis, training, selective
+  publication) still is — privacy does not degrade through processing of
+  the outputs. <strong>(ii) Group privacy:</strong> if \(x, x'\) differ
+  on \(k\) individuals,
+  \(\mathbb{P}(M(x) \in S) \leq e^{k\varepsilon}\mathbb{P}(M(x') \in S)\).
+  <strong>(iii) Convexity:</strong> a mixture of \(\varepsilon\)-DP
+  mechanisms is \(\varepsilon\)-DP.
+  <div class="proof">
+  (i) For every section \(A\), \(\mathbb{P}(g(M(x)) \in S) =
+  \mathbb{P}(M(x) \in g^{-1}(S)) \leq e^\varepsilon
+  \mathbb{P}(M(x') \in g^{-1}(S)) = e^\varepsilon \mathbb{P}(g(M(x'))
+  \in S)\) — the direct image of a dominated measure preserves the
+  Radon-Nikodym ratio. (ii) A chain of \(k\) intermediate neighboring
+  databases and multiplication of the \(e^\varepsilon\). (iii) For a
+  mixture with weights \(\lambda_j\) over \(M_j\) all
+  \(\varepsilon\)-DP: \(\sum_j \lambda_j \mathbb{P}(M_j(x) \in S) \leq
+  \sum_j \lambda_j e^\varepsilon \mathbb{P}(M_j(x') \in S) =
+  e^\varepsilon \mathbb{P}(\text{mixture}(x') \in S)\).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.3 — Sensitivity</span>
+  The \(\ell_1\) (resp. \(\ell_2\)) sensitivity of a query \(f\) on
+  neighboring databases:
+  $$\Delta_1 f = \max_{x \sim x'} \|f(x) - f(x')\|_1, \qquad \Delta_2 f = \max_{x \sim x'} \|f(x) - f(x')\|_2.$$
+  Computed examples: counting (how many individuals satisfy \(Q\)?)
+  \(\Rightarrow \Delta_1 = 1\) (one row changes the count by at most 1);
+  mean over \(n\) rows in \([0, 1]\) \(\Rightarrow \Delta_1 = 1/n\)
+  (adding one row shifts the mean by at most \(1/n\)); histogram with
+  \(k\) bins \(\Rightarrow \Delta_1 = 1\) (one row falls in one bin —
+  under the add/remove convention); maximum \(\Rightarrow \Delta_1\)
+  unbounded (hence the systematic clipping in practice, ch. 4).
+  Sensitivity measures "how much one individual can weigh" — it is what
+  will set the noise.
+</div>
+
+<div class="note">
+  <span class="tag">Choosing \(\varepsilon\) — the embarrassing question</span>
+  No universal rule, but industry benchmarks: 2020 US Census: a global
+  \(\varepsilon\) on the order of twenty in total for the person file
+  (Abowd, 2018); Apple (keyboard telemetry): \(\varepsilon\) on the order
+  of 4–8 per day; Google (RAPPOR): \(\varepsilon \approx \ln 3\) per
+  report, cumulative budgets; academic literature: \(\varepsilon \leq 1\)
+  "strict", 1–10 "reasonable". The essential point: \(\varepsilon\) is a
+  <em>budget</em> that one spends (ch. 3), not a moral grade.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Reminders: probability, concentration, DP as seen in M1</a><a class="next" href="ch2.html"><span class="dir">Next</span> Mechanisms: Laplace, Gaussian, exponential</a></nav>
+</main>
+</div>
+
+</body>
+</html>

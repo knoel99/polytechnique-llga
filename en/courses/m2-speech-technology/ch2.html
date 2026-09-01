@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech Technology for Conversational AI — CTC: the loss, derived — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Speech Technology for Conversational AI</a> › CTC: the loss, derived</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Speech Technology for Conversational AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: the speech signal and its representations</a>
+<a href="ch1.html">Classical ASR: the GMM-HMM pipeline</a>
+<a href="ch2.html" class="active">CTC: the loss, derived</a>
+<a href="ch3.html">Encoder-decoder: LAS, Conformer, RNN-T</a>
+<a href="ch4.html">Whisper: robustness and multi-task</a>
+<a href="ch5.html">Streaming: chunking, VAD, latency vs quality</a>
+<a href="ch6.html">Vocoders: from WaveNet to HiFi-GAN</a>
+<a href="ch7.html">Neural TTS: Tacotron 2, VITS, diffusion and flow</a>
+<a href="ch8.html">Expressivity: prosody, style tokens, SSML</a>
+<a href="ch9.html">Voice conversion and cloning: ethics and watermarking</a>
+<a href="ch10.html">The conversational loop: VAD, turn-taking, full-duplex</a>
+<a href="ch11.html">Speech LLMs and multilingualism</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. CTC: the loss, derived</h2>
+
+<p>The central problem of neural ASR: the output (sequence of tokens \(y\)) is
+shorter than the input (\(T\) frames) and <em>unaligned</em> — there is no label
+per frame. The solution of Graves et al. (ICML 2006): marginalize over
+<em>all</em> possible alignments. We derive everything: this is technical
+chapter no. 1 of the module.</p>
+
+<div class="def">
+  <span class="tag">Definition 2.1 — Alignments and collapse</span>
+  The network emits at each frame a distribution \(p_\theta(\cdot \mid
+  x_{1:T}, t)\) over the extended alphabet \(\mathcal V \cup \{\epsilon\}\)
+  (\(\epsilon\) = blank). A <em>path</em> \(\pi \in (\mathcal V \cup
+  \{\epsilon\})^T\) is a sequence of \(T\) symbols, drawn independently:
+  \(p(\pi \mid x) = \prod_{t=1}^T p_\theta(\pi_t \mid x, t)\). The
+  <strong>collapse</strong> map \(\mathcal B\) first removes the blanks then
+  merges consecutive repetitions: \(\mathcal B(\texttt{hh ee ll ll o}) =
+  \texttt{helo}\) (the three consecutive l's, once the blanks are removed, make
+  only one). Conversely, doubles <em>separated by a blank</em> survive:
+  \(\mathcal B(\texttt{l}\,\epsilon\,\texttt{l}) = \texttt{ll}\) — that is the
+  whole art of CTC. The CTC loss marginalizes:
+  $$p_\theta(y \mid x) \;=\; \sum_{\pi \in \mathcal B^{-1}(y)} p(\pi \mid x),
+  \qquad
+  \mathcal L_{\mathrm{CTC}} = -\log p_\theta(y \mid x).$$
+  <em>Why the blank is indispensable</em>: without it, a collapsed
+  \(\texttt{ll}\) could not be distinguished from \(\texttt{l}\) — impossible
+  to write "bonne" with a double n. The blank carries the boundary
+  information.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.2 — Counting by hand (T = 4, y = "ab")</span>
+  Extended sequence \(\ell = (\epsilon, a, \epsilon, b)\) (length \(S = 4\)).
+  The valid paths of length 4 are: \(aa\epsilon b\)? No — let us enumerate
+  seriously: \(\texttt{-a-b}\), \(\texttt{-ab-}\), \(\texttt{a--b}\),
+  \(\texttt{a-b-}\), \(\texttt{aa-b}\), \(\texttt{a-ab}\),
+  \(\texttt{-aab}\), \(\texttt{ab--}\) (8 paths). Each contributes its product
+  of 4 probabilities: \(p(y|x)\) is the sum of the 8; exercise 3 computes it
+  for numerical values, exercise 4 checks with the implementation. The number
+  of paths grows exponentially (\(\sim |\mathcal V|^T\)): direct summation is
+  impossible — hence the forward-backward.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 2.3 — CTC forward-backward (recursions and gradient, proven)</span>
+  Let \(p_t(k) = p_\theta(k \mid x, t)\), and \(\ell\) the extended sequence.
+  The <em>forward variables</em> \(\alpha_t(s) = p(\ell_{1:s} \text{ reached
+  at frame } t)\) follow
+  $$\alpha_t(s) = \Big[\alpha_{t-1}(s) + \alpha_{t-1}(s{-}1) +
+  \mathbf 1\{\ell_s \neq \epsilon,\ \ell_s \neq \ell_{s-2}\}\,
+  \alpha_{t-1}(s{-}2)\Big]\cdot p_t(\ell_s),$$
+  initialized \(\alpha_1(1) = p_1(\epsilon)\), \(\alpha_1(2) = p_1(\ell_2)\),
+  the rest at 0 (one cannot "jump" ahead). Symmetrically \(\beta_t(s)\)
+  (backward, from the end). Then
+  $$p(y \mid x) = \alpha_T(S) + \alpha_T(S{-}1), \qquad
+  \alpha_t(s)\,\beta_t(s) = p\big(y \mid x,\ \pi_t = \ell_s\big)\cdot
+  p_t(\ell_s),$$
+  and the gradient of the loss is written in closed form
+  $$\frac{\partial \mathcal L_{\mathrm{CTC}}}{\partial p_t(k)}
+  = -\,\frac{1}{p(y \mid x)}\ \frac{1}{p_t(k)} \sum_{s\,:\,\ell_s = k}
+  \alpha_t(s)\, \beta_t(s).$$
+  <div class="proof">
+  <strong>Step 1 (decomposition by the state at \(t\)).</strong> The sum over
+  paths partitions according to the position \(s\) occupied at frame \(t\):
+  each path passing through \(\ell_s\) at \(t\) factorizes into "prefix
+  reaching \(\ell_s\) at \(t\)" \(\times\) "\(p_t(\ell_s)\)" \(\times\)
+  "suffix from \(\ell_s\) at \(t{+}1\)" — hence \(\alpha_t(s)\beta_t(s) =
+  p(y, \pi_t = \ell_s \mid x)\) (careful: the definition of \(\beta\) includes
+  the \(p_t\) factor or not depending on the convention; with the one above,
+  \(\alpha_t(s)\) contains \(p_t(\ell_s)\) and \(\beta_t(s)\) does not).
+  <strong>Step 2 (recursion).</strong> For the path to be at \(\ell_s\) at
+  \(t\), it was at \(s\), \(s{-}1\) or \(s{-}2\) at \(t{-}1\); the jump of
+  two positions is forbidden <em>except</em> if \(\ell_s\) is a real letter
+  different from \(\ell_{s-2}\) (otherwise two identical letters would be
+  merged by the collapse; and one never jumps <em>over</em> a letter).
+  <strong>Step 3 (gradient).</strong>
+  \(p(y|x) = \sum_{\pi} \prod_{t'} p_{t'}(\pi_{t'})\); each term using
+  \(p_t(k)\) corresponds to the paths with \(\pi_t = k \in \ell\), whose total
+  sum equals \(\sum_{s:\ell_s = k}\alpha_t(s)\beta_t(s)\). Differentiating
+  the log: \(\partial \mathcal L/\partial p_t(k) = -\partial p(y|x)/\partial
+  p_t(k) \cdot 1/p(y|x)\), and \(\partial p(y|x)/\partial p_t(k) =
+  \big[\sum_s \alpha\beta\big] / p_t(k)\) (each path where \(\pi_t = k\) is
+  linear in \(p_t(k)\)). <strong>Complexity</strong>: \(\mathcal O(T \cdot
+  S)\) — two tables of \(T \times (2|y|+1)\), versus the exponential
+  enumeration. <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.4 — CTC inference and model assumptions</span>
+  (i) <em>Greedy decoding</em>: \(\hat y = \mathcal B(\arg\max_k p_t(k)\
+  \text{for each } t)\) — fast, suboptimal; <em>beam search</em>: maintain
+  \(K\) prefixes with their truncated \(\alpha\) scores, merge equal prefixes
+  after collapse, optionally rescored by an LM. (ii) <em>Assumptions of
+  CTC</em>: conditional independence of the frames (no internal language
+  model — hence the external LM) and <em>monotone</em> distribution (the
+  alignment goes left to right): perfect for reading, forbidden for
+  translation (ch. 3 to break free of it).
+</div>
+
+<div class="note">
+  <span class="tag">CTC's posterity</span>
+  CTC lives everywhere in 2026: forced alignment (lab 1), the pre-training of
+  wav2vec&nbsp;2 (CTC objective), and — above all — <strong>RNN-T</strong>
+  (ch. 3) is a CTC extended to real time, with a blank reinterpreted as "move
+  forward in time". By contrast, Whisper is <em>not</em> CTC (attention
+  encoder-decoder, ch. 4): knowing how to say "this one marginalizes
+  alignments, that one generates them" is a classic oral-exam question.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Previous</span> Classical ASR: the GMM-HMM pipeline</a><a class="next" href="ch3.html"><span class="dir">Next</span> Encoder-decoder: LAS, Conformer, RNN-T</a></nav>
+</main>
+</div>
+
+</body>
+</html>

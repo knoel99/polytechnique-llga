@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Boosting to Foundation Models: learning with Tabular Data — Boosting: functional gradient descent — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">From Boosting to Foundation Models: learning with Tabular Data</a> › Boosting: functional gradient descent</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>From Boosting to Foundation Models: learning with Tabular Data</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: trees, forests, boosting</a>
+<a href="ch1.html">Why GBDTs (still) dominate tabular data</a>
+<a href="ch2.html" class="active">Boosting: functional gradient descent</a>
+<a href="ch3.html">XGBoost, LightGBM, CatBoost: three engineering approaches</a>
+<a href="ch4.html">Encoding columns: categorical and numerical</a>
+<a href="ch5.html">Deep tabular: regularized MLPs and FT-Transformer</a>
+<a href="ch6.html">TabPFN: learning tables in-context</a>
+<a href="ch7.html">LLMs and tables: serialization, text-to-SQL</a>
+<a href="ch8.html">Synthetic tabular data</a>
+<a href="ch9.html">Honest benchmarking</a>
+<a href="ch10.html">Choosing your method: guide and open questions</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. Boosting: functional gradient descent</h2>
+
+<p>Boosting is most cleanly written as <em>gradient descent in the
+space of functions</em> — a view due to Friedman (2001), which
+generalizes AdaBoost (Freund &amp; Schapire, 1997; cf. Machine
+Learning module ch. 5 for the historical account).</p>
+
+<div class="def">
+  <span class="tag">Definition 2.1 — Functional gradient descent</span>
+  We look for \(F^\star = \arg\min_F \sum_i L(y_i, F(x_i))\) in a
+  space of functions. The "gradient at point \(x_i\)" is the variable
+  \(r_i = -\left[\dfrac{\partial L(y_i, F(x_i))}{\partial F(x_i)}\right]_{F = F_{m-1}}\).
+  The boosting iteration: (1) compute the \(r_i\); (2) fit a weak
+  learner \(h_m\) (shallow tree) by least squares to the \(r_i\); (3)
+  update \(F_m = F_{m-1} + \eta\, h_m\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — Residuals for the quadratic loss</span>
+  For \(L(y, a) = \tfrac{1}{2}(y - a)^2\), one has exactly \(r_i = y_i
+  - F_{m-1}(x_i)\): "fitting on the residuals" is a special case of
+  definition 2.1.
+  <div class="proof">
+  \(\partial L / \partial a = a - y\), so \(-\partial L(y_i,
+  F(x_i))/\partial F = y_i - F(x_i)\).&nbsp;<span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">The role of each ingredient</span>
+  <strong>\(\eta\) (shrinkage)</strong>: a small step ⇒ each tree
+  corrects what the previous ones left behind — equivalent to a
+  regularization of the descent step, to be combined with more trees.
+  <strong>Subsampling</strong> (Friedman, 2002): fitting each tree on
+  a fraction of the rows injects bagging into the descent and
+  decorrelates the trees (direct link with the M1 forests).
+  <strong>Limited depth</strong>: a tree of depth \(d\) models only
+  order-\(d\) interactions — boosting learns a sum of "simple
+  piecewise" functions, which matches the irregularity of tabular
+  targets (study 1.2). <strong>Early stopping</strong>: \(M\) chosen
+  on validation — the analogue of truncating an expansion.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.3 — One iteration by hand</span>
+  Regression, quadratic loss, current model \(F_0 \equiv \bar{y}\).
+  Residuals \(r_i = y_i - \bar{y}\). A depth-1 tree fit to the
+  residuals chooses the column \(j^\star\) and the threshold
+  \(t^\star\) minimizing the within-leaf variance of the \(r_i\) —
+  that is, best explaining <em>what the constant model could not
+  say</em>. New prediction \(F_1(x) = \bar{y} + \eta\,(a\,
+  \mathbf{1}[x_{j^\star} \leq t^\star] + b\,\mathbf{1}[x_{j^\star}
+  &gt; t^\star])\), where \(a, b\) are the per-leaf residual means.
+  The following iterations attack the residuals of \(F_1\), and so
+  on.
+</div>
+
+<div class="note">
+  <span class="tag">What ch. 3 adds</span> Definition 2.1 says
+  <em>what</em> to fit; XGBoost, LightGBM, and CatBoost optimize
+  <em>how</em>: closed-form leaf weights via a second-order Taylor
+  expansion, histogram-based splits, large-gradient sampling,
+  symmetric trees, ordered statistics for categoricals. All choices
+  that take the GBDT from "nice idea" to industrial default on
+  tables.
+</div>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Previous</span> Why GBDTs (still) dominate tabular data</a><a class="next" href="ch3.html"><span class="dir">Next</span> XGBoost, LightGBM, CatBoost: three engineering approaches</a></nav>
+</main>
+</div>
+
+</body>
+</html>

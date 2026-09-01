@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Animation — Particles, forces, mass-spring systems — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Computer Animation</a> › Particles, forces, mass-spring systems</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51085_EP</span>Computer Animation</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: ODEs, Taylor, rotations, energy</a>
+<a href="ch1.html">The animation pipeline: keyframes and splines</a>
+<a href="ch2.html">Numerical integration of ODEs</a>
+<a href="ch3.html">Stability: the oscillator theorem</a>
+<a href="ch4.html" class="active">Particles, forces, mass-spring systems</a>
+<a href="ch5.html">Rigid bodies and quaternions</a>
+<a href="ch6.html">Collisions and constraints</a>
+<a href="ch7.html">Skinning: LBS and its artifacts</a>
+<a href="ch8.html">Inverse kinematics</a>
+<a href="ch9.html">Crowds and behaviors</a>
+<a href="ch10.html">Procedural versus data-driven</a>
+<a href="ch11.html">Research of the teaching team</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Particles, forces, mass-spring systems</h2>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — Particle system</span>
+  A system of \(n\) particles is the state \((\mathbf{x}_i, \mathbf{v}_i)_{i=1}^n \in
+  \mathbb{R}^{6n}\) endowed with a force field \(\mathbf{F}_i(\mathbf{x}, \mathbf{v})\).
+  The dynamics \(\dot{\mathbf{x}}_i = \mathbf{v}_i,\ m_i \dot{\mathbf{v}}_i = \mathbf{F}_i\)
+  is integrated by one of the schemes of chapter 2. Usual forces: gravity
+  \(m_i \mathbf{g}\); linear drag \(-c_d \mathbf{v}_i\) or quadratic
+  \(-c_q \|\mathbf{v}_i\| \mathbf{v}_i\); spring \(\mathbf{F}_{i\leftarrow j} =
+  k(\|\ell\| - r_{ij})\,\hat{\ell}\) with \(\ell = \mathbf{x}_j - \mathbf{x}_i\), rest
+  length \(r_{ij}\); axial damper \(-c\,(\mathbf{v}_j - \mathbf{v}_i)\cdot
+  \hat{\ell}\,\hat{\ell}\). This is the basic model of "magical" effects (fire, smoke,
+  dust) and the forerunner of the SPH of chapter 11.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Eigenmodes of a mass-spring network</span>
+  For small displacements around rest, a network with masses \(M\) (diagonal) and
+  stiffness matrix \(K\) (symmetric, positive definite if the network is anchored)
+  linearizes to \(M\ddot{\mathbf{u}} = -K\mathbf{u}\). The natural frequencies are
+  $$\omega_k^2 = \lambda_k(M^{-1}K), \qquad k = 1, \dots, 3n,$$
+  and the stability condition of symplectic Euler (Theorem 3.5) becomes
+  \(h \leq 2/\omega_{\max} = 2/\sqrt{\lambda_{\max}(M^{-1}K)}\).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 4.3 — Choosing the step for a garment</span>
+  A discrete cloth of \(20 \times 20\) points, mesh size \(d = 1\) cm, structural
+  springs \(k_s = 50\) N/m, mass per point \(m = 2\) g. The fastest mode couples two
+  neighboring points: \(\omega \approx \sqrt{2k_s/m} = \sqrt{2 \cdot 50 / 0.002}
+  \approx 224\) rad/s, hence \(h \leq 2/\omega \approx 9\) ms (≈ 110 Hz). With
+  "2-hop" bending springs five times stiffer, \(\omega\) is multiplied by
+  \(\sqrt{5}\) and the allowed step divided accordingly — hence the value of the
+  implicit approach. Remember the orders of magnitude: real-time garment simulation:
+  \(h \sim 2\)–5 ms, implicit; effects particles: \(h \sim 16\)–33 ms, symplectic.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 4.4 — Implicit: the system to solve</span>
+  The linearized implicit (or semi-implicit) step writes
+  $$\Big(\,I - h\,J\,\Big)\,\Delta\mathbf{v} = h\,\big(\mathbf{F}(\mathbf{x}_n) +
+  h\,J\,\mathbf{v}_n\big), \qquad J = \frac{\partial \mathbf{F}}{\partial \mathbf{x}}
+  \ \ \text{(force Jacobian,}\ \sphericalangle\ \text{negative definite system)},$$
+  then \(\mathbf{v}_{n+1} = \mathbf{v}_n + \Delta\mathbf{v}\),
+  \(\mathbf{x}_{n+1} = \mathbf{x}_n + h\,\mathbf{v}_{n+1}\). In practice one solves by
+  conjugate gradient <em>without</em> assembling \(J\) explicitly (matrix-vector
+  products by looping over the springs) — the same trick of writing as the
+  backpropagation gradient, cf. Machine Learning module, backpropagation chapter.
+</div>
+
+<div class="note">
+  <span class="tag">Beyond springs: spheres and density</span>
+  <em>Interactional</em> particle systems (SPH fluids, MPM sand) replace fixed links
+  with finite-range interactions: each particle carries a density
+  \(\rho_i = \sum_j m_j W(\|\mathbf{x}_j - \mathbf{x}_i\|)\) (kernel \(W\)), and the
+  forces derive from a compression energy potential. The free surface is the
+  isosurface \(\rho = \rho_0\) — this is the <em>smoothed particles</em> paradigm of
+  Desbrun &amp; Cani (1996), chapter 11: merging, splashing and object separation
+  emerge without any imposed topology.
+</div>
+
+<pre class="code"><code>import numpy as np
+
+# ------------- Particle simulator: symplectic Euler -------------
+# n particles, gravity, chain of springs, impenetrable ground (restitution 0.8)
+def simulate(n=40, steps=1200, h=1/240, seed=0):
+    rng = np.random.default_rng(seed)
+    x = rng.uniform(-1, 1, (n, 3)); x[:, 2] += 1.5   # initial positions
+    v = np.zeros((n, 3))
+    m = np.full(n, 0.05)                             # 50 g per particle
+    g = np.array([0, 0, -9.81]); mu = 0.7            # gravity, linear drag
+    # springs (i, j, stiffness k, damping c, rest length r)
+    edges = [(i, i + 1, 80.0, 0.4, 0.15) for i in range(n - 1)]
+    for _ in range(steps):
+        F = m[:, None] * g[None, :]                  # gravity
+        for (i, j, k, c, r) in edges:                # spring + damper
+            d = x[j] - x[i]; L = np.linalg.norm(d); u = d / L
+            Fij = (k * (L - r) + c * np.dot(v[j] - v[i], u)) * u
+            F[i] += Fij; F[j] -= Fij
+        v += h * F / m[:, None]     # (1) velocity first   -- symplectic Euler
+        v *= (1 - mu * h)           # global linear drag
+        x += h * v                  # (2) position next
+        hit = x[:, 2] &lt; 0           # ground z = 0: projection + bounce
+        x[hit, 2] = 0
+        v[hit, 2] = -0.8 * v[hit, 2]
+        yield x.copy(), v.copy()
+
+# mechanical energy: must remain bounded (cf. theorem 3.5)
+for k, (x, v) in enumerate(simulate()):
+    if k % 240 == 0:
+        E = 0.5 * 0.05 * (v ** 2).sum() + 0.05 * 9.81 * x[:, 2].sum()
+        print(f"t = {k/240:5.2f} s   E = {E:7.3f} J")
+</code></pre>
+
+<div class="note">
+  <span class="tag">Reading the code</span>
+  Two details matter more than everything else: (i) the order of the "velocity then
+  position" lines — swapping these two lines gives back explicit Euler and makes the
+  chain explode (try it with \(k = 500\)); (ii) handling of the ground by
+  <em>projection</em> (position corrected, velocity reflected) foreshadows the
+  constraints of chapter 6: no contact spring, hence no added stiffness. The energy
+  loop must oscillate boundedly — the most useful diagnostic of a physics engine.
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Stability: the oscillator theorem</a><a class="next" href="ch5.html"><span class="dir">Next</span> Rigid bodies and quaternions</a></nav>
+</main>
+</div>
+
+</body>
+</html>

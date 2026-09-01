@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control in Generative AI — Controlling diffusions: CFG, ControlNet, inversion — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Control in Generative AI</a> › Controlling diffusions: CFG, ControlNet, inversion</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>Control in Generative AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: generating, conditioning, decoding</a>
+<a href="ch1.html">Why control: safety, fidelity, intellectual property</a>
+<a href="ch2.html">Taxonomy: four families of control</a>
+<a href="ch3.html">Constrained decoding: grammars, automata, masks</a>
+<a href="ch4.html">Steering: controlling in activation space</a>
+<a href="ch5.html">RLHF: control in behavior space</a>
+<a href="ch6.html">Watermarking: proving the origin of a text</a>
+<a href="ch7.html" class="active">Controlling diffusions: CFG, ControlNet, inversion</a>
+<a href="ch8.html">Controlling graph generators</a>
+<a href="ch9.html">Evaluating control: fidelity versus diversity</a>
+<a href="ch10.html">Attacks on control and robustness</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Controlling diffusions: CFG, ControlNet, inversion</h2>
+
+<p>Control of diffusion models was introduced in M1 (Multimodal GenAI module
+ch. 4); here we give the short <em>proof</em> (the part we had not done), then
+the two industrial standards of spatial control (ControlNet) and editing
+(inversion).</p>
+
+<h3>7.1. CFG: the short proof</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 7.1 — Classifier guidance and CFG are the same exponential reweighting</span>
+  Let \(\hat\epsilon_c, \hat\epsilon_u\) denote the noises predicted with/without
+  conditioning, and \(\hat\epsilon_w = \hat\epsilon_u + w\,(\hat\epsilon_c -
+  \hat\epsilon_u)\) the CFG prediction. Since \(\hat\epsilon(x_t, t) =
+  -\sqrt{1 - \bar\alpha_t}\, \nabla_{x_t} \log p(x_t)\) (score parametrization),
+  the CFG combination realizes
+  $$\nabla_{x_t} \log p_w(x_t) \;=\; \nabla_{x_t} \log p(x_t) + w\, \nabla_{x_t}
+  \log p(c \mid x_t) \;=\; \nabla_{x_t} \log \big[p(x_t \mid c)^w \, p(x_t)^{1-w}\big],$$
+  that is, sampling from the <em>reweighted</em> law \(p_w \propto p(x_t|c)^w
+  p(x_t)^{1-w}\) — exactly the family of theorem 5.1 (RLHF) with
+  \(w \leftrightarrow 1/\beta\).
+  <div class="proof">
+  Linearity of the score: \(\hat\epsilon_w = (1 - w)\hat\epsilon_u +
+  w \hat\epsilon_c\) (rewrite the combination); each term is proportional to the
+  gradient of the corresponding log-density, so the sum is the gradient of the
+  <em>sum</em> of the logs. For the conditional term, Bayes' rule
+  \(p(x_t \mid c) \propto p(c \mid x_t)\, p(x_t)\) gives
+  \(\nabla \log p(x_t|c)^w p(x_t)^{1-w} = w\nabla\log p(c|x_t) + \nabla \log p(x_t)\) —
+  which is precisely the formula of <em>classifier guidance</em> with weight
+  \(w\): CFG obtains it <em>without a classifier</em>, by training the same
+  network with conditioning dropout. At \(w = 1\): pure conditional model;
+  \(w &gt; 1\): over-guidance (fidelity \(\uparrow\), diversity \(\downarrow\),
+  color saturation — the classic visual symptom); \(w &lt; 1\): interpolation
+  toward the unconditional.
+  <span class="qed">∎</span></div>
+</div>
+
+<h3>7.2. ControlNet: spatial control, without breaking the pre-training</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 7.2 — ControlNet architecture (Zhang, Rao &amp; Agrawala, ICCV 2023)</span>
+  Let \(F(x ; \Theta)\) be a frozen UNet block (operation on the activation
+  \(x\) of layer \(i\)). ControlNet branches off a <em>trainable copy</em>
+  initialized at \(\Theta\) and locks the output with two <em>null</em>
+  convolutions (zero-convolutions):
+  $$y \;=\; F(x;\Theta) \;+\; Z_2\Big(F_c\big(Z_1(c;\Theta_{z_1});\ \Theta_c\big);\ \Theta_{z_2}\Big),$$
+  where \(c\) is the control map (Canny edges, depth, skeletal pose…);
+  \(Z_i\) is a \(1\times1\) convolution with <em>zero weights at
+  initialization</em>.
+  <div class="proof">
+  <strong>Identity property at the start.</strong> At \(t = 0\):
+  \(Z_2(\cdot) = W_2 \, h = 0\) since \(W_2 = 0\) — the branch outputs exactly
+  zero, and the composed model is <em>identically</em> the pre-trained model:
+  fine-tuning starts from the initial quality, without "catastrophic shift".
+  <strong>The gradient does not vanish.</strong> The derivative of the output
+  with respect to \(W_2\) equals \(\partial y / \partial W_2 = h_c \neq 0\)
+  (the copy \(F_c\), initialized at \(\Theta\), produces nonzero activations):
+  the first update pulls \(W_2\) away from zero, which then <em>unlocks</em>
+  the gradients toward \(F_c\) and \(Z_1\) (which were zero as long as
+  \(W_2 = 0\), by the chain rule). Compare the naive alternative (branching
+  \(F_c\) directly): at step 0, uncontrolled random noise is added to the
+  activations of the frozen UNet and destroys the coherence of the output for
+  hundreds of steps.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="note">
+  <span class="tag">Why a "copy" and not a "new network"</span>
+  The copy inherits the pre-trained features: control learns <em>the
+  correspondence control map → existing rich features</em>, not vision from
+  scratch — hence the data efficiency (a few thousand pairs suffice for a new
+  type of control). This is a general pattern of the module: condition around
+  a frozen model and protect the interface with an identity initialization
+  (the mask of ch. 3 is the exact analogue for discrete slots: allow only
+  what preserves the invariant).
+</div>
+
+<h3>7.3. Editing a real image: inversion and null-text</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 7.3 — DDIM inversion and its failure under CFG</span>
+  DDIM defines a deterministic step linking \(x_t\) and \(x_{t-1}\) via the
+  prediction \(\hat x_0(x_t, c)\); <em>inversion</em> traverses the relation
+  backwards (reminder: Multimodal GenAI module ch. 4):
+  $$x_{t+1} = \sqrt{\bar\alpha_{t+1}}\, \hat x_0(x_t, c) + \sqrt{1 - \bar\alpha_{t+1}}\;
+  \hat\epsilon_c(x_t, c).$$
+  With CFG, the applied "noise" depends on a \(w\)-combination of the
+  conditional/unconditional predictions; inversion becomes an implicit
+  equation (the step depends on \(x_t\) through two networks): error
+  accumulates, the reconstruction drifts. <strong>Null-text inversion</strong>
+  (Mokady et al., CVPR 2023): keep the inversion trajectory as an
+  <em>anchor</em> and optimize, step by step, the <em>null</em> condition
+  embedding \(c_\varnothing^{(t)}\) to minimize
+  \(\|\hat x_0\big(x_t; c, c_\varnothing^{(t)}\big) - x_0\|^2\) — a few dozen
+  gradient steps per image; editing (Prompt-to-Prompt: substituting the
+  cross-attention maps; InstructPix2Pix: learning editing on synthetic data)
+  then operates <em>along</em> this faithful trajectory.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.4 — CFG by hand (pen-and-paper, in the graph module's format)</span>
+  Vocabulary of 3 artistic "directions", logits of step \(t\) without
+  conditioning: \((\text{painting}: 2.0,\ \text{photo}: 1.5,\ \text{3D}:
+  0.5)\); with condition "watercolor": \((3.0,\ 0.5,\ 0.5)\). At \(w = 3\):
+  guided logits \(= (1-w)\,u + w\,c = (-4.0,\ -1.0,\ 0.5)\)… in the
+  equivalent additive form \(u + w(c - u) = (5.0,\ -1.0,\ 0.5)\) — softmax
+  \(\approx (0.95, 0.007,\ 0.04)\): the target style crushes the
+  distribution, exactly like the molecular CFG of example 7.3 of the Graph
+  Generative Models module. \(w = 8\) → a single mode survives: the curve of
+  ch. 9, readable on a single step.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Watermarking: proving the origin of a text</a><a class="next" href="ch8.html"><span class="dir">Next</span> Controlling graph generators</a></nav>
+</main>
+</div>
+
+</body>
+</html>

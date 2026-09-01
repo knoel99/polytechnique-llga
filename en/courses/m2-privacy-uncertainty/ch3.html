@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy and Uncertainty Quantification — Composition: advanced and Rényi DP — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Privacy and Uncertainty Quantification</a> › Composition: advanced and Rényi DP</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>Privacy and Uncertainty Quantification</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: probability, concentration, DP as seen in M1</a>
+<a href="ch1.html">Differential privacy: the foundation</a>
+<a href="ch2.html">Mechanisms: Laplace, Gaussian, exponential</a>
+<a href="ch3.html" class="active">Composition: advanced and Rényi DP</a>
+<a href="ch4.html">Local versus global, and DP-SGD</a>
+<a href="ch5.html">DP in industry and attacks</a>
+<a href="ch6.html">Uncertainty: sources and vocabulary</a>
+<a href="ch7.html">Calibration: diagrams, ECE, Brier</a>
+<a href="ch8.html">Bayesian deep learning: MC dropout versus ensembles</a>
+<a href="ch9.html">Conformal prediction: theorem and algorithm</a>
+<a href="ch10.html">Quantile and conformalized regression</a>
+<a href="ch11.html">UQ for LLMs</a>
+<a href="ch12.html">Applications: deciding under uncertainty</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Composition: advanced and Rényi DP</h2>
+
+<div class="thm">
+  <span class="tag">Theorem 3.1 — Basic composition, proved</span>
+  If \(M_1\) is \(\varepsilon_1\)-DP and \(M_2\), applied <em>after</em>
+  \(M_1\) and allowed to depend on its output, is
+  \(\varepsilon_2\)-DP, then \((M_1, M_2)\) is
+  \((\varepsilon_1 + \varepsilon_2)\)-DP — adaptive composition
+  <em>accumulates linearly</em>.
+  <div class="proof">
+  By conditioning then post-processing: for measurable \(S\),
+  \(\mathbb{P}(M_2(M_1(x), x) \in S_2 \mid M_1(x) = m) \leq e^{\varepsilon_2}
+  \mathbb{P}(M_2(M_1(x'), x') \in S_2 \mid M_1(x') = m)\) — caution:
+  conditioning only makes sense via the regular version; the clean proof
+  handles densities: \(p_x(m, s) = p_x(m)\, p_x(s \mid m) \leq
+  e^{\varepsilon_1} p_{x'}(m) \cdot e^{\varepsilon_2} p_{x'}(s \mid m) =
+  e^{\varepsilon_1 + \varepsilon_2} p_{x'}(m, s)\), then one integrates.
+  Adaptivity breaks nothing because \(e^{\varepsilon_2}\) bounds the
+  ratio <em>for every value</em> of the history. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.2 — Advanced composition (Dwork, Rothblum, Vadhan, 2010)</span>
+  The composition of \(k\) adaptive \((\varepsilon_0, \delta_0)\)-DP
+  mechanisms is \((\varepsilon^\*, \, k\delta_0 + \delta')\)-DP for every
+  \(\delta' &gt; 0\) with
+  $$\varepsilon^\* = \sqrt{2 k \ln(1/\delta')}\; \varepsilon_0 \;+\; k\, \varepsilon_0 \big( e^{\varepsilon_0} - 1 \big).$$
+  In \(\sqrt k\) rather than \(k\) — the idea (sketch: the proof bounds
+  the deviation of the sum of log-ratios via Azuma, then converts a
+  sub-Gaussian concentration into an \((\varepsilon,
+  \delta)\)-type threshold). <strong>Numerical.</strong> \(k = 100\)
+  releases, \(\varepsilon_0 = 0.01\), \(\delta' = 10^{-5}\):
+  \(\sqrt{200 \times 11.5} \times 0.01 = 0.48\), second term
+  \(100 \times 0.01 \times 0.0101 = 0.010\), hence
+  \(\varepsilon^\* \approx 0.49\) versus \(\varepsilon = k\varepsilon_0
+  = 1.0\) under basic composition — twice as good; the gain explodes for
+  large \(k\) (ch. 4, DP-SGD: \(k \sim 10^4\) steps).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.3 — Rényi DP (Mironov, 2017)</span>
+  The Rényi divergence of order \(\alpha &gt; 1\) between two laws
+  \(P, Q\):
+  $$D_\alpha(P \| Q) = \frac{1}{\alpha - 1} \ln\, \mathbb{E}_{Q}\!\Big[ \Big( \frac{dP}{dQ} \Big)^{\alpha} \Big].$$
+  \(M\) is \((\alpha, \varepsilon)\)-RDP if \(D_\alpha(M(x) \| M(x'))
+  \leq \varepsilon\) for all neighboring databases. Three computational
+  virtues: (i) <strong>Gaussian mechanism</strong>: for \(f\) with
+  sensitivity \(\Delta_2\), the noise \(\mathcal N(0, \sigma^2)\) is
+  exactly \(\big(\alpha, \frac{\alpha \Delta_2^2}{2\sigma^2}\big)\)-RDP
+  for every \(\alpha\); (ii) <strong>composition = addition</strong> at
+  fixed \(\alpha\): \(k\) mechanisms \((\alpha,
+  \varepsilon_i)\)-RDP compose into \((\alpha, \sum_i
+  \varepsilon_i)\)-RDP (proof: conditional Hölder inequality applied to
+  the joint density — the global likelihood ratio raised to the exponent
+  \(\alpha\) factorizes into a product of individual ratios, each
+  bounded by \(e^{\varepsilon_i \alpha}\), and the expectation of the
+  product is bounded term by term); (iii) <strong>conversion</strong>:
+  \((\alpha, \varepsilon)\)-RDP \(\Rightarrow\) \((\varepsilon +
+  \frac{\ln(1/\delta)}{\alpha - 1}, \delta)\)-DP — one then optimizes
+  \(\alpha\) a posteriori.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 3.4 — The RDP account, computed end to end</span>
+  64 successive releases of the same Gaussian counting query, noise
+  \(\sigma = 8\Delta_2\), target \(\delta = 10^{-6}\).
+  <strong>(a) Classical route.</strong> Each release: \(\varepsilon_0 =
+  \sqrt{2 \ln(1.25/\delta_0)}\,\Delta/\sigma \approx 5.3/8 = 0.66\).
+  Advanced composition over \(k = 64\): \(\sqrt{128 \times 13.8} \times
+  0.66 + 64 \times 0.66 \times (e^{0.66} - 1) \approx 27.8 + 39.3
+  \approx \mathbf{67}\). Ruinous.
+  <strong>(b) RDP route.</strong> Each release is \((\alpha,
+  \alpha/128)\)-RDP (\(\alpha\Delta^2/2\sigma^2 = \alpha/128\)); the 64
+  compose into \((\alpha, \alpha/2)\)-RDP. Conversion:
+  \(\varepsilon(\alpha) = \frac{\alpha}{2} + \frac{13.8}{\alpha - 1}\),
+  minimized at \(\alpha - 1 = \sqrt{2 \times 13.8} \approx 5.3\), i.e.
+  \(\varepsilon^\* \approx 3.1 + 2.6 = \mathbf{5.7}\).<br>
+  Same budget, same \(\delta\) — RDP accounting <strong>saves a factor
+  of ~10</strong>. This is exactly what the "moments accountants" of
+  DP-SGD do (ch. 4); the later improvement (amplification by
+  subsampling, Wang et al. 2019) adds another significant factor when
+  each step touches only a mini-batch.
+</div>
+
+<div class="note">
+  <span class="tag">The family of generalized DP</span>
+  z-CDP (Bun &amp; Steinke, 2016 — Rényi divergence parameterized by
+  \(\rho = \varepsilon/\alpha\)), f-DP (Dong, Roth, Su, 2019 — binary
+  tests, exact frontier): same program, different representations; the
+  practitioner retains: <em>divergences with exact additivity (Rényi)
+  give the tightest composition bounds</em>, and the interface (Opacus,
+  TF Privacy, OpenDP) performs the conversion to \((\varepsilon,
+  \delta)\) for governance.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Mechanisms: Laplace, Gaussian, exponential</a><a class="next" href="ch4.html"><span class="dir">Next</span> Local versus global, and DP-SGD</a></nav>
+</main>
+</div>
+
+</body>
+</html>

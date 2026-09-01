@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — Spectral filters and spectral clustering — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Graph Machine and Deep Learning for Generative AI</a> › Spectral filters and spectral clustering</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52072_EP</span>Graph Machine and Deep Learning for Generative AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: graph theory</a>
+<a href="ch1.html">Why graphs?</a>
+<a href="ch2.html">Learning tasks on graphs</a>
+<a href="ch3.html">Node embeddings</a>
+<a href="ch4.html" class="active">Spectral filters and spectral clustering</a>
+<a href="ch5.html">GNNs and message passing</a>
+<a href="ch6.html">Link prediction and graph auto-encoders</a>
+<a href="ch7.html">GNNs at scale</a>
+<a href="ch8.html">Applications and hands-on</a>
+<a href="ch9.html">Graph generation</a>
+<a href="ch10.html">Research of the teaching team</a>
+<a href="ch11.html">Graphs × LLMs: GraphRAG and the hybrid</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Spectral filters and spectral clustering</h2>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — Graph Fourier transform</span>
+  Let \(L = U \Lambda U^\top\) (spectral decomposition, \(U\) orthogonal,
+  columns \(u_1, \dots, u_n\)). For a signal \(x \in \mathbb{R}^n\) carried
+  by the nodes:
+  $$\hat x = U^\top x \quad (\text{analysis}), \qquad x = U \hat x \quad (\text{synthesis}).$$
+  The "frequencies" are the eigenvalues \(\lambda_k\) — small = slow
+  variations over the graph (low frequencies), large = local alternations
+  (high frequencies). This is the convolution of the Signal Processing
+  module, with the Laplacian in place of \(-i\frac{d}{dt}\): \(L\) plays
+  the role of the differential operator there.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.2 — Variational characterization of \(\lambda_2\) (Fiedler)</span>
+  For a connected graph:
+  $$\lambda_2 \;=\; \min_{x \neq 0,\ x \perp \mathbf{1}} \frac{x^\top L x}{x^\top x},$$
+  attained at the Fiedler vector \(u_2\). The smaller \(\lambda_2\), the
+  more there exists a quasi-constant signal "almost orthogonal" to
+  \(\mathbf{1}\) — that is, two large blocks of weakly connected opposite
+  values.
+  <div class="proof">
+  Write \(x = \sum_i c_i u_i\) (orthonormal basis); \(x \perp
+  \mathbf{1}\) forces \(c_1 = 0\) since
+  \(u_1 = \mathbf{1}/\sqrt{n}\) (the kernel of \(L\) is exactly spanned by
+  \(\mathbf{1}\), Prop. 0.2 of the multiplicity computation). Then
+  \(x^\top L x = \sum_{i \geq 2} \lambda_i c_i^2\) and
+  \(x^\top x = \sum_{i \geq 2} c_i^2\); the quotient is a weighted average
+  of the \(\lambda_i, i \geq 2\), hence lower-bounded by \(\lambda_2\), with
+  equality for \(x = u_2\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 4.3 — Fiedler vector on two linked cliques (exact computation)</span>
+  Two \(K_5\)s (\(\{u, x_1, \dots, x_4\}\) and \(\{v, y_1, \dots, y_4\}\))
+  linked by the bridge \((u, v)\). By symmetry, look for an antisymmetric
+  eigenvector: \(x_i = a\) on the 4 non-bridge nodes of the left,
+  \(u \mapsto b\), and opposite values on the right. The equations
+  \(L x = \lambda x\) at a non-bridge node (degree 4) and at \(u\) (degree
+  5) give:
+  $$\lambda a = a - b \qquad \text{and} \qquad \lambda b = 6b - 4a
+  \;\;\Rightarrow\;\; \lambda^2 - 7\lambda + 2 = 0.$$
+  Hence \(\lambda_2 = \frac{7 - \sqrt{41}}{2} \approx 0.298\) and
+  \(b = (1 - \lambda_2)\, a \approx 0.70\, a\); the Fiedler vector equals,
+  up to normalization:
+  $$(\underbrace{1, 1, 1, 1}_{x_i}, \underbrace{0.70}_{u}, \underbrace{-0.70}_{v},
+  \underbrace{-1, -1, -1, -1}_{y_j})$$
+  — the <strong>sign exactly separates the two communities</strong>, and
+  the bridge node takes an intermediate value. This is <em>the</em> picture
+  to remember about spectral clustering.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.4 — Spectral clustering: complete algorithm and justification (RatioCut relaxation)</span>
+  <strong>Algorithm</strong> (for \(k\) communities):
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>compute the first \(k\) eigenvectors \(u_1, \dots, u_k\) of \(L\);
+    form \(F = [u_1 | \dots | u_k] \in \mathbb{R}^{n \times k}\);</li>
+    <li>normalize each row of \(F\);</li>
+    <li>apply k-means to the \(n\) rows of \(F\) (spectral descriptor).</li>
+  </ol>
+  <strong>Justification</strong>: the RatioCut of a partition
+  \(\{C_1, \dots, C_k\}\) is
+  \(\mathrm{RatioCut} = \sum_{j=1}^{k} \frac{\mathrm{cut}(C_j, \bar{C}_j)}{|C_j|}\)
+  (cutting a small community is costly — unlike the plain minimization of
+  the cut). Let \(H \in \mathbb{R}^{n \times k}\) denote the renormalized
+  indicators \(H_{ij} = \mathbb{1}[v_i \in C_j] / \sqrt{|C_j|}\).
+  <div class="proof">
+  (i) <em>Exactness on the discrete class</em>. \(H^\top H = I\)
+  (orthogonal columns of norm 1). Moreover
+  \(h_j^\top L h_j = \sum_{(u,v) \in E} (h_j(u) - h_j(v))^2 =
+  \frac{1}{|C_j|} \times |\{(u,v) \in E : |\{u, v\} \cap C_j| = 1\}| =
+  \frac{\mathrm{cut}(C_j, \bar{C_j})}{|C_j|}\). So
+  \(\mathrm{tr}(H^\top L H) = \mathrm{RatioCut}\): minimizing RatioCut =
+  minimizing \(\mathrm{tr}(H^\top L H)\) over orthonormal
+  <em>indicators</em>.
+  (ii) <em>Relaxation</em>. We allow any \(F \in \mathbb{R}^{n \times k}\)
+  with \(F^\top F = I\); the relaxed problem
+  \(\min_{F^\top F = I} \mathrm{tr}(F^\top L F)\) has as solution the
+  first \(k\) eigenvectors (Ky Fan's theorem: shown by writing
+  \(F^\top L F = \sum_{ij} (F^\top u_i)\,\lambda_i\,(u_j^\top F)\) and
+  exchanging the order of summation, then minimizing the diagonalized
+  coefficients).
+  (iii) <em>Back to the discrete</em>. The rows of \(F\) remain close to
+  the rows of renormalized indicators; k-means groups them.
+  <span class="qed">∎</span>
+  </div>
+  <strong>Normalized Cut</strong> variant (Shi &amp; Malik): weighting by
+  the volumes \(d(C_j)\) leads to the generalized problem
+  \(L y = \lambda D y\), solved by the eigenvectors of
+  \(L_{\mathrm{sym}}\) — this is the version used in practice (and by
+  scikit-learn). Links: PCA (Machine Learning module — the matrix \(F\) is
+  the spectral counterpart of the projection); SBM (ch. 9) for the
+  statistical approach; sign ambiguities of the eigenvectors — a real
+  problem for GNNs, solved by SignNet (M2, ch. 3).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.5 — ChebNet: Chebyshev polynomials (Defferrard et al., 2016)</span>
+  Filtering exactly costs \(y = U\, g_\theta(\Lambda)\, U^\top x\) — a
+  full decomposition (\(\mathcal{O}(n^3)\)) <em>specific to each graph</em>.
+  Trick: take \(g_\theta\) a <strong>polynomial of degree \(K\)</strong> in
+  the Chebyshev basis. Set \(T_0(x) = 1\), \(T_1(x) = x\),
+  \(T_{k+1}(x) = 2x T_k(x) - T_{k-1}(x)\), and
+  \(\tilde\Lambda = \frac{2\Lambda}{\lambda_{\max}} - I\) (rescaling to
+  \([-1, 1]\)); then
+  $$y = \sum_{k=0}^K \theta_k\, T_k(\tilde L)\, x, \qquad \tilde L = \frac{2L}{\lambda_{\max}} - I,$$
+  <em>without eigenvectors</em>: \(K\)-localized filter, weights
+  \(\theta\) <em>shared by all graphs</em>.
+  <div class="proof">
+  (i) <em>Chebyshev recursion</em>. For \(x = \cos\theta\),
+  \(T_k(x) = \cos(k\theta)\); the addition formula
+  \(\cos((k{+}1)\theta) = 2\cos\theta \cos(k\theta) - \cos((k{-}1)\theta)\)
+  gives the recursion (it propagates to all \(x \in \mathbb{R}\) by
+  polynomial identity).
+  (ii) <em>Functional calculus</em>. Let us show
+  \(T_k(\tilde L) = U T_k(\tilde\Lambda) U^\top\): this is true for the
+  monomials by recursion — \(\tilde L^m = (U \tilde\Lambda U^\top)^m =
+  U \tilde\Lambda^m U^\top\), the inner products \(U^\top U\) canceling —
+  hence for every polynomial. Thus
+  \(y = U\, g_\theta(\tilde\Lambda)\, U^\top x = g_\theta(\tilde L)\, x\):
+  the spectral filter is expressed as a polynomial of \(L\) applied
+  directly to \(x\).
+  (iii) <em>Locality</em>. \(\tilde L x\) at a node only combines \(x_v\)
+  and \(\{x_u : u \in \mathcal{N}(v)\}\); by recursion on the Chebyshev
+  recursion (linear combination of \(\tilde L^k x\), \(k \leq K\)), the
+  output at \(v\) depends only on the \(K\)-neighborhood.
+  <span class="qed">∎</span>
+  </div>
+  Cost: \(\mathcal{O}(K |E|)\) per application — linear in the size of the
+  graph.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.6 — From spectral to spatial: the equality demonstrated</span>
+  Every filter that is a <em>polynomial of degree \(K\)</em> in \(L\) is
+  exactly a \(K\)-localized operator, and conversely every message passing
+  operator with \(K\) layers whose propagation is a polynomial of \(A\)
+  realizes a polynomial spectral filter.
+  <div class="proof">
+  Forward direction: developed in (iii) above. Conversely: a local layer
+  \(y_v = \sum_{u \in \{v\} \cup \mathcal{N}(v)} c_{uv} x_u\) with uniform
+  weights by symmetry writes in matrix form
+  \(y = \sum_{k \leq 1} c_k\, \Pi_k(A) x\) for polynomials \(\Pi_k\) of
+  degree \(\leq 1\) (the diagonal term is \(\Pi_0\), the edges
+  \(\Pi_1\)); composing \(K\) layers without non-linearity,
+  \(y = \Pi(A) x\) with \(\deg \Pi \leq K\), and since \(L = D - A\) is
+  itself a polynomial in \(A\) (with \(D\) fixed by the graph),
+  \(\Pi(A) = g(L)\) for a polynomial \(g\) of the same degree. The
+  non-linearities between layers break the exact equality — this is
+  precisely the gap between the spectral "CNN on graph" and the spatial
+  GNN: the GNN generalizes the filter by inserting point-wise
+  non-linearities, like a 1D CNN. <span class="qed">∎</span>
+  </div>
+</div>
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Node embeddings</a><a class="next" href="ch5.html"><span class="dir">Next</span> GNNs and message passing</a></nav>
+</main>
+</div>
+
+</body>
+</html>

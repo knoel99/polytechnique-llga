@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech Technology for Conversational AI — The conversational loop: VAD, turn-taking, full-duplex — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Speech Technology for Conversational AI</a> › The conversational loop: VAD, turn-taking, full-duplex</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Speech Technology for Conversational AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: the speech signal and its representations</a>
+<a href="ch1.html">Classical ASR: the GMM-HMM pipeline</a>
+<a href="ch2.html">CTC: the loss, derived</a>
+<a href="ch3.html">Encoder-decoder: LAS, Conformer, RNN-T</a>
+<a href="ch4.html">Whisper: robustness and multi-task</a>
+<a href="ch5.html">Streaming: chunking, VAD, latency vs quality</a>
+<a href="ch6.html">Vocoders: from WaveNet to HiFi-GAN</a>
+<a href="ch7.html">Neural TTS: Tacotron 2, VITS, diffusion and flow</a>
+<a href="ch8.html">Expressivity: prosody, style tokens, SSML</a>
+<a href="ch9.html">Voice conversion and cloning: ethics and watermarking</a>
+<a href="ch10.html" class="active">The conversational loop: VAD, turn-taking, full-duplex</a>
+<a href="ch11.html">Speech LLMs and multilingualism</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch10">
+<h2>10. The conversational loop: VAD, turn-taking, full-duplex</h2>
+
+<div class="thm">
+  <span class="tag">Theorem 10.1 — The human speaking turn, in numbers</span>
+  Human conversation alternates turns with a median delay on the order of
+  200 ms — measured across a dozen languages (Stivers et al., PNAS 2009);
+  now pronouncing the first word of a turn takes ~600 ms: humans
+  <em>anticipate</em> the end of the other's turn (prosodic, syntactic,
+  pragmatic cues) to prepare their own. An assistant that listens to
+  everything, waits for silence, transcribes, thinks, synthesizes, shows
+  ~1.5-3 s of latency — <em>five to ten times too slow</em>: turn-taking is
+  the real conversational bottleneck, not intelligence. Reference
+  framework: the survey by Skantze (Computer Speech &amp; Language, 2021):
+  transition-relevance points (TRP), end-of-turn prediction (end-of-turn:
+  classifier on a sliding window — VAD + prosody + syntax),
+  <em>backchannels</em> ("hmm", audible nods: listening without taking the
+  turn).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 10.2 — Pipeline: endpointing as control</span>
+  Deciding "the user is done" is an error/latency trade-off: cutting too
+  early = interruptions (the assistant speaks <em>over</em> — the most
+  badly perceived error), cutting too late = dead silences. Parameters:
+  silence threshold \(\tau_s\) (typically 300-700 ms), depth of context
+  (rising prosody? incomplete syntax?), and <em>policy</em> (letting long
+  hesitations speak). Formalization: a sequential test — detect the "end of
+  turn" regime change as early as possible under a false-positive
+  constraint; the same fidelity/cost curve as streaming ASR (ch. 5), this
+  time at the <em>dialogue</em> level. Modern implementation: the
+  end-of-turn predictor becomes a small <em>multi-modal</em> model (audio +
+  partial text) that replaces hand-tuned thresholds.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 10.3 — Full-duplex: dGSLM then Moshi (the 2023-2024 leap)</span>
+  <strong>dGSLM</strong> (Nguyen et al., TACL 2023): the first
+  <em>entirely vocal</em> dialogue model — two streams of HuBERT tokens
+  (discretized speech, ch. 11) run in parallel; the model learns <em>by
+  itself</em> alternation and overlaps (simultaneous laughs): proof of
+  concept that turn-taking is <em>learnable</em> without text.
+  <strong>Moshi</strong> (Défossez et al., Kyutai, 2024): the first
+  real-time full-duplex voice assistant. Three pieces: (i) the neural
+  codec <em>Mimi</em> (descendant of EnCodec, ch. 11) tokenizes audio at
+  low rate (~12.5 frames/s) into two streams: semantic and acoustic;
+  (ii) the <em>multi-stream</em> architecture: the tokens of
+  <em>Moshi</em> (the model's voice) and of the <em>user</em> are predicted
+  <em>in parallel</em>, not in alternation — the model can cut itself off
+  or fall silent during an interruption; (iii) the <em>inner monologue</em>:
+  each audio token of the model is aligned with its corresponding
+  <em>text</em> token — the text guides, the audio realizes; theoretical
+  latency ~200 ms (the human target of thm. 10.1), dialogue memory via the
+  transformer context. The module's loop is closed: VAD, endpointing,
+  ASR-LLM-TTS pipeline <em>disappear</em> into a single generative model —
+  the next topic.
+</div>
+
+<div class="note">
+  <span class="tag">What full-duplex changes in practice</span>
+  (i) <em>Interruptions</em>: handled natively (the user stream continues
+  to be predicted while Moshi speaks — the model "hears itself" speak);
+  (ii) <em>Backchannels</em>: emergent, unscripted; (iii) <em>The voice of
+  machines</em>: unique and marked vocal identity (transparency policy —
+  AI Act ch. 9); (iv) <em>the risk</em>: human latency makes the machine
+  socially <em>indistinguishable</em> — watermarking (ch. 9) becomes the
+  only frontier. To be debated in session: should a 200 ms assistant
+  announce itself?
+</div>
+</section>
+<nav class="pager"><a href="ch9.html"><span class="dir">← Previous</span> Voice conversion and cloning: ethics and watermarking</a><a class="next" href="ch11.html"><span class="dir">Next</span> Speech LLMs and multilingualism</a></nav>
+</main>
+</div>
+
+</body>
+</html>

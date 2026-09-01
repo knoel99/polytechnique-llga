@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainability, Security, Privacy of LLMs — Internal interpretability: probing and control — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Explainability, Security, Privacy of LLMs</a> › Internal interpretability: probing and control</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Explainability, Security, Privacy of LLMs</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: the black box and its three questions</a>
+<a href="ch1.html" class="active">Internal interpretability: probing and control</a>
+<a href="ch2.html">Reading the layers: logit lens, attention and its limits</a>
+<a href="ch3.html">Superposition and sparse autoencoders</a>
+<a href="ch4.html">Explaining an output: SHAP, LIME, gradients</a>
+<a href="ch5.html">Security: taxonomy of attacks</a>
+<a href="ch6.html">Defenses in depth</a>
+<a href="ch7.html">Privacy I: memorization and extraction</a>
+<a href="ch8.html">Privacy II: membership inference and DP</a>
+<a href="ch9.html">Anonymization and watermarking</a>
+<a href="ch10.html">Evaluating safety: red teaming, AI Act</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch1">
+<h2>1. Internal interpretability: probing and control</h2>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Probe</span>
+  A <strong>probe</strong> is a classifier (typically linear:
+  logistic regression) trained to predict a linguistic property
+  \(y\) (grammatical category, language, document topic, country of a capital...)
+  from the <em>activations</em> \(h^{(l)}(x)\) of a layer \(l\) of the model,
+  <em>frozen</em>. High probe accuracy reads as: "layer \(l\) (linearly) encodes
+  the information necessary for \(y\)" — and <em>only</em> as that (see the
+  warning below).
+</div>
+
+<pre class="code"><code>import torch, torch.nn.functional as F
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+
+model = GPT2.from_pretrained("gpt2").eval()          # frozen
+
+@torch.no_grad()
+def states(texts, layer=6):                          # residual stream activations
+    out = model(input_ids=tokenizer(texts, return_tensors="pt").input_ids,
+                output_hidden_states=True)
+    return out.hidden_states[layer][:, -1].numpy()   # last token
+
+X = states(phrases)                                  # (n, d=768)
+Xtr, Xte, ytr, yte = train_test_split(X, pos_tags, test_size=.2)
+probe = LogisticRegression(max_iter=2000).fit(Xtr, ytr)
+print("acc sonde :", probe.score(Xte, yte))          # ~0.9 on POS in layer 6-8</code></pre>
+
+<h3>1.1. What probes have revealed</h3>
+
+<p>Alain &amp; Bengio (2016) launched the method: the loss of a linear probe per
+layer decreases with depth, then rises again toward the output layer — the model
+"solves" the task at intermediate layers then projects onto the vocabulary.
+Since then, probes have mapped: early syntactic positions, named entities,
+world-fact relations ("the Eiffel Tower is in Paris") manipulated by
+<em>subspace edits</em>, linearly decodable language and sentiment... The
+emerging hypothesis: the residual stream is a communication channel where each
+head writes to and reads from relatively linear subspaces.</p>
+
+<h3>1.2. The trap: information ≠ use</h3>
+
+<div class="prop">
+  <span class="tag">Problem 1.2 — Control tasks (Hewitt &amp; Liang, EMNLP 2019)</span>
+  A probe can learn \(y\) from \(h\) <em>even if the model does not use</em>
+  this information — it suffices that it be decodable. The countermeasure: train
+  the same probe on a <strong>control task</strong> \(y_{\text{ctrl}}\) — same
+  statistical structure, but invented labels (shuffled type) that the model
+  cannot "know". One reports the <strong>selectivity</strong>:
+  $$\mathrm{sel} \;=\; \mathrm{acc}(\text{probe on } y) \;-\;
+  \mathrm{acc}(\text{probe on } y_{\text{ctrl}}).$$
+  High accuracy with low selectivity = the probe memorizes, not the model; only
+  a <em>thin probe</em> (low capacity) with good selectivity attests to an
+  encoding that is <em>linear and usable</em>.
+</div>
+
+<div class="note">
+  <span class="tag">Correlation is not causation — and the causal proof</span>
+  To take the step, one <em>intervenes</em>: <strong>amnesia</strong> (remove
+  the information from \(h\) by projection, re-measure the model's performance
+  — if it drops, the information was <em>used</em>), head ablation, patching of
+  activations between runs (activation patching). Rule of the module: an
+  interpretability case is closed only when the intervention confirms the
+  correlation. See Belinkov (2022) for a survey of the promises and failures of
+  the method.
+</div>
+</section>
+<nav class="pager"><a href="ch0.html"><span class="dir">← Previous</span> Recap: the black box and its three questions</a><a class="next" href="ch2.html"><span class="dir">Next</span> Reading the layers: logit lens, attention and its limits</a></nav>
+</main>
+</div>
+
+</body>
+</html>

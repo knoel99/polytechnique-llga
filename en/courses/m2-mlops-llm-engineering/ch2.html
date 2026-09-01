@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ML Ops and LLM Engineering Principles — CI/CD for ML: testing data and models — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">ML Ops and LLM Engineering Principles</a> › CI/CD for ML: testing data and models</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>ML Ops and LLM Engineering Principles</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: from notebook to system</a>
+<a href="ch1.html">Lifecycle: versioning data, features, models</a>
+<a href="ch2.html" class="active">CI/CD for ML: testing data and models</a>
+<a href="ch3.html">LLM serving: continuous batching, P99 latency</a>
+<a href="ch4.html">Costs: euros per million tokens</a>
+<a href="ch5.html">Evaluation in production: drift and monitoring</a>
+<a href="ch6.html">RAG Ops: freshness and continuous evaluation</a>
+<a href="ch7.html">Fine-tuning Ops: versioned LoRAs</a>
+<a href="ch8.html">Agents in production: tracing and guardrails</a>
+<a href="ch9.html">Operational security: secrets, sandbox, supply chain</a>
+<a href="ch10.html">Case study and green ops</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch2">
+<h2>2. CI/CD for ML: testing data and models</h2>
+
+<p>The continuous integration of an ML system tests <em>four</em> layers, in
+order of increasing cost: the code, the data, the model, the infrastructure.
+The golden rule: make the pipeline fail <strong>as early as possible</strong>,
+at the cheapest level.</p>
+
+<h3>2.1. Data tests</h3>
+
+<p>Data is an interface like any other: one writes contracts for it. A
+<strong>data contract</strong> checks: the schema (types, columns, bounds),
+business invariants (allowed nulls, ranges), and statistical properties
+(duplication rate, distribution of a key column). Tools: Pandera (contracts
+in Python, executed in the pipeline), Great Expectations (declarative
+validation suites), quality servers integrated into platforms.</p>
+
+<pre class="code"><code>import pandera as pa
+import pandas as pd
+
+schema = pa.DataFrameSchema({
+    "question": pa.Column(str, pa.Check.str_length(3, 2000)),
+    "answer":   pa.Column(str, pa.Check.str_length(1, 8000), nullable=True),
+    "lang":     pa.Column(str, pa.Check.isin(["fr", "en"])),
+    "doc_ids":  pa.Column(pa.List(str), pa.Check.list_length(1, 10)),
+    "n_tokens": pa.Column(int, pa.Check.ge(0), pa.Check.le(4096)),
+})
+
+def validate(df: pd.DataFrame) -&gt; pd.DataFrame:
+    return schema.validate(df, lazy=True)   # collects ALL errors</code></pre>
+
+<h3>2.2. Model tests — and prompt tests</h3>
+
+<div class="def">
+  <span class="tag">Definition 2.1 — Model non-regression test</span>
+  Let a fixed qualification set \(D_{\text{qual}}\) and a metric \(m\) (F1,
+  accuracy rate, refusal rate, mean cost). The candidate
+  \(f_{\text{new}}\) replaces \(f_{\text{prod}}\) if
+  \(m(f_{\text{new}}) \geq m(f_{\text{prod}}) - \tau\), where \(\tau\) is the
+  tolerance margin. The subtle point: \(m\) is measured on a
+  <em>sample</em> — deciding with a measured gap requires knowing when it is
+  <em>significant</em>.
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 2.2 — Decision threshold by concentration (Hoeffding)</span>
+  Let \(\ell\) be a loss bounded in \([0,1]\), measured on \(n\) i.i.d.
+  examples. With probability \(\geq 1-\delta\) (on both sides):
+  $$\bigl|\;\mathbb{E}[\ell] - \widehat{\ell}_n\;\bigr| \;\leq\;
+  \sqrt{\frac{\log(2/\delta)}{2n}}.$$
+  To decide a rollback at \(\delta = 0.05\) on \(n = 1000\) examples, two
+  models whose losses differ by less than
+  \(\sqrt{\log 40 / 2000} \approx 0.027\) are not <em>distinguishable</em>:
+  the observed gap may be sampling noise.
+</div>
+
+<div class="proof">
+The Hoeffding bound (proved in the ML module) applies to the \(n\) i.i.d.
+variables \(\ell_i \in [0,1]\):
+\(\mathbb{P}\bigl(|\overline{\ell} - \mathbb{E}\ell| \geq t\bigr) \leq
+2e^{-2nt^2}\). Setting the right-hand side to \(\delta\) yields
+\(t = \sqrt{\log(2/\delta)/(2n)}\). To compare two models one applies it to
+the variable \(\ell_{\text{new}} - \ell_{\text{prod}}\) (bounded in
+\([-1,1]\), a factor 2 over the range — hence a factor 2 under the root).
+With \(n=1000\), \(\delta = 0.05\) and the signed version:
+\(t \approx 2.8\,&permil;\). <span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Practical consequence</span>
+  A "+0.4% F1" measured on 500 examples proves nothing: the 95% confidence
+  interval is on the order of ±4 points for a metric at 50%. CI gateways
+  must therefore require a <em>minimal</em> gap (margin \(\tau\)
+  <em>and</em> significance), under pain of "dancing on the noise" — a
+  rollback here, a rollback there, and a slow drift of quality.
+</div>
+
+<p>Model tests also come in <strong>slices</strong>: performance per language,
+per context length, per topic, per user category — a global aggregate can
+mask a localized drop (a fairness theme, cf. Emerging ML module ch. 6). For
+an LLM, <strong>prompt tests</strong> add on: output format (valid JSON,
+schema), refusal guarantees (forbidden phrases), determinism wrappers
+(temperature 0, seed) and an <strong>LLM judge</strong> as oracle (ch. 5) —
+the judge itself being versioned and tested on a golden set.</p>
+
+<pre class="code"><code># .github/workflows/eval-gate.yml (excerpt) -- CPU gates first, GPU last
+jobs:
+  unit:                      # 1. code: fast tests, no model
+    steps: [run: pytest tests/unit -x -q]
+  data:                      # 2. data: pandera contracts on the day's delta
+    steps: [run: python -m src.validate_delta --date $(date -d yesterday +%F)]
+  eval:                      # 3. model: golden set + judge + prompt contracts
+    steps:
+      - run: python -m src.eval_llm --model staging --golden data/eval_v3.parquet
+      - run: python -m src.gate --min-faithfulness 0.85 --max-regression 0.01
+  deploy:                    # 4. progressive deployment (canary 5% -> 50% -> 100%)
+    needs: [unit, data, eval]
+    steps: [run: ./deploy.sh --canary 5]</code></pre>
+
+<h3>2.3. Continuous delivery: canary and shadow</h3>
+
+<p>The deployment of an ML component is <em>progressive</em>:
+<strong>shadow</strong> (the new model receives duplicated traffic, its
+output is logged but not served — zero risk, double cost),
+<strong>canary</strong> (5% of traffic, automatic rollback if the guard
+metrics — latency, error rate, negative feedback — degrade), then full
+rollout. Rollback must be <em>a single button</em>: the previous version
+(weights + prompt + index) stays deployable in one command, thanks to the
+registry of ch. 1.</p>
+</section>
+<nav class="pager"><a href="ch1.html"><span class="dir">← Previous</span> Lifecycle: versioning data, features, models</a><a class="next" href="ch3.html"><span class="dir">Next</span> LLM serving: continuous batching, P99 latency</a></nav>
+</main>
+</div>
+
+</body>
+</html>

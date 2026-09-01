@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech Technology for Conversational AI — Neural TTS: Tacotron 2, VITS, diffusion and flow — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Speech Technology for Conversational AI</a> › Neural TTS: Tacotron 2, VITS, diffusion and flow</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Speech Technology for Conversational AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: the speech signal and its representations</a>
+<a href="ch1.html">Classical ASR: the GMM-HMM pipeline</a>
+<a href="ch2.html">CTC: the loss, derived</a>
+<a href="ch3.html">Encoder-decoder: LAS, Conformer, RNN-T</a>
+<a href="ch4.html">Whisper: robustness and multi-task</a>
+<a href="ch5.html">Streaming: chunking, VAD, latency vs quality</a>
+<a href="ch6.html">Vocoders: from WaveNet to HiFi-GAN</a>
+<a href="ch7.html" class="active">Neural TTS: Tacotron 2, VITS, diffusion and flow</a>
+<a href="ch8.html">Expressivity: prosody, style tokens, SSML</a>
+<a href="ch9.html">Voice conversion and cloning: ethics and watermarking</a>
+<a href="ch10.html">The conversational loop: VAD, turn-taking, full-duplex</a>
+<a href="ch11.html">Speech LLMs and multilingualism</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. Neural TTS: Tacotron 2, VITS, diffusion and flow</h2>
+
+<div class="thm">
+  <span class="tag">Theorem 7.1 — Tacotron 2 (Shen et al., ICASSP 2018): the two-stage scheme</span>
+  Stage 1 (acrobatic): an <em>attentional</em> encoder-decoder reads the
+  text (graphemes) and writes the Mel frame by frame — the
+  <em>location-sensitive</em> attention learns the text→acoustic alignment
+  there (same mechanism as LAS in ch. 3, applied in reverse); training by
+  teacher forcing on the reference Mels. Stage 2: a WaveNet (ch. 6) turns
+  the Mel into a wave. Historical quality: natural on read sentences. Two
+  chronic diseases: <em>attention failure</em> (skipped or stuttered words
+  on long or out-of-distribution sentences) and <em>abusive
+  determinization</em> — one text, a single voice/rate (the one-to-many of
+  Definition 0.1 denied by training toward the <em>average</em> Mel:
+  smoothed, metallic output).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.2 — VITS (Kim et al., ICML 2021): one-stage, stochastic, end-to-end</span>
+  Three ideas that answer Tacotron's diseases. <em>(i) VAE:</em> a
+  variational encoder encodes the target speech into \(z\); the decoder
+  (HiFi-GAN) writes the wave from \(z\) — the <em>noise</em> of the prior
+  explores the multiplicity of ways of saying; <em>(ii) normalizing
+  flow:</em> a flow (exact change of variables: cf. Graph Generative Models
+  M2 module ch. 4 for the proof) aligns the distribution of the
+  text-conditioned latent with the prior, which makes training end-to-end
+  (exact likelihood + adversary); <em>(iii) implicit monotone alignment</em>
+  (MAS: search for the optimal monotone alignment between text and Mel,
+  refined at each step). Result: a single text→wave network, parallel,
+  stochastic — the first "industrializable" generation of TTS (YourTTS,
+  ch. 9, derives from it).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 7.3 — Iterative generation arrives: Grad-TTS then Voicebox</span>
+  <strong>Grad-TTS (Popov et al., ICML 2021)</strong>: an encoder predicts,
+  for each phone, the <em>target mean</em> \(\mu(x)\) of a Gaussian in Mel
+  space; a <em>diffusion</em> decoder (DDPM — cf. Multimodal GenAI M1 module
+  ch. 3) turns a noise \(\mathcal N(0, I)\) into a Mel around \(\mu\),
+  guided by the noise prediction \(\hat\epsilon_\theta(x_t, t, \mu)\); a
+  duration predictor handles the number of frames per phone. Quality grows
+  with the number of steps... like latency: the step/quality curve is
+  <em>the</em> trade-off curve of the Control module (M2) ch. 9, in TTS
+  version. <strong>Voicebox (Le et al., 2023)</strong>: <em>conditional
+  flow matching in infilling mode</em> — one masks a region of the Mel and
+  regenerates <em>only it</em>, the context remaining fixed: the same
+  machinery as DiGress's inpainting (Graph Generative Models M2 module
+  ch. 5) transported into acoustics. Immediate applications: editing a word
+  in a sentence while keeping the voice, de-noising, voice translation...
+  and zero-shot cloning from a few seconds of reference. Non-autoregressive
+  and parallel: the dominant family of research TTS 2024-2026.
+</div>
+
+<table class="tbl">
+  <tr><th>System</th><th>Paradigm</th><th>Alignment</th><th>Stochastic?</th><th>Streaming</th><th>Native cloning</th></tr>
+  <tr><td>Tacotron 2 + WaveNet</td><td>AR attention + AR vocoder</td><td>learned attention</td><td>no</td><td>no</td><td>no</td></tr>
+  <tr><td>VITS</td><td>VAE + flow + GAN</td><td>implicit MAS</td><td>yes (prior)</td><td>difficult</td><td>via speaker emb. (YourTTS)</td></tr>
+  <tr><td>Grad-TTS</td><td>diffusion to Mel</td><td>predicted durations</td><td>yes (initial noise)</td><td>per step</td><td>no</td></tr>
+  <tr><td>Voicebox</td><td>flow matching, infilling</td><td>none (conditioned)</td><td>yes</td><td>region by region</td><td>yes (3 s prompt)</td></tr>
+</table>
+
+<div class="ex">
+  <span class="tag">Example 7.4 — Latency budget of a conversational TTS</span>
+  Goal: &lt; 300 ms between the end of the LLM's decision and the first
+  sound. An AR Tacotron-like: the first <em>sentence</em> must be
+  synthesized before the first sound (if one wants the intonation) — 1-2 s
+  of lead time required: prohibitive. VITS: the first <em>chunk</em> of Mel
+  (a few frames) suffices — ~100 ms; Voicebox: one must bound the number of
+  sampling steps: 4-10 steps (instead of 50-100) with distillation,
+  otherwise quality drops (the curve of thm. 7.3). Conclusion: the
+  full-duplex of ch. 10 was only possible after the non-autoregressive
+  revolution — architecture and conversation are coupled constraints.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Vocoders: from WaveNet to HiFi-GAN</a><a class="next" href="ch8.html"><span class="dir">Next</span> Expressivity: prosody, style tokens, SSML</a></nav>
+</main>
+</div>
+
+</body>
+</html>

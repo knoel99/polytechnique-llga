@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Topological Data Analysis — Persistent homology: the algorithm — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Topological Data Analysis</a> › Persistent homology: the algorithm</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51056_EP</span>Topological Data Analysis</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: topology, distances, algebra</a>
+<a href="ch1.html">Simplices and simplicial complexes</a>
+<a href="ch2.html">From point cloud to complex: Rips and Čech</a>
+<a href="ch3.html">Simplicial homology</a>
+<a href="ch4.html" class="active">Persistent homology: the algorithm</a>
+<a href="ch5.html">Diagrams, barcodes and landscapes</a>
+<a href="ch6.html">Stability and statistics</a>
+<a href="ch7.html">The Mapper algorithm</a>
+<a href="ch8.html">TDA × machine learning</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ch10.html">Hands-on: GUDHI, scikit-tda, ripser</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch4">
+<h2>4. Persistent homology: the algorithm</h2>
+
+<p>Let us come back to the data. At which scale \(\varepsilon\) should we build the
+Rips complex? Too small: dust of points. Too large: one contractible ball. The
+answer of persistence: <em>all scales at once</em>, with a ledger that records,
+for each topological feature, its birth and its death. Features that live long
+are the "true hole" candidates; ephemeral ones are noise.</p>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — Filtration and persistence module</span>
+  A <strong>filtration</strong> of a complex \(K\) is an increasing family
+  $$\emptyset = K_{-1} \subseteq K_0 \subseteq K_1 \subseteq \dots \subseteq K_m = K$$
+  (each \(K_i\) is a subcomplex of \(K_{i+1}\)). In practice: we order the
+  simplices \(\sigma_1 &lt; \sigma_2 &lt; \dots &lt; \sigma_m\) by increasing
+  value of a function \(\varphi\) (appearance distance in the Rips complex, gray
+  level of an image, elevation of a terrain), faces before cofaces, and
+  \(K_i = K_{i-1} \cup \{\sigma_i\}\). The <strong>persistence module</strong>
+  is the family of spaces and linear maps
+  $$H_k(K_0) \to H_k(K_1) \to \dots \to H_k(K_m)$$
+  induced by the inclusions. It is <em>tame</em> if these spaces are
+  finite-dimensional — which the finiteness of \(K\) guarantees.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.2 (interval decomposition)</span>
+  Every tame persistence module over a field decomposes in a unique way (up to
+  isomorphism and to the order of the factors) into a direct sum of
+  <strong>interval</strong> modules \(\mathbb{I}[b, d)\): copies of the field
+  placed at indices \(b \leq i &lt; d\), connected by identities, zero
+  elsewhere. The <strong>barcode</strong> is the multiset of these intervals
+  \([b, d)\); each bar is a homology class born at \(b\) and dying at \(d\)
+  (with \(d = \infty\) for essential classes).
+  <div class="proof">
+  (Structure, out of scope: this is Gabriel's theorem for quivers of type
+  \(\mathbb{A}\) — the module is a representation of the linear quiver
+  \(0 \to 1 \to \dots \to m\), all its indecomposable representations are the
+  \(\mathbb{I}[b, d)\), and the decomposition is unique because the quiver is
+  of finite type. Oudot's book, ch. 9, gives a self-contained proof — cf. ch. 9
+  of this module. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 4.3 — Boundary matrix of a filtration and low index</span>
+  Number the simplices \(\sigma_1, \dots, \sigma_m\) in the order of the
+  filtration. The <strong>boundary matrix</strong> \(M \in
+  \mathbb{F}_2^{m \times m}\) is defined by \(M[i, j] = 1\) if \(\sigma_i\) is
+  a proper face of \(\sigma_j\), and 0 otherwise (strictly upper triangular
+  matrix: a face always precedes its coface). For a non-zero column, the
+  <strong>low index</strong> is
+  $$\mathrm{low}(j) = \max \{ i : M[i, j] = 1 \}.$$
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.4 (standard persistence algorithm)</span>
+  Let \(R\) be the matrix obtained by reducing \(M\) column by column, from
+  left to right: as long as \(\mathrm{low}(j)\) is defined and already occupied
+  by an earlier column \(j' &lt; j\) (i.e. \(\mathrm{low}(j') =
+  \mathrm{low}(j)\)), replace \(R_{:, j} \leftarrow R_{:, j} + R_{:, j'}\).
+  Then:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>each column \(j\) with \(\mathrm{low}(j) = i\) associates the
+    <strong>pair</strong> \((i, j)\): a class born at index \(i\) (the simplex
+    \(\sigma_i\)) dies at index \(j\) — bar \([i, j)\);</li>
+    <li>each zero (reduced) column \(j\) encodes an <strong>essential</strong>
+    class born at \(j\) — bar \([j, \infty)\);</li>
+    <li>the total complexity is \(O(m^3)\) in the worst case, \(O(m^2)\) in
+    practice on real data (columns already almost reduced).</li>
+  </ol>
+  <div class="proof">
+  <strong>Dimensional consistency.</strong> If \(\sigma_j\) is a \(k\)-simplex,
+  its column lives in the rows of the \((k-1)\)-simplices: a pair \((i, j)\)
+  always connects two consecutive dimensions (\(\sigma_i\) is a
+  \((k-1)\)-simplex).
+  <br><br>
+  <strong>A pair \((i, j)\) is a birth-then-death.</strong> At step \(i\), the
+  simplex \(\sigma_i\) either creates a class (if it completes an independent
+  cycle), or kills one (if it completes a chain whose boundary becomes a trivial
+  cycle). The algorithm reproduces this alternative: \(\sigma_i\) kills a class
+  exactly when the reduced column of \(\sigma_j\) has \(\mathrm{low}(j) = i\),
+  that is, when \(\partial \sigma_j\) contains \(\sigma_i\) as the <em>last</em>
+  unpaired face — the class carried by the cycle
+  \(\partial \sigma_j + (\text{already paired boundaries})\) was born with
+  \(\sigma_i\).
+  <br><br>
+  <strong>Zero columns = essential births.</strong> If the reduced column of
+  \(\sigma_j\) is zero, \(\sigma_j\) completes a cycle \(z = \sigma_j + \dots\)
+  of which no face is "available" to kill it later: no future coface will have
+  \(\sigma_j\) as low index in its reduction (reductions never eliminate
+  pivots already used). The class lives until the end: bar \([j, \infty)\).
+  <br><br>
+  <strong>Uniqueness.</strong> The choice of pivots is forced: at each step,
+  there is at most one earlier column with the same low index (invariant
+  maintained by the algorithm), so the matching depends on no arbitrary choice
+  — it coincides with the interval decomposition of Theorem 4.2.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<pre class="code"><code># Standard persistence algorithm (Edelsbrunner-Letscher-Zomorodian,
+# Zomorodian-Carlsson), over F2. low[j] = row of the last 1 of column j.
+def persistence(M):                        # M : m x m boundary matrix (bits)
+    m = M.shape[1]
+    R = M.copy()
+    pairs = []
+    for j in range(m):
+        while True:
+            nz = np.nonzero(R[:, j])[0]
+            if len(nz) == 0:
+                pairs.append(None)         # zero column: bar [j, inf)
+                break
+            low = nz[-1]
+            prev = [jj for jj in range(j)
+                    if pairs[jj] == low]   # pivot already used
+            if not prev:
+                pairs.append(low)          # pair (low, j): bar [low, j)
+                break
+            R[:, j] ^= R[:, prev[0]]       # column addition (XOR in F2)
+    return [(i, j) for j, i in enumerate(pairs) if i is not None]</code></pre>
+
+<div class="ex">
+  <span class="tag">Example 4.5 — The algorithm demonstrated step by step on a complete complex</span>
+  Consider the following filtration (a controlled variant of Example 3.2): four
+  vertices \(v_1, v_2, v_3, v_4\), five edges, one triangle. The indices are
+  those of appearance:
+  <table class="tbl">
+  <thead><tr><th>Index</th><th>Simplex</th><th>Dim.</th><th>Expected event</th></tr></thead>
+  <tbody>
+  <tr><td>1, 2, 3, 4</td><td>\(v_1, v_2, v_3, v_4\)</td><td>0</td><td>four H0 births</td></tr>
+  <tr><td>5</td><td>\([v_1, v_2]\)</td><td>1</td><td>merging of components (H0 death)</td></tr>
+  <tr><td>6</td><td>\([v_2, v_3]\)</td><td>1</td><td>merging of components (H0 death)</td></tr>
+  <tr><td>7</td><td>\([v_3, v_4]\)</td><td>1</td><td>merging of components (H0 death)</td></tr>
+  <tr><td>8</td><td>\([v_1, v_3]\)</td><td>1</td><td>creation of a loop (H1 birth)</td></tr>
+  <tr><td>9</td><td>\([v_1, v_2, v_3]\)</td><td>2</td><td>filling: H1 death</td></tr>
+  <tr><td>10</td><td>\([v_1, v_4]\)</td><td>1</td><td>creation of a loop (H1 birth)</td></tr>
+  </tbody>
+  </table>
+  Non-trivial columns of the boundary matrix \(M\) (rows = simplices 1 to 10,
+  columns = simplices 5 to 10; columns 1–4 are zero):
+  <table class="tbl">
+  <thead><tr><th>Row\Col.</th><th>5 \(=[v_1v_2]\)</th><th>6 \(=[v_2v_3]\)</th><th>7 \(=[v_3v_4]\)</th><th>8 \(=[v_1v_3]\)</th><th>9 \(=[v_1v_2v_3]\)</th><th>10 \(=[v_1v_4]\)</th></tr></thead>
+  <tbody>
+  <tr><td>1: \(v_1\)</td><td>1</td><td>0</td><td>0</td><td>1</td><td>0</td><td>1</td></tr>
+  <tr><td>2: \(v_2\)</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  <tr><td>3: \(v_3\)</td><td>0</td><td>1</td><td>1</td><td>1</td><td>0</td><td>0</td></tr>
+  <tr><td>4: \(v_4\)</td><td>0</td><td>0</td><td>1</td><td>0</td><td>0</td><td>1</td></tr>
+  <tr><td>5: \([v_1v_2]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+  <tr><td>6: \([v_2v_3]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+  <tr><td>7: \([v_3v_4]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  <tr><td>8: \([v_1v_3]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+  <tr><td>9: triangle</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  <tr><td>10: \([v_1v_4]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  </tbody>
+  </table>
+  <strong>Reduction, column by column.</strong>
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>Column 5</strong>: \(\{1, 2\}\), \(\mathrm{low} = 2\). No earlier
+    pivot: pair \((2, 5)\). The component born with \(v_2\) dies when edge
+    \([v_1v_2]\) merges it.</li>
+    <li><strong>Column 6</strong>: \(\{2, 3\}\), \(\mathrm{low} = 3\) — pair
+    \((3, 6)\). Likewise for \(v_3\).</li>
+    <li><strong>Column 7</strong>: \(\{3, 4\}\), \(\mathrm{low} = 4\) — pair
+    \((4, 7)\). Likewise for \(v_4\).</li>
+    <li><strong>Column 8</strong>: \(\{1, 3\}\), \(\mathrm{low} = 3\):
+    <em>conflict</em> with column 6. We add:
+    \(\{1,3\} \oplus \{2,3\} = \{1,2\}\), \(\mathrm{low} = 2\): <em>conflict</em>
+    with column 5. We add: \(\{1,2\} \oplus \{1,2\} = \emptyset\):
+    <strong>zero column</strong> — a class of \(H_1\) is born at index 8 (the
+    loop \(v_1 \to v_2 \to v_3 \to v_1\)). No pivot is destroyed: the existing
+    matching is unchanged.</li>
+    <li><strong>Column 9</strong>: \(\{5, 6, 8\}\), \(\mathrm{low} = 8\). Is
+    pivot 8 occupied? Column 8 is now <em>zero</em> — it occupies nothing: no
+    conflict, <strong>pair \((8, 9)\)</strong>. The loop born at 8 is killed by
+    the triangle \([v_1v_2v_3]\).</li>
+    <li><strong>Column 10</strong>: \(\{1, 4\}\), \(\mathrm{low} = 4\): conflict
+    with column 7 → \(\{1,4\} \oplus \{3,4\} = \{1,3\}\),
+    \(\mathrm{low} = 3\): conflict with column 6 →
+    \(\{1,3\} \oplus \{2,3\} = \{1,2\}\), \(\mathrm{low} = 2\): conflict with
+    column 5 → \(\{1,2\} \oplus \{1,2\} = \emptyset\) — <strong>zero
+    column</strong>: a class of \(H_1\) is born at 10 (the loop
+    \(v_1 \to v_3 \to v_4 \to v_1\)) and never dies.</li>
+  </ul>
+  <strong>Final barcode.</strong>
+  $$H_0 : [1, \infty),\; [2, 5),\; [3, 6),\; [4, 7) \qquad H_1 : [8, 9),\; [10, \infty).$$
+  <strong>Checks.</strong> (i) At the end, \(\beta_0 = 1\) and \(\beta_1 = 1\),
+  consistent with the final graph (connected, two independent cycles — formula
+  3.4: \(m - n + c = 5 - 4 + 1 = 2\), one of which is killed by the triangle).
+  (ii) Euler characteristic of the final complex: \(4 - 5 + 1 = 0 = \beta_0 -
+  \beta_1\) (Theorem 3.7). (iii) Bar count: 4 H0 births (4 vertices), 3 H0
+  deaths (3 merging edges — the 4th edge \([v_1v_3]\) creates a loop instead of
+  merging), 2 H1 births, 1 H1 death (the triangle). Everything connects.
+</div>
+
+<div class="note">
+  <span class="tag">From Euler to barcodes, and back</span>
+  The Euler–Poincaré characteristic can be reread through the algorithm: at
+  filtration level \(i\), \(\chi(K_i)\) is the number of active H0 bars minus
+  the number of active H1 bars, etc. The <strong>Betti curve</strong>
+  \(\beta_k(i)\) — number of active bars — is a discrete summary of the
+  barcode, strictly less fine but sometimes sufficient (and directly related to
+  the counting functions of ch. 5). Remember: the barcode is the <em>dynamic</em>
+  version of homology; the plain homology of ch. 3 is its slice frozen at
+  \(i = m\).
+</div>
+
+<div class="note">
+  <span class="tag">Variants and limits (general culture)</span>
+  The "faces before cofaces" constraint makes the filtration increasing; to
+  free oneself from it, one uses <strong>zigzag persistence</strong> (Carlsson,
+  de Silva, Morozov): the arrows alternate left-right, and the algorithm is
+  rewritten with "in-out" columns. For vector-valued functions, one enters
+  multi-dimensional persistence — where Theorem 4.2 <em>fails</em>: no complete
+  discrete barcode (Carlsson–Zomorodian negative structure theorem).
+</div>
+
+</section>
+<nav class="pager"><a href="ch3.html"><span class="dir">← Previous</span> Simplicial homology</a><a class="next" href="ch5.html"><span class="dir">Next</span> Diagrams, barcodes and landscapes</a></nav>
+</main>
+</div>
+
+</body>
+</html>

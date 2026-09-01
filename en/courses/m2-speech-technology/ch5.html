@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech Technology for Conversational AI — Streaming: chunking, VAD, latency vs quality — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Speech Technology for Conversational AI</a> › Streaming: chunking, VAD, latency vs quality</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P2 (brochure)</span>Speech Technology for Conversational AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Recap: the speech signal and its representations</a>
+<a href="ch1.html">Classical ASR: the GMM-HMM pipeline</a>
+<a href="ch2.html">CTC: the loss, derived</a>
+<a href="ch3.html">Encoder-decoder: LAS, Conformer, RNN-T</a>
+<a href="ch4.html">Whisper: robustness and multi-task</a>
+<a href="ch5.html" class="active">Streaming: chunking, VAD, latency vs quality</a>
+<a href="ch6.html">Vocoders: from WaveNet to HiFi-GAN</a>
+<a href="ch7.html">Neural TTS: Tacotron 2, VITS, diffusion and flow</a>
+<a href="ch8.html">Expressivity: prosody, style tokens, SSML</a>
+<a href="ch9.html">Voice conversion and cloning: ethics and watermarking</a>
+<a href="ch10.html">The conversational loop: VAD, turn-taking, full-duplex</a>
+<a href="ch11.html">Speech LLMs and multilingualism</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Streaming: chunking, VAD, latency vs quality</h2>
+
+<p>Conversing means answering fast: the ASR must produce words <em>while</em>
+one speaks. This chapter deals with the "offline \(\to\) streaming"
+transformation, whose cost is measured in WER added per second gained.</p>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — Latencies of a streaming ASR</span>
+  The <strong>algorithmic latency</strong> of a chunked encoder
+  (<em>chunking</em>) of size \(L\) frames with a lookahead of \(R\) frames
+  equals
+  $$\lambda = (L + R)\,\Delta, \qquad \Delta = \text{frame step }
+  (10\ \mathrm{ms}),$$
+  — one cannot predict before having heard the context. The
+  <strong>real-time factor</strong> (RTF) measures the computational cost:
+  computation time / audio duration (RTF \(&lt;\) 1 required, \(&lt;&lt;\) 1
+  on device). The <strong>first-word latency</strong> adds the VAD (ch. 10)
+  and the energy bar. A conversational voice assistant targets
+  \(\lambda \leq 300\) ms end to end (lab 5) — humans answer in ~200 ms
+  (ch. 10): this is <em>the</em> structuring constraint of the field.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.2 — Three streaming architectures (Moritz et al., ICASSP 2020, for the first)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Block attention</strong>: the transformer encoder processes
+    windows of \(L\) frames with a complete left context (memory) and a
+    bounded right lookahead \(R\) — the attention is <em>masked</em> beyond;
+    the larger \(R\) grows, the more the WER drops and the latency rises
+    (curve of ch. 5.3);</li>
+    <li><strong>Causal RNN-T</strong> (Theorem 3.3): pure encoder
+    \(L = 1\), \(R = 0\) — emission from the frame on; the lookahead is
+    reinjected into the <em>prediction</em> network (the right context comes
+    from the tokens already emitted); standard on mobile;</li>
+    <li><strong>Asynchronous re-scoring</strong>: a first streaming pass
+    gives the real-time display, an offline model (Whisper)
+    <em>re-corrects</em> the final transcription with a few hundred ms of
+    delay — the interface shows the text "correcting itself" (the design of
+    2026 assistants: the truth arrives one second later, reactivity is
+    immediate).</li>
+  </ol>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.3 — The latency/quality curve, and how to read it</span>
+  For each point \((L, R)\) (or each model choice): measure WER and
+  first-word latency on a <em>fixed</em> test corpus; plot WER(\(\lambda\)).
+  Typical shape: plateau up to \(\lambda \approx 200\) ms (the useful
+  context of a phoneme fits in ~200 ms), then rapid drop (one loses the
+  transitions), then plateau (ultra-context no longer helps). Engineer's
+  reading: choose the elbow point; scientific reading: the curve <em>is</em>
+  a control curve (fidelity against resource) — exactly the grid of the
+  Control in Generative AI module (M2, ch. 2 and 9), where "diversity" is
+  replaced by "reactivity".
+</div>
+
+<div class="note">
+  <span class="tag">VAD: the gateway of the stream</span>
+  <em>Voice activity detection</em> decides, window by window (10-30 ms),
+  whether the frame contains speech: energy + periodicity (historical),
+  energy/noise GMM (Signal module ch. 7), lightweight networks (Silero VAD —
+  the lab's tool). Two errors of opposite cost: the <em>false alarm</em>
+  sends noise to the ASR (Whisper hallucinations on silences!); the
+  <em>miss</em> cuts word beginnings (the initial French "euh"). The VAD
+  also initiates <em>endpointing</em> — deciding that the user has finished
+  speaking (ch. 10): even more sensitive, because it sets the
+  <em>perceived</em> latency of the whole system.
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Whisper: robustness and multi-task</a><a class="next" href="ch6.html"><span class="dir">Next</span> Vocoders: from WaveNet to HiFi-GAN</a></nav>
+</main>
+</div>
+
+</body>
+</html>

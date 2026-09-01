@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Optimization in practice — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Deep Learning</a> › Optimization in practice</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: matrix differential calculus and numerical stability</a>
+<a href="ch1.html">From the neuron to the deep network</a>
+<a href="ch2.html">Backpropagation</a>
+<a href="ch3.html" class="active">Optimization in practice</a>
+<a href="ch4.html">Convolutional networks (CNN)</a>
+<a href="ch5.html">Sequences: RNN, LSTM</a>
+<a href="ch6.html">Attention and transformers</a>
+<a href="ch7.html">Generative models: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning and fine-tuning</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ch10.html">Training in practice</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch3">
+<h2>3. Optimization in practice</h2>
+
+<p>Training minimizes \(\mathcal{J}(\theta) = \mathbb{E}_{(x,y)\sim\mathcal{D}}\big[\ell(f_\theta(x), y)\big]\)
+by <em>stochastic</em> gradient descent: at each step, the gradient is estimated
+on a mini-batch (proposition 0.2). This chapter analyzes <em>why</em> each ingredient
+of the modern recipe (momentum, Adam, warmup, normalization, regularization) is there.</p>
+
+<h3>3.1. Convergence of SGD: the quadratic case, fully proved</h3>
+
+<p>The generic model of non-convexity is hard; the quadratic case, for its part,
+is solved exactly and illuminates all the others. Let
+\(f(\theta) = \tfrac12 \theta^\top A \theta - b^\top \theta\) with \(A\) symmetric positive
+definite, eigenvalues \(\lambda_1 \ge \dots \ge \lambda_d &gt; 0\), \(\lambda_1 = L\)
+(Lipschitz constant of the gradient), \(\lambda_d = \mu\), condition number
+\(\kappa = L/\mu\). The minimizer \(\theta^\star = A^{-1}b\) satisfies
+\(\nabla f(\theta^\star) = 0\),
+and the (for now deterministic) descent reads
+\(\theta_{k+1} = \theta_k - \eta (A\theta_k - b)\).</p>
+
+<div class="thm">
+  <span class="tag">Theorem 3.1 — Guaranteed decrease if and only if \(\eta &lt; 2/L\)</span>
+  Setting \(e_k = \theta_k - \theta^\star\):
+  $$e_{k+1} = (I - \eta A)\, e_k, \qquad \|e_k\| \le \rho^k \|e_0\|, \quad \rho = \max_i |1 - \eta\lambda_i|.$$
+  Convergence takes place for every \(e_0\) if and only if \(0 &lt; \eta &lt; 2/L\); the
+  optimal rate is reached for \(\eta = 2/(L+\mu)\) and equals
+  \(\rho = \frac{\kappa - 1}{\kappa + 1} \approx 1 - \frac{2}{\kappa}\).
+</div>
+
+<div class="proof">
+Since \(\theta^\star\) is a fixed point of the iteration,
+\(e_{k+1} = \theta_{k+1} - \theta^\star = (I - \eta A)(\theta_k - \theta^\star) = (I-\eta A)e_k\),
+hence \(e_k = (I - \eta A)^k e_0\). Diagonalize \(A = Q \Lambda Q^\top\) (orthonormal):
+\(I - \eta A = Q\,\mathrm{diag}(1 - \eta\lambda_i)\,Q^\top\), so in the eigenbasis
+\(\|e_k\|^2 = \sum_i (1-\eta\lambda_i)^{2k} (q_i^\top e_0)^2\). Each eigenmode
+contracts by \(|1-\eta\lambda_i|\) per step. The maximum \(\rho\) of the
+\(|1 - \eta\lambda_i|\)
+is reached at \(\lambda_1 = L\) or \(\lambda_d = \mu\): one wants \(1 - \eta L &gt; -1\)
+(i.e. \(\eta &lt; 2/L\)) to avoid expanding the stiff modes, and \(\eta\) large to
+contract the flat modes. The minimal
+\(\rho(\eta) = \max(|1-\eta L|,\, |1-\eta\mu|)\) equalizes the two terms,
+\(1 - \eta\mu = \eta L - 1\), i.e. \(\eta = 2/(L+\mu)\) and
+\(\rho = (L-\mu)/(L+\mu)\). For \(\kappa \gg 1\), \(\rho \approx 1 - 2/\kappa\):
+\(\mathcal{O}(\kappa)\) iterations are needed to divide the error by a constant.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Reading for what follows</span>
+  1) The step is bounded by the <em>stiff</em> directions but the slowness comes from the
+  <em>flat</em> directions: the whole art of deep optimization consists in
+  decoupling these scales — momentum (3.2), adaptive preconditioning (3.3),
+  activation normalization (3.5). 2) In noisy SGD, the same step \(2/L\) remains
+  the stability condition, and the residual noise fluctuates around the minimum at a
+  distance proportional to \(\eta\): decreasing \(\eta\) at the end of training
+  (scheduling) amounts to "annealing". 3) On real networks, the landscape
+  is non-convex, but saddle points — not local minima — are the main obstacle,
+  and SGD noise helps precisely to escape them.
+</div>
+
+<h3>3.2. Momentum: convergence rates</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.2 — SGD with momentum (Polyak's heavy ball)</span>
+  $$v_{k+1} = \beta v_k + \hat g_k, \qquad \theta_{k+1} = \theta_k - \eta\, v_{k+1}, \qquad \beta \in [0,1),$$
+  with \(\hat g_k\) the mini-batch estimator of the gradient. The velocity \(v\)
+  exponentially averages the past gradients: in a narrow valley where the gradient
+  alternates \(+g, -g, +g, \dots\) (zigzag), the average cancels in the direction of
+  the oscillation and accumulates in the direction of progress.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.3 — What momentum changes, mode by mode</span>
+  On the quadratic case of theorem 3.1 (exact gradient), the error follows
+  \(e_{k+1} = (1 + \beta - \eta\lambda)\, e_k - \beta\, e_{k-1}\). With the step
+  \(\eta = (1-\beta)/L\): (i) the stiff mode \(\lambda = L\) converges like
+  \((\sqrt\beta)^k\); (ii) on a flat mode, the effective rate is
+  \(1 - \frac{\eta}{1-\beta}\lambda\) — everything happens as if the step were multiplied
+  by \(1/(1-\beta)\) on the slow directions without destabilizing the stiff ones.
+  The complete analysis (Polyak, 1964) gives a global rate in
+  \(\mathcal{O}(1 - c/\sqrt\kappa)\) instead of \(\mathcal{O}(1 - c/\kappa)\), a rate
+  optimally reached by Nesterov's variant.
+</div>
+
+<div class="proof">
+Inject the iteration into \(e_k\):
+\(e_{k+1} = e_k - \eta A e_k + \beta(e_k - e_{k-1})\), giving the announced difference
+equation. Per eigenmode (\(e_k\) collinear with the eigenvector \(q_i\)), the solutions
+are of the form \(e_k = z^k q_i\) where \(z\) solves the characteristic polynomial
+$$z^2 - (1 + \beta - \eta\lambda)\, z + \beta = 0.$$
+Write \(s = 1 + \beta - \eta\lambda\). The product of the two roots equals \(\beta\).
+
+<p><strong>(i) Stiff modes.</strong> The roots are complex conjugates as soon as
+\(s^2 \le 4\beta\), and their modulus then equals \(\sqrt{\beta}\) (product = \(\beta\),
+equal modulus for two conjugates). With \(\eta = (1-\beta)/L\) and \(\lambda \le L\), one has
+\(\eta\lambda \le 1-\beta\), so \(s \in [\,2\beta,\; 1+\beta)\). For \(\lambda = L\):
+\(s = 2\beta\), and \(2\beta \le 2\sqrt\beta\) whenever \(\beta \le 1\) — condition
+satisfied, the stiff mode is damped by \(\sqrt\beta\) per step.</p>
+
+<p><strong>(ii) Flat modes.</strong> For \(\eta\lambda \ll 1\), look for the root
+close to 1 in the form \(z = 1 - c\,\eta\lambda + o(\eta\lambda)\). Expanding
+\(z^2 - sz + \beta = 0\) to first order with \(s = 1 + \beta - \eta\lambda\):
+\((1 - 2c\eta\lambda) - (1 + \beta - \eta\lambda)(1 - c\eta\lambda) + \beta
+= \eta\lambda\big(1 - c(1-\beta)\big) + o(\eta\lambda) = 0\), hence
+\(c = 1/(1-\beta)\) and \(z_+ \approx 1 - \frac{\eta\lambda}{1-\beta}\): the
+effective step of the flat modes is \(\eta/(1-\beta)\) — the moving average amplifies
+the displacement in the directions where the gradient is coherent, whereas (i) shows
+that it bounds the oscillation in the directions where it alternates.</p>
+<span class="qed">∎</span>
+</div>
+
+<h3>3.3. Adam, derived step by step</h3>
+
+<div class="thm">
+  <span class="tag">Algorithm 3.4 — Adam (Kingma &amp; Ba, 2014)</span>
+  At each step \(t\), with stochastic gradient \(g_t\), \(\beta_1 = 0{,}9\),
+  \(\beta_2 = 0{,}999\):
+  $$m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t \quad\text{(moving average of the gradient)},$$
+  $$v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \quad\text{(moving average of squares, element-wise)},$$
+  $$\hat m_t = \frac{m_t}{1 - \beta_1^t}, \qquad \hat v_t = \frac{v_t}{1 - \beta_2^t} \quad\text{(bias correction)},$$
+  $$\theta_{t+1} = \theta_t - \eta\, \frac{\hat m_t}{\sqrt{\hat v_t} + \varepsilon}.$$
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.5 — Why the bias correction is exact</span>
+  If the gradient is constant \(g_t \equiv g\), then \(m_t = (1 - \beta_1^t)\, g\) and
+  \(v_t = (1-\beta_2^t)\, g^2\) (element by element). The correction therefore divides
+  precisely by the underestimation factor: \(\hat m_t = g\), \(\hat v_t = g^2\).
+</div>
+
+<div class="proof">
+By induction. \(m_t = (1-\beta_1)\sum_{k=1}^{t} \beta_1^{t-k} g_k\). If \(g_k \equiv g\):
+\(m_t = (1-\beta_1)\, g \sum_{j=0}^{t-1} \beta_1^{j} = (1-\beta_1)\, g\, \frac{1 - \beta_1^t}{1 - \beta_1} = (1-\beta_1^t)\, g\)
+(geometric sum). Without correction, the moving average would start from \(m_0 = 0\)
+and underestimate the gradient by a factor \(1-\beta_1^t\) — by 90% at step 1 with
+\(\beta_1 = 0{,}9\); Adam's first step would be ~10× too small (and for \(v\),
+with \(\beta_2 = 0{,}999\), ~1000× too small, which would make the update
+\(\hat m/\sqrt{\hat v}\) <em>explode</em>). The computation is identical for \(v_t\)
+with \(g^2\).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">What Adam does, intuitively</span>
+  If the gradient is constant, \(\hat m_t / \sqrt{\hat v_t} \approx g/|g| = \mathrm{sign}(g)\):
+  Adam moves by a step of size ~\(\eta\) <em>per coordinate</em>, independent of
+  the gradient scale — a diagonal preconditioner that solves the decoupling
+  \(\lambda_{\max}/\lambda_{\min}\) of theorem 3.1. It is also its weakness:
+  the weight of "calm" coordinates is relatively amplified, and the
+  \(\varepsilon\) in the denominator must stay small (\(10^{-8}\)) so as not to crush
+  small gradients.
+</div>
+
+<table class="tbl">
+<thead><tr><th>Optimizer</th><th>Update</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>SGD</td><td>\(\theta \leftarrow \theta - \eta\, \hat g\)</td><td>useful noise (escapes saddle points); \(\eta &lt; 2/L\)</td></tr>
+<tr><td>Momentum</td><td>\(v \leftarrow \beta v + \hat g\); \(\theta \leftarrow \theta - \eta v\)</td><td>inertia, damps zigzags (prop. 3.3)</td></tr>
+<tr><td>RMSProp</td><td>adaptive normalization by \(v\) alone</td><td>per-coordinate step, no momentum</td></tr>
+<tr><td>Adam</td><td>bias-corrected first and second moments</td><td>universal default; tune <code>lr</code> first</td></tr>
+<tr><td>AdamW</td><td>Adam + decoupled decay</td><td>see 3.6 — the transformers standard</td></tr>
+</tbody>
+</table>
+
+<h3>3.4. Step scheduling and warmup</h3>
+
+<ul>
+  <li><strong>Warmup</strong> (linear from 0 to \(\eta\) over a few hundred/thousand
+  steps): at the very start of training, the features are random and the
+  first gradients have a large norm; moreover, the bias correction of
+  \(\hat v_t\) (prop. 3.5) divides by \(1 - \beta_2^t\), which varies fast when \(t\)
+  is small — the ratio \(\hat m/\sqrt{\hat v}\) is then very noisy. A small step at
+  the start lets the statistics settle. Pre-norm architectures
+  (chapter 6) strongly reduce this need.</li>
+  <li><strong>Decay</strong>: cosine \(\eta_t = \eta_{\min} + \tfrac12(\eta - \eta_{\min})(1 + \cos(\pi t/T))\),
+  or steps (\(\times 1/10\)). Quadratic motif (theorem 3.1): close to the minimum,
+  too large a step makes the SGD noise orbit around the solution — decreasing \(\eta\)
+  divides the oscillation radius.</li>
+  <li><strong>LR range test</strong> (Smith, 2015): grow \(\eta\)
+  geometrically over one epoch and plot the loss; the optimal \(\eta\) sits
+  just before the minimum of this curve (chapter 10).</li>
+</ul>
+
+<h3>3.5. BatchNorm and LayerNorm</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.6 — BatchNorm (Ioffe &amp; Szegedy, 2015) and LayerNorm (Ba et al., 2016)</span>
+  BatchNorm normalizes each <em>feature</em> over the batch (the \(j\)-th coordinate of
+  the activations, for a batch of size \(m\)):
+  $$\hat h_{ij} = \frac{h_{ij} - \mu_j}{\sqrt{\sigma_j^2 + \varepsilon}}, \qquad
+  \mu_j = \frac1m \sum_i h_{ij}, \quad \sigma_j^2 = \frac1m \sum_i (h_{ij} - \mu_j)^2, \qquad
+  y_{ij} = \gamma_j \hat h_{ij} + \beta_j.$$
+  At inference, \(\mu, \sigma\) are frozen moving averages. LayerNorm normalizes
+  each <em>example</em> over its features (same formulas, but the means are taken
+  over \(j\) at fixed \(i\)): independent of the batch, it is the norm of
+  transformers.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.7 — Reparameterization invariance</span>
+  BatchNorm makes the layer output invariant when one replaces \(W\) by \(cW\)
+  and \(b\) by \(cb\) (\(c &gt; 0\)): the statistics become \(c\mu, c^2\sigma^2\),
+  and \(\hat h\) is unchanged. The scaling effect is absorbed by \(\gamma\).
+</div>
+
+<div class="proof">
+If \(h' = cWh + cb = c\,h\), then \(\mu' = c\mu\), \({\sigma^2}' = c^2\sigma^2\) and
+\(\hat h' = (ch - c\mu)/\sqrt{c^2\sigma^2 + \varepsilon}\). For \(\varepsilon\) small
+compared to \(\sigma^2\), \(\hat h' \approx c(h-\mu)/(c\sigma) = \hat h\). The gradient
+of the loss with respect to the scale \(c\) of the weights is then ~zero: the
+optimization no longer "wastes" capacity correcting the scale of the activations,
+only their direction.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">The ICS controversy</span>
+  The historical explanation — "reducing internal covariate shift" — was
+  largely debunked by Santurkar et al. (2018): BatchNorm works mainly
+  because it <em>reparameterizes</em> the problem in a Lipschitz way (smoother loss
+  landscape, better-conditioned gradients), not because it stabilizes
+  distributions. Practical consequences: BatchNorm requires fairly large batches
+  (the statistics become noisy otherwise) and behaves badly at inference with
+  batch size 1; LayerNorm has no such dependencies. In transformers,
+  LayerNorm is applied before each sub-block (pre-norm, chapter 6).
+</div>
+
+<h3>3.6. Regularization: the complete tour</h3>
+
+<ul>
+  <li><strong>Dropout</strong> (Srivastava et al., 2014): during training, each
+  activation is multiplied by an iid mask \(M_j \sim \mathrm{Bernoulli}(1-p)\) then
+  divided by \(1-p\) ("inverted"); at inference, identity.
+  <em>Proof that the expectation is preserved</em>:
+  \(\mathbb{E}[M_j/(1-p)] = 1\), hence \(\mathbb{E}[\tilde h_j] = h_j\) — no scaling
+  is needed at test time. Ensemble interpretation: each mask defines a
+  sub-network; training samples \(2^{n}\) architectures sharing their
+  weights, and inference approximately averages their consensus (the exact
+  "mean network" approximation holds for a single final linear block;
+  Gal &amp; Ghahramani, 2016, give it a Bayesian reading, cf. Emerging ML module).</li>
+  <li><strong>Weight decay</strong> \(\tfrac{\lambda}{2}\|\theta\|^2\): SGD + decay
+  gives \(\theta \leftarrow (1 - \eta\lambda)\theta - \eta \hat g\) — multiplicative
+  shrinkage at each step (implicit ridge). <strong>AdamW</strong> (Loshchilov &amp;
+  Hutter, 2017) applies the decay <em>directly</em> to the weights and not through
+  Adam's preconditioner: via \(\hat m/\sqrt{\hat v}\), the decay would undergo a
+  per-coordinate normalization that makes it uneven; decoupled, it becomes a
+  homogeneous ridge again. It is the standard for transformers (typically
+  \(\lambda \sim 10^{-2}\),
+  much larger than in the SGD era).</li>
+  <li><strong>Label smoothing</strong> \(\varepsilon \in [0{,}05, 0{,}2]\): the
+  target becomes \(q_k = (1 - \varepsilon)\,\mathbf{1}[k = y] + \varepsilon/K\). The
+  cross-entropy penalizes \(-\log p_k \to \infty\) as \(p_k \to 0\): a hard
+  target pushes the model toward \(\log p^\star \to \infty\) (overconfidence), the
+  smoothed target bounds the optimum at \(p^\star = q &lt; 1\) and improves
+  calibration.</li>
+  <li><strong>Data augmentation</strong>: inject the known invariances
+  (rotations/crops in vision, synonyms in NLP) — the cheapest regularization in
+  parameters; it acts on the <em>data</em>, not on the model.</li>
+  <li><strong>Early stopping</strong>: stop when the validation loss rises
+  again — a regularization at zero compute cost, equivalent to an implicit
+  penalization of the norm (cf. Machine Learning module, bias-variance).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Overfitting, order of profitability</span>
+  Diagnosis: a train/validation gap that opens while the train loss decreases.
+  Remedies in order: 1) more data / augmentation, 2) augmentation,
+  3) dropout, 4) weight decay, 5) shrink the model as a last resort. A model
+  that cannot overfit a small batch (chapter 10) is often too small or badly
+  wired — the capacity to overfit is first and foremost a <em>health check</em>.
+</div>
+</section>
+<nav class="pager"><a href="ch2.html"><span class="dir">← Previous</span> Backpropagation</a><a class="next" href="ch4.html"><span class="dir">Next</span> Convolutional networks (CNN)</a></nav>
+</main>
+</div>
+
+</body>
+</html>

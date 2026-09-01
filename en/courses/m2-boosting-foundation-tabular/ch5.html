@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Boosting to Foundation Models: learning with Tabular Data — Deep tabular: regularized MLPs and FT-Transformer — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 2 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">From Boosting to Foundation Models: learning with Tabular Data</a> › Deep tabular: regularized MLPs and FT-Transformer</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">M2 · P1 (brochure)</span>From Boosting to Foundation Models: learning with Tabular Data</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Reminders: trees, forests, boosting</a>
+<a href="ch1.html">Why GBDTs (still) dominate tabular data</a>
+<a href="ch2.html">Boosting: functional gradient descent</a>
+<a href="ch3.html">XGBoost, LightGBM, CatBoost: three engineering approaches</a>
+<a href="ch4.html">Encoding columns: categorical and numerical</a>
+<a href="ch5.html" class="active">Deep tabular: regularized MLPs and FT-Transformer</a>
+<a href="ch6.html">TabPFN: learning tables in-context</a>
+<a href="ch7.html">LLMs and tables: serialization, text-to-SQL</a>
+<a href="ch8.html">Synthetic tabular data</a>
+<a href="ch9.html">Honest benchmarking</a>
+<a href="ch10.html">Choosing your method: guide and open questions</a>
+<a href="ex.html">Exercises / Labs</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. Deep tabular: regularized MLPs and FT-Transformer</h2>
+
+<p>Two deep answers to the dominance of trees: better regularize
+MLPs, and treat the <em>columns</em> as tokens of a transformer —
+attention playing the role of a differentiable interaction
+engine.</p>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — Feature tokenizer (FT-Transformer)</span>
+  Each column becomes a token of dimension \(d\): for a numerical
+  one, \(e_j = b_j + x_j\, w_j\) (\(b_j, w_j \in \mathbb{R}^d\)
+  learned); for a categorical one, a row of an embedding table. To
+  this one adds a \([\mathrm{CLS}]\) token. The following block is a
+  standard transformer (multi-head attention, cf. Deep Learning
+  module):
+  $$ \mathrm{Att}(Q, K, V) = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V, $$
+  computed <em>between features</em> of the same row. The prediction
+  is read from \([\mathrm{CLS}]\) after \(L\) blocks.
+</div>
+
+<div class="note">
+  <span class="tag">Why feature-wise attention changes things</span>
+  An MLP must <em>sample</em> interactions via its weights; a tree
+  builds them greedily; the transformer learns, for each pair of
+  columns, a conditional interaction weight (the heads saturate on
+  useful pairs and "switch off" useless columns — a partial answer
+  to the sensitivity to uninformative features of study 1.2).
+  Gorishniy et al. (NeurIPS 2021) show that the FT-Transformer is
+  the most consistent tabular network, at an equal tuning budget —
+  and that the tokenizer/def. 4.5 accounts for much of it.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.2 — Two other families</span>
+  <strong>TabNet</strong> (Arik &amp; Pfister, AAAI 2021):
+  <em>per-instance</em> selection of a small group of features
+  (sparse masks learned via a sparsemax) at each step — a
+  differentiable echo of the trees' "column selection", with the
+  masks offered as interpretability. <strong>NODE</strong> (Popov et
+  al., 2020): <em>differentiable</em> oblivious trees (entmax splits
+  over thresholds) trained end-to-end — boosting rewritten as a
+  network. <strong>Regularized MLPs</strong> (Kadra et al., 2021): a
+  well-tuned "cocktail" of regularizations suffices to hold the
+  comparison — confirming that on tables, the essence of the game is
+  played on inductive biases and tuning.
+</div>
+
+<div class="thm">
+  <span class="tag">Peculiarities of tables (summary)</span>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Heterogeneous columns</strong>: mixed types, scales,
+    semantics — no "natural" convolution kernel;</li>
+    <li><strong>No translation invariance</strong> nor locality:
+    permuting <em>pixels</em> changes nothing in an image, permuting
+    <em>columns</em> changes everything; the rotation experiment of
+    ch. 1 shows that this absence of invariance is a richness
+    (axis-aligned structure) that MLPs do not exploit;</li>
+    <li><strong>Irregular distributions</strong>: skewness, heavy
+    tails, multimodality, "round" regulatory thresholds;</li>
+    <li><strong>Many uninformative features</strong> and
+    <strong>informative missing values</strong>;</li>
+    <li><strong>Small/medium \(n\)</strong> by vision standards: the
+    risk of overfitting the architecture is real (cf. TabZilla,
+    ch. 9).</li>
+  </ul>
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Encoding columns: categorical and numerical</a><a class="next" href="ch6.html"><span class="dir">Next</span> TabPFN: learning tables in-context</a></nav>
+</main>
+</div>
+
+</body>
+</html>
