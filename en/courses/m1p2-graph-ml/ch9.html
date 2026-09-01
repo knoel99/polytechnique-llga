@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — Graph generation — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Graph Machine and Deep Learning for Generative AI</a> › Graph generation</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52072_EP</span>Graph Machine and Deep Learning for Generative AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: graph theory</a>
+<a href="ch1.html">Why graphs?</a>
+<a href="ch2.html">Learning tasks on graphs</a>
+<a href="ch3.html">Node embeddings</a>
+<a href="ch4.html">Spectral filters and spectral clustering</a>
+<a href="ch5.html">GNNs and message passing</a>
+<a href="ch6.html">Link prediction and graph auto-encoders</a>
+<a href="ch7.html">GNNs at scale</a>
+<a href="ch8.html">Applications and hands-on</a>
+<a href="ch9.html" class="active">Graph generation</a>
+<a href="ch10.html">Research of the teaching team</a>
+<a href="ch11.html">Graphs × LLMs: GraphRAG and the hybrid</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch9">
+<h2>9. Graph generation</h2>
+
+<div class="def">
+  <span class="tag">Problem</span>
+  Sample \(G \sim p_\theta(G)\) where \(p\) is learned over a family of graphs
+  (active molecules, road networks…) — possibly <em>conditioned</em> on a
+  target property ("generate a molecule with this activity") or on text
+  (text-to-graph). This is the "Generative AI" side of the title of the master. Three
+  difficulties specific to graphs: (i) variable size (\(n\) random);
+  (ii) <em>discrete</em> outputs (atom types, edge types); (iii) a space
+  quotiented by isomorphism — two permuted adjacencies are the same graph: one needs
+  <em>exchangeable</em> models (theory below).
+</div>
+
+<div class="thm">
+  <span class="tag">9.1 — The limiting model: graphons and exchangeability</span>
+  A <strong>graphon</strong> is a measurable function \(W : [0,1]^2 \to [0,1]\). Given
+  \(W\) and \(n\): draw \(x_i \sim \mathcal{U}([0,1])\), then each edge
+  \((i, j)\) independently with probability \(W(x_i, x_j)\) — a graph \(G_n\) on \(n\)
+  vertices. The Aldous-Hoover theorem guarantees that any sequence of <em>exchangeable</em>
+  graphs (distribution invariant under permutation of the vertices) admits a limit graphon in the sense of the cut
+  metric (Lovász, <em>Large Networks and Graph Limits</em>, 2012). The learning connection:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>estimation</strong>: estimating \(W\) from a large graph = approximating it by
+    a step function constant per block — partition the \(n\) vertices into \(k\)
+    blocks of sizes \(n_b\), set \(\hat W = \frac{e_{bb'}}{n_b n_{b'}}\) on the block
+    \((b, b')\) (empirical densities); the partition <em>is</em> the problem — and
+    SBM/clustering solves it;</li>
+    <li><strong>generation</strong>: a learned graph model implicitly targets a
+    \(\hat W\) (large molecules: large \(n\), structured target distribution);</li>
+    <li><strong>theory of deep generative models of graphs</strong>: the exchangeable architectures
+    (invariant to permutations of the nodes) are those that approximate
+    graphons — this is the consistency criterion of the models below.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">9.2 — Classical random models: ER and SBM (with the math)</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Erdős-Rényi</strong> \(G(n, p)\): all the edges iid with probability
+    \(p\); degrees \(\sim \mathrm{Bin}(n-1, p)\), no community; threshold
+    phenomena (at \(\frac{\log n}{n}\)) for connectivity — the "null"
+    reference against which to test structure (Refresher Statistics module);</li>
+    <li><strong>SBM</strong> (Holland et al., 1983): each node has a latent block
+    \(z_i \in \{1..k\}\) (uniform), and
+    $$P(A_{ij} = 1 \mid z_i = a, z_j = b) = B_{ab}.$$
+    Likelihood:
+    \(\log P(A | z, B) = \sum_{a,b} n_{ab} \log B_{ab} + (n_a n_b - n_{ab}) \log(1 - B_{ab})\)
+    (with \(n_{ab}\) = observed edges between blocks \(a, b\)); inference by maximum of
+    likelihood (EM) or Bayesian (MCMC sampling); detectability: below the
+    Kesten-Stigum threshold, no algorithm recovers the blocks — the phase where the
+    <em>spectral clustering</em> (ch. 4) sits exactly at the boundary. Generation:
+    sample \(z\) then \(A\); DCSBM variant (corrected degrees). The SBM is used
+    <em>in both directions</em>: generating realistic synthetic graphs
+    (benefit: total control) and inferring the blocks (statistically grounded
+    clustering, without a resolution limit unlike the modularity of ch. 0); topic modeling
+    by SBM (TopSBM, Gerlach et al., 2018) treats a document-term corpus as a bipartite SBM
+    — the "statistical" generalization of the Graph of Words of ch. 10.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">9.3 — Graph VAEs: GraphVAE and NeVAE</span>
+  <strong>GraphVAE</strong> (Simonovsky &amp; Komodakis, 2018): a GNN encoder, decoder
+  <em>in one block</em> \(\hat A, \hat X, \hat E\) (full adjacency); the mismatch of the
+  outputs to the ground truth requires a <em>matching matrix</em> (Hungarian matching) —
+  the node ordering problem is paid for here (cf. GOAT, ch. 10). <strong>NeVAE</strong>
+  (Samanta et al., AAAI 2019): a <em>granular</em> VAE designed for chemistry:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>sparse encoder</strong>: one embedding per atom (no full adjacency
+    — memory \(\mathcal{O}(n)\) instead of \(\mathcal{O}(n^2)\)), MPNN messages between
+    atoms;</li>
+    <li><strong>sequential decoder constrained by valence</strong>: at each step, a
+    new atom is added and its bonds drawn by probability heads
+    <em>conditioned on the remaining valence</em> — a carbon cannot receive 5
+    bonds; aromaticity is handled by dedicated heads;</li>
+    <li><strong>noise correction</strong>: local resampling of the invalid
+    bonds during training — the penalty of forbidden solutions is softened;</li>
+    <li>result: chemical validity &gt; 90% <em>before</em> post-processing,
+    where unconstrained GraphVAEs produce very few.</li>
+  </ol>
+  Moral: injecting domain knowledge (valence) into the architecture beats the
+  post-processing (RDKit sanitization) — reused by all the following methods.
+</div>
+
+<div class="thm">
+  <span class="tag">9.4 — Autoregressive models: GraphRNN (You et al., 2018)</span>
+  Generating a graph = generating a <em>sequence</em>. Order the nodes \(1, 2, \dots\) (any
+  order: the model must be robust to this choice — in practice canonical BFS orders);
+  the graph is then the sequence of adjacency rows
+  \(S^i = (A_{i1}, \dots, A_{i,i-1}) \in \{0,1\}^{i-1}\). Two levels:
+  $$\text{node level: } h_i = \mathrm{RNN}_{node}(h_{i-1}, s_i), \qquad
+  \text{edge level: } P(S^i | h_i) = \prod_{j &lt; i} \mathrm{RNN}_{edge}(s_{ij}),$$
+  where the state \(h_i\) conditions the edge RNN which emits \(S^i\) bit by bit
+  (Bernoulli categorical per position); training maximizes the sequential likelihood
+  (teacher forcing). Properties: exchangeability approximated by the use
+  of BFS orders (the prefix is invariant to intra-level permutations); complexity
+  \(\mathcal{O}(n)\) decoding steps, \(\mathcal{O}(n)\) per step → quadratic — very
+  reasonable for \(n \leq 100\). Limits: sensitivity to order (aromatic
+  rings depend on the starting point); conditioning on properties is awkward
+  (hence the models below). This "sequentialize the graph" scheme is
+  exactly that of the LLM on text — the text-to-graph convergence is natural (ch. 11).
+</div>
+
+<div class="thm">
+  <span class="tag">9.5 — Discrete diffusion: DiGress (Vignac et al., 2023)</span>
+  The molecular state of the art 2023-2026 transposes the diffusion of the Multimodal GenAI module to
+  <em>categories</em> (atom types, bond types). Forward process (noising):
+  at each step, each node and edge type is re-drawn
+  $$q(X_t | X_{t-1}) = \mathrm{Cat}\big(X_t;\ Q_t X_{t-1}\big), \qquad q(E_t | E_{t-1}) = \mathrm{Cat}\big(E_t;\ \bar Q_t E_{t-1}\big),$$
+  where \(Q_t\) are transition matrices (one row = law of the new type given the
+  old one); after \(T\) steps, the stationary law is the marginal of the datasets
+  (distribution of the atoms/bonds). Backward process (denoising): a GNN
+  \(\theta_\phi\) (MPNN + attention) predicts \(X_0\) and \(E_0\) <em>clean</em> from
+  \((X_t, E_t)\), then a Bayesian denoising step \(q(X_{t-1}|X_t, \hat X_0)\) is
+  derived in closed form; <em>perturbations</em>: edges are also added/removed
+  during noising (discrete topology). Three winning choices: auxiliary
+  losses (valence, bond lengths) for chemistry; guaranteed
+  <em>exchangeability</em> — the model never sees a node order (unlike GraphRNN);
+  conditioning by graph (inpainting): freeze a skeleton and generate the rest —
+  "target molecule" conditional generation. 3D cousin: EDM/EDT (equivariant
+  positions — M2, ch. 9). The team's <strong>NGG</strong> paper (ch. 10) transposes
+  this recipe <em>into latent space</em> to condition on graph features.
+</div>
+
+<div class="note">
+  <span class="tag">9.6 — Evaluating generated graphs: distributional fidelity</span>
+  A generator is not graded image by image but <em>distribution against
+  distribution</em>:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>validity / uniqueness / novelty</strong> (chemistry): % of
+    syntactically valid, distinct molecules, absent from training — a model that memorizes
+    has a novelty of 0;</li>
+    <li><strong>structural MMDs</strong>: maximum mean discrepancy
+    \(\mathrm{MMD}^2 = \big\| \mathbb{E}_{G \sim p}[\phi(G)] - \mathbb{E}_{G \sim q}[\phi(G)] \big\|^2\)
+    with \(\phi\) = degree histograms, clustering coefficients, motif/orbit
+    counts (the triangles of ch. 0!) — the remark: these features are
+    exactly what 1-WL does <em>not</em> always capture (M2, ch. 1);</li>
+    <li><strong>FCD</strong> (Fréchet ChemNet Distance): Fréchet distance between the
+    Gaussians of the ChemNet embeddings of the generated vs real molecules — the exact analogue of the
+    FID of images (Multimodal GenAI module);</li>
+    <li><strong>OT distances</strong>: comparing <em>graphs</em> without node
+    correspondence = Gromov-Wasserstein optimal transport (Optimal Transport module); the
+    MMDs above are kernel special cases of them.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">9.7 — Conditional generation: the real industrial product</span>
+  Rank by target property (solubility, docking), condition on text ("an
+  antibiotic against X"), on a skeleton (R-group optimization), on a partial graph
+  (inpainting); three mechanisms: (i) input conditioning (concat of the
+  descriptor — NGG); (ii) gradient guidance through a property
+  predictor during sampling (the classifier guidance of images); (iii) search
+  in latent space (Bayesian optimization — the classic QSAR pipeline). This is where
+  the GNN × LLM encounter is most fertile (ch. 11): the LLM proposes, the GNN evaluates,
+  the loop optimizes.
+</div>
+</section>
+<nav class="pager"><a href="ch8.html"><span class="dir">← Previous</span> Applications and hands-on</a><a class="next" href="ch10.html"><span class="dir">Next</span> Research of the teaching team</a></nav>
+</main>
+</div>
+
+</body>
+</html>

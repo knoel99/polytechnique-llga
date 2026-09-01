@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph Machine and Deep Learning for Generative AI — GNNs at scale — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 2</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Graph Machine and Deep Learning for Generative AI</a> › GNNs at scale</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_52072_EP</span>Graph Machine and Deep Learning for Generative AI</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Refresher: graph theory</a>
+<a href="ch1.html">Why graphs?</a>
+<a href="ch2.html">Learning tasks on graphs</a>
+<a href="ch3.html">Node embeddings</a>
+<a href="ch4.html">Spectral filters and spectral clustering</a>
+<a href="ch5.html">GNNs and message passing</a>
+<a href="ch6.html">Link prediction and graph auto-encoders</a>
+<a href="ch7.html" class="active">GNNs at scale</a>
+<a href="ch8.html">Applications and hands-on</a>
+<a href="ch9.html">Graph generation</a>
+<a href="ch10.html">Research of the teaching team</a>
+<a href="ch11.html">Graphs × LLMs: GraphRAG and the hybrid</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch7">
+<h2>7. GNNs at scale</h2>
+
+<div class="def">
+  <span class="tag">Why full-batch does not fit</span>
+  The gradient of a GCN layer mobilizes <em>the whole</em> graph: activation memory
+  \(\mathcal{O}((|V| + |E|) d)\) per layer, not to mention the densification of the deep
+  layers. On ogbn-products (2.4 million nodes, 61.9 million edges), the
+  full-batch does not fit on a GPU; three families of solutions, all grounded on the
+  same observation: the dependence of a node over \(L\) layers is limited to its \(L\)-neighborhood.
+</div>
+
+<div class="thm">
+  <span class="tag">7.1 — Neighborhood minibatching (GraphSAGE / NeighborSampler)</span>
+  For a batch of target nodes \(\mathcal{B}\) and a depth \(L\) with sampling
+  sizes \((s_L, \dots, s_1)\) (fanouts):
+<pre class="code"><code>for l = L .. 1 :                                    # from the deep layer toward the surface
+    N_l = union of the sampled neighbors (s_l per node) of the nodes of N_{l+1}
+    N_{l+1/2} = N_l sampled                          # computation subgraph
+compute the representations layer by layer on the subgraph
+update the parameters with the loss on the outputs of B only</code></pre>
+  Subgraph size: \(|\mathcal{B}| \times (1 + s_L (1 + s_{L-1}(\dots)))\);
+  with \(L = 2\), \(s_1 = s_2 = 10\), a batch of 1 node touches at most
+  \(1 + 10 + 100 = 111\) nodes — <em>bounded, independent of \(n\)</em>. Two subtleties:
+  (i) the estimator is <em>unbiased in expectation</em> for the mean over neighbors, but
+  the variance explodes at the hubs (hence decreasing fanouts); (ii) the
+  nested samplings create redundant computation across batches (the "expansive
+  neighborhood"; PyG's NeighborLoader implements exactly this).
+</div>
+
+<div class="thm">
+  <span class="tag">7.2 — Cluster-GCN (Chiang et al., 2019): partitioning</span>
+  Partition the graph into \(k\) clusters (METIS), each batch = one <em>whole cluster</em>:
+  GCN training on the induced subgraph costs \(\mathcal{O}(|E_c| d + |V_c| d^2)\) and
+  each full epoch costs \(\mathcal{O}(|E|)\) — like the full-batch, but in constant
+  memory, and deep GCNs become trainable again. The price: the partition bias —
+  the inter-cluster edges are invisible during the step; correction:
+  block adjacency matrix, \(\bar A = A + \lambda\,\mathrm{diag}(A)\) (linking each
+  cluster to itself) and re-sampling the partitions from time to time. Even better:
+  link the clusters by a "virtual graph" of clusters — a precursor of the
+  GraphRAG hierarchies (ch. 11).
+</div>
+
+<div class="thm">
+  <span class="tag">7.3 — GraphSAINT (Zeng et al., 2020): sampling subgraphs, unbiasedly</span>
+  Flip the perspective: first sample a subgraph \(\mathcal{G}_s\)
+  (by nodes, by edges, or by random walks), then compute a <em>corrected</em> gradient on it.
+  The key is the <strong>normalization by coverage probability</strong>: if the
+  subgraph includes node \(v\) with its edges covered with probabilities
+  \(p_v, p_{uv}\), the reweighted estimator
+  $$\hat\nabla = \sum_{v \in \mathcal{G}_s} \frac{1}{p_v} \nabla_v + \sum_{(u,v) \in \mathcal{G}_s} \Big(\frac{1}{p_{uv}} - \frac{1}{p_u} - \frac{1}{p_v}\Big) \nabla_{uv}$$
+  is <em>unbiased</em> for the full-batch gradient — the paper proves it by expanding
+  the expectation over the sampling scheme. Hidden benefit: the batches are
+  "dense" (no expansive neighborhood), and walk-based sampling captures the
+  community structure. The general picture: <em>bias-variance-memory</em> —
+  neighbor-sampling (high variance, zero bias); cluster-GCN (partition bias, zero
+  variance); GraphSAINT (unbiased by reweighting, variance controlled by RW
+  sampling). These trade-offs are the daily bread of M2, ch. 6 (and of the Emerging ML module for the
+  federated parallel: partitions = clients).
+</div>
+
+<div class="note">
+  <span class="tag">OGB — measuring honestly at scale (Hu et al., 2020)</span>
+  <table class="tbl">
+  <thead><tr><th>Benchmark</th><th>Size</th><th>Task</th></tr></thead>
+  <tbody>
+  <tr><td>ogbn-arxiv</td><td>169,343 nodes, 1.2M edges</td><td>node classification</td></tr>
+  <tr><td>ogbn-products</td><td>2.4M nodes, 61.9M edges</td><td>node classification</td></tr>
+  <tr><td>ogbg-molhiv / molpcba</td><td>41,127 / 437k molecules</td><td>graph classification</td></tr>
+  <tr><td>ogbl-ppa / citation2</td><td>large bipartite/citation graphs</td><td>link prediction</td></tr>
+  </tbody>
+  </table>
+  Rules of the game: fixed splits, defined model selection protocols, public
+  leaderboards — the experimental hygiene of M2 (ch. 6; Dwivedi et al., "Benchmarking
+  GNNs") is not optional: at this scale, progress is measured in
+  tenths of a point and only strict protocols distinguish it from noise.
+</div>
+</section>
+<nav class="pager"><a href="ch6.html"><span class="dir">← Previous</span> Link prediction and graph auto-encoders</a><a class="next" href="ch8.html"><span class="dir">Next</span> Applications and hands-on</a></nav>
+</main>
+</div>
+
+</body>
+</html>
