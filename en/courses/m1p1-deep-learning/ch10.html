@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — Training in practice — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Deep Learning</a> › Training in practice</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">CSC_51054_EP</span>Deep Learning</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: matrix differential calculus and numerical stability</a>
+<a href="ch1.html">From the neuron to the deep network</a>
+<a href="ch2.html">Backpropagation</a>
+<a href="ch3.html">Optimization in practice</a>
+<a href="ch4.html">Convolutional networks (CNN)</a>
+<a href="ch5.html">Sequences: RNN, LSTM</a>
+<a href="ch6.html">Attention and transformers</a>
+<a href="ch7.html">Generative models: AE, VAE, GAN</a>
+<a href="ch8.html">Transfer learning and fine-tuning</a>
+<a href="ch9.html">Research of the teaching team</a>
+<a href="ch10.html" class="active">Training in practice</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch10">
+<h2>10. Training in practice</h2>
+
+<p>A network that does not learn almost always has a mundane bug. This chapter is the
+diagnostic protocol we will apply in the labs, in the order in which it must
+be applied.</p>
+
+<h3>10.1. The training recipe, in order</h3>
+
+<ol>
+  <li><strong>Shape sanity check</strong>: one forward pass without errors, the
+  dimensions of every activation verified (rule of ch. 0: gradients have the
+  shape of their variable).</li>
+  <li><strong>Overfit a single batch</strong>: 32 examples, train until the loss is
+  \(\approx 0\). If the model cannot do it, the bug is <em>structural</em> (data,
+  loss, initialization, wild learning rate) — no point training longer.&nbsp;A
+  model unable to memorize 32 examples is broken or too small; this is THE test
+  that avoids weeks of silent error.</li>
+  <li><strong>LR range test</strong> (Smith, 2015): \(\eta\) increasing
+  geometrically from \(10^{-7}\) to \(10^{0}\), plot the loss: plateau →
+  descent → divergence. Take the \(\eta\) at the dip (or slightly before): it sets
+  AdamW/SGD in one epoch.</li>
+  <li><strong>Small full training run</strong> on ~10% of the data, with the
+  train/val curves: check that the dynamics are healthy before scaling up.</li>
+  <li><strong>Scaling + regularization</strong>: larger batch (or gradient
+  accumulation), mixed precision, data augmentation, dropout, weight decay — in that
+  order of payoff (ch. 3).</li>
+  <li><strong>Checkpointing</strong>: save regularly (weights + optimizer
+  state + current step + data generator seed), to resume exactly.</li>
+</ol>
+
+<h3>10.2. Monitoring: reading your curves</h3>
+
+<table class="tbl">
+<thead><tr><th>Symptom</th><th>Likely cause</th><th>Response</th></tr></thead>
+<tbody>
+<tr><td>loss = NaN</td><td>lr too large, log(0), unprotected softmax (ch. 0), fp16 overflow</td><td>divide lr by 10, log-softmax, loss scaling</td></tr>
+<tr><td>one-off loss spikes</td><td>aberrant batch, lr near the edge of 2/L (thm. 3.1)</td><td>inspect the data, lower the lr, gradient clipping</td></tr>
+<tr><td>exploding gradient norm</td><td>poorly conditioned recurrences (ch. 5)</td><td>clip \(\|\hat g\|\) to a threshold (standard: 1.0)</td></tr>
+<tr><td>train goes down, val stagnates</td><td>overfitting</td><td>ch. 3.6, in order of payoff</td></tr>
+<tr><td>neither train nor val moves</td><td>lr too small, blockage (dead ReLUs), loss mis-wired</td><td>LR range test, per-layer activation statistics</td></tr>
+</tbody>
+</table>
+
+<p>Tools: tensorboard/wandb; systematically log the loss, accuracy,
+gradient norm, weight norm, the fraction of zero activations (dying ReLU), and
+the activation histograms of a few layers.</p>
+
+<h3>10.3. GPU: the levers that matter</h3>
+
+<ul>
+  <li><strong>Mixed precision</strong> (bf16 preferably): ~2× throughput,
+  memory divided by ~2 — the first reflex (ch. 2).</li>
+  <li><strong>Batch and accumulation</strong>: saturate the GPU (measure
+  utilization); if memory runs out, accumulate small batches;
+  adjust the BatchNorm statistics accordingly.</li>
+  <li><strong>DataLoader</strong>: workers &gt; 0, pin_memory, prefetch — a GPU
+  waiting for data is a wasted GPU (CPU preprocessing is often the
+  real bottleneck).</li>
+  <li><strong>torch.compile</strong>, fused kernels (FlashAttention, ch. 6),
+  avoid CPU→GPU synchronizations inside the loop (the .item() / prints at each step).</li>
+</ul>
+
+<h3>10.4. Reproducibility</h3>
+
+<pre class="code"><code>import torch, numpy as np, random
+
+def seed_everything(seed=42):
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+seed_everything(42)
+torch.backends.cudnn.deterministic = True    # determinism (speed cost)
+torch.backends.cudnn.benchmark = False       # disable non-deterministic autotuning</code></pre>
+
+<p>Set the seeds (python/numpy/torch/cuda), the data shuffling, and record
+the library versions; some CUDA kernels remain non-deterministic by
+nature (atomics); aim for reproducibility <em>up to a tolerance</em> rather
+than bit-for-bit, and document configurations and seeds in every experiment. Reproducibility
+is also a debugging tool: a random bug you know how to
+reproduce is half fixed.</p>
+</section>
+<nav class="pager"><a href="ch9.html"><span class="dir">← Previous</span> Research of the teaching team</a><a class="next" href="ex.html"><span class="dir">Next</span> Exercises</a></nav>
+</main>
+</div>
+
+</body>
+</html>

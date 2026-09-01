@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Processing — DFT, FFT and digital filtering — LLGA</title>
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap">
+    <div class="brand">
+      <div class="rx">X</div>
+      <div>
+        <div class="t1">MSc&amp;T LLGA · Course materials</div>
+        <div class="t2">Year 1 · Period 1</div>
+      </div>
+    </div>
+    <nav><a href="../../index.html">Home</a></nav>
+  </div>
+</header>
+
+<div class="section-strip"><a href="../../index.html">Program</a> › <a href="ch0.html">Signal Processing</a> › DFT, FFT and digital filtering</div>
+
+<div class="tutorial-layout">
+<aside class="sidebar">
+<a class="sidebar-home" href="ch0.html"><span class="code-mini">APM_51055_EP</span>Signal Processing</a>
+<nav class="sidebar-toc">
+<a href="intro.html">Introduction and overview</a>
+<a href="ch0.html">Review: Fourier series in the L² sense, Fubini</a>
+<a href="ch1.html">Signals and linear systems</a>
+<a href="ch2.html">The Fourier series</a>
+<a href="ch3.html">The Fourier transform</a>
+<a href="ch4.html">Sampling: the Shannon theorem</a>
+<a href="ch5.html" class="active">DFT, FFT and digital filtering</a>
+<a href="ch6.html">Time-frequency analysis and wavelets</a>
+<a href="ch7.html">Random signals and spectral estimation</a>
+<a href="ch8.html">The signal for modern ML</a>
+<a href="ch9.html">The teacher's research: from signals to optimal transport</a>
+<a href="ex.html">Exercises</a>
+<a href="refs.html">References</a>
+</nav>
+<a class="sidebar-program" href="../../index.html">← Master's program</a>
+</aside>
+<main class="content">
+<section class="chapter" id="ch5">
+<h2>5. DFT, FFT and digital filtering</h2>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — The DFT</span>
+  For \(x_0, \dots, x_{N-1}\):
+  $$X_k = \sum_{n=0}^{N-1} x_n\, e^{-i 2\pi k n / N}, \qquad k = 0, \dots, N-1.$$
+  The DFT samples the transform of the implicitly <em>periodized</em> signal
+  (\(k \leftrightarrow \nu_k = k f_s/N\)). Two links to know:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>DFT ↔ Fourier series</strong>: if \(x\) is \(T_0\)-periodic
+    sampled with \(N\) points <em>per period</em> and \(f_s &gt; 2B\):
+    \(X_k = N\,c_k\) (for \(k &lt; N/2\), and \(X_{N-k} = N c_{-k}\));</li>
+    <li><strong>DFT ↔ Fourier transform</strong>: for a segment of duration
+    \(T = NT_e\) of an aperiodic signal: \(\hat x(\nu_k) \approx T_e\,X_k\)
+    (the so-called "rectangular" approximation, with the spectral leakage of
+    prop. 5.4).</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 5.2 — Circular convolution (proved)</span>
+  Let \(x \circledast h\) be the <em>circular</em> convolution (indices modulo \(N\)):
+  \(y_n = \sum_{m=0}^{N-1} x_m\,h_{(n-m) \bmod N}\). Then
+  \(\mathrm{DFT}(x \circledast h)_k = X_k\,H_k\).
+  <div class="proof">
+  \(Y_k = \sum_n \sum_m x_m h_{(n-m) \bmod N}\,\omega^{kn}\) with
+  \(\omega = e^{-2\pi i/N}\). For \(m\) fixed, \(n \mapsto p = (n-m) \bmod N\) is a
+  bijection of \(\mathbb{Z}/N\mathbb{Z}\) and \(\omega^{kn} = \omega^{k(m+p)}\) (since
+  \(\omega^{kN} = 1\)). Hence
+  \(Y_k = \sum_m x_m\omega^{km}\sum_p h_p\omega^{kp} = X_k H_k\). The
+  <em>linear</em> convolution is obtained by <strong>zero-padding</strong> both signals to
+  \(N' \geq n + m - 1\) points: the "circular" wrap-around then no longer
+  has any effect (the overflowing indices fall on zeros).<span class="qed">∎</span></div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.3 — Radix-2 FFT (proved: the butterfly recurrence)</span>
+  If \(N = 2^q\), the DFT is computed in \(T(N) = \mathcal{O}(N \log N)\) operations.
+  <div class="proof">
+  Separate the even and odd sums:
+  $$X_k = \underbrace{\sum_{m=0}^{N/2-1} x_{2m}\,\omega^{2mk}}_{E_k}
+  +\ \omega^{k}\,\underbrace{\sum_{m=0}^{N/2-1} x_{2m+1}\,\omega^{2mk}}_{O_k}.$$
+  Now \(\omega^2 = e^{-4\pi i/N}\) is an \(N/2\)-th root of unity: \(E\) and
+  \(O\) are two DFTs of size \(N/2\), <em>periodic</em> with period \(N/2\);
+  and \(\omega^{k + N/2} = -\omega^k\). Hence the <strong>butterfly</strong>:
+  $$X_k = E_k + \omega^k O_k, \qquad X_{k+N/2} = E_k - \omega^k O_k, \qquad k = 0,\dots,\tfrac{N}{2}-1,$$
+  which produces the \(N\) outputs from the \(N\) inputs in \(O(N)\) multiply-adds
+  once \(E, O\) are known. Recurrence \(T(N) = 2T(N/2) + cN = cN\log_2 N\). For
+  \(N = 2^{20}\) (one second of audio): \(\approx 2\times10^7\) units versus
+  \(10^{12}\) for the definition — a factor of 50,000.<span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.4 — Windows: quantified lobes</span>
+  Analyzing a segment of signal = multiplying it by a window \(w\) ⇒ convolving the
+  spectrum with \(\hat w\) (prop. 3.2): a pure line becomes the profile \(\hat w\).
+  Characteristics (window of length \(M\), bin \(= f_s/M\), classical values of
+  Harris 1978):
+  <table class="tbl">
+  <thead><tr><th>Window</th><th>Main lobe</th><th>1st side lobe</th><th>Decay</th></tr></thead>
+  <tbody>
+  <tr><td>rectangular</td><td>±1 bin</td><td>−13 dB</td><td>−6 dB/octave</td></tr>
+  <tr><td>Hann</td><td>±2 bins</td><td>−31 dB</td><td>−18 dB/octave</td></tr>
+  <tr><td>Hamming</td><td>±2 bins</td><td>−41 dB</td><td>−6 dB/octave</td></tr>
+  <tr><td>Blackman</td><td>±3 bins</td><td>−58 dB</td><td>−18 dB/octave</td></tr>
+  </tbody>
+  </table>
+  Universal trade-off: a narrow window (low side lobes) ⇒ a wide main lobe
+  (resolution lost). The rectangular one "leaks" at −13 dB: a strong line
+  masks a weak neighboring line at −60 dB; Hann is the default choice.
+</div>
+
+<div class="def">
+  <span class="tag">Digital filters: FIR and IIR</span>
+  <strong>FIR</strong> (finite impulse response):
+  \(y_n = \sum_{k=0}^{M} b_k x_{n-k}\) — always stable (Σ|b| finite: th. 1.3),
+  linear phase if the \(b_k\) are symmetric, designed by windowing;
+  <strong>IIR</strong> (infinite): \(y_n = \sum b_k x_{n-k} - \sum_{j\geq1} a_j y_{n-j}\),
+  transfer function \(H(z) = B(z)/A(z)\) — more selective at equal coefficient counts, but
+  stability must be checked.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.5 — Stability of an IIR: the poles (proved)</span>
+  For a rational IIR, BIBO stable ⇔ all the poles of \(H(z)\) lie in the open disk
+  \(|z| &lt; 1\).
+  <div class="proof">
+  The impulse response of a system with (simple) poles \(p_1, \dots, p_r\) is a
+  combination of \(\mathcal{O}(n^s)\,p_j^n\): each mode contributes
+  \(\sum_n |p_j|^n\), a geometric series convergent ⇔ \(|p_j| &lt; 1\). A pole on the
+  unit disk ⇒ a marginal or divergent mode; outside ⇒ a divergent exponential
+  (the accumulator \(h = \mathbf{1}\), pole at 1, illustrates this).<span class="qed">∎</span></div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.6 — Designing a low-pass FIR by windowing, step by step</span>
+  Objective: \(H_d(\nu) = \mathbf{1}_{|\nu| \leq \nu_c}\) (ν normalized by \(f_s\)).
+  <ol style="margin:.3rem 0; padding-left:1.4rem;">
+    <li><strong>Ideal response in time</strong>: \(h_d[n] = 2\nu_c\,\mathrm{sinc}(2\nu_c n)\)
+    (inverse FT of the rectangle, cf. proof of th. 4.1) — infinite and non-causal.</li>
+    <li><strong>Delay</strong> of \(M/2\) for causality (and symmetry ⇒ linear
+    phase).</li>
+    <li><strong>Windowing</strong>: \(h[n] = h_d[n - M/2]\,w[n - M/2]\),
+    \(n = 0,\dots,M\).</li>
+    <li><strong>Analysis</strong>: \(H = H_d * \hat w\); the transition band
+    equals the width of the main lobe of \(\hat w\) — rule of thumb
+    \(M \cdot \Delta\nu \approx 4\) (Hann), \(\approx 6\) (Blackman); the in-band
+    ripple equals the level of the side lobes (prop. 5.4).</li>
+  </ol>
+  The <strong>effective frequency response</strong> is the DTFT of \(h\),
+  \(H(\nu) = \sum_n h[n]e^{-2\pi i\nu n}\), evaluated by zero-padding the FFT (trick:
+  a DFT with \(N_{\text{fft}} \gg M\) points interpolates the DTFT). A finer alternative:
+  <strong>frequency-domain least squares</strong> — minimize
+  \(\sum_{\omega \in \Omega} |H_b(\omega) - D(\omega)|^2\) over a frequency grid,
+  a quadratic problem in \(b\), hence a linear system (Parks-McClellan equiripple
+  method: the same spirit in infinite norm). For IIRs, one projects an
+  analog prototype via the <strong>bilinear transform</strong>
+  \(s \mapsto \frac{2}{T_e}\frac{1 - z^{-1}}{1 + z^{-1}}\) (Butterworth, Chebyshev…) while
+  keeping the poles inside the disk — the "smooth" filter of example 5.7.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.7 — Low-pass denoising</span>
+<pre class="code"><code>sig = x + 0.5*rng.standard_normal(len(x))
+SIG = np.fft.rfft(sig)
+SIG[np.abs(freqs) > 80] = 0            # abrupt cutoff at 80 Hz (zero-phase)
+clean = np.fft.irfft(SIG, n=len(sig))
+# Abrupt cutoff in frequency = Gibbs in time (th. 2.4): prefer a soft
+# profile (4th-order Butterworth via scipy.signal.butter + filtfilt, or a Hann mask)</code></pre>
+</div>
+</section>
+<nav class="pager"><a href="ch4.html"><span class="dir">← Previous</span> Sampling: the Shannon theorem</a><a class="next" href="ch6.html"><span class="dir">Next</span> Time-frequency analysis and wavelets</a></nav>
+</main>
+</div>
+
+</body>
+</html>
