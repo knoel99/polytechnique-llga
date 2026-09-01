@@ -2,7 +2,9 @@
 
 Supports de cours (tutoriels HTML) pour le master **MSc&T « Large Language Models, Graphs and Applications » (LLGA)** de l'École Polytechnique.
 
-**Site en ligne** : <https://knoel99.github.io/polytechnique-llga/>
+**Sites** : 🇫🇷 <https://knoel99.github.io/polytechnique-llga/> · 🇬🇧 <https://knoel99.github.io/polytechnique-llga/en/>
+
+Chaque module est aligné sur la **fiche officielle SynapseS 2026-2027** (code UE, volume horaire, équipe pédagogique, objectifs et programme officiel avec tableau de correspondance vers nos sections, évaluation, prérequis).
 
 ## Objectif
 
