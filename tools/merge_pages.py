@@ -31,7 +31,7 @@ def fix_links(body):
     # liens intra-module vers une autre page -> ancre de la page fusionnée
     body = re.sub(r'href="(intro|ex|refs|ch\d+)\.html(#[\w-]*)?"', r'href="#\2"', body)
     # liens inter-modules vers l'intro -> dossier (index.html)
-    body = re.sub(r'href="(\.\./m[^"/]+)/intro\.html(#[\w-]*)?"', r'href="\1/\2"', body)
+    body = re.sub(r'href="(\.\./m[^"/]+)/intro\.html(#[\w-]*)?"', r'href="\1/index.html\2"', body)
     return body
 
 TEMPLATE = '''<!DOCTYPE html>

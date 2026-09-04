@@ -75,7 +75,8 @@ def card(n, src):
                 marks=[re.sub(r'\s+', ' ', m).strip() for m in marks])
 
 def li(c):
-    t = f'<a href="{c["href"]}">{c["title"]}</a>' if c['href'] else c['title']
+    href = c['href'].rstrip('/') + '/index.html' if c['href'] else None
+    t = f'<a href="{href}">{c["title"]}</a>' if href else c['title']
     bits = ' · '.join(x for x in [c['code'], c['meta']] if x)
     head = f'{t} <span class="code-mini">{bits}</span>' if bits else t
     if c['marks']:
