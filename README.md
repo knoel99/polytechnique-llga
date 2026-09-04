@@ -39,15 +39,16 @@ Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste de
 
 ```
 index.html              Page d'accueil (brochure cliquable : tronc commun + moments de choix)
-assets/style.css        Feuille de style commune (layout tutoriel : volet sommaire + contenu)
-tools/                  Scripts rejouables (découpe par section, insertion intros)
+assets/style.css        Feuille de style de l'index
+assets/paper.css        Feuille de style des cours (minimaliste, façon LaTeX/Wikipédia)
+tools/                  Scripts rejouables (découpe, fusion en page unique…)
 courses/<module>/       Un dossier par module :
-  intro.html            Introduction : fiche du cours, objectifs, positionnement dans la formation, plan
-  ch1.html … chN.html   Une page par section (rappels, chapitres)
-  ex.html, refs.html    Exercices et références
+  index.html            Le cours entier sur une page unique : titre, sommaire cliquable,
+                        introduction (fiche SynapseS, objectifs, positionnement), sections
+                        numérotées, exercices, références
 ```
 
-Chaque page affiche un **volet sommaire à gauche** (section active surlignée) et le **contenu à droite** avec pager précédent/suivant. Le clic sur un cours dans l'index mène directement à son **introduction** (vue d'ensemble et intégration dans le master), puis à la première section.
+Chaque cours est **une longue page unique** (comme un article Wikipédia) : sommaire en tête, sections numérotées N.k., encadrés définitions/théorimes style LaTeX, formules rendues par KaTeX. Le clic sur un cours dans l'index mène directement à cette page.
 
 ## Sources
 

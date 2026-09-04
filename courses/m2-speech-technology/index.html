@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speech Technology for Conversational AI — LLGA</title>
+<link rel="stylesheet" href="../../assets/paper.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<p class="crumb"><a href="../../index.html">MSc&amp;T LLGA · Supports de cours</a></p>
+<main class="paper">
+<h1>Speech Technology for Conversational AI</h1>
+<p class="subtitle">M2 · P2 (brochure) · Année 2 · Période 2</p>
+<nav class="toc">
+<p class="toc-title">Sommaire</p>
+<ol>
+<li><a href="#intro">Introduction et vue d'ensemble</a></li>
+<li><a href="#ch0">0. Rappels&nbsp;: le signal de parole et ses représentations</a></li>
+<li><a href="#ch1">1. ASR classique&nbsp;: le pipeline GMM-HMM</a></li>
+<li><a href="#ch2">2. CTC&nbsp;: la perte dérivée</a></li>
+<li><a href="#ch3">3. Encoder-décodeur&nbsp;: LAS, Conformer, RNN-T</a></li>
+<li><a href="#ch4">4. Whisper&nbsp;: robustesse et multi-tâche</a></li>
+<li><a href="#ch5">5. Streaming&nbsp;: chunking, VAD, latence contre qualité</a></li>
+<li><a href="#ch6">6. Vocodeurs&nbsp;: de WaveNet à HiFi-GAN</a></li>
+<li><a href="#ch7">7. TTS neuronal&nbsp;: Tacotron 2, VITS, diffusion et flow</a></li>
+<li><a href="#ch8">8. Expressivité&nbsp;: prosodie, style tokens, SSML</a></li>
+<li><a href="#ch9">9. Conversion et clonage de voix&nbsp;: éthique et watermarking</a></li>
+<li><a href="#ch10">10. La boucle conversationnelle&nbsp;: VAD, turn-taking, full-duplex</a></li>
+<li><a href="#ch11">11. Speech LLMs et multilinguisme</a></li>
+<li><a href="#ex">Exercices / Labs</a></li>
+<li><a href="#refs">Références</a></li>
+</ol>
+</nav>
+<section class="chapter" id="intro">
+<h2>Introduction et vue d'ensemble</h2>
+<table class="tbl">
+<tr><th style="width:160px">Module</th><td>Speech Technology for Conversational AI</td></tr>
+<tr><th>Code</th><td>M2 · P2 (brochure) — code officiel non communiqué (fiche non publiée)</td></tr>
+<tr><th>Equipe et volume</th><td>Enseignant&nbsp;: équipe du master · ~24&nbsp;h · construire la boucle vocale complète — signal (spectrogramme Mel/MFCC), ASR du GMM-HMM à CTC (perte dérivée), LAS, Whisper et le streaming, TTS du vocodeur (WaveNet, HiFi-GAN) aux modèles diffusions/flows, expressivité et clonage (éthique, watermarking audio), jusqu'aux voix conversationnelles full-duplex et aux speech LLMs — le pont entre Signal Processing (M1) et LLMs (M2).</td></tr>
+<tr><th>Statut dans la formation</th><td><span class="badge m2">M2</span><span class="badge position">Hors track recommandé</span> · équipe du master — programme M2 en finalisation</td></tr>
+</table>
+
+<p>La voix est l'interface la plus naturelle qui soit&nbsp;: un assistant conversationnel complet doit comprendre la parole (ASR), raisonner (LLM) et répondre avec une voix naturelle (TTS), le tout en continu et en latence faible. Ce module construit cette boucle de bout en bout&nbsp;: du signal et de ses spectrogrammes au pipeline GMM-HMM, à la perte CTC dérivée, aux architectures encoder-décodeur (LAS, Conformer, RNN-T) et à Whisper&nbsp;; puis les vocodeurs de WaveNet à HiFi-GAN, le TTS neuronal (Tacotron 2, VITS, diffusion), l'expressivité et le clonage — avec son éthique et son watermarking — jusqu'aux systèmes full-duplex et aux speech LLMs. Dans le master LLGA, c'est le pont direct entre le traitement du signal de M1 et les modèles de langage de M2.</p>
+
+<h3>Ce que vous saurez faire</h3>
+<ul>
+<li>Choisir et calculer les représentations du signal de parole (spectrogramme Mel, MFCC) selon l'usage&nbsp;;</li>
+<li>Expliquer le pipeline GMM-HMM classique et ce qui a causé son remplacement&nbsp;;</li>
+<li>Dériver la perte CTC (somme sur les alignements, forward-backward) et l'implémenter&nbsp;;</li>
+<li>Comparer LAS, Conformer et RNN-T selon le compromis qualité/latence, et expliquer la robustesse multi-tâche de Whisper&nbsp;;</li>
+<li>Dimensionner un système de streaming&nbsp;: chunking, détection d'activité vocale, latence contre qualité&nbsp;;</li>
+<li>Expliquer la chaîne TTS moderne&nbsp;: vocodeurs (WaveNet à HiFi-GAN), Tacotron 2, VITS, approches diffusion et flow&nbsp;;</li>
+<li>Contrôler l'expressivité d'une synthèse (prosodie, style tokens, SSML) et maîtriser les enjeux éthiques du clonage de voix&nbsp;;</li>
+<li>Décrire la boucle conversationnelle complète (VAD, turn-taking, full-duplex) et le fonctionnement des speech LLMs multilingues.</li>
+</ul>
+
+<h3>Objectifs et programme officiel</h3>
+<p><strong>Fiche officielle non publiée (catalogue S3/S4 vide)</strong>&nbsp;: à la rentrée 2026, les parcours «&nbsp;LLGA 2 – Semestre 3&nbsp;» et «&nbsp;LLGA 2 – Semestre 4&nbsp;» du catalogue SynapseS 2026-2027 ne listent encore aucune UE, et le wiki du master indique que le programme détaillé du M2 est «&nbsp;en cours de développement&nbsp;» (période&nbsp;2&nbsp;: «&nbsp;to be completed soon&nbsp;»). Le programme ci-dessous reflète donc la brochure du master (période&nbsp;2), avec un volume indicatif de ~24&nbsp;h&nbsp;; ce support est calibré sur ce volume, soit environ deux heures de travail par chapitre, labs inclus. Le tableau suivant rapproche chaque thème de la brochure des sections du cours&nbsp;; les apports propres au support sont marqués «&nbsp;approfondissement&nbsp;».</p>
+<table class="tbl">
+<tr><th style="width:340px">Thème de la brochure</th><th>Section du cours qui le couvre</th></tr>
+<tr><td>Signal de parole et ses représentations (spectrogramme Mel, MFCC)</td><td>ch. 0</td></tr>
+<tr><td>ASR&nbsp;: du GMM-HMM à CTC (perte dérivée)</td><td>ch. 1 (pipeline GMM-HMM) et ch. 2 (CTC dérivée)</td></tr>
+<tr><td>ASR&nbsp;: architectures encoder-décodeur et Whisper</td><td>ch. 3 (LAS, Conformer, RNN-T) et ch. 4 (Whisper)</td></tr>
+<tr><td>Streaming&nbsp;: latence contre qualité</td><td>ch. 5 (chunking, VAD)</td></tr>
+<tr><td>TTS&nbsp;: vocodeurs (WaveNet, HiFi-GAN) et modèles diffusion/flow</td><td>ch. 6 (vocodeurs) et ch. 7 (Tacotron 2, VITS, diffusion)</td></tr>
+<tr><td>Expressivité (prosodie, style tokens, SSML)</td><td>ch. 8</td></tr>
+<tr><td>Clonage de voix&nbsp;: éthique et watermarking audio</td><td>ch. 9</td></tr>
+<tr><td>Voix conversationnelles full-duplex</td><td>ch. 10 (VAD, turn-taking)</td></tr>
+<tr><td>Speech LLMs et multilinguisme</td><td>ch. 11</td></tr>
+<tr><td>Approfondissement — labs (alignement CTC, WER, watermarking audio)</td><td><a href="#">Exercices / Labs</a></td></tr>
+</table>
+
+<h3>Positionnement dans la formation</h3>
+<p>Module de M2 proposé en période 2, hors track recommandé&nbsp;: c'est le module «&nbsp;multimodal&nbsp;» du master consacré à la modalité audio, pensé comme la mise en production conjointe de deux prérequis. <strong>Prérequis</strong>&nbsp;: <a href="../m1p1-signal-processing/">Signal Processing</a> (fenêtrage, transformée de Fourier, spectrogrammes — repris au ch. 0) et <a href="../m2-large-language-models/">Large Language Models</a>, dont le chapitre multimodal (ch. 8) annonce les speech LLMs traités ici en fin de cours.</p>
+<p><strong>En aval</strong>&nbsp;: le module donne sa composante vocale à l'assistant conversationnel — le fil rouge applicatif du LLGA, qui croise les agents de <a href="../m2-advanced-topics-llms/">Advanced Topics in Large Language Models</a> (ch. 8) et les contraintes de production de <a href="../m2-mlops-llm-engineering/">ML Ops and LLM Engineering Principles</a> (latence P99, coûts)&nbsp;; il prolonge aussi le watermarking du module <a href="../m2-control-generative-ai/">Control in Generative AI</a> côté audio.</p>
+
+<h3>Plan du cours</h3>
+<ul>
+<li><strong>Rappels&nbsp;: le signal de parole et ses représentations</strong> — fenêtrage, spectrogrammes Mel et MFCC&nbsp;: la matière première de tout le cours.</li>
+<li><strong>ASR classique&nbsp;: le pipeline GMM-HMM</strong> — l'architecture historique, encore utile pour comprendre ce que le neuronal a remplacé.</li>
+<li><strong>CTC&nbsp;: la perte dérivée</strong> — apprendre sans alignement frame/phonème&nbsp;: la dérivation complète de la perte qui a ouvert l'ASR profond.</li>
+<li><strong>Encoder-décodeur&nbsp;: LAS, Conformer, RNN-T</strong> — trois réponses architecturales au compromis qualité/latence.</li>
+<li><strong>Whisper&nbsp;: robustesse et multi-tâche</strong> — ce que l'apprentissage supervisé à très grande échelle change (et coûte).</li>
+<li><strong>Streaming&nbsp;: chunking, VAD, latence contre qualité</strong> — passer du fichier au flux&nbsp;: découper, détecter la parole, assumer la latence.</li>
+<li><strong>Vocodeurs&nbsp;: de WaveNet à HiFi-GAN</strong> — générer la forme d'onde elle-même, et le chemin des autorégressifs lents aux GAN rapides.</li>
+<li><strong>TTS neuronal&nbsp;: Tacotron 2, VITS, diffusion et flow</strong> — la synthèse moderne du texte au spectrogramme puis au signal.</li>
+<li><strong>Expressivité&nbsp;: prosodie, style tokens, SSML</strong> — ne pas seulement dire, mais <em>comment</em> le dire.</li>
+<li><strong>Conversion et clonage de voix&nbsp;: éthique et watermarking</strong> — les promesses du clonage, ses détournements, et comment marquer l'audio généré.</li>
+<li><strong>La boucle conversationnelle&nbsp;: VAD, turn-taking, full-duplex</strong> — écouter, attendre son tour, s'interrompre&nbsp;: l'orchestration temps réel.</li>
+<li><strong>Speech LLMs et multilinguisme</strong> — le signal de parole entré directement dans le modèle de langage&nbsp;: architectures et enjeux pour les langues peu dotées.</li>
+<li><strong>Exercices / Labs</strong> — aligner un CTC, mesurer un WER, synthétiser et watermarker un extrait vocal.</li>
+<li><strong>Références</strong> — les articles fondateurs de l'ASR et du TTS neuronaux.</li>
+</ul>
+
+<h3>Comment travailler ce module</h3>
+<ul>
+<li>Écoutez chaque audio d'exemple du cours (originaux, dégradés, synthétisés)&nbsp;: l'oreille est ici un instrument de mesure à entraîner autant que le WER.</li>
+<li>Écrivez vous-même le forward-backward de CTC sur un mini-exemple à la main&nbsp;: c'est le passage obligé pour ne plus jamais confondre alignement et décodage.</li>
+<li>Pour chaque architecture, placez-la sur l'axe «&nbsp;latence/qualité&nbsp;» et notez ce qui est calculé en ligne contre hors ligne&nbsp;: c'est la grille de lecture du module.</li>
+<li>Câblez tôt une mini-boucle «&nbsp;micro → ASR → réponse → TTS → haut-parleur&nbsp;», même basique, puis améliorez-la chapitre après chapitre.</li>
+<li>Lisez le ch. 9 (clonage, éthique) avec un œil de futur professionnel&nbsp;: les questions de consentement et de watermarking audio se poseront dans vos projets dès le stage.</li>
+</ul>
+
+<div class="note">
+<span class="tag">Le regard LLGA</span>
+Avec les speech LLMs, la voix est devenue une modalité de première classe pour les modèles de langage&nbsp;: le master LLGA, qui forme au croisement des LLMs et de leurs applications, vous propose ici la chaîne complète — du spectrogramme au tour de parole — plutôt qu'un simple survol. Les assistants conversationnels (téléphonie, accessibilité, interfaces vocales embarquées) sont l'un des débouchés les plus demandés du domaine, et le module croise toutes les compétences du master&nbsp;: signal, LLMs, streaming temps réel, éthique et contrôle.
+</div>
+</section>
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: le signal de parole et ses représentations</h2>
+
+<div class="recap">
+  <div class="recap-title">Prérequis (module Signal Processing M1) — ce qui est supposé acquis</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Échantillonnage</strong> (ch. 4)&nbsp;: théorème de Shannon&nbsp;; la parole est
+    échantillonnée à 16&nbsp;kHz (ASR) ou 24&nbsp;kHz (synthèse), bande utile du téléphone
+    300-3400&nbsp;Hz, des formants jusqu'à ~8&nbsp;kHz&nbsp;;</li>
+    <li><strong>Analyse temps-fréquence</strong> (ch. 6)&nbsp;: STFT, fenêtres de Gabor,
+    compromis temps-fréquence — <em>le</em> spectrogramme est l'entrée de presque tous les
+    modèles de ce module (cf. module Signal Processing ch. 6)&nbsp;;</li>
+    <li><strong>Spectrogramme Mel et MFCC</strong> (ch. 8)&nbsp;: trames de 25&nbsp;ms toutes
+    les 10&nbsp;ms, fenêtre de Hann, banc de filtres Mel (échelle perceptive linéaire sous
+    1&nbsp;kHz puis logarithmique&nbsp;: \(m = 2595\log_{10}(1 + f/700)\)), 20-80 coefficients,
+    éventuellement DCT (MFCC)&nbsp;;</li>
+    <li><strong>Signaux aléatoires</strong> (ch. 7)&nbsp;: densité spectrale de puissance,
+    périodogramme — utilisé par les VAD énergétiques (ch. 10) et le watermarking par spectre
+    étalé (ch. 9)&nbsp;;</li>
+    <li><strong>Réseaux récurrents et transformers</strong> (Deep Learning M1)&nbsp;: LSTM,
+    attention \(\mathrm{softmax}(QK^\top/\sqrt{d})V\) — l'encodeur ASR/TTS est un
+    transformer (ch. 3-4)&nbsp;;</li>
+    <li><strong>Diffusion et VAE</strong> (Multimodal GenAI M1 ch. 1 et 3)&nbsp;: ELBO, DDPM,
+    prédiction de bruit — les TTS de génération (ch. 7) en descendent directement.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 0.1 — ASR et TTS, formalisés</span>
+  <strong>Reconnaissance</strong> (ASR)&nbsp;: estimer la transcription \(y\) (suite de
+  tokens — caractères, phonèmes, BPE) d'une trame acoustique \(x_{1:T}\) (features Mel,
+  typiquement \(T \approx 100\) trames pour 10&nbsp;s de parole)&nbsp;: modéliser
+  \(p_\theta(y \mid x_{1:T})\). <strong>Synthèse</strong> (TTS)&nbsp;: l'inverse,
+  \(p_\theta(x \mid y)\) — un problème <em>un-à-plusieurs</em>&nbsp;: un texte se dit d'une
+  infinité de façons (voix, débit, émotion), ce qui structurera tout le ch. 7-8 (le TTS est
+  un problème de <em>génération</em>, l'ASR un problème de <em>décision</em>). L'erreur de
+  référence ASR est le <strong>WER</strong>&nbsp;:
+  $$\mathrm{WER} = \frac{S + D + I}{N},$$
+  substitutions/déletions/insertions obtenues par alignement de Levenshtein mot à mot entre
+  hypothèse et référence (lab 1).
+</div>
+
+<div class="note">
+  <span class="tag">La ligne du module — et pourquoi «&nbsp;conversational&nbsp;»</span>
+  Le cours suit la pile d'un assistant vocal&nbsp;: comprendre (ch. 1-5), parler (ch. 6-9),
+  converser (ch. 10-11). Le fil technique&nbsp;: deux <em>ruptures</em> ont eu lieu —
+  (i)&nbsp;l'abandon de l'alignement explicite (HMM&nbsp;→ CTC&nbsp;→ attention&nbsp;→ tokens
+  discrets)&nbsp;; (ii)&nbsp;la fusion des trois briques ASR+LLM+TTS en un seul modèle
+  multimodal (speech LLMs, ch. 11) qui parle et écoute — où la conversation
+  <em>full-duplex</em> (ch. 10) devient calculable. La parole y retrouve son statut&nbsp;:
+  l'interface la plus rapide (3-4 mots/s produits, 5-8 compréhendus) et la plus naturelle.
+</div>
+
+<div class="note">
+  <span class="tag">Statut du module</span>
+  Cours proposé dans la brochure M2 (période 2)&nbsp;: l'équipe enseignante n'est pas encore
+  confirmée&nbsp;; il n'y a donc pas de chapitre «&nbsp;travaux de l'enseignant&nbsp;» — le
+  contenu suit les standards du domaine et s'appuie en permanence sur les modules déjà couverts
+  (Signal Processing M1 pour le signal, LLMs M2 pour la couche langagière).
+</div>
+</section>
+<section class="chapter" id="ch1">
+<h2>1. ASR classique&nbsp;: le pipeline GMM-HMM</h2>
+
+<p>Le pipeline historique (1980-2015) ne survit qu'à l'état de souvenirs techniques — mais son
+formalisme (modèle d'émission, chaîne d'états, décodage bayésien) réapparaît partout, jusqu'au
+forward-backward du CTC (ch. 2). On le couvre en un chapitre structuré.</p>
+
+<div class="thm">
+  <span class="tag">Théorème 1.1 — Le modèle acoustique GMM-HMM et le décodage</span>
+  On décompose \(p(x_{1:T} \mid w)\) par une chaîne de Markov cachée sur des états
+  phonétiques \(q_t\)&nbsp;: chaque phonème est un HMM gauche-à-droite à 3 états
+  (début/milieu/fin), mis en contexte (triphones)&nbsp;; l'émission d'un état est un
+  <strong>mélange de gaussiennes</strong> sur les MFCC (39 dimensions&nbsp;: 13 + dérivées
+  premières et secondes)&nbsp;:
+  $$p(x_t \mid q_t = s) = \sum_{m=1}^{M_s} c_{sm}\, \mathcal N(x_t;\ \mu_{sm}, \Sigma_{sm}),$$
+  et la transcription retenue maximise le <em>décodage bayésien</em>
+  $$\hat w = \arg\max_w\ p(x_{1:T} \mid w)\, p_{\mathrm{LM}}(w),$$
+  où \(p_{\mathrm{LM}}\) est un modèle de langage à n-grammes (cf. module NLP M1 ch. 2).
+  La vraisemblance se calcule par récursion <em>forward</em>
+  $$\alpha_t(j) = \Big[\sum_i \alpha_{t-1}(i)\, a_{ij}\Big]\, b_j(x_t),$$
+  (\(\mathcal O(T N^2)\), \(N\) états) et le meilleur chemin par <em>Viterbi</em> (même
+  récursion, max au lieu de la somme). Entraînement&nbsp;: EM (Baum-Welch) — cf. module
+  Graph ML M1 ch. 5 pour l'EM des modèles à variables latentes.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — Pourquoi GMM&nbsp;? Pourquoi est-ce mort&nbsp;?</span>
+  (i)&nbsp;Un mélange de gaussiennes est un approximateur universel de densités (avec assez de
+  composantes, toute densité continue est approchée)&nbsp;: c'était la meilleure
+  paramétrisation <em>avant</em> l'apprentissage profond. (ii)&nbsp;Troux mortels&nbsp;:
+  les MFCC ne sont pas des features sémantiques (le GMM modélise des blocs acoustiques, ne
+  sait rien des phones similaires)&nbsp;; le HMM suppose le signal localement stationnaire par
+  état et l'indépendance conditionnelle des trames&nbsp;; surtout, chaque morceau (lexique,
+  contextes, LM) est optimisé séparément — impossible à aligner globalement. Les systèmes
+  neuronaux <em>mangent</em> les données brutes&nbsp;: 10&nbsp;000&nbsp;h étiquetées
+  remplacent 300&nbsp;h soignées (ch. 4).
+</div>
+
+<div class="note">
+  <span class="tag">Ce qui survit du pipeline</span>
+  Trois héritages directs&nbsp;: (i)&nbsp;la <em>fusion</em> acoustique + LM au décodage
+  (le «&nbsp;shallow fusion&nbsp;» réapparaît avec les LLMs pour rescorer les N-best)&nbsp;;
+  (ii)&nbsp;le <em>forward-backward</em> — l'algorithme central du CTC au prochain
+  chapitre&nbsp;; (iii)&nbsp;l'<em>alignement forcé</em> (trouver les instants de chaque mot,
+  encore utilisé pour sous-titrer et entraîner les TTS). Référence historique&nbsp;: le
+  tutoriel de Rabiner (Proc. IEEE, 1989) reste une lecture limpide.
+</div>
+</section>
+<section class="chapter" id="ch2">
+<h2>2. CTC&nbsp;: la perte dérivée</h2>
+
+<p>Le problème central de l'ASR neuronal&nbsp;: la sortie (suite de tokens \(y\)) est plus
+courte que l'entrée (\(T\) trames) et <em>non alignée</em> — on n'a pas d'étiquette par
+trame. La solution de Graves et al. (ICML 2006)&nbsp;: marginaliser sur <em>tous</em> les
+alignements possibles. On dérive tout&nbsp;: c'est le chapitre technique n°1 du module.</p>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — Alignements et effondrement (collapse)</span>
+  Le réseau émet à chaque trame une distribution \(p_\theta(\cdot \mid x_{1:T}, t)\) sur
+  l'alphabet étendu \(\mathcal V \cup \{\epsilon\}\) (\(\epsilon\) = blanc). Un
+  <em>chemin</em> \(\pi \in (\mathcal V \cup \{\epsilon\})^T\) est une séquence de \(T\)
+  symboles, tirée indépendamment&nbsp;: \(p(\pi \mid x) = \prod_{t=1}^T p_\theta(\pi_t
+  \mid x, t)\). L'application <strong>collapse</strong> \(\mathcal B\) enlève d'abord les
+  blancs puis fusionne les répétitions consécutives&nbsp;:
+  \(\mathcal B(\texttt{hh ee ll ll o}) = \texttt{helo}\) (les trois l consécutifs, une fois
+  les blancs retirés, n'en font plus qu'un). Inversement, les doubles <em>séparés par un
+  blanc</em> survivent&nbsp;: \(\mathcal B(\texttt{l}\,\epsilon\,\texttt{l}) =
+  \texttt{ll}\) — c'est tout l'art du CTC. La perte CTC marginalise&nbsp;:
+  $$p_\theta(y \mid x) \;=\; \sum_{\pi \in \mathcal B^{-1}(y)} p(\pi \mid x), \qquad
+  \mathcal L_{\mathrm{CTC}} = -\log p_\theta(y \mid x).$$
+  <em>Pourquoi le blanc est indispensable</em>&nbsp;: sans lui, \(\texttt{ll}\) effondré ne
+  pourrait pas se distinguer de \(\texttt{l}\) — impossible d'écrire «&nbsp;bonne&nbsp;»
+  avec un n double. Le blanc porte l'information de frontière.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.2 — Compter à la main (T = 4, y = «&nbsp;ab&nbsp;»)</span>
+  Séquence étendue \(\ell = (\epsilon, a, \epsilon, b)\) (longueur \(S = 4\)). Les chemins
+  valides de longueur 4 sont&nbsp;: \(aa\epsilon b\)? Non — énumérons sérieusement&nbsp;:
+  \(\texttt{-a-b}\), \(\texttt{-ab-}\), \(\texttt{a--b}\), \(\texttt{a-b-}\),
+  \(\texttt{aa-b}\), \(\texttt{a-ab}\), \(\texttt{-aab}\), \(\texttt{ab--}\) (8 chemins).
+  Chacun contribue son produit de 4 probabilités&nbsp;: \(p(y|x)\) est la somme des 8&nbsp;;
+  l'exercice 3 la calcule pour des valeurs numériques, l'exercice 4 vérifie avec
+  l'implémentation. Le nombre de chemins croît exponentiellement (\(\sim |\mathcal V|^T\))&nbsp;:
+  la sommation directe est impossible — d'où le forward-backward.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.3 — Forward-backward CTC (récursions et gradient, démontrés)</span>
+  Notons \(p_t(k) = p_\theta(k \mid x, t)\), \(\ell\) la séquence étendue. Les
+  <em>variables forward</em> \(\alpha_t(s) = p(\ell_{1:s} \text{ atteints à la trame } t)\)
+  suivent
+  $$\alpha_t(s) = \Big[\alpha_{t-1}(s) + \alpha_{t-1}(s{-}1) +
+  \mathbf 1\{\ell_s \neq \epsilon,\ \ell_s \neq \ell_{s-2}\}\, \alpha_{t-1}(s{-}2)\Big]\cdot
+  p_t(\ell_s),$$
+  initialisées \(\alpha_1(1) = p_1(\epsilon)\), \(\alpha_1(2) = p_1(\ell_2)\), le reste à 0
+  (on ne peut pas «&nbsp;sauter&nbsp;» en avant). Symétriquement \(\beta_t(s)\) (backward,
+  depuis la fin). Alors
+  $$p(y \mid x) = \alpha_T(S) + \alpha_T(S{-}1), \qquad
+  \alpha_t(s)\,\beta_t(s) = p\big(y \mid x,\ \pi_t = \ell_s\big)\cdot p_t(\ell_s),$$
+  et le gradient de la perte s'écrit en forme fermée
+  $$\frac{\partial \mathcal L_{\mathrm{CTC}}}{\partial p_t(k)}
+  = -\,\frac{1}{p(y \mid x)}\ \frac{1}{p_t(k)} \sum_{s\,:\,\ell_s = k} \alpha_t(s)\, \beta_t(s).$$
+  <div class="proof">
+  <strong>Étape 1 (décomposition par l'état en \(t\)).</strong> La somme sur les chemins se
+  partitionne selon la position \(s\) occupée à la trame \(t\)&nbsp;: chaque chemin passant
+  par \(\ell_s\) en \(t\) se factorise en «&nbsp;préfixe atteignant \(\ell_s\) en
+  \(t\)&nbsp;» \(\times\) «&nbsp;\(p_t(\ell_s)\)&nbsp;» \(\times\) «&nbsp;suffixe depuis
+  \(\ell_s\) à \(t{+}1\) » — d'où \(\alpha_t(s)\beta_t(s) = p(y, \pi_t = \ell_s \mid x)\)
+  (attention&nbsp;: la définition de \(\beta\) inclut ou non le facteur \(p_t\) selon la
+  convention&nbsp;; avec celle ci-dessus, \(\alpha_t(s)\) contient \(p_t(\ell_s)\) et
+  \(\beta_t(s)\) pas). <strong>Étape 2 (récursion).</strong> Pour que le chemin soit en
+  \(\ell_s\) en \(t\), il était en \(s\), \(s{-}1\) ou \(s{-}2\) en \(t{-}1\)&nbsp;; le saut
+  de deux positions est interdit <em>sauf</em> si \(\ell_s\) est une vraie lettre différente
+  de \(\ell_{s-2}\) (sinon deux lettres identiques seraient fusionnées par le collapse&nbsp;;
+  et on ne saute jamais <em>au-dessus</em> d'une lettre). <strong>Étape 3 (gradient).</strong>
+  \(p(y|x) = \sum_{\pi} \prod_{t'} p_{t'}(\pi_{t'})\)&nbsp;; chaque terme utilisant
+  \(p_t(k)\) correspond aux chemins avec \(\pi_t = k \in \ell\), dont la somme totale vaut
+  \(\sum_{s:\ell_s = k}\alpha_t(s)\beta_t(s)\). En dérivant le log&nbsp;:
+  \(\partial \mathcal L/\partial p_t(k) = -\partial p(y|x)/\partial p_t(k) \cdot 1/p(y|x)\),
+  et \(\partial p(y|x)/\partial p_t(k) = \big[\sum_s \alpha\beta\big] / p_t(k)\) (chaque
+  chemin où \(\pi_t = k\) est linéaire en \(p_t(k)\)). <strong>Complexité</strong>&nbsp;:
+  \(\mathcal O(T \cdot S)\) — deux tables de \(T \times (2|y|+1)\), contre l'énumération
+  exponentielle. <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.4 — Inférence CTC et conditions du modèle</span>
+  (i)&nbsp;<em>Décodage glouton</em>&nbsp;: \(\hat y = \mathcal B(\arg\max_k p_t(k)\
+  \text{pour chaque } t)\) — rapide, sous-optimal&nbsp;; <em>beam search</em>&nbsp;: maintenir
+  \(K\) préfixes avec leurs scores \(\alpha\) tronqués, fusionner les préfixes égaux après
+  collapse, optionnellement rescorés par un LM. (ii)&nbsp;<em>Hypothèses de CTC</em>&nbsp;:
+  indépendance conditionnelle des trames (pas de modèle de langage interne — d'où le LM
+  externe) et distribution <em>monotone</em> (l'alignement va de gauche à droite)&nbsp;: parfait
+  pour la lecture, interdit pour la traduction (ch. 3 pour s'en affranchir).
+</div>
+
+<div class="note">
+  <span class="tag">Postérité du CTC</span>
+  CTC vit partout en 2026&nbsp;: alignement forcé (lab 1), pré-entraînement de wav2vec&nbsp;2
+  (objectif CTC), et — surtout — le <strong>RNN-T</strong> (ch. 3) est un CTC étendu au
+  temps réel, avec un blanc réinterprété en «&nbsp;avancer dans le temps&nbsp;». En revanche
+  Whisper n'est <em>pas</em> CTC (encoder-décodeur attention, ch. 4)&nbsp;: savoir dire
+  «&nbsp;celui-ci marginalise les alignements, celui-là les génère&nbsp;» est une question
+  d'oral classique.
+</div>
+</section>
+<section class="chapter" id="ch3">
+<h2>3. Encoder-décodeur&nbsp;: LAS, Conformer, RNN-T</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 3.1 — LAS&nbsp;: Listen, Attend and Spell (Chan et al., ICASSP 2016)</span>
+  <strong>Listen</strong>&nbsp;: un encoder BLSTM (puis transformer) pyramidal compacte les
+  trames \(x_{1:T}\) en états \(h_j\). <strong>Attend</strong>&nbsp;: à chaque pas de sortie
+  \(i\), une attention additive calcule
+  $$e_{ij} = v^\top \tanh\big(W_s s_{i-1} + W_h h_j\big), \qquad
+  \alpha_{ij} = \frac{\exp e_{ij}}{\sum_{j'} \exp e_{ij'}}, \qquad
+  c_i = \sum_j \alpha_{ij}\, h_j,$$
+  (attention <em>location-sensitive</em> en pratique&nbsp;: les poids passés \(a_{i-1}\)
+  entrent dans \(e_{ij}\) pour la rendre monotone et éviter les mots sautés/répétés).
+  <strong>Spell</strong>&nbsp;: un décodeur autorégressif émet \(y_i\) depuis
+  \((s_{i-1}, y_{i-1}, c_i)\), entraîné par forçage enseignant et entropie croisée. La perte
+  n'est plus une marginalisation&nbsp;: l'attention <em>apprend</em> l'alignement — et peut
+  le réordonner (utilisé pour la traduction de la parole). Deux faiblesses héritées&nbsp;:
+  l'<em>exposure bias</em> (entraîné sur la référence, testé sur ses propres erreurs) et
+  l'impossibilité du streaming strict (tout \(x\) est lu avant le premier token).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.2 — Conformer&nbsp;: convolution locale + attention globale (Gulati et al., Interspeech 2020)</span>
+  Le bloc Conformer enchaîne (module «&nbsp;macaron&nbsp;») deux réseaux feed-forward à
+  facteur 1/2 autour de <em>(i)</em> une attention multi-tête à encodage positionnel
+  <em>relatif</em> (capture le contexte long — les phrases font des centaines de trames)
+  et <em>(ii)</em> un module convolutif profond (convolution pointwise \( \to \) depthwise
+  avec dilatation, GLU/SiLU, LayerNorm) qui capture la phonétique locale (formants,
+  transitions). L'intuition retenue&nbsp;: l'attention seule est mauvaise sur les motifs
+  locaux fins de la parole, la convolution seule ne voit pas le contexte — le sandwich des
+  deux a dominé l'ASR industriel 2021-2024 (avant d'être absorbé par les fondations modèles
+  du ch. 4&nbsp;:&nbsp;wav2vec&nbsp;2, HuBERT, Whisper encoder).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.3 — RNN-T (Graves, 2012)&nbsp;: le CTC qui parle en temps réel</span>
+  Le RNN-transducer combine un <em>encoder</em> \(f_t\) (trame&nbsp;\(\to\)état, causal —
+  traité au fil de l'eau) et un <em>prediction network</em> \(g_u\) (tokens déjà émis&nbsp;
+  \(\to\)état)&nbsp;; un réseau joint produit
+  $$P(k \mid t, u) = \mathrm{softmax}\big(W\, f_t + W'\, g_u + b\big)_{k}, \qquad k \in
+  \mathcal V \cup \{\epsilon\},$$
+  et la vraisemblance somme sur tous les chemins de la grille \((t, u)\) — c'est le
+  forward-backward du théorème 2.3, transposé sur un treillis \(T \times U\) où
+  \(\epsilon\) = «&nbsp;avancer en \(t\) sans émettre&nbsp;». Propriété décisive&nbsp;:
+  l'encoder est <em>causal</em>, chaque \(f_t\) est calculable dès l'arrivée de la
+  trame — le RNN-T est l'architecture reine de l'ASR <strong>streaming</strong> (ch. 5),
+  notamment sur appareil. Coût&nbsp;: une lattice \(\mathcal O(TU)\) à l'entraînement et
+  l'hypothèse de monotonie du CTC (pas de réordonnancement).
+</div>
+
+<table class="tbl">
+  <tr><th>Architecture</th><th>Alignement</th><th>Perte</th><th>Streaming</th><th>LM interne&nbsp;?</th><th>Usage typique</th></tr>
+  <tr><td>GMM-HMM (ch. 1)</td><td>états explicites</td><td>EM (Baum-Welch)</td><td>oui</td><td>non (n-gramme)</td><td>legacy, téléphonie ancienne</td></tr>
+  <tr><td>CTC (ch. 2)</td><td>marginalisé, monotone</td><td>forward-backward</td><td>partiel</td><td>non</td><td>alignement forcé, pré-entraînement</td></tr>
+  <tr><td>LAS (ch. 3)</td><td>appris (attention)</td><td>entropie croisée</td><td>non</td><td>oui (décodeur AR)</td><td>offline, qualité max</td></tr>
+  <tr><td>RNN-T (ch. 3)</td><td>trellis monotone</td><td>forward-backward 2D</td><td>oui</td><td>partiel (prediction net)</td><td> assistants, mobile</td></tr>
+  <tr><td>Whisper (ch. 4)</td><td>généré (attention)</td><td>entropie croisée multi-tâche</td><td>non (fenêtres 30 s)</td><td>oui</td><td>transcription générale</td></tr>
+</table>
+</section>
+<section class="chapter" id="ch4">
+<h2>4. Whisper&nbsp;: robustesse et multi-tâche</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 4.1 — Whisper (Radford et al., ICML 2023)&nbsp;: la force du faible</span>
+  Entraîné sur \(\approx\) 680&nbsp;000 heures de paires audio/texte <em>faiblement
+  supervisées</em> collectées sur le web (contre quelques centaines à milliers d'heures
+  soignées auparavant), Whisper est un encoder-décodeur transformer simple (88M-1,5G
+  paramètres)&nbsp;; l'audio est découpé en fenêtres de 30&nbsp;s, log-Mel&nbsp;80 bins.
+  La sortie est une <em>séquence de tokens spéciaux + texte</em>&nbsp;:
+  \(\langle\!|\)start\(\,|\rangle \to\) langue \(\to\) tâche (transcrire/traduire vers
+  l'anglais) \(\to\) horodatages \(\to\) texte — tout (identifiant de langue, décision de
+  traduction, temps) est <em>appris comme du langage</em>, aucun module dédié. Résultats&nbsp;:
+  une robustesse sans précédent bruit/réverération/accents (entraîné sur des données
+  réelles, pas lues), WER proche des humains sur l'anglais propre&nbsp;; meilleures
+  performances zéro-shot sur la plupart des langues à l'époque.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Pourquoi ça marche&nbsp;: la loi d'échelle des données sales</span>
+  (i)&nbsp;<em>Couverture</em>&nbsp;: la robustesse n'est pas un module, c'est une
+  conséquence de la diversité — les 680 kh couvrent le désordre réel (bruits de fond,
+  musique, accents), là où LibriSpeech (1000&nbsp;h de livres lus) sur-apprend la lecture
+  propre&nbsp;; (ii)&nbsp;<em>Le filtrage bat l'étiquetage</em>&nbsp;: le pipeline
+  d'entraînement filtre agressivement (détection de langue, correspondance
+  audio-texte par un ASR initial, heuristiques anti-hallucination) plutôt que de corriger à
+  la main — la donnée <em>moyennement propre mais massive</em> gagne&nbsp;; (iii)&nbsp;
+  <em>Multi-tâche comme régularisation</em>&nbsp;: transcrire ET traduire ET horodater
+  partage un encodeur — la traduction force des représentations sémantiques, pas seulement
+  acoustiques. Limites documentées&nbsp;: hallucinations sur les silences longs (répétitions
+  bouclées — le modèle «&nbsp;invente&nbsp;» du texte), pas de streaming natif (ch. 5),
+  specialisation fine difficile.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.3 — Le français en ligne de mire</span>
+  Sur l'anglais propre, un bon système rejoint le WER humain (~5&nbsp;%)&nbsp;; le même
+  modèle sur le français contemporain spontané fait typiquement 2 à 3 fois plus (accents,
+  débits, code-switching, noms propres) — le lab 1 le mesure. Trois phénomènes français à
+  connaître pour l'ingénierie&nbsp;: la <em>liaison</em> (les|ami·z·arbitres&nbsp;:
+  l'orthographe n'est pas la phonétique — l'ASR doit réapprendre la graphie), les
+  <em>enchaînements</em> (consonne finale liée à la voyelle suivante&nbsp;: les frontières
+  de mots s'estompent dans le spectrogramme) et la <em>numérisation</em> (1996&nbsp;:
+  «&nbsp;mille neuf cent quatre-vingt-seize&nbsp;» ou «&nbsp;dix-neuf cent
+  quatre-vingt-seize&nbsp;»&nbsp;? — ambiguïté de normalisation, les deux sont valides&nbsp;;
+  cf. ch. 8 pour le sens inverse en TTS).
+</div>
+</section>
+<section class="chapter" id="ch5">
+<h2>5. Streaming&nbsp;: chunking, VAD, latence contre qualité</h2>
+
+<p>Conversationner, c'est répondre vite&nbsp;: l'ASR doit produire des mots <em>pendant</em>
+qu'on parle. Ce chapitre traite la transformation «&nbsp;offline&nbsp;\(\to\)&nbsp;en
+flux&nbsp;», dont le coût se mesure en WER ajouté par seconde gagnée.</p>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — Latences d'un ASR en flux</span>
+  La <strong>latence algorithmique</strong> d'un encodeur par morceaux
+  (<em>chunking</em>) de taille \(L\) trames avec <em>lookahead</em> de \(R\) trames vaut
+  $$\lambda = (L + R)\,\Delta, \qquad \Delta = \text{pas de trame } (10\ \mathrm{ms}),$$
+  — on ne peut pas prédire avant d'avoir entendu le contexte. Le <strong>facteur temps
+  réel</strong> (RTF) mesure le coût de calcul&nbsp;: durée de calcul / durée de l'audio
+  (RTF \(&lt;\) 1 requis, \(&lt;&lt;\) 1 sur appareil). La <strong>latence de premier
+  mot</strong> ajoute le VAD (ch. 10) et la barre d'énergie. Un assistant vocal conversationnel
+  vise \(\lambda \leq 300\) ms bout en bout (lab 5) — l'humain répond en ~200&nbsp;ms
+  (ch. 10)&nbsp;: c'est <em>la</em> contrainte structurante du domaine.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Trois architectures de streaming (Moritz et al., ICASSP 2020, pour la première)</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Attention par blocs</strong>&nbsp;: l'encodeur transformer traite des
+    fenêtres de \(L\) trames avec un contexte gauche complet (mémoire) et un lookahead
+    droit borné \(R\) — l'attention est <em>masquée</em> au-delà&nbsp;; plus \(R\) grandit,
+    plus le WER baisse et la latence monte (courbe du ch. 5.3)&nbsp;;</li>
+    <li><strong>RNN-T causal</strong> (théorème 3.3)&nbsp;: encoder pur \(L = 1\),
+    \(R = 0\) — émission dès la trame&nbsp;; le lookahead est réinjecté dans le
+    <em>prediction</em> network (le contexte droit vient des tokens déjà émis)&nbsp;;
+    standard sur mobile&nbsp;;</li>
+    <li><strong>Re-scorching asynchrone</strong>&nbsp;: un premier passe streaming donne
+    l'affichage temps réel, un modèle offline (Whisper) <em>re-corrigé</em> la transcription
+    finale avec quelques centaines de ms de retard — l'interface montre le texte «&nbsp;se
+    corriger&nbsp;» (le design des assistants 2026&nbsp;: la vérité arrive une seconde plus
+    tard, la réactivité est immédiate).</li>
+  </ol>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.3 — La courbe latence/qualité, et comment la lire</span>
+  Pour chaque point \((L, R)\) (ou chaque choix de modèle)&nbsp;: mesurer WER et latence de
+  premier mot sur un corpus de test <em>fixe</em>&nbsp;; tracer WER(\(\lambda\)). Forme
+  typique&nbsp;: plateau jusqu'à \(\lambda \approx 200\) ms (le contexte utile d'un phonème
+  tient dans ~200&nbsp;ms), puis chute rapide (on perd les transitions), puis plateau
+  (l'ultra-contexte n'aide plus). Lecture ingénieur&nbsp;: choisir le point du coude&nbsp;;
+  lecture scientifique&nbsp;: la courbe <em>est</em> une courbe de contrôle (fidélité contre
+  ressource) — exactement la grille du module Control in Generative AI (M2, ch. 2 et 9),
+  où la «&nbsp;diversité&nbsp;» est remplacée par la «&nbsp;réactivité&nbsp;».
+</div>
+
+<div class="note">
+  <span class="tag">VAD&nbsp;: la porte d'entrée du flux</span>
+  Le <em>voice activity detection</em> décide, fenêtre par fenêtre (10-30&nbsp;ms), si la
+  trame contient de la parole&nbsp;: énergie + periodicité (historique), GMM
+  énergie/bruit (module Signal ch. 7), réseaux légers (Silero VAD — l'outil du lab).
+  Deux erreurs de prix opposés&nbsp;: la <em>fausse alarme</em> envoie du bruit à l'ASR
+  (hallucinations de Whisper sur les silences&nbsp;!)&nbsp;; le <em>manqué</em> coupe les
+  débuts de mots (les français «&nbsp;euh&nbsp;» initiaux). Le VAD amorce aussi le
+  <em>endpointing</em> — décider que l'utilisateur a fini de parler (ch. 10)&nbsp;: plus
+  sensible encore, car il fixe la latence <em>perçue</em> de tout le système.
+</div>
+</section>
+<section class="chapter" id="ch6">
+<h2>6. Vocodeurs&nbsp;: de WaveNet à HiFi-GAN</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 6.1 — WaveNet (van den Oord et al., 2016)&nbsp;: l'autorégression sur les échantillons</span>
+  Le vocodeur modélise la forme d'onde directement&nbsp;:
+  $$p(x) = \prod_{t=1}^{T_{\mathrm{ech}}} p(x_t \mid x_{&lt;t},\, c),$$
+  avec \(T_{\mathrm{ech}}\) = 24&nbsp;000 échantillons par seconde, \(x_t\) quantifié
+  \(\mu\)-law sur 256 niveaux, \(c\) le conditionnement (Mel, locuteur). Architecture&nbsp;:
+  <strong>convolutions causales dilatées</strong> — couche \(k\) regarde \(2^k\) échantillons
+  en arrière (dilatations 1, 2, 4, …, 512, empilées)&nbsp;: le champ récepteur croît
+  <em>exponentiellement</em> avec la profondeur (\(\approx 2^L\) pour \(L\) couches), là où
+  une convolution non dilatée exigerait \(2^L\) couches. Qualité&nbsp;: proche de la
+  parole humaine en tests subjectifs (MOS au-delà de 4, contre ~4,5 pour la vérité
+  terrain)&nbsp;; défaut fatal&nbsp;:
+  générérer une seconde de parole demande 24&nbsp;000 pas séquentiels — des ordres de
+  grandeur plus lent que le temps réel, inutilisable en production.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — HiFi-GAN (Kong et al., NeurIPS 2020)&nbsp;: la vitesse par l'adversaire</span>
+  Renversement complet&nbsp;: le générateur est <em>feed-forward parallèle</em> (sur-échantillonnage
+  par convolutions transposées du Mel 80 bins vers la forme d'onde, puis convolutions
+  dilatées multi-champs récepteurs pour la cohérence de phase)&nbsp;; l'entraînement est
+  <em>adversarial</em> (rappel des GAN&nbsp;: module Multimodal GenAI M1 ch. 2) avec deux
+  familles de discriminateurs — <em>multi-période</em> (réarrangent la forme d'onde en
+  matrices de périodes 2, 3, 5, 7, 11 pour piéger les artéfacts périodiques&nbsp;: le
+  «&nbsp;buzz&nbsp;») et <em>multi-échelle</em> — plus une perte L1 sur le Mel reconstruit
+  pour ancrer le contenu. Résultat&nbsp;: qualité WaveNet, génération parallèle — des
+  ordres de grandeur plus rapide que le temps réel sur GPU, le vocodeur par défaut de
+  l'industrie. À retenir du chapitre&nbsp;: le couple <em>durée du mélange</em> (autorégressif
+  sur 24 kHz) <em>contre architecture parallèle + perte perceptuelle</em> dicte tout le TTS
+  moderne.
+</div>
+
+<div class="note">
+  <span class="tag">Le Mel comme interface contractuelle</span>
+  Les deux étages du TTS (ch. 7) communiquent par spectrogramme Mel&nbsp;: 80 bins, une
+  trame toutes les 12&nbsp;ms environ (~ 80&nbsp;Hz), échelle logarithmique — le
+  <em>cahier des charges</em> du vocodeur. Changer la définition (fréquence
+  d'échantillonnage, hop, n_bins) casse la compatibilité modèle/vocodeur — première
+  expérience du lab 2. Et le Mel n'est pas inversible (phase perdue)&nbsp;: toute la
+  difficulté du vocodeur est de <em>ré-inventer</em> une phase cohérente — d'où les
+  discriminateurs de période.
+</div>
+</section>
+<section class="chapter" id="ch7">
+<h2>7. TTS neuronal&nbsp;: Tacotron 2, VITS, diffusion et flow</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 7.1 — Tacotron 2 (Shen et al., ICASSP 2018)&nbsp;: le schéma à deux étages</span>
+  Étage 1 (acrobatique)&nbsp;: un encoder-décodeur <em>attentionnel</em> lit le texte
+  (graphèmes) et écrit le Mel trame par trame — l'attention <em>location-sensitive</em> y
+  apprend l'alignement texte→acoustique (même mécanisme que LAS du ch. 3, appliqué à
+  l'envers)&nbsp;; entraînement par forçage enseignant sur les Mel de référence. Étage 2&nbsp;:
+  un WaveNet (ch. 6) transforme le Mel en onde. Qualité historique&nbsp;: naturelle sur
+  phrases lues. Deux maladies chroniques&nbsp;: l'<em>attention failure</em> (mots sautés ou
+  bégayés sur les phrases longues ou hors distribution) et la <em>déterminisation
+  abusive</em> — un texte, une seule voix/débit (le un-à-plusieurs de la définition 0.1
+  nié par l'entraînement au Mel <em>moyen</em>&nbsp;: sortie lissée, métallique).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.2 — VITS (Kim et al., ICML 2021)&nbsp;: one-stage, stochastique, end-to-end</span>
+  Trois idées qui répondent aux maladies de Tacotron. <em>(i) VAE&nbsp;:</em> un encodeur
+  variationnel encode la parole cible en \(z\)&nbsp;; le décodeur (HiFi-GAN) écrit l'onde
+  depuis \(z\) — le <em>bruit</em> du prior explore la multiplicité des façons de dire&nbsp;;
+  <em>(ii) normalizing flow&nbsp;:</em> un flow (changement de variable exact&nbsp;: cf.
+  module Graph Generative Models M2 ch. 4 pour la démonstration) aligne la distribution du
+  latent texte-conditionné sur le prior, ce qui rend l'entraînement end-to-end
+  (vraisemblance exacte + adversaire)&nbsp;; <em>(iii) alignement monotone implicite</em>
+  (MAS&nbsp;: recherche de l'alignement monotone optimal entre texte et Mel, raffiné à
+  chaque pas). Résultat&nbsp;: un seul réseau texte→onde, parallèle, stochastique — la
+  première génération «&nbsp;industrialisable&nbsp;» du TTS (YourTTS, ch. 9, en dérive).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.3 — La génération itérative arrive&nbsp;: Grad-TTS puis Voicebox</span>
+  <strong>Grad-TTS (Popov et al., ICML 2021)</strong>&nbsp;: un encoder prédit, pour chaque
+  phone, la <em>moyenne cible</em> \(\mu(x)\) d'une gaussienne dans l'espace Mel&nbsp;; un
+  décodeur <em>de diffusion</em> (DDPM — cf. module Multimodal GenAI M1 ch. 3) transforme un
+  bruit \(\mathcal N(0, I)\) en Mel autour de \(\mu\), guidé par la prédiction de bruit
+  \(\hat\epsilon_\theta(x_t, t, \mu)\)&nbsp;; un prédicteur de durées gère le nombre de
+  trames par phone. La qualité croît avec le nombre de pas… comme la latence&nbsp;:
+  la courbe pas/qualité est <em>la</em> courbe de compromis du module Control (M2) ch. 9,
+  en version TTS. <strong>Voicebox (Le et al., 2023)</strong>&nbsp;: le <em>flow matching
+  conditionnel en infilling</em> — on masque une région du Mel et on régénère <em>seulement
+  elle</em>, le contexte restant fixé&nbsp;: la même machinerie que l'inpainting de DiGress
+  (module Graph Generative Models M2 ch. 5) transportée dans l'acoustique. Applications
+  immédiates&nbsp;: éditer un mot dans une phrase en gardant la voix, dé-bruiter,
+  traduire la voix… et le clonage zéro-shot à partir de quelques secondes de référence.
+  Non-autorégressif et parallèle&nbsp;: la famille dominante des TTS de recherche 2024-2026.
+</div>
+
+<table class="tbl">
+  <tr><th>Système</th><th>Paradigme</th><th>Alignement</th><th>Stochastique&nbsp;?</th><th>Streaming</th><th>Clonage natif</th></tr>
+  <tr><td>Tacotron 2 + WaveNet</td><td>AR attention + vocodeur AR</td><td>attention apprise</td><td>non</td><td>non</td><td>non</td></tr>
+  <tr><td>VITS</td><td>VAE + flow + GAN</td><td>MAS implicite</td><td>oui (prior)</td><td>difficile</td><td>via speaker emb. (YourTTS)</td></tr>
+  <tr><td>Grad-TTS</td><td>diffusion vers Mel</td><td>durées prédites</td><td>oui (bruit initial)</td><td>par pas</td><td>non</td></tr>
+  <tr><td>Voicebox</td><td>flow matching, infilling</td><td>aucun (conditionné)</td><td>oui</td><td>région par région</td><td>oui (prompt 3&nbsp;s)</td></tr>
+</table>
+
+<div class="ex">
+  <span class="tag">Exemple 7.4 — Budget de latence d'un TTS conversationnel</span>
+  Objectif&nbsp;: &lt; 300&nbsp;ms entre la fin de la décision du LLM et le premier son. Un
+  Tacotron-like AR&nbsp;: la première <em>phrase</em> doit être synthétisée avant le premier
+  son (si on veut l'intonation) — 1-2&nbsp;s d'avance requis&nbsp;: rédhibitoire. VITS&nbsp;:
+  le premier <em>chunk</em> de Mel (quelques trames) suffit — ~100&nbsp;ms&nbsp;; Voicebox&nbsp;:
+  il faut borner le nombre de pas de sampling&nbsp;: 4-10 pas (au lieu de 50-100) avec
+  distillation, sinon la qualité chute (la courbe du th. 7.3). Conclusion&nbsp;: le
+  full-duplex du ch. 10 n'a été possible qu'après la révolution non-autorégressive —
+  l'architecture et la conversation sont des contraintes couplées.
+</div>
+</section>
+<section class="chapter" id="ch8">
+<h2>8. Expressivité&nbsp;: prosodie, style tokens, SSML</h2>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — La prosodie, trois curseurs continus</span>
+  La manière de dire se décompose en \(F_0\) (mélodie, en Hz — ~100-200 Hz chez l'homme,
+  160-300 chez la femme, chute finale des énoncés assertifs), <em>durée</em> (allongements
+  contrastifs&nbsp;: «&nbsp;énorme&nbsp;» étiré), <em>énergie</em> (accents, mots porteurs).
+  Ces curseurs sont <em>continus et imbriqués</em>&nbsp;: le TTS doit les prédire tous, et
+  le texte seul est ambigu (une même phrase neutre, dix lectures valides) —
+  c'est le un-à-plusieurs du ch. 7, version esthétique. Le français ajoute sa signature&nbsp;:
+  accent <em>final</em> de groupe (et non lexical comme l'anglais), montée interrogative
+  sans inversion, débit soutenu qui rend la segmentation critique.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 8.2 — Global Style Tokens (Wang et al., Interspeech 2018)&nbsp;: le style comme latent contrôlable</span>
+  Un <em>reference encoder</em> lit un audio de référence (quelques secondes) et produit un
+  embedding&nbsp;; une attention lit cet embedding sur une <em>banque de tokens de style</em>
+  (petit dictionnaire appris de «&nbsp;manières de dire&nbsp;»)&nbsp;; le vecteur pondéré
+  conditionne le Tacotron (rendez-vous du ch. 7). Trois usages&nbsp;: <em>transfert</em>
+  (donner l'audio d'un locuteur enthousiaste, générer le texte cible avec sa prosodie),
+  <em>contrôle</em> (déplacer l'embedding dans l'espace des tokens — atténuer
+  «&nbsp;agressif&nbsp;»), <em>exploration</em> (les tokens s'organisent spontanément en
+  axes interprétables&nbsp;: débit, énergie, émotion). C'est le steering vector du module
+  Control (M2) ch. 4, appliqué au TTS&nbsp;: une direction latente lue sur des contrastes,
+  additionnée au lieu d'apprendre — mêmes vertus (contrôle doux, composable), mêmes limites
+  (aucune garantie).
+</div>
+
+<div class="def">
+  <span class="tag">Définition 8.3 — SSML&nbsp;: le contrôle dur de la production</span>
+  Le <em>Speech Synthesis Markup Language</em> (W3C) est le langage de contrôle des TTS
+  industriels&nbsp;: pauses (<code>&lt;break time="500ms"/&gt;</code>), débit/hauteur
+  (<code>&lt;prosody rate="+10%" pitch="+2st"&gt;</code>), emphase
+  (<code>&lt;emphasis&gt;</code>), prononciation (<code>&lt;phoneme
+  alphabet="ipa" ph="ʁə.ʒan"&gt;</code>), dates et nombres. C'est une <strong>contrainte
+  dure</strong> au sens du module Control ch. 2&nbsp;: le moteur est <em>obligé</em> d'obéir
+  (pause exacte), par opposition au conditionnement doux des style tokens. La
+  <strong>normalisation du texte</strong> (front-end)&nbsp;: «&nbsp;1 234 567&nbsp;€&nbsp;»
+  \(\to\) «&nbsp;un million deux cent trente-quatre mille cinq cent soixante-sept
+  euros&nbsp;» est la moitié cachée du TTS — les systèmes neuronaux intègrent le front-end
+  (tokenizer lettres) au prix d'erreurs amusantes (les sigles, «&nbsp;SARS-CoV-2&nbsp;»&nbsp;:
+  à tester en lab 2).
+</div>
+
+<div class="note">
+  <span class="tag">Contrôler quoi, et comment&nbsp;: la grille complète</span>
+  Récapitulatif du chapitre dans la taxonomie du module Control (M2)&nbsp;:
+  <table class="tbl">
+    <tr><th>Cible</th><th>Mécanisme doux</th><th>Mécanisme dur</th></tr>
+    <tr><td>Voix</td><td>speaker embedding (ch. 9)</td><td>modèle par locuteur (fine-tune)</td></tr>
+    <tr><td>Prosodie</td><td>style tokens, prompt audio (Voicebox)</td><td>SSML prosody/phonème</td></tr>
+    <tr><td>Segmentation</td><td>prédicteur de durées</td><td>SSML break, longueur max</td></tr>
+    <tr><td>Contenu</td><td>LLM en amont (renvoi LLMs M2)</td><td>lexique de prononciation</td></tr>
+  </table>
+  En production&nbsp;: les deux colonnes cohabitent — SSML pour la précision (annonces,
+  accessibilité), latents pour le naturel (conversation).
+</div>
+</section>
+<section class="chapter" id="ch9">
+<h2>9. Conversion et clonage de voix&nbsp;: éthique et watermarking</h2>
+
+<div class="def">
+  <span class="tag">Définition 9.1 — Conversion, adaptation, clonage zéro-shot</span>
+  <em>Voice conversion</em>&nbsp;: ré-émettre <em>ce que dit</em> une voix source <em>avec
+  le timbre</em> d'une voix cible (contenu préservé, locuteur changé). <em>Clonage
+  zéro-shot</em>&nbsp;: synthétiser <em>n'importe quel texte</em> dans une voix donnée à
+  partir d'un <em>prompt audio</em> de quelques secondes (VALL-E, Voicebox&nbsp;:
+  conditionnement par référence, ch. 7). Techniquement&nbsp;: un embedding de locuteur
+  (appris par vérification du locuteur — la perte GE2E de Wan et al., 2018, aligne les
+  embeddings d'une même voix)&nbsp;; YourTTS (ICML 2022) l'ajoute à VITS (le TTS du
+  ch. 7 devient multi-locuteurs en un entraînement)&nbsp;; VALL-E (Microsoft, 2023)
+  traite le clonage comme du langage&nbsp;: AR sur les <em>tokens acoustiques</em> EnCodec
+  (ch. 11), le prompt 3&nbsp;s servant de préfixe — le TTS est absorbé par le paradigme LLM.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 9.2 — Éthique&nbsp;: le droit suit (lentement), l'ingénieur décide (vite)</span>
+  Le clonage à 3&nbsp;s de référence rend possible&nbsp;: la fraude vocale (appels au
+  «&nbsp;patron&nbsp;»), la désinformation sonore, l'usurpation de personnalité. Cadres&nbsp;:
+  le règlement (UE) 2024/1689 (AI Act, art. 50) impose la <em>transparence</em> — les
+  systèmes générant ou manipulant l'image/la voix doivent marquer leurs sorties de manière
+  lisible par machine&nbsp;; en France, la voix est protégée comme attribut de la
+  personnalité (jurisprudence civile sur l'imitation). Pour l'ingénieur, la réponse
+  opérationnelle est technique&nbsp;: <em>consentement</em> (datasets de voix sous licence
+  claire — le lab 2 n'utilise que des voix autorisées), <em>marquage</em> (watermarking,
+  ci-dessous), <em>détection</em> (provenance&nbsp;: cf. module Explainability ch. 9 pour le
+  texte, la logique est identique). La question d'examen&nbsp;: «&nbsp;pourquoi le
+  watermarking du TTS est-il plus <em>facile</em> que celui du texte&nbsp;?&nbsp;» — parce que
+  l'espace de sortie est continu et que la capacité de canal est immense (ch. 6)&nbsp;:
+  on peut cacher des bits sans perte perceptible… mais le canal se dégrade par les
+  compressions.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 9.3 — Watermarking audio&nbsp;: du spectre étalé aux réseaux</span>
+  <em>Classique</em>&nbsp;: tatouage par spectre étalé — ajouter un bruit
+  pseudo-aléatoire (clé \(k\)) de faible énergie, masqué par l'effet de seuil
+  psychoacoustique, dans un domaine temps-fréquence (STFT — modules Signal Processing M1
+  ch. 6-7&nbsp;: l'analyse temps-fréquence et les signaux aléatoires y sont démontrés)&nbsp;;
+  détection par corrélation avec la clé — la structure <em>exacte</em> du watermark
+  vert/rouge textuel (ch. 6 du module Control)&nbsp;: une clé pseudo-aléatoire, un test
+  d'hypothèse, un compromis force/qualité. <em>Neuronal</em>&nbsp;: <strong>WavMark</strong>
+  (2023) cache ~32 bits par seconde de parole avec un encodeur/détecteur appris, robuste
+  aux ré-encodages&nbsp;; <strong>AudioSeal</strong> (Meta, ICASSP 2024) ajoute la
+  <em>localisation</em>&nbsp;: un détecteur à l'échantillon près indique <em>quels</em>
+  segments sont synthétiques (générateur/détecteur adversariaux, perte perceptuelle)&nbsp;;
+  le marquage <em>pendant</em> la génération (in-generation) applique le watermark dans le
+  TTS lui-même — indissociable de la sortie. Protocole d'évaluation&nbsp;: courbes ROC
+  taux de détection / faux positifs, sous attaque (mp3, re-voix, réverbération) — le
+  budget de robustesse du module Control ch. 10, mot pour mot.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 9.4 — La fraude vocale en 3 étapes (et ses 3 parades)</span>
+  (1)&nbsp;3&nbsp;s de voix publique \(\to\) clonage zéro-shot&nbsp;; (2)&nbsp;script
+  d'urgence généré par LLM (renvoi LLMs M2)&nbsp;; (3)&nbsp;appel en vishing. Parades&nbsp;:
+  (i)&nbsp;<em>canal</em>&nbsp;: rappel automatique sur numéro connu (le contrôle le plus
+  robuste est organisationnel)&nbsp;; (ii)&nbsp;<em>challenge</em>&nbsp; imposé par
+  l'interlocuteur (question hors script — les TTS conversationnels y répondent de mieux en
+  mieux, cf. ch. 10)&nbsp;; (iii)&nbsp;<em>provenance</em>&nbsp;: watermark vérifié à la
+  réception si les deux téléphones le supportent. Morale du module&nbsp;: aucune couche
+  seule ne suffit — défense en profondeur.
+</div>
+</section>
+<section class="chapter" id="ch10">
+<h2>10. La boucle conversationnelle&nbsp;: VAD, turn-taking, full-duplex</h2>
+
+<div class="thm">
+  <span class="tag">Théorème 10.1 — Le tour de parole humain, en chiffres</span>
+  La conversation humaine alterne les tours avec un délai médian de l'ordre de
+  200&nbsp;ms — mesuré à travers une dizaine de langues (Stivers et al., PNAS 2009)&nbsp;; or prononcer
+  le premier mot d'un tour prend ~600&nbsp;ms&nbsp;: les humains <em>anticipent</em> la fin
+  du tour de l'autre (indices prosodiques, syntaxiques, pragmatiques) pour préparer le
+  leur. Un assistant qui écoute tout, attend le silence, transcrit, réfléchit, synthétise,
+  accuse ~1,5-3&nbsp;s de latence — <em>cinq à dix fois trop lent</em>&nbsp;: le
+  turn-taking est le vrai goulot conversationnel, pas l'intelligence. Cadre de référence&nbsp;:
+  la revue de Skantze (Computer Speech &amp; Language, 2021)&nbsp;: points de pertinence
+  transitionnelle (TRP), prédiction de fin de tour (end-of-turn&nbsp;: classifieur sur
+  fenêtre glissante — VAD + prosodie + syntaxe), <em>backchannels</em> («&nbsp;hmm&nbsp;»,
+  hochements sonores&nbsp;: écouter sans prendre le tour).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 10.2 — Pipeline&nbsp;: le endpointing comme contrôle</span>
+  Décider «&nbsp;l'utilisateur a fini&nbsp;» est un compromis erreur/latence&nbsp;: couper
+  trop tôt = interruptions (l'assistant parle <em>par-dessus</em> — l'erreur la plus mal
+  perçue), couper trop tard = silences morts. Paramètres&nbsp;: seuil de silence \(\tau_s\)
+  (typ. 300-700&nbsp;ms), profondeur du contexte (prosodie montante&nbsp;? syntaxe
+  incomplète&nbsp;?), et <em>politique</em> (laisser parler les hésitations longues).
+  Formalisation&nbsp;: un test séquentiel — détecter le changement de régime «&nbsp;fin de
+  tour&nbsp;» au plus tôt sous contrainte de faux positifs&nbsp;; la même courbe
+  fidélité/coût que le streaming ASR (ch. 5), au niveau <em>dialogue</em> cette fois.
+  Implémentation moderne&nbsp;: le prédicteur de fin de tour devient un petit modèle
+  <em>multi-modal</em> (audio + texte partiel) qui remplace les seuils réglés à la main.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 10.3 — Full-duplex&nbsp;: dGSLM puis Moshi (le saut 2023-2024)</span>
+  <strong>dGSLM</strong> (Nguyen et al., TACL 2023)&nbsp;: le premier modèle de dialogue
+  <em>entièrement vocal</em> — deux flux de tokens HuBERT (parole discrétisée, ch. 11)
+  tournent en parallèle&nbsp;; le modèle apprend <em>de lui-même</em> l'alternance et les
+  chevauchements (rires simultanés)&nbsp;: preuve de concept que le turn-taking est
+  <em>apprenable</em> sans texte. <strong>Moshi</strong> (Défossez et al., Kyutai,
+  2024)&nbsp;: le premier assistant vocal full-duplex en temps réel. Trois pièces&nbsp;:
+  (i)&nbsp;le codec neuronal <em>Mimi</em> (descendant d'EnCodec, ch. 11) tokenise l'audio
+  à bas débit (~12,5 trames/s) en deux flux&nbsp;: sémantique et acoustique&nbsp;;
+  (ii)&nbsp;l'architecture <em>multi-flux</em>&nbsp;: les tokens de <em>Moshi</em> (la voix
+  du modèle) et de l'<em>utilisateur</em> sont prédits <em>en parallèle</em>, pas en
+  alternance — le modèle peut se couper la parole ou se taire pendant une interruption&nbsp;;
+  (iii)&nbsp;le <em>monologue intérieur</em>&nbsp;: chaque token audio du modèle est aligné
+  avec son token <em>texte</em> correspondant — le texte guide, l'audio
+  réalise&nbsp;;: latence théorique ~200&nbsp;ms (la cible humaine du th. 10.1), mémoire
+  du dialogue par le contexte transformer. La boucle du module est bouclée&nbsp;:
+  VAD, endpointing, pipeline ASR-LLM-TTS <em>disparaissent</em> dans un unique modèle
+  génératif — le sujet suivant.
+</div>
+
+<div class="note">
+  <span class="tag">Ce que le full-duplex change en pratique</span>
+  (i)&nbsp;<em>Interruptions</em>&nbsp;: gérées nativement (le flux utilisateur continue
+  d'être prédit pendant que Moshi parle — le modèle «&nbsp;s'entend&nbsp;» parler)&nbsp;;
+  (ii)&nbsp;<em>Backchannels</em>&nbsp;: émergents, non scriptés&nbsp;; (iii)&nbsp;
+  <em>La voix des machines</em>&nbsp;: identité vocale unique et marquée (politique de
+  transparence — AI Act ch. 9)&nbsp;; (iv)&nbsp;<em>le risque</em>&nbsp;: une latence
+  humaine rend la machine <em>indiscernable</em> socialement — le watermarking (ch. 9)
+  devient la seule frontière. À débattre en séance&nbsp;: un assistant à 200&nbsp;ms
+  doit-il s'annoncer&nbsp;?
+</div>
+</section>
+<section class="chapter" id="ch11">
+<h2>11. Speech LLMs et multilinguisme</h2>
+
+<div class="def">
+  <span class="tag">Définition 11.1 — Tokeniser l'audio&nbsp;: codecs neuronaux et RVQ</span>
+  Un <em>code neuronal</em> (EnCodec&nbsp;: Défossez et al., 2022) compresse la parole par
+  un auto-encodeur convolutif contraint par une <strong>quantification vectorielle
+  résiduelle</strong> (RVQ)&nbsp;: le latent continu est approché par une somme de
+  vecteurs de codebooks successifs — chaque trame (à 24&nbsp;kHz&nbsp;: une trame \(\approx\)
+  320 échantillons, ~75&nbsp;Hz) devient une pile de ~2-32 indices discrets. Résultat&nbsp;:
+  la parole devient un <em>texte</em> de tokens — consommable par un transformer. La
+  hiérarchie d'<strong>AudioLM</strong> (Borsos et al., 2023) ordonne ces tokens&nbsp;:
+  d'abord <em>sémantiques</em> (unités discrétisées d'un modèle self-supervised —
+  wav2vec&nbsp;2/HuBERT — qui capturent le contenu), puis <em>acoustiques grossiers</em>
+  puis <em>fins</em> (timbre, environnement)&nbsp;: générer dans cet ordre garantit le
+  contenu avant la texture. C'est l'architecture de dGSLM et de Moshi (ch. 10).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 11.2 — Speech LLMs&nbsp;: trois greffes d'audio sur un LLM</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Audio-in</strong>&nbsp;: l'encodeur de parole (Whisper, HuBERT) est projeté
+    dans l'espace du LLM par un adaptateur (SALMONN, SpeechGPT, et tous les assistants
+    multimodaux 2025+) — le modèle <em>écoute</em> (transcription implicite, paralinguistique&nbsp;:
+    émotion, locuteur) et répond en texte&nbsp;; c'est la famille «&nbsp;audio-in&nbsp;»
+    du ch. 8 du module LLMs (M2), même machinerie que la vision&nbsp;;</li>
+    <li><strong>Audio-out</strong>&nbsp;: le LLM génère des <em>tokens acoustiques</em>
+    (VALL-E&nbsp;: AR sur EnCodec avec prompt de voix&nbsp;; unités AudioLM en sortie)&nbsp;;
+    le clonage du ch. 9 devient une compétence du modèle de langage&nbsp;;</li>
+    <li><strong>Audio-in-out (speech-to-speech)</strong>&nbsp;: Moshi (ch. 10)&nbsp;:
+    le texte est le <em>monologue intérieur</em> guidant les tokens audio dans les deux
+    sens — l'LLM <em>est</em> le pipeline. SpeechT5 (2022) avait posé la première
+    architecture unifiée texte/parole (encodeur-décodeur T5 + codebook partagé)&nbsp;;
+    2024-2026 généralisent&nbsp;: un modèle, toutes les tâches du module (ASR, TTS,
+    traduction vocale, édition, voix à voix).</li>
+  </ol>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 11.3 — Multilinguisme&nbsp;: 7&nbsp;000 langues, 100 couvertes</span>
+  Le goulot des langues à faibles ressources&nbsp;: l'étiquetage coûte cher, l'écriture
+  manque parfois. <strong>MMS</strong> (Meta, 2023 — «&nbsp;Scaling Speech Technology to
+  1000+ Languages&nbsp;»)&nbsp;: un seul modèle wav2vec&nbsp;2 couvre 1&nbsp;107 langues en
+  ASR <em>et</em> TTS (4&nbsp;017 en identification de langue), appris sur des lectures
+  religieuses publiques (le paradoxe&nbsp;: la bible est le corpus le plus traduit du
+  monde) — un bond d'un facteur 10-40 sur la couverture. <strong>Common Voice</strong>
+  (Mozilla)&nbsp;: le crowd-sourcing ouvert (dont le français — accents régionaux&nbsp;:
+  le lab 1 y pioche). Les spécificités du français reviennent (ch. 4, ex. 4.3)&nbsp;:
+  normalisation des nombres (le sous-test des dates&nbsp;: «&nbsp;en 1996&nbsp;»&nbsp;),
+  sigles, emprunts. Pour l'ingénieur&nbsp;: zéro-shot (Whisper/MMS) d'abord, adaptation
+  légère ensuite (LoRA sur encodeur — module LLMs M2 ch. 6), données ciblées enfin&nbsp;;
+  et mesurer <em>par langue</em> — un WER «&nbsp;moyen&nbsp;» multilingue masque les
+  effondrements locaux.
+</div>
+
+<div class="note">
+  <span class="tag">Conclusion du module — la fusion des trois mondes</span>
+  Signal (M1), langage (LLMs M2), conversation (ce module)&nbsp;: la parole n'est plus
+  une interface <em>devant</em> le langage, elle en devient un dialecte — des tokens
+  discrets comme les autres, générables, guidables, contrôlables. Le contrôle du module
+  <em>Control in Generative AI</em> (M2, ch. 2&nbsp;: la taxonomie) s'applique désormais
+  mot pour mot&nbsp;: contraintes dures = SSML et grammaires de prosodie&nbsp;; guidance =
+  style tokens et clonage par prompt&nbsp;; watermarking = provenance vocale (ch. 9)&nbsp;;
+  évaluation = WER/MOS/latence et courbes de compromis. Où que vous mettiez les pieds en
+  2026 — recherche ou produit — la question finale est la même&nbsp;: <em>que doit-on
+  contrôler, et à quel prix&nbsp;?</em>
+</div>
+</section>
+<section class="exercises" id="ex">
+<h3>Exercices / Labs</h3>
+<ol>
+  <li><strong>Lab&nbsp;: transcription Whisper et WER (le lab ASR du module).</strong>
+  Avec <code>transformers</code>&nbsp;: (a)&nbsp;charger <code>openai/whisper-tiny</code> en
+  pipeline ASR, transcrire deux extraits français de Common Voice (un lu, un spontané)&nbsp;;
+  (b)&nbsp;implémenter le WER (alignement de Levenshtein mot à mot&nbsp;: \(S + D + I\) sur
+  la référence)&nbsp;; (c)&nbsp;comparer tiny/small&nbsp;; (d)&nbsp;pré-filtrer par Silero
+  VAD (couper les silences) et mesurer l'effet sur les hallucinations du (a)&nbsp;;
+  (e)&nbsp;refaire sur l'anglais pour situer le français.
+  <div class="proof">
+  Guidage (résultats attendus)&nbsp;: tiny est 2-3× plus rapide mais nettement plus
+  fragile&nbsp;; le WER français spontané est 1,5-3× l'anglais lu&nbsp;; le VAD réduit
+  massivement les boucles hallucinées sur les silences (Whisper «&nbsp;invente&nbsp;» du
+  texte sans énergie&nbsp;— prop. 4.2 vécue)&nbsp;; attention aux normalisations (majuscules,
+  ponctuation&nbsp;: les normaliser avant d'aligner, sinon le WER est artefactuel).
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>Lab&nbsp;: TTS avec transformers (le lab synthèse).</strong>
+  (a)&nbsp;synthétiser un texte français avec un modèle TTS public (SpeechT5&nbsp;;
+  MMS-TTS français)&nbsp;; (b)&nbsp;mesurer le RTF (durée de calcul / durée d'audio)
+  et la latence de premier échantillon&nbsp;; (c)&nbsp;tenter trois phrases pièges&nbsp;:
+  «&nbsp;1 234 567&nbsp;€&nbsp;», «&nbsp;le SARS-CoV-2&nbsp;», «&nbsp;à Saint-Étienne, il
+  est 19&nbsp;h58&nbsp;» — consigner les échecs de normalisation&nbsp;; (d)&nbsp;injecter
+  un embedding de locuteur différent et comparer.
+  <div class="proof">
+  Guidage&nbsp;: RTF \(&lt;\) 1 sur GPU, de l'ordre de 1-3 sur CPU&nbsp;; la latence de
+  premier son est dominée par la longueur du premier <em>chunk</em> Mel&nbsp;; les nombres
+  et sigles échouent de façon reproductible — discuter front-end neuronal vs règles
+  (déf. 8.3)&nbsp;; l'embedding déplace le timbre mais pas l'accent régional&nbsp;:
+  le clonage zéro-shot parfait n'existe pas avec un seul vecteur (ch. 9&nbsp;: il faut le
+  prompt séquentiel, à la VALL-E). <span class="qed">∎</span></div></li>
+
+  <li><strong>CTC à la main.</strong> Reprendre l'exemple 2.2 (\(T = 4\), \(y =
+  \texttt{ab}\))&nbsp;: avec \(p_t(\epsilon) = 0{,}5\), \(p_t(a) = 0{,}3\),
+  \(p_t(b) = 0{,}2\) pour \(t = 1..4\), calculer les 8 produits, sommer, vérifier que la
+  somme vaut le \(\alpha_4(4) + \alpha_4(3)\) obtenu par les récursions du théorème 2.3
+  (remplir la table \(\alpha\) ligne par ligne).
+  <div class="proof">
+  Guidage&nbsp;: la table \(\alpha\) a 4 lignes \(\times\) 5 colonnes (avec zéros
+  structurels — on ne peut pas atteindre \(\ell_4\) avant \(t=2\))&nbsp;; chemin le plus
+  probable parmi les 8&nbsp;: celui qui maximise chaque colonne&nbsp;; vérifier que la
+  borne \(T \geq |y|\) (ici 2) est nécessaire et expliquer la condition de saut
+  \(\mathbf 1\{\ell_s \neq \ell_{s-2}\}\) sur un contre-exemple «&nbsp;aa&nbsp;».
+  <span class="qed">∎</span></div></li>
+
+  <li><strong>CTC en code, gradient vérifié.</strong> Implémenter \(\alpha\), \(\beta\)
+  (th. 2.3) en NumPy pour un mini-vocabulaire&nbsp;; calculer \(\partial \mathcal
+  L/\partial p_t(k)\) par la formule fermée&nbsp;; vérifier contre une différenciation
+  automatique (autograd/PyTorch de la somme des chemins) à \(\varepsilon = 10^{-6}\)
+  près.
+  <div class="proof">
+  Guidage&nbsp;: la convention (\(\beta\) avec ou sans facteur \(p_t\)) est l'erreur
+  classique — la vérification autograd la détecte immédiatement&nbsp;; complexité mesurée
+  \(\mathcal O(T S)\) vs l'énumération (\(8\) chemins ici&nbsp;: explose au-delà de
+  \(T = 15\))&nbsp;; conclure sur la différenciation <em>de l'objectif du modèle
+  complet</em> (softmax + récursions) — c'est exactement ce que fait PyTorch, en
+  vectorisé. <span class="qed">∎</span></div></li>
+
+  <li><strong>Budget de latence d'un assistant vocal.</strong> Un pipeline&nbsp;:
+  VAD (fenêtre 30&nbsp;ms) \(\to\) ASR chunking (chunk 640&nbsp;ms, lookahead
+  160&nbsp;ms) \(\to\) LLM (time-to-first-token 250&nbsp;ms) \(\to\) TTS (premier chunk
+  Mel 120&nbsp;ms + vocodeur 20&nbsp;ms). (a)&nbsp;calculer la latence de premier son de
+  réponse (détail composant par composant)&nbsp;; (b)&nbsp;identifier les deux dominantes
+  et proposer trois réductions&nbsp;; (c)&nbsp;comparer au full-duplex de Moshi
+  (~200&nbsp;ms théoriques)&nbsp;: que supprime-t-il&nbsp;?
+  <div class="proof">
+  Guidage&nbsp;: (a) \(\approx 160\) (endpointing à ajouter&nbsp;: seuil de silence
+  300-500&nbsp;ms&nbsp;! le vrai coût) \(+\) (640+160)\(\times\)1/80 Hz… soigner les
+  unités&nbsp;: le chunk audio se compte en secondes, pas en trames&nbsp;; total typique
+  1-2&nbsp;s dont la moitié d'endpointing&nbsp;; (b) réduire le seuil par prédiction de
+  fin de tour (prop. 10.2), ASR à plus petit chunk, LLM spéculatif (renvoi LLMs M2
+  ch. 6)&nbsp;; (c) Moshi supprime VAD/endpointing (prédiction continue du flux),
+  ASR/TTS (tokens audio natifs) et la file d'attente LLM&nbsp;: il reste le temps de
+  réseau + un pas de modèle. <span class="qed">∎</span></div></li>
+
+  <li><strong>Watermarking audio&nbsp;: ROC sous attaque (bonus).</strong> Synthétiser 20
+  phrases (lab 2)&nbsp;; en marquer la moitié par un watermark audio public (p.&nbsp;ex.
+  AudioSeal)&nbsp;; tracer la ROC du détecteur (vrai positif / faux positif) sur&nbsp;:
+  audio propre, ré-encodage mp3 64&nbsp;kbps, ajout de bruit léger&nbsp;; conclure sur le
+  canal de provenance de bout en bout (ch. 9).
+  <div class="proof">
+  Guidage&nbsp;: la courbe propre est quasi parfaite (AUC \(&gt;\) 0,99)&nbsp;; le mp3
+  dégrade modérément (le watermark survit aux compressions usuelles — c'est conçu
+  pour)&nbsp;; le bruit additif fort attaque plus fort&nbsp;; relier au budget de
+  robustesse (module Control ch. 10)&nbsp;: force du marquage \(\uparrow\) =
+  imperceptibilité \(\downarrow\) — le même triple compromis qu'en texte. 
+  <span class="qed">∎</span></div></li>
+</ol>
+</section>
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li><strong>Signal et représentations</strong>&nbsp;: L. Rabiner, B.-H. Juang,
+  <em>Fundamentals of Speech Recognition</em>, Prentice Hall, 1993&nbsp;;
+  L. Rabiner, <em>A Tutorial on Hidden Markov Models and Selected Applications in Speech
+  Recognition</em>, Proc. IEEE 77(2), 1989&nbsp;;
+  S. Davis, P. Mermelstein, <em>Comparison of Parametric Representations…</em> (MFCC),
+  IEEE TASSP, 1980 — bases au <a href="../m1p1-signal-processing/">module Signal Processing
+  (M1) ch. 4-8</a>.</li>
+  <li><strong>ASR end-to-end</strong>&nbsp;: A. Graves, S. Fernández, F. Gomez, J. Schmidhuber,
+  <em>Connectionist Temporal Classification: Labelling Unsegmented Sequence Data with
+  Recurrent Neural Networks</em>, ICML 2006&nbsp;;
+  A. Graves, <a href="https://arxiv.org/abs/1211.3711">Sequence Transduction with Recurrent
+  Neural Networks</a> (RNN-T), 2012&nbsp;;
+  W. Chan et al., <a href="https://arxiv.org/abs/1508.01209">Listen, Attend and Spell</a>,
+  ICASSP 2016&nbsp;;
+  A. Gulati et al., <a href="https://arxiv.org/abs/2005.08100">Conformer: Convolution-augmented
+  Transformer for Speech Recognition</a>, Interspeech 2020&nbsp;;
+  N. Moritz, T. Hori, J. Le Roux, <a href="https://arxiv.org/abs/2001.02674">Streaming
+  Automatic Speech Recognition with the Transformer Model</a>, ICASSP 2020.</li>
+  <li><strong>Représentations auto-supervisées et données à l'échelle</strong>&nbsp;:
+  A. Baevski et al., <a href="https://arxiv.org/abs/2006.11477">wav2vec 2.0</a>, NeurIPS 2020&nbsp;;
+  W.-N. Hsu et al., <a href="https://arxiv.org/abs/2106.07447">HuBERT</a>, IEEE/ACM TASLP 2021&nbsp;;
+  A. Radford et al., <a href="https://arxiv.org/abs/2212.04356">Robust Speech Recognition via
+  Large-Scale Weak Supervision</a> (Whisper), ICML 2023&nbsp;;
+  V. Pratap et al., <a href="https://arxiv.org/abs/2305.13516">Scaling Speech Technology to
+  1000+ Languages</a> (MMS), 2023&nbsp;;
+  <a href="https://commonvoice.mozilla.org/">Mozilla Common Voice</a>.</li>
+  <li><strong>TTS et vocodeurs</strong>&nbsp;: A. van den Oord et al.,
+  <a href="https://arxiv.org/abs/1609.03499">WaveNet: A Generative Model for Raw Audio</a>, 2016&nbsp;;
+  J. Shen et al., <a href="https://arxiv.org/abs/1712.05884">Natural TTS Synthesis by
+  Conditioning WaveNet on Mel Spectrogram Predictions</a> (Tacotron 2), ICASSP 2018&nbsp;;
+  J. Kong et al., <a href="https://arxiv.org/abs/2010.05646">HiFi-GAN</a>, NeurIPS 2020&nbsp;;
+  J. Kim et al., <a href="https://arxiv.org/abs/2106.06103">Conditional Variational
+  Autoencoder with Adversarial Learning for End-to-End Text-to-Speech</a> (VITS), ICML 2021&nbsp;;
+  V. Popov et al., <a href="https://arxiv.org/abs/2105.06337">Grad-TTS</a>, ICML 2021&nbsp;;
+  M. Le et al., <a href="https://arxiv.org/abs/2306.15687">Voicebox: Text-Guided Multilingual
+  Universal Speech Generation at Scale</a>, 2023&nbsp;;
+  Y. Wang et al., <a href="https://arxiv.org/abs/1803.09017">Style Tokens: Unsupervised Style
+  Modeling, Control and Transfer in End-to-End Speech Synthesis</a>, Interspeech 2018&nbsp;;
+  <a href="https://www.w3.org/TR/speech-synthesis11/">W3C, Speech Synthesis Markup Language
+  (SSML) 1.1</a>.</li>
+  <li><strong>Clonage, éthique, watermarking</strong>&nbsp;: E. Casanova et al.,
+  <a href="https://arxiv.org/abs/2112.02418">YourTTS</a>, ICML 2022&nbsp;;
+  C. Wang et al., <a href="https://arxiv.org/abs/2301.02111">Neural Codec Language Models are
+  Zero-Shot Text to Speech Synthesizers</a> (VALL-E), 2023&nbsp;;
+  L. Wan et al., <em>Generalized End-to-End Loss for Speaker Verification</em>, ICASSP 2018&nbsp;;
+  G. Chen et al., <a href="https://arxiv.org/abs/2308.12770">WavMark: Watermarking for Audio
+  Generation</a>, 2023&nbsp;;
+  R. San Roman et al., <a href="https://arxiv.org/abs/2401.17264">Proactive Detection of Voice
+  Cloning with Localized Watermarking</a> (AudioSeal), ICASSP 2024&nbsp;;
+  <a href="https://eur-lex.europa.eu/eli/reg/2024/1689/oj">Règlement (UE) 2024/1689 — AI
+  Act</a> (art. 50) — prolongé par le <a href="../m2-explainability-security-privacy-llms/">module
+  Explainability ch. 9</a> et le <a href="../m2-control-generative-ai/">module Control in
+  Generative AI ch. 6 et 10</a>.</li>
+  <li><strong>Conversation et speech LLMs</strong>&nbsp;: G. Skantze,
+  <a href="https://www.sciencedirect.com/science/article/pii/S088523082030111X">Turn-taking in
+  Conversational Systems and Human-Robot Interaction: A Review</a>, Computer Speech &amp;
+  Language 67, 2021&nbsp;;
+  T. Stivers et al., <em>Universals and Cultural Variation in Turn-Taking</em>, PNAS 2009&nbsp;;
+  T. Nguyen et al., <a href="https://aclanthology.org/2023.tacl-1.15/">Generative Spoken
+  Dialogue Language Modeling</a> (dGSLM), TACL 2023&nbsp;;
+  Z. Borsos et al., <a href="https://arxiv.org/abs/2209.03143">AudioLM: A Language Modeling
+  Approach to Audio Generation</a>, IEEE/ACM TASLP 2023&nbsp;;
+  A. Défossez et al., <a href="https://arxiv.org/abs/2210.13438">High Fidelity Neural Audio
+  Compression</a> (EnCodec), 2022&nbsp;;
+  A. Défossez et al., <a href="https://arxiv.org/abs/2410.00037">Moshi: a Speech-Text Foundation
+  Model for Real-Time Dialogue</a>, 2024 (<a href="https://github.com/kyutai-labs/moshi">code</a>)&nbsp;;
+  J. Ao et al., <em>SpeechT5: Unified-Modal Encoder-Decoder for Speech Language Processing</em>,
+  ACL 2022&nbsp;;
+  Z. Zhang et al., <em>SpeechGPT</em>, 2023&nbsp;;
+  T. Tang et al., <em>SALMONN</em>, 2023 — la couche multimodale est au
+  <a href="../m2-large-language-models/">module LLMs (M2) ch. 8</a>.</li>
+  <li><strong>Outils des labs</strong>&nbsp;: <a href="https://huggingface.co/docs/transformers">HuggingFace
+  transformers</a> (pipelines ASR/TTS)&nbsp;;
+  <a href="https://github.com/snakers4/silero-vad">Silero VAD</a>&nbsp;;
+  <a href="https://github.com/jitsi/jiwer">jiwer</a> (WER)&nbsp;;
+  <a href="https://github.com/facebookresearch/audioseal">AudioSeal</a>.</li>
+</ul>
+</section>
+</main>
+<footer class="foot">
+<p><a href="../../index.html">← Programme du master</a></p>
+</footer>
+</body>
+</html>

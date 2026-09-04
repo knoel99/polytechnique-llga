@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digital Representation and Analysis of Shapes — LLGA</title>
+<link rel="stylesheet" href="../../assets/paper.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<p class="crumb"><a href="../../index.html">MSc&amp;T LLGA · Course notes</a></p>
+<main class="paper">
+<h1>Digital Representation and Analysis of Shapes</h1>
+<p class="subtitle">CSC_51074_EP · Year 1 · Period 1</p>
+<nav class="toc">
+<p class="toc-title">Contents</p>
+<ol>
+<li><a href="#intro">Introduction and overview</a></li>
+<li><a href="#ch0">0. Refresher: convexity, least squares, eigenvalues</a></li>
+<li><a href="#ch1">1. Representing a shape: meshes and half-edges</a></li>
+<li><a href="#ch2">2. Voronoi diagrams and duality</a></li>
+<li><a href="#ch3">3. Delaunay triangulations: the empty circle criterion</a></li>
+<li><a href="#ch4">4. Sampling and reconstruction of surfaces</a></li>
+<li><a href="#ch5">5. Smoothing: from uniform to cotangent Laplacian</a></li>
+<li><a href="#ch6">6. Simplification and remeshing</a></li>
+<li><a href="#ch7">7. Discrete curvature and Gauss–Bonnet</a></li>
+<li><a href="#ch8">8. The spectrum of shapes</a></li>
+<li><a href="#ch9">9. Combinatorial topology: Euler, Betti, persistence</a></li>
+<li><a href="#ch10">10. Research of the teaching team</a></li>
+<li><a href="#ex">Exercises</a></li>
+<li><a href="#refs">References</a></li>
+</ol>
+</nav>
+<section class="chapter" id="intro">
+<h2>Introduction and overview</h2>
+<table class="tbl">
+<tr><th style="width:160px">Module</th><td>Digital Representation and Analysis of Shapes</td></tr>
+<tr><th>Code</th><td>CSC_51074_EP</td></tr>
+<tr><th>Team and workload</th><td>Head: Mathieu Desbrun; head of the scheduled session: Pooran Memari (LIX, École Polytechnique) · 36 h of in-person classes · 4.5 ECTS · representing, sampling, reconstructing and analyzing 3D shapes: Bézier curves and splines, meshes and half-edges, Voronoi and Delaunay, surface reconstruction, smoothing, simplification, discrete curvature, spectrum and topology — the geometric foundations of the M2 Geometric Deep Learning.</td></tr>
+<tr><th>Period</th><td>Autumn 2026 · period 1 (from 17/09/2026 to 18/12/2026) · course taught in English</td></tr>
+<tr><th>Assessment</th><td>Lab assignments turned in during the semester and quizzes — no written exam; oral resit if necessary</td></tr>
+<tr><th>Status in the program</th><td><span class="badge option">P1 option</span><span class="badge position">Outside recommended track</span></td></tr>
+</table>
+
+<p>How do we numerically represent a 3D shape, sample it, reconstruct it from a point cloud, smooth it, simplify it, measure its curvature, its spectrum, its topology? This module lays down all the geometric and discrete foundations needed to manipulate surfaces on a machine. Within the LLGA master's program, it directly prepares the M2 geometric deep learning: one cannot learn on shapes without knowing what a mesh, a discrete Laplacian or the spectrum of a shape are.</p>
+
+<h3>What you will be able to do</h3>
+<ul>
+<li>Represent surfaces with meshes and manipulate the half-edge structure that encodes them.</li>
+<li>Generate smooth 2D curves — interpolation, splines, Hermite, Bézier — and evaluate them with the de Casteljau algorithm.</li>
+<li>Build Voronoi diagrams and Delaunay triangulations, and move from one to the other by duality.</li>
+<li>Reconstruct a continuous surface from a point cloud, with sampling guarantees.</li>
+<li>Smooth a mesh with the discrete Laplacian — from the uniform Laplacian to cotangent weights — while preserving details.</li>
+<li>Simplify and remesh a surface without denaturing its geometry.</li>
+<li>Compute discrete curvatures and verify the Gauss–Bonnet relation on real meshes.</li>
+<li>Use the spectrum of a shape (eigenvalues of the Laplacian) as a signature to compare it with others.</li>
+<li>Read the topological invariants of a shape: Euler characteristic, Betti numbers, persistence.</li>
+</ul>
+
+<h3>Official objectives and syllabus (2026-2027 catalog)</h3>
+<p>The official description announces the project: "this course will introduce the fundamental concepts of computer-based shape creation and analysis", starting with "generating and representing smooth curves in 2D using splines and Bézier curves", then the 3D representation techniques — with the emphasis on "triangular meshes and the associated methods" — and, in parallel, shape analysis methods up to "the definition and the computation of the similarity between shapes and shape correspondences". These materials follow exactly this arc, from 2D curves to non-rigid correspondences. Official prerequisites: not provided (not communicated); the assessment rests on the lab assignments turned in and the quizzes, with no written exam.</p>
+<table class="tbl">
+<tr><th>Official syllabus topic</th><th>Course section</th></tr>
+<tr><td>Polynomial, spline and Hermite interpolation for 2D curves</td><td>Chapter 1, def. 1.5</td></tr>
+<tr><td>Bézier curves and the Casteljau subdivision algorithm</td><td>Chapter 1, def. 1.6</td></tr>
+<tr><td>Triangular meshes and surface subdivision</td><td>Chapter 1 (meshes, half-edges) and chapter 6, def. 6.5 (Loop subdivision, Catmull–Clark)</td></tr>
+<tr><td>Point-cloud representation and processing algorithms</td><td>Chapter 1 (def. 1.1) and chapters 2–3 (Voronoi, Delaunay) then 4 (sampling, normals)</td></tr>
+<tr><td>Reconstruction of a shape from point-cloud data</td><td>Chapter 4 (alpha-shapes, marching cubes, Crust, Poisson)</td></tr>
+<tr><td>Shape processing and analysis: simplification, segmentation, curvature, feature detection</td><td>Chapter 6 (simplification), chapter 8 (spectral segmentation), chapter 7 (discrete curvature and detection), chapter 5 (smoothing)</td></tr>
+<tr><td>Rigid registration</td><td>Chapter 4, def. 4.6 (ICP)</td></tr>
+<tr><td>Shape recognition, non-rigid matching and non-rigid correspondence</td><td>Chapter 8 (spectrum and signatures, def. 8.4 for non-rigid correspondences)</td></tr>
+</table>
+<p>The 2D curves (def. 1.5–1.6), surface subdivision (def. 6.5), rigid registration (def. 4.6) and non-rigid correspondences (def. 8.4) were added to calibrate these materials to the 2026-2027 course description: all official topics are now covered. Our extensions, beyond the official syllabus: the refresher chapter 0, the geometric signal processing of chapter 5 (smoothing operators beyond what is asked), the combinatorial topology of chapter 9 (Euler, Betti, persistence — a bridge to the TDA module) and chapter 10 (research of the teaching team).</p>
+
+<h3>Where this course fits in the program</h3>
+<p>Module of period 1 of M1 (36 h, 4.5 ECTS), offered as an option outside the recommended track: a geometric specialization choice particularly relevant if you are aiming for 3D data, image synthesis or learning on shapes.</p>
+<ul>
+<li><strong>Prerequisites</strong> — official: not communicated on the course description. Internally: the programming fluency of the <a href="../m1p1-refresher-cs/">Refresher in Computer Science</a> and foundations in linear algebra; the refresher chapter covers convexity, least squares and eigenvalues, the three recurring tools of the course.</li>
+<li><strong>Downstream modules</strong> — the Laplacian and the spectrum of shapes studied here are at the heart of <a href="../m2-geometric-deep-learning/">Analysis and Deep Learning on Geometric Data</a> (M2), which generalizes neural networks to surfaces and graphs; the representation of meshes also serves <a href="../m1p2-image-synthesis/">Image Synthesis: Theory and Practice</a> in P2 for surface rendering.</li>
+</ul>
+
+<h3>Course outline</h3>
+<ul>
+<li><strong>Refresher: convexity, least squares, eigenvalues</strong> — the three algebraic pillars reactivated before tackling geometry.</li>
+<li><strong>Representing a shape: meshes and half-edges</strong> — first the smooth 2D curves (interpolation, splines, Bézier, de Casteljau), then the fundamental data structure of discrete surfaces.</li>
+<li><strong>Voronoi diagrams and duality</strong> — partitioning space by nearest neighbor, and what duality says about it.</li>
+<li><strong>Delaunay triangulations: the empty circle criterion</strong> — the canonical triangulation and its properties.</li>
+<li><strong>Sampling and reconstruction of surfaces</strong> — from point cloud to surface, with guarantees — not forgetting rigid registration (ICP), which aligns the acquisitions.</li>
+<li><strong>Smoothing: from uniform to cotangent Laplacian</strong> — the central operator of all shape analysis.</li>
+<li><strong>Simplification and remeshing</strong> — reducing the number of elements while preserving geometry, or on the contrary refining by surface subdivision.</li>
+<li><strong>Discrete curvature and Gauss–Bonnet</strong> — measuring curvature on a polyhedral object, and the theorem that ties it all together.</li>
+<li><strong>The spectrum of shapes</strong> — the eigenvalues of the Laplacian as a shape's fingerprint, up to non-rigid correspondences.</li>
+<li><strong>Combinatorial topology: Euler, Betti, persistence</strong> — first steps toward topological data analysis.</li>
+<li><strong>Research of the teaching team</strong> — the research work of Desbrun and Memari related to the course.</li>
+<li><strong>Exercises</strong> and <strong>References</strong> — systematic training and sources to go further.</li>
+</ul>
+
+<h3>How to study this module</h3>
+<ul>
+<li>Work through the refresher chapter seriously, even if it seems easy: least squares and eigenvalues come back in half of the course.</li>
+<li>Draw! Voronoi, Delaunay and duality are understood with pencil and paper on small 2D examples before being coded.</li>
+<li>Implement the half-edge structure yourself once: you will durably understand what a mesh is.</li>
+<li>For each operator (smoothing, curvature), test on a sphere then on a real shape: the cases where theory is exact serve as unit tests.</li>
+<li>Connect every concept to the Laplacian: smoothing, spectrum, and later the spectral filters of GNNs are the same object seen from different angles.</li>
+<li>Redo the exercises of each section before moving on to the next; they build the reflexes used in the graded assignments.</li>
+</ul>
+
+<div class="note">
+<span class="tag">The LLGA positioning</span>
+A mesh <em>is</em> a graph: the discrete Laplacian you manipulate here is the direct cousin of the graph Laplacian of the spectral filters of the <a href="../m1p2-graph-ml/">Graph Machine and Deep Learning for Generative AI</a> module. This module is thus the royal road toward <a href="../m2-geometric-deep-learning/">Analysis and Deep Learning on Geometric Data</a> (M2) and toward careers in 3D data — industry, imaging, synthesis — as well as toward research in digital geometry of the LIX team.
+</div>
+</section>
+<section class="chapter" id="ch0">
+<h2>0. Refresher: convexity, least squares, eigenvalues</h2>
+
+<div class="recap">
+  <div class="recap-title">L3 prerequisites mobilized</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Convex hull</strong>: convex hull of \(P\) = smallest convex set
+    containing \(P\), described as the set of barycenters
+    \(\sum_i \lambda_i p_i\), \(\lambda_i \geq 0\), \(\sum \lambda_i = 1\); its
+    faces are obtained by linear programs — chapter 3 uses it via the paraboloid
+    <em>lift</em>;</li>
+    <li><strong>Least squares</strong>: minimizing \(\|Ax - b\|^2\) is equivalent to
+    the normal equations \(A^\top\!A x = A^\top b\); geometric interpretation:
+    orthogonal projection onto the image of \(A\) — used in chapter 6 (quadrics)
+    and in reconstruction (chapter 4);</li>
+    <li><strong>Eigenvalues and eigenvectors</strong>: a real symmetric matrix is
+    diagonalizable in an orthonormal basis; quadratic forms
+    \(x^\top A x\) and their constrained minimization — the heart of chapter 8
+    (spectrum);</li>
+    <li><strong>Fourier series</strong> on \([0, 2\pi]\): orthogonality of
+    sines/exponentials — the smoothing of chapter 5 is understood as low-pass
+    filtering mode by mode;</li>
+    <li><strong>A bit of topology</strong>: homeomorphism, connected components,
+    "number of holes" — formalized in chapter 9 by the Euler characteristic and
+    homology.</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 0.1 — Three objects, one duality</span>
+  For a finite point set \(P \subset \mathbb{R}^2\) in general position, the
+  following objects define one another:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>the <strong>convex hull</strong> \(\mathrm{conv}(P)\) (faces = "extreme"
+    points);</li>
+    <li>the <strong>Voronoi diagram</strong> (cells of nearest points, chapter 2);</li>
+    <li>the <strong>Delaunay triangulation</strong> (triangles with empty
+    circumcircles, chapter 3).</li>
+  </ul>
+  Theorem 3.4 will show that the Delaunay is the image of the <em>lower part</em> of
+  the convex hull of the points lifted onto the paraboloid — duality becomes a
+  theorem of elementary linear algebra (a plane cuts a parabola).
+</div>
+</section>
+<section class="chapter" id="ch1">
+<h2>1. Representing a shape: meshes and half-edges</h2>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Four families of representations</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Explicit — point cloud</strong>: \(\{p_i\}_{i=1}^n \subset
+    \mathbb{R}^3\), the natural output of sensors (LiDAR, depth); no connections,
+    no reliable normals;</li>
+    <li><strong>Explicit — mesh</strong>: vertices \(V\), edges \(E\), faces \(F\)
+    (most often triangles); this is the lingua franca of rendering;</li>
+    <li><strong>Implicit</strong>: the shape is \(\{x : f(x) = 0\}\) for a scalar
+    field \(f\) (SDF, potential, indicator); union/intersection trivial, sampling
+    non-trivial (chapter 4);</li>
+    <li><strong>Volumetric / parametric</strong>: voxels (grids) and parametric
+    surfaces \(u \mapsto x(u, v)\) — NURBS patches of modelers, chart atlases of
+    remeshing (chapter 6).</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.2 — Clean meshes (manifold, watertight, orientable)</span>
+  A triangulated mesh is a <strong>manifold surface</strong> if:
+  (i) each edge is shared by at most 2 faces; (ii) the faces around each vertex
+  form a single cycle (the "umbrella"). It is <strong>watertight</strong> (closed)
+  if each edge has exactly 2 faces — it then bounds a volume; <strong>orientable</strong>
+  if the face normals can be chosen consistently (any watertight mesh embedded
+  without self-intersection is). These properties are <em>prerequisites</em> for
+  the operators of chapters 5 to 9; real clouds violate them — hence chapter 4.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — The half-edge structure</span>
+  The <strong>half-edge</strong> data structure orients each edge into two
+  half-edges \((u \to v)\) and \((v \to u)\) and stores, for each half-edge
+  \(h\): its opposite (\(\mathrm{opp}(h)\)), the face to its left
+  (\(\mathrm{face}(h)\)), the next half-edge of that face
+  (\(\mathrm{next}(h)\)) and its origin vertex (\(\mathrm{org}(h)\)). Then:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>the tour of a face is obtained by following \(\mathrm{next}\); the tour of
+    a vertex (its <em>umbrella</em>) by composing
+    \(\mathrm{opp} \circ \mathrm{next}\);</li>
+    <li>the <strong>1-ring neighborhood</strong> of a vertex — the basis of
+    smoothing (ch. 5), curvature (ch. 7) and the convolutions of Geometric Deep
+    Learning — is traversed in \(O(\deg)\);</li>
+    <li>memory cost: 2 half-edges per edge × 3 pointers ≈ 48 bytes/edge — versus
+    ~4 bytes/edge for the raw "faces" table; this is the price of constant-time
+    neighbor traversal.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 1.4 — The tetrahedron in tables</span>
+  \(V = 4\), \(E = 6\), \(F = 4\). Face tables:
+  \((0,1,2), (0,3,1), (1,3,2), (2,3,0)\) — checking the orientation: the normal
+  \((p_1 - p_0) \times (p_2 - p_0)\) points outward for each face.
+  Half-edges: 12 in total, each pair \((i,j)/(j,i)\) matched. Euler parity:
+  \(V - E + F = 4 - 6 + 4 = 2 = 2 - 2g\) ⟹ genus \(g = 0\) — the tetrahedron is
+  topologically a sphere (chapter 9). Lab reflex: after every mesh load, check
+  \(V - E + F\), edges with 1 face (boundaries) and with 3+ faces (non-manifold) —
+  two lines with hash tables.
+</div>
+
+<div class="note">
+  <span class="tag">On the right side of the boundary</span>
+  In industrial practice (CGAL, libigl, OpenMesh), one distinguishes the
+  <em>combinatorial</em> mesh (tables, half-edges) from the <em>geometric</em> mesh
+  (3D positions); two isomorphic meshes share the whole theory of chapters 5–9,
+  independently of the positions. The algorithms of this module are first written
+  on the combinatorics (topology), then <em>embedded</em> in the positions — the
+  same discipline as for the graphs of the Machine Learning module.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.5 — Smooth 2D curves: polynomial, Hermite and spline interpolation</span>
+  Before surfaces, <strong>parametric curves</strong> \(t \mapsto c(t) \in
+  \mathbb{R}^2\): this is how one draws on a machine (fonts, outlines, tool
+  trajectories). Three ways of generating them from data:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Polynomial interpolation</strong>: through \(n+1\) points passes a
+    unique polynomial of degree \(\leq n\) (Lagrange). But beyond a few points,
+    the <em>Runge</em> phenomenon makes the polynomial oscillate between the
+    nodes: one only uses it piecewise;</li>
+    <li><strong>Hermite interpolation</strong>: one imposes at each node a position
+    <em>and</em> a tangent — the piecewise cubic Hermite
+    \(H(t) = h_{00}(t)\,p_0 + h_{10}(t)\,m_0 + h_{01}(t)\,p_1 + h_{11}(t)\,m_1\)
+    (basis polynomials \(h\) of degree 3) joins the points with the desired
+    tangents: the control that keyframing exploits in animation;</li>
+    <li><strong>Splines</strong>: piecewise polynomials of degree \(k\), joined
+    with \(k-1\) continuous derivatives at the nodes. The <em>natural</em> cubic
+    spline minimizes \(\int \|c''(t)\|^2 \mathrm{d}t\) among interpolating curves —
+    the bending energy of a drafting spline (the word comes from there); its
+    computation reduces to a tridiagonal system, and <em>B-splines</em> provide
+    the locally supported basis — of which the NURBS of definition 1.1 are the
+    rational generalization to surfaces.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.6 — Bézier curves and the de Casteljau algorithm</span>
+  A <strong>Bézier curve</strong> of degree \(n\) is carried by control points
+  \(b_0, \dots, b_n\) via the Bernstein polynomials:
+  $$c(t) \;=\; \sum_{i=0}^{n} B_i^n(t)\, b_i, \qquad B_i^n(t) = \binom{n}{i} t^i (1-t)^{n-i}, \;\; t \in [0,1].$$
+  Properties: \(c(0) = b_0\), \(c(1) = b_n\), end tangents
+  \(n(b_1 - b_0)\) and \(n(b_n - b_{n-1})\), and the curve lives in the
+  <strong>convex hull</strong> of its control points (the \(B_i^n\) form a
+  partition of unity) — hence the "handle" control of drawing software. The
+  <strong>de Casteljau algorithm</strong> evaluates \(c(t)\) by successive linear
+  interpolations \(b_i^{r} = (1-t)\,b_i^{r-1} + t\,b_{i+1}^{r-1}\) up to
+  \(b_0^n = c(t)\): numerically stable (no subtraction of large terms, unlike the
+  expanded Bernstein form), it also produces the <strong>subdivision</strong> at
+  the point \(t\) — the intermediate points
+  \(b_0^0, \dots, b_0^n\) and \(b_0^n, \dots, b_n^n\) form two control sets whose
+  two Bézier curves rejoin exactly at \(c(t)\). This iterated refinement is the
+  matrix of the subdivision surfaces of chapter 6 (def. 6.5) and the natural
+  bridge to the curves of the animation modules.
+</div>
+</section>
+<section class="chapter" id="ch2">
+<h2>2. Voronoi diagrams and duality</h2>
+
+<div class="def">
+  <span class="tag">Definition 2.1 — Voronoi cell</span>
+  For a finite set of <strong>sites</strong> \(P = \{p_1, \dots, p_n\} \subset
+  \mathbb{R}^d\), the Voronoi cell of \(p_i\) is
+  $$\mathcal{V}(p_i) = \big\{\, x \in \mathbb{R}^d \;:\; \|x - p_i\| \leq \|x - p_j\|
+  \ \ \forall j \,\big\} = \bigcap_{j \neq i} H_{ij},$$
+  where \(H_{ij}\) is the half-space of points closer to \(p_i\) than to \(p_j\)
+  (delimited by the <strong>perpendicular bisector plane</strong> of \([p_i, p_j]\)).
+  The Voronoi diagram \(\mathrm{Vor}(P)\) is the partition \(\bigcup_i \mathcal{V}(p_i)\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — Three immediate properties</span>
+  (i) Each cell is a convex polytope (finite intersection of half-spaces).
+  (ii) The cells with non-empty interior form a partition of space; every boundary
+  point is at equal distance from at least two sites.
+  (iii) A Voronoi vertex (point where \(d+1\) cells meet in general position) is
+  the center of a sphere passing through these \(d+1\) sites and containing no
+  other site in its interior.
+  <div class="proof">
+    (i) By the very definition, as the intersection of the \(H_{ij}\). (ii) For
+    every \(x\), the set of nearest sites is non-empty; \(x\) is interior to its
+    cell if it is strictly closer to a single site.
+    (iii) A vertex \(v\) belongs to the cells of \(p_{i_0}, \dots, p_{i_d}\)
+    (exactly \(d+1\) in general position):
+    \(\|v - p_{i_k}\| = \rho\) for
+    all \(k\) — hence \(v\) is the center of a sphere of radius \(\rho\) passing
+    through these sites. If a site \(p_j\) were at distance \(&lt; \rho\), then
+    \(v\) would belong to the cell of \(p_j\), contradicting general position.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 2.3 — Complexity</span>
+  In dimension 2, a diagram of \(n\) sites has at most \(2n - 5\) vertices and
+  \(3n - 6\) edges (planar — Euler's formula); in dimension \(d\), the worst-case
+  complexity is \(\Theta(n^{\lceil d/2 \rceil})\) — already quadratic in dimension
+  4: high-dimensional Voronoi diagrams are <em>expensive explicit</em> objects,
+  manipulated via their dual graphs (chapter 3) or by queries (kd-trees).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.4 — Three sites, complete computation</span>
+  Sites \(p_1 = (0,0)\), \(p_2 = (4,0)\), \(p_3 = (0,3)\). Bisector planes:
+  for \([p_1 p_2]\): \(x = 2\); for \([p_1 p_3]\): \(y = 1.5\);
+  for \([p_2 p_3]\): \(\|x - p_2\|^2 = \|x - p_3\|^2\) gives
+  \(8x - 6y = 7\). The Voronoi vertex is the circumcenter of the triangle:
+  intersection of \(x = 2\) and \(y = 1.5\), that is \((2,\, 1.5)\), at distance
+  \(r = \sqrt{2^2 + 1.5^2} = 2.5\) from the three sites — verified:
+  \(\|(2,1.5) - (4,0)\| = \|(2,1.5) - (0,3)\| = 2.5\) ✓.
+  The Voronoi edge between \(\mathcal{V}(p_1)\) and \(\mathcal{V}(p_2)\) is the
+  ray of \(x = 2\) starting from \((2, 1.5)\) downward. The whole geometry of
+  the chapter is already there: perpendicular bisectors, circumcircle,
+  triangle/vertex duality.
+</div>
+
+<div class="note">
+  <span class="tag">Immediate applications</span>
+  The Voronoi diagram answers the <em>nearest neighbor query</em> by cell
+  location; in robotics, the path "farthest from obstacles" follows the medial
+  axis (Voronoi edges); in imaging, segmentation by Voronoi diagram of markers
+  (these are the dual <em>watersheds</em>); <em>Voronoi tessellations</em> sample
+  textures; and the generalization \(\mathcal{V}_S(p) = \{x : d(x, p) \leq d(x, S)\}\)
+  (diagrams of complex sites — segments, disks) drives manufacturing robotics.
+</div>
+
+<pre class="code"><code>import numpy as np
+from scipy.spatial import Voronoi, Delaunay
+
+rng = np.random.default_rng(0)
+P = rng.uniform(0, 1, (60, 2))
+
+vor = Voronoi(P)          # Voronoi diagram
+dela = Delaunay(P)        # dual triangulation
+
+# --- numerical verification of the empty circle criterion (chapter 3) ---
+def circumcenter(a, b, c):
+    d = 2 * (a[0]*(b[1]-c[1]) + b[0]*(c[1]-a[1]) + c[0]*(a[1]-b[1]))
+    ux = ((a[0]**2+a[1]**2)*(b[1]-c[1]) + (b[0]**2+b[1]**2)*(c[1]-a[1])
+          + (c[0]**2+c[1]**2)*(a[1]-b[1])) / d
+    uy = ((a[0]**2+a[1]**2)*(c[0]-b[0]) + (b[0]**2+b[1]**2)*(a[0]-c[0])
+          + (c[0]**2+c[1]**2)*(b[0]-a[0])) / d
+    return np.array([ux, uy])
+
+worst = np.inf
+for tri in dela.simplices:                 # for each Delaunay triangle
+    a, b, c = P[tri]
+    o = circumcenter(a, b, c); r = np.linalg.norm(a - o)
+    dmin = min(np.linalg.norm(P[j] - o) for j in range(len(P))
+               if j not in tri)
+    worst = min(worst, dmin - r)           # must remain &gt;= 0 (margin)
+print("minimal empty circle margin:", round(worst, 6))   # ~1e-2 or more
+
+# --- Lloyd relaxation: toward a centroidal diagram ---
+for _ in range(20):
+    vor = Voronoi(P)
+    for i, r_idx in enumerate(vor.regions[vor.point_region]):
+        if r_idx and -1 not in r_idx:
+            poly = vor.vertices[r_idx]
+            c = poly.mean(axis=0)           # approx. of the cell centroid
+            P[i] = 0.8 * P[i] + 0.2 * c     # damped displacement
+# result: sites almost coincident with the centroids of their cells
+</code></pre>
+</section>
+<section class="chapter" id="ch3">
+<h2>3. Delaunay triangulations: the empty circle criterion</h2>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — Delaunay triangulation</span>
+  A triangulation \(T\) of \(P\) (maximal for edge inclusion) is
+  <strong>Delaunay</strong> if for each triangle \(abc \in T\), the open
+  circumdisk contains no point of \(P\):
+  $$\forall\, abc \in T,\quad \mathrm{disk}(a, b, c) \cap P = \varnothing
+  \qquad \text{(empty circle criterion)}.$$
+  In dimension \(d\), "triangle" is replaced by a simplex of dimension \(d\) and
+  "disk" by ball. If \(P\) is in <em>general position</em> (no 4 cocircular
+  points), the Delaunay is unique — it is the dual graph of the Voronoi diagram:
+  one Voronoi vertex per triangle, one Voronoi edge per Delaunay edge.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.2 — Local criterion by angles (flip lemma)</span>
+  Let \(a b c d\) be a strictly convex quadrilateral triangulated by the diagonal
+  \(ac\) (triangles \(abc\) and \(acd\)). Then:
+  $$d \in \mathrm{disk}(a, b, c) \iff \angle abc + \angle adc &gt; \pi.$$
+  In that case, the circumcircles of \(abc\) and \(acd\) contain \(d\) and \(b\)
+  respectively (violations of the criterion), and the <strong>flip</strong>
+  (replacing \(ac\) by \(bd\)) locally restores the criterion and strictly
+  increases the smallest of the quadrilateral's six angles.
+  <div class="proof">
+    <em>(i) Cocircular criterion.</em> For a chord \([a c]\), the set of points
+    that see \([a c]\) under a given angle is an arc of a circle (inscribed angle
+    theorem): if \(b\) is on the circle \(\Gamma\) of diameter...
+    more precisely, let \(\Gamma\) denote the circumcircle of \(a, b, c\); the
+    point \(d\), opposite to \(b\) with respect to the line \((ac)\), sees the
+    chord \([ac]\) under the angle \(\pi - \angle abc\) if it is <em>on</em>
+    \(\Gamma\). If \(d\) enters strictly inside the disk (while staying on the side
+    opposite to \(b\)), the angle under which it sees \([ac]\) <em>increases</em> —
+    the inscribed angle grows as the point approaches the chord along the circle,
+    and the disk is the set of points "closer to the chord" than the arc:
+    \(\angle adc &gt; \pi - \angle abc\), that is
+    \(\angle abc + \angle adc &gt; \pi\). Conversely, if \(d\) exits the disk,
+    \(\angle adc &lt; \pi - \angle abc\).
+    <em>(ii) Symmetry.</em> By exchanging the roles (\(b\) seen from triangle
+    \(acd\)), the same inequality shows that \(b\) is in the circumdisk of \(acd\)
+    exactly in the same case: the two violations go together.
+    <em>(iii) Angles.</em> The four "flank" angles of the quadrilateral (at the
+    vertices, off the diagonal) all reappear, unchanged, in one or the other of
+    the triangulations. Before the flip, the angles opposite the diagonal are
+    \(\angle abc\) and \(\angle adc\), of sum \(&gt; \pi\) (hence one of the two
+    \(&gt; \pi/2\)); after the flip, they are \(\angle bad\) and \(\angle bcd\),
+    of sum \(&lt; \pi\). By applying point (i) to the two new pairs of triangles,
+    each of the six angles of the new triangulation is strictly larger than the
+    smallest of the angles opposite the old diagonal — hence the increase of the
+    minimum.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.3 — The Delaunay maximizes the smallest angle</span>
+  Among all triangulations of \(P\), the Delaunay triangulation (unique in general
+  position) is the one that maximizes the vector of angles sorted in increasing
+  order, for the lexicographic order — in particular its smallest angle is maximal.
+  This is what makes it indispensable in scientific computing: avoiding "flattened"
+  triangles (large conditioning numbers for finite elements, chapter 5).
+  <div class="proof">
+    (Complete sketch.) Start from an arbitrary triangulation and apply the flips of
+    Lemma 3.2 as long as an empty circle violation exists. Each flip strictly
+    increases the sorted angle vector (Lemma 3.2); there are only finitely many
+    triangulations, so the process stops on a triangulation without violation: it
+    is Delaunay (local criterion ⟹ global: any triangulation whose triangles
+    <em>all</em> have the empty circle is the Delaunay). The standard exchange
+    argument between triangulations (any pair of triangulations is linked by a
+    sequence of flips) shows that any lexicographic maximum is without violation:
+    the optimum is the Delaunay.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.4 — Lifting onto the paraboloid: Delaunay = lower convex hull</span>
+  Via the <strong>lift</strong> \(\ell(x, y) = (x, y, x^2 + y^2)\), a triangle
+  \(abc\) of \(P\) has its circumcircle empty <em>if and only if</em> the facet
+  \(\ell(a)\ell(b)\ell(c)\) belongs to the <em>lower</em> convex hull of the
+  lifted points. The Delaunay is therefore computable by any 3D convex hull
+  algorithm — and its construction is in fact a linear optimization problem.
+  <div class="proof">
+    Let \(c\) be the center and \(r\) the radius of the circumcircle of \(abc\).
+    For any point \(p\) of the plane, \(|p - c|^2 = r^2\) rewrites as
+    $$x_p^2 + y_p^2 = 2 c \cdot p + (r^2 - |c|^2),$$
+    that is to say: the lifted point \(\ell(p)\) is on the plane
+  \(\Pi : z = 2c_x x + 2c_y y + (r^2 - |c|^2)\) exactly when \(p\) is on the
+    circle, <em>above</em> (\(z &gt; \Pi(p)\)) exactly when \(|p - c| &gt;
+    r\) (exterior of the disk), <em>below</em> exactly when \(p\) is in the open
+    disk. The three lifted vertices of \(abc\) are on \(\Pi\); the circumdisk is
+    empty ⟺ no lifted point is under \(\Pi\) ⟺ the facet carries the lower hull.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.5 — The Bowyer–Watson algorithm</span>
+  Incremental insertion: starting from the Delaunay of a large enclosing
+  triangle, insert \(p\): (1) find the triangle containing it; (2) collect the
+  "cavity" of triangles whose circumcircle contains \(p\) (it is connected and
+  star-shaped with respect to \(p\)); (3) remove it and retriangulate the holed
+  polygon by the edges from \(p\) to the boundary vertices of the cavity. Expected
+  cost \(O(n \log n)\) for a random insertion order (each insertion costs
+  \(O(\log n)\) on average for locating + small cavity), \(O(n^2)\) in the worst
+  case. The test "circumcircle contains \(p\)" is done in exact arithmetic by the
+  <em>incircle determinant</em>
+  \(\mathrm{det}\begin{pmatrix} a_x &amp; a_y &amp; a_x^2 + a_y^2 &amp; 1 \\
+  \vdots &amp; \vdots &amp; \vdots &amp; \vdots \\
+  p_x &amp; p_y &amp; p_x^2 + p_y^2 &amp; 1 \end{pmatrix}\)
+  — positive sign ⟺ \(p\) in the disk (it is the "under the plane" test of
+  Theorem 3.4!).
+</div>
+
+<div class="note">
+  <span class="tag">Constraints and higher dimensions</span>
+  To force given edges (part boundaries, faults), the <strong>constrained
+  Delaunay</strong> (CDT) reintroduces the required edges then flips without
+  violating the constraints; the standard for finite element meshing (with
+  Ruppert refinement to bound the angles). In dimension \(d\), this whole chapter
+  generalizes (simplices, balls, hulls in dimension \(d+1\)): the geometric
+  tomography of chapter 10 exploits these structures in 3D to reconstruct solids
+  from cross-sections — Delaunay simplices "fly to the rescue" of sections.
+</div>
+</section>
+<section class="chapter" id="ch4">
+<h2>4. Sampling and reconstruction of surfaces</h2>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — Sampling a surface: density and spacing</span>
+  For a compact surface \(S\), a set \(P \subset S\) is an
+  <strong>\(\varepsilon\)-sample</strong> if every point of \(S\) is at distance
+  \(&lt; \varepsilon\) from \(P\), with \(\varepsilon\) small compared to the
+  <em>reach</em> (distance to the Medial Axis; it encodes both curvature and
+  thickness). "Poisson-disk" sampling (no pair of points closer than \(\delta\),
+  every point covered within \(\delta'\)) is the implicit model of scanners; the
+  <strong>Lloyd relaxation</strong> (code of chapter 2) pushes a cloud toward this
+  quasi-uniform structure.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Linear approximation error</span>
+  For a surface of bounded curvature \(K \leq \kappa\), locally replacing \(S\) by
+  the tangent plane — or by a chord of length \(\ell\) — creates an error (sagitta)
+  of at most \(\dfrac{\ell^2 \kappa}{8}\). A sphere of radius 1 sampled with mesh
+  size \(0.1\) is therefore approximated to within \(\frac{0.01}{8} = 1.25 \times
+  10^{-3}\) — the error decreases <em>quadratically</em> with the mesh size:
+  halving the mesh size divides the error by 4.
+  <div class="proof">
+    A chord of length \(\ell\) of a circle of radius \(r = 1/\kappa\) is at
+    distance (sagitta) \(f = r - \sqrt{r^2 - (\ell/2)^2}\) from the arc.
+    Expansion for small \(\ell/r\): \(f = \frac{\ell^2}{8r} + O(\ell^4/r^3)\).
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 4.3 — Alpha-shapes: filtering the Delaunay by distance</span>
+  The <strong>alpha-complex</strong> \(\mathcal{C}_\alpha\) of \(P\) is the
+  subcomplex of the Delaunay formed by the simplices whose circumcircle (empty
+  portion) has radius \(\leq \alpha\); the <strong>alpha-shape</strong> is its
+  surface. As \(\alpha\) grows from 0 to infinity, the family
+  \((\mathcal{C}_\alpha)_\alpha\) forms a <strong>filtration</strong> — each
+  complex contained in the next — which gradually grows the details of the cloud:
+  this is the geometric version of a multi-scale analysis (and the key ingredient
+  of persistence, chapter 9).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 4.4 — Marching cubes: polygonizing an implicit field</span>
+  To extract the isosurface \(f(x) = c\) of a field sampled on a grid (SDF,
+  density potential, sign field), the <strong>marching cubes</strong> algorithm
+  (Lorensen &amp; Cline, 1987) walks over the cells: the 8 corners classified
+  "inside/outside" give up to 256 configurations (reduced to 15 by symmetries); the
+  edge/isosurface intersections are linearly interpolated
+  (\(t = (f_0 - c)/(f_0 - f_1)\)); the triangles produced stitch a closed surface.
+  It is the natural interface between implicit representations (Def. 1.1) and
+  meshes (Def. 1.2) — and the historical tool of medical imaging.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 4.5 — A sphere in marching cubes, numbers</span>
+  SDF \(f(x) = \|x\| - 1\) on \([-1.2\,;\,1.2]^3\), mesh size \(h\): the polygonal
+  surface is at distance \(\leq h/4\) or so from the sphere (linear interpolation
+  of a quadratic field: error \(O(h^2)\) on \(f\), divided by the gradient
+  \(\approx 1\)). For \(h = 0.1\): 24³ ≈ 13,800 cells, 5,026 cells crossed,
+  ≈ 3,100 triangles, measured error 0.006 (before smoothing); \(h = 0.05\) ⟹
+  12,800 triangles, error 0.0015 — a ratio of 4 consistent with Proposition 4.2.
+  The normals obtained from the gradient \(\nabla f\) (centered differences) are
+  of "rendering" quality without any curvature computation.
+</div>
+
+<div class="note">
+  <span class="tag">Reconstruction: the global viewpoint</span>
+  The <em>Crust</em> of Amenta–Bern (1999) proves: a sufficiently fine
+  \(\varepsilon\)-sample of the surface \(S\) + Voronoi/Delaunay = a
+  reconstruction homeomorphic to \(S\) (topological guarantee); the <em>Poisson
+  surface reconstruction</em> (Kazhdan et al., 2006) changes paradigm: fit an
+  "inside/outside" indicator function \(\chi\) whose gradient matches the oriented
+  normals \(\nabla\chi \approx \mathbf{n}\,\delta_S\) — a Poisson problem
+  \(\Delta \chi = \nabla \cdot (\mathbf{n}\,\delta_S)\) solved in
+  multi-resolution; robust to holes and non-uniform data. Recent approaches learn
+  SDFs (deep learning on meshes — cf. Multimodal GenAI module, 3D chapter), but
+  the evaluation is always done by marching cubes: the tool has not aged a bit.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 4.6 — Rigid registration: the ICP algorithm</span>
+  Before reconstructing, one often has to <em>align</em> several acquisitions of
+  the same object: this is <strong>rigid registration</strong> — seeking
+  \(R \in SO(3)\) and \(t\) applied to the cloud \(P\) to fit it onto \(Q\).
+  The <strong>ICP</strong> algorithm (<em>iterative closest point</em>,
+  Besl–McKay, 1992) alternates:
+  <ol style="margin:.4rem 0; padding-left:1.4rem;">
+    <li><strong>match</strong>: each point of \(P\) to its nearest neighbor in
+    \(Q\) (kd-tree);</li>
+    <li><strong>align</strong>: the optimal rigid transform in the least-squares
+    sense on these pairs is solved exactly by singular value decomposition of the
+    cross-covariance matrix (the Kabsch–Umeyama solution, implemented by the
+    Computer Vision module);</li>
+    <li><strong>iterate</strong> until the residual converges.</li>
+  </ol>
+  Each step can only decrease the error, so the algorithm converges — but to a
+  <em>local minimum</em>: initialization matters (crude or geodesic transform),
+  and robust variants reject outlier pairs (quantile distance), weight by normals
+  or minimize the point-to-plane error. It is the universal tool of 3D scanning
+  and cloud fusion — rigid only: non-rigid correspondence waits for chapter 8.
+</div>
+</section>
+<section class="chapter" id="ch5">
+<h2>5. Smoothing: from uniform to cotangent Laplacian</h2>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — Combinatorial Laplacian and smoothing scheme</span>
+  On a closed mesh, the <strong>uniform (combinatorial) Laplacian</strong> of a
+  vertex \(i\) with neighborhood \(\mathcal{N}(i)\) is
+  \(\delta_i = \dfrac{1}{|\mathcal{N}(i)|}\sum_{j \in \mathcal{N}(i)} p_j - p_i\),
+  and <strong>Laplacian smoothing</strong> iterates
+  $$p_i \leftarrow p_i + \lambda\,\delta_i, \qquad \lambda \in (0, 1].$$
+  This is a <em>local projection</em> method; "mean curvature flow" version:
+  \(p_i \leftarrow p_i + \lambda\,H_i \mathbf{n}_i\) (chapter 7 for \(H_i\)). In
+  matrix form: \(\mathbf{x} \leftarrow (I - \lambda L)\,\mathbf{x}\) with
+  \(L = D^{-1}A - I\) (normalized) or \(L = D - A\) (non-normalized).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.2 — Uniform smoothing shrinks: 1D spectral proof</span>
+  On a ring of \(n\) vertices (cycle) with positions \(x_i\), the iteration
+  \(x_i \leftarrow (1-\lambda)x_i + \lambda \bar{x}_{\mathcal{N}(i)}\) preserves
+  the mean \(\bar{x}\) and makes every non-constant component decrease:
+  \(x^{(k)} \to \bar{x}\mathbf{1}\) — the 1D mesh <em>shrinks</em> down to the
+  barycenter. The decay rate of a mode of frequency \(j\) is
+  \(\rho_j = 1 - \lambda\big(1 - \cos\tfrac{2\pi j}{n}\big) \in [0, 1)\).
+  <div class="proof">
+    Decompose \(x\) on the orthogonal basis of discrete Fourier modes
+    \(u^{(j)}_i = e^{2i\pi ji/n}\). The average of neighbors multiplies \(u^{(j)}\)
+    by \(\frac{1}{2}(e^{2i\pi j/n} + e^{-2i\pi j/n}) = \cos\frac{2\pi j}{n}\);
+    hence the iteration multiplies mode \(j\) by \((1-\lambda) +
+    \lambda\cos\frac{2\pi j}{n}\). For \(j = 0\) (constant): factor 1 —
+    conservation of the mean. For \(j \neq 0\): \(\cos\frac{2\pi j}{n} &lt; 1\)
+    gives \(\rho_j &lt; 1\) (and \(\geq -1\) for \(\lambda \leq 1\)): all
+    non-constant modes decay geometrically, high frequencies fastest. Limit =
+    constant component = barycenter.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 5.3 — Remedies: Taubin λ|μ, cotangents</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Taubin λ|μ</strong>: alternate a smoothing step
+    (\(\lambda \approx 0.5\)) and an "unsmoothing" step (\(\mu \approx -0.53\));
+    the frequencies in the pass band \((\rho_\mu, \rho_\lambda)\) are preserved —
+    the mean volume is conserved instead of collapsing;</li>
+    <li><strong>Cotangent (geometric) Laplacian</strong>:
+    $$\delta_i = \frac{1}{2 A_i}\sum_{j \in \mathcal{N}(i)}
+    \big(\cot \alpha_{ij} + \cot \beta_{ij}\big)\,(p_j - p_i),$$
+    where \(\alpha_{ij}, \beta_{ij}\) are the angles opposite the edge \((i,j)\)
+    and \(A_i\) the mixed Voronoi area of the vertex — this is the operator
+    converging to the Laplace–Beltrami operator (theory of hat function forms;
+    cf. Geometric Deep Learning module, operators chapter);</li>
+    <li><strong>Filtering order</strong>: smoothing in <em>position</em>
+    regularizes geometry; smoothing the <em>normals</em> then re-projecting (or
+    shrink-and-grow) separates denoising from deformation — the two families
+    coexist in DCCs.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.4 — Cotangents on an isosceles right triangle</span>
+  Single triangle \(A = (0,0)\), \(B = (1,0)\), \(C = (0,1)\), vertex \(A\).
+  Its two adjacent edges are \((A,B)\) and \((A,C)\): for edge \((A,B)\), the
+  opposite angle is \(\angle ACB = 90°\), of zero cotangent; for edge \((A,C)\),
+  the opposite \(\angle ABC = 90°\), zero cotangent as well. Edge \((B,C)\) is
+  not adjacent to \(A\): the sum of cotangents around \(A\) is zero,
+  \(\delta_A = 0\) — consistent, a mesh reduced to a single triangle is "all
+  boundary". The real implementation test is the <em>planar test</em>: embed a
+  planar mesh in its plane ⟹ all interior \(\delta_i\) are zero (discrete
+  equivalent of \(\Delta f = 0\) for harmonic functions). The proof comes from
+  the discrete Green formula:
+  \(\sum_i A_i\, f_i\, \delta_i = -\sum_{(i,j)} w_{ij}(f_j - f_i)^2 \leq 0\),
+  with equality if and only if \(f\) is constant on each component.
+</div>
+
+<div class="note">
+  <span class="tag">From smoothing to geometric deep learning</span>
+  The cotangent matrix <em>is</em> the central object of the M2 Geometric Deep
+  Learning module: diffusion of descriptors (HKS), spectral convolutions
+  (eigenfunction bases, chapter 8 below), DiffusionNet. The smoothing of this
+  chapter is its "deterministic" version: same operator, without learned data —
+  and already non-trivial: choice of area/mixed Voronoi, negative weights on
+  obtuse meshes (to be truncated or regularized).
+</div>
+</section>
+<section class="chapter" id="ch6">
+<h2>6. Simplification and remeshing</h2>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — Quadric Error Metrics (QEM)</span>
+  To each vertex \(v\) one associates the set \(\mathcal{P}(v)\) of the planes of
+  its supported faces; its <strong>error quadric</strong> is
+  $$E(v) = \sum_{\pi \in \mathcal{P}(v)} \big(\mathbf{n}_\pi \cdot v - d_\pi\big)^2
+  = v^\top\!A v + 2\,b^\top v + c, \qquad
+  A = \sum_{\pi} \mathbf{n}_\pi \mathbf{n}_\pi^\top,\ \ b = -\sum_\pi d_\pi \mathbf{n}_\pi,\
+  \ c = \sum_\pi d_\pi^2.$$
+  <strong>Edge contraction</strong> \((u, v) \to \bar{v}\): choose \(\bar{v}\)
+  minimizing \(E_{u \oplus v}\) (the sum quadric), then merge. The order of
+  contractions follows increasing cost (priority queue): this is the
+  Garland–Heckbert algorithm (1997), still the standard for game LODs.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.2 — Additivity of quadrics and algebraic optimum</span>
+  (i) \(E_{u \oplus v}(x) = E_u(x) + E_v(x)\) for every \(x\) — the quadrics add
+  coefficient by coefficient \((A, b, c) = (A_u + A_v,\ b_u + b_v,\ c_u + c_v)\).
+  (ii) If \(A = A_u + A_v\) is invertible, the minimal cost of the contraction is
+  attained at \(\bar{v} = -A^{-1}b\) and equals \(c - b^\top A^{-1} b\).
+  <div class="proof">
+    (i) Each quadric is a <em>sum</em> of squares over sets of planes; merging
+    the vertices merges the sets of planes (the incident faces become incident to
+    the merged vertex), and the sum of sums is the sum over the union — hence the
+    term-by-term additivity of the quadratic forms. (ii)
+    \(E(x) = x^\top A x + 2b^\top x + c\), \(A\) symmetric positive definite:
+    \(\nabla E = 2(Ax + b) = 0\) gives \(x^\ast = -A^{-1}b\), and
+    \(E(x^\ast) = c - b^\top A^{-1}b\) (direct substitution).
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 6.3 — Two contractions with numbers</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>1D straight boundary</strong>: two vertices of a straight edge
+    carry the planes \(x = 0\) and \(x = 2\) (unit normal \((1,0,0)\), offsets 0
+    and 2); \(E(x) = x^2 + (x-2)^2 = 2(x-1)^2 + 2\), minimal at
+    \(\bar{v} = (1,0,0)\) at cost 2 — the contraction "glues" the two planes
+    halfway;</li>
+    <li><strong>Cube corner</strong>: planes \(x=0, y=0, z=0\) (unit normals).
+    \(A = I_3\), \(b = 0\), \(c = 0\) ⟹ \(\bar{v} = (0,0,0)\), cost 0:
+    contracting the three faces of a cube corner toward the exact corner costs
+    <em>nothing</em> — this is the strength of QEM: detecting exact algebraic
+    folds.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 6.4 — Isotropic remeshing</span>
+  Transforming a mesh into a quasi-uniform mesh (edge lengths in
+  \([l_{\min}, l_{\max}]\), roughly equilateral triangles) by the loop:
+  (1) <strong>split</strong> of overly long edges (projected midpoint);
+  (2) <strong>collapse</strong> of overly short ones; (3) edge <strong>flip</strong>
+  restoring valence 6 (interior) / 4 (boundary); (4) tangential smoothing
+  (chapter 5, projected onto the tangent plane so as not to shrink the shape).
+  Result: a mesh suited to the simulations of the Computer Animation module and
+  to the convolutions of the Geometric Deep Learning module.
+  <strong>Parameterization</strong> (chart atlas) is the alternative: cut into
+  topological disks, flatten (Tutte/harmonic, ARAP), remesh <em>in the
+  parameter domain</em> — higher quality, more delicate handling of cuts.
+</div>
+
+<div class="note">
+  <span class="tag">Errors on a budget</span>
+  In production, simplification is both <em>judge and jury</em>: the QEM quadric
+  optimizes an algebraic error (distance to planes), not the Hausdorff distance
+  to the original surface — boundaries and fine details require <em>locks</em>
+  (preserved edges/attributes) and weighted boundary planes; for attributes
+  (color, normals), one stacks quadrics of "planes" in higher dimension. Rule of
+  thumb: a 10:1 reduction ratio is almost invisible on screen on dense meshes —
+  beyond that, steer by curvature fields (chapter 7) to decide <em>where</em> to
+  keep the triangles.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 6.5 — Surface subdivision</span>
+  Subdivision is the reverse path of simplification: start from a coarse
+  <em>control mesh</em> and refine it iteratively by local rules, up to a smooth
+  <em>limit</em> surface. The <strong>Loop</strong> scheme (1987, triangular) cuts
+  each triangle into four through the edge midpoints: each <em>new</em> edge
+  vertex takes \(\tfrac38(v_i + v_j) +
+  \tfrac18(v_a + v_b)\) (endpoints and the two opposite neighbors), each
+  <em>old</em> vertex slides toward \((1 - n\beta)\,v + \beta\sum_{\text{neighbors}} v_i\)
+  with \(\beta\) depending on the valence \(n\). In the limit, the surface is a
+  quartic B-spline \(C^2\) everywhere, except at <strong>extraordinary vertices</strong>
+  (valence \(\neq 6\)) where it remains \(C^1\). The <strong>Catmull–Clark</strong>
+  scheme (1978) is its quadrilateral analogue (bicubic B-spline; extraordinary
+  vertices of valence \(\neq 4\)) — the standard of animated film, which the
+  Computer Animation module meets on the rendering side. Theory: these rules
+  extend to surfaces the de Casteljau refinement of curves (def. 1.6);
+  subdivision and simplification thus bracket the level of detail of a single
+  shape, from the control mesh to the rendering mesh.
+</div>
+</section>
+<section class="chapter" id="ch7">
+<h2>7. Discrete curvature and Gauss–Bonnet</h2>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — Curvatures in the continuous setting, to set the targets</span>
+  At a point of a smooth surface, the principal directions have extreme normal
+  curvatures \(\kappa_1, \kappa_2\);
+  <strong>Gaussian curvature</strong> \(K = \kappa_1 \kappa_2\) (product);
+  <strong>mean curvature</strong> \(H = \tfrac{\kappa_1 + \kappa_2}{2}\)
+  (average); the shape operator satisfies \(H = \tfrac12 \mathrm{div}\,
+  \mathbf{n}\) — hence the link with the Laplacian of chapter 5:
+  \(\Delta x = -2H\mathbf{n}\). \(K\) is intrinsic (measurable "from within
+  the surface"); \(H\) depends on the embedding — this distinction structures
+  all of shape analysis.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 7.2 — Angle deficit</span>
+  At vertex \(i\) of a triangulated mesh, the <strong>angle deficit</strong> is
+  $$\mathcal{K}_i = 2\pi - \sum_{j}\,\theta_{ij},$$
+  the sum of the angles of the faces incident at \(i\). It is the natural
+  discretization of the Gaussian curvature <em>integrated</em> over the
+  neighborhood: positive at tips (cone), zero on developable zones, negative at
+  passes (saddle). The <strong>discrete mean curvature</strong> is obtained by the
+  discrete Steiner theorem: \(\mathbf{H}_i = \frac{1}{2 A_i}
+  \sum_j (\cot\alpha_{ij} + \cot\beta_{ij})(p_j - p_i)\) — the same cotangent
+  matrix as in chapter 5: geometry and analysis are one.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 7.3 — Discrete Gauss–Bonnet</span>
+  For a closed mesh of genus \(g\):
+  $$\sum_{i \in V} \mathcal{K}_i = 2\pi\,\chi = 2\pi\,(2 - 2g),$$
+  where \(\chi = V - E + F\) is the Euler characteristic (chapter 9). The total
+  curvature depends only on the topology — not on the geometry.
+  <div class="proof">
+    <em>Counting.</em> The double sum of angles runs over all the angles of all
+    the faces: each triangle contributes \(\pi\), so
+    \(\sum_i \sum_j \theta_{ij} = \pi F\) and
+    \(\sum_i \mathcal{K}_i = 2\pi V - \pi F\). Each face has 3 edges and each
+    edge carries 2 faces: \(3F = 2E\), so \(2\pi E = 3\pi F\), hence
+    $$-2\pi E + 2\pi F = -3\pi F + 2\pi F = -\pi F \quad\Longrightarrow\quad
+    2\pi(V - E + F) = 2\pi V - \pi F = \sum_i \mathcal{K}_i.$$
+    <em>Verification on the cube</em> (Example 7.4 below): \(8\) vertices of
+    deficit \(\tfrac{\pi}{2}\) give \(4\pi = 2\pi \cdot 2\), consistent with
+    \(\chi = V - E + F = 8 - 12 + 6 = 2\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.4 — Regular tetrahedron, and subdivisions</span>
+  Regular tetrahedron: each vertex carries 3 angles of 60° ⟹
+  \(\mathcal{K} = 2\pi - \pi = \pi\), total \(4\pi\) = that of the cube — same
+  topological sphere, very different local curvatures ("pointy" vertices of the
+  tetrahedron), same <em>total</em>. Subdividing each face of the cube into 4
+  triangles (mid-edges): the new edge vertices are flat (zero deficit: \(2\pi\)
+  of angles around them), the 8 corners keep the same deficit \(\tfrac{\pi}{2}\)
+  — the sum is unchanged: the theorem is <em>invariant under subdivision</em>, an
+  indispensable condition for "discrete curvature" to converge to the continuous
+  curvature as the mesh is refined.
+</div>
+
+<div class="note">
+  <span class="tag">Estimating in practice</span>
+  Deficits give an <em>integrated</em> curvature; for a <em>pointwise</em>
+  curvature, divide by the mixed Voronoi area \(A_i\):
+  \(K_i \approx \mathcal{K}_i / A_i\), with the same areas as in chapter 5. For
+  noisy meshes, smooth first (chapter 5) — curvature is a <em>second
+  derivative</em>, twice as sensitive to noise as positions. These descriptors
+  (\(K_i, H_i\), principal directions) directly feed: adaptive remeshing
+  (chapter 6), the descriptors of Geometric Deep Learning, and direction fields
+  for quadrangulation.
+</div>
+</section>
+<section class="chapter" id="ch8">
+<h2>8. The spectrum of shapes</h2>
+
+<div class="def">
+  <span class="tag">Definition 8.1 — Laplace–Beltrami and spectrum</span>
+  On a compact boundaryless surface \(S\), the <strong>Laplace–Beltrami</strong>
+  operator \(\Delta_S\) (surface Laplacian) is self-adjoint, negative, with
+  compact resolvent: its spectrum is a sequence
+  $$0 = \lambda_0 &lt; \lambda_1 \leq \lambda_2 \leq \dots \to \infty,$$
+  with orthonormal eigenfunctions \(\phi_0, \phi_1, \dots\) (a basis of
+  \(L^2(S)\)). The <strong>spectrum</strong> \(\{\lambda_k\}\) (or its sampling
+  \((\lambda_1, \dots, \lambda_N)\), "ShapeDNA") is an <em>isometric
+  invariant</em>: two isometric surfaces have the same spectrum. In practice:
+  discretize by the generalized cotangent matrix \(L = A^{-1}W\) (chapter 5) and
+  solve the <em>generalized eigenvalue problem</em> \(W\phi = \lambda A \phi\),
+  with \(A\) the diagonal matrix of mixed Voronoi areas — the same objects as in
+  chapters 5 and 7.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 8.2 — Exact spectra: path graph and cycle</span>
+  For the combinatorial Laplacian of a path with \(n\) vertices (chain):
+  $$\lambda_k = 2 - 2\cos\frac{k\pi}{n+1}, \qquad k = 1, \dots, n,$$
+  and for the cycle with \(n\) vertices (closed ring):
+  \(\mu_k = 2 - 2\cos\frac{2\pi k}{n}\). For \(n = 10\) path:
+  \(\lambda_1 = 2 - 2\cos(\pi/11) \approx 0.081\), \(\lambda_{10} \approx
+  3.919\); cycle: \(\mu_1 \approx 0.382\), \(\mu_5 = 4\) (alternation ±1, the
+  highest possible frequency). Geometric reading: closing the chain "tightens"
+  the lowest frequency (\(\lambda_1\) multiplied by ~4.7): the smallest
+  eigenvalue measures the <em>connectedness / tightness</em> of the shape — it
+  is what discriminates components and pinch points (the applications of
+  spectral segmentation).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 8.3 — Heat kernel and spectral signatures</span>
+  The solution of the heat equation \(\partial_t u = -\Delta_S u\),
+  \(u(0) = f\), writes \(u(t) = e^{-t\Delta_S}f = \sum_k e^{-\lambda_k t}
+  \langle f, \phi_k\rangle \phi_k\) and the <strong>heat kernel</strong>
+  \(h_t(x, y) = \sum_k e^{-\lambda_k t}\phi_k(x)\phi_k(y)\) is an isometric
+  invariant. Pointwise signatures (HKS: \(h_t(x, x)\) for a few \(t\); WKS:
+  oscillation) describe each point by "its" place in the spectrum — the basis of
+  non-rigid shape correspondence, detailed in the M2 Geometric Deep Learning
+  module (signatures chapter). The converse "spectrum ⟹ shape" is false: there
+  exist <em>isospectral non-isometric</em> surfaces ("you cannot hear the shape
+  of a drum", Gordon–Webb–Wolpert, 1992).
+</div>
+
+<div class="note">
+  <span class="tag">Interpretations and uses</span>
+  The eigenvalue \(\lambda_k\) is the square of a spatial frequency: small
+  \(k\) = large undulations (silhouette), large \(k\) = details. Direct
+  applications: shape compression (projecting onto the \(\phi_k\) of small
+  \(k\)), correspondence (coordination of eigenbases), retrieval (vector
+  \((\sqrt{\lambda_1}, \dots, \sqrt{\lambda_N})\) renormalized by scale),
+  segmentation (cutting along the level lines of \(\phi_2\), the "Fiedler
+  function"). Numerical caution: only the first ~\(\sqrt{N}\) eigenvalues of a
+  discretization with \(N\) vertices are reliable — beyond that, one describes
+  the mesh, not the surface (same phenomenon as numerical dispersion in finite
+  elements).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 8.4 — Shape recognition, non-rigid matching and correspondence</span>
+  <strong>Recognition</strong>: measuring the <em>similarity</em> of two shapes
+  \(S, T\). The spectral signatures ("ShapeDNA" spectrum of definition 8.1, heat
+  kernel of proposition 8.3) give fast retrieval; the
+  <strong>Gromov–Hausdorff</strong> distance — comparing the intrinsic
+  <em>geodesic distance matrices</em> — compares without a common embedding.
+  <strong>Non-rigid matching</strong>: the two shapes are two poses of a single
+  articulated object (a sitting or standing character) — related by a
+  <em>quasi-isometry</em> \(T\) that preserves geodesic distances up to a factor
+  \(\varepsilon\); the intrinsic descriptors (HKS, WKS) are then stable and match
+  point to point. <strong>Correspondence</strong>: the map
+  \(x \mapsto T(x)\) itself. The <em>functional maps</em> approach
+  (Ovsjanikov et al., 2012) represents it by the transport operator of functions
+  on the surface, which becomes <em>diagonal</em> in the eigenbases of the two
+  Laplacians: a small \(k \times k\) matrix to estimate — constrained by the
+  HKS/WKS pairs and the preservation of signals — before conversion into a
+  point-to-point map. It is the official entry gate of the "non-rigid matching
+  and correspondence" of the syllabus, extended in M2 by Analysis and Deep
+  Learning on Geometric Data.
+</div>
+</section>
+<section class="chapter" id="ch9">
+<h2>9. Combinatorial topology: Euler, Betti, persistence</h2>
+
+<div class="thm">
+  <span class="tag">Theorem 9.1 — Euler–Poincaré formula</span>
+  For every connected closed mesh of genus \(g\):
+  $$\chi = V - E + F = 2 - 2g,$$
+  and more generally for an arbitrary complex \(\chi = \sum_{k} (-1)^k c_k\)
+  (\(c_k\) = number of cells of dimension \(k\)) \(= \sum_k (-1)^k b_k\)
+  (Betti numbers). <em>Proof sketch</em> for a sphere: start from the tetrahedron
+  (\(\chi = 2\), Example 1.4) and note that subdividing a face (adding a vertex
+  on an edge or at the center of a face) does not change \(\chi\) (an edge
+  split: \(+1\) vertex, \(+1\) edge; a face split: \(+1\) vertex, \(+3\)
+  edges, \(+2\) faces — \(\Delta\chi = 0\) in both cases); any triangulation
+  of the sphere is obtained from the tetrahedron by these operations. Adding a
+  "handle" subtracts 2 from \(\chi\) — hence \(2 - 2g\).
+  <span class="qed">∎</span>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 9.2 — Homology and Betti numbers</span>
+  On a complex \(K\), the homology groups \(H_k(K)\) (with coefficients in
+  \(\mathbb{Z}_2\), to simplify) are the classes of cycles modulo boundaries:
+  \(H_k = \ker \partial_k / \mathrm{im}\, \partial_{k+1}\), with
+  \(\partial_k \partial_{k+1} = 0\) (the boundary of a boundary is zero). The
+  <strong>Betti numbers</strong> \(b_k = \dim H_k\) count the independent
+  "holes": for a closed surface: \(b_0\) connected components, \(b_1\) =
+  \(2g\) handles, \(b_2\) = 1 if orientable (the volume itself). Examples:
+  sphere \((1, 0, 1)\), torus \((1, 2, 1)\), double torus \((1, 4, 1)\);
+  check: \(\chi = b_0 - b_1 + b_2\) ✓. Homology is computed by Gaussian
+  elimination on the boundary matrices (Smith normal form): purely
+  combinatorial algorithms, polynomial cost.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 9.3 — Persistent homology</span>
+  Let a <strong>filtration</strong> \(K_0 \subseteq K_1 \subseteq \dots \subseteq
+  K_m\) (e.g.: alpha-shapes \((\mathcal{C}_\alpha)_\alpha\) of chapter 4, or
+  sublevel sets of a function on the mesh). At each step, cycles are born and
+  die; the <strong>persistence</strong> of a cycle is
+  \(\mathrm{pers} = \alpha_{death} - \alpha_{birth}\). The
+  <strong>diagram/barcode</strong> (one bar \([\alpha_{birth},
+  \alpha_{death}]\) per class) separates structure (long bars) from noise
+  (short bars); the stability theorem guarantees that the barcode changes
+  little when the data change little — this is what makes TDA usable on real
+  data. Standard implementation: column reduction algorithm (boundary matrix of
+  the filtration, Gaussian pivot), in \(O(m^\omega)\) worst case,
+  quasi-linear in practice.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 9.4 — A noisy ring, read by persistence</span>
+  1,000 points sampling a ring (disk of radius 2 with a hole of radius 1) +
+  Gaussian noise σ = 0.1. Filtration by alpha-shapes: \(H_0\) bars: 999 short
+  ones (merging clusters, all \(\alpha \lesssim 0.2\)) + 1 infinite (the
+  component); \(H_1\) bars: one long bar \([0.25\,;\,2.0]\) — the central hole
+  — plus a few bars of length \(&lt; 0.2\) (small noise holes plugged early).
+  With σ = 0.4, the central bar survives \([0.4\,;\,1.7]\): persistence,
+  unlike counting at fixed \(\alpha\), is <em>robust to noise</em>. It is the
+  most widely used topological descriptor for learning (vectorizations of
+  persistence diagrams, persistence kernels — cf. the team's work,
+  chapter 10).
+</div>
+
+<div class="note">
+  <span class="tag">Topology and learning</span>
+  The invariants of this chapter serve as <em>structural regularizers</em> in
+  learning: persistence loss to reconstruct with the right number of
+  components/holes, genus constraints in mesh generation (the Multimodal GenAI
+  module, 3D chapter, returns to this); the Gauss–Bonnet theorem (chapter 7) is
+  the "curvature" case of the same idea: global quantities that constrain local
+  solutions.
+</div>
+</section>
+<section class="chapter" id="ch10">
+<h2>10. Research of the teaching team</h2>
+
+<div class="def">
+  <span class="tag">Mathieu Desbrun — discrete differential geometry</span>
+  M. Desbrun (Caltech / Inria associate) is one of the founders of discrete
+  exterior calculus and of the discrete geometric operators that structure this
+  module:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Discrete Exterior Calculus</strong> (with A. Hirani, M. Leok,
+    J. Marsden, 2005) — <a href="https://arxiv.org/abs/math/0508341">arXiv
+    math/0508341</a>: a theory of differential forms on simplicial complexes
+    that preserves the identities of the continuum <em>exactly</em>
+    (Stokes, Hodge): the cotangent Laplacians of chapter 5 and the curvatures of
+    chapter 7 are instances of it;</li>
+    <li><strong>Discrete Differential Forms for Computational Modeling</strong> (with
+    E. Kanso, Y. Tong) — <a href="https://link.springer.com/chapter/10.1007/978-3-7643-8621-4_16">Springer
+    chapter</a>: the pedagogical version (why the "naive" discretization of
+    operators loses the structure);</li>
+    <li>The course <strong>Digital Geometry Processing with Discrete Exterior
+    Calculus</strong> (K. Crane, F. de Goes, M. Desbrun, P. Schröder,
+    SIGGRAPH Asia 2013) — <a href="https://dl.acm.org/doi/10.1145/2504435.2504442">ACM
+    DL</a> / <a href="https://www.cs.cmu.edu/~kmcrane/Projects/DDG/">open DDG
+    notes</a>: the reference for the labs (libigl), from the Laplacian to
+    geometric flows.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Pooran Memari — topology and reconstruction of shapes</span>
+  CNRS senior researcher at LIX (École Polytechnique), P. Memari works at the
+  interface of algorithmic geometry / topology:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Geometric Tomography with Topological Guarantees</strong> (with
+    O. Amini, J.-D. Boissonnat, Discrete &amp; Computational Geometry,
+    2013) — <a href="https://arxiv.org/abs/1007.2452">arXiv</a> /
+    <a href="https://link.springer.com/article/10.1007/s00454-013-9531-z">Springer</a>:
+    reconstructing a 3D solid from 2D cross-sections (serial microscopy); the
+    analysis shows why naive reconstructions fail (two solids of different
+    topologies can have the <em>same</em> cross-sections) and gives guarantees —
+    exactly the "sample, reconstruct, guarantee" program of chapter 4;</li>
+    <li>Her HDR thesis, <strong>"Points, Patterns and Shapes: towards
+    accessible geometric modeling"</strong> (2024), synthesizes this program:
+    point patterns (sampling, chapter 4), proximity structures
+    (Voronoi/Delaunay, chapters 2–3), accessibility of modeling tools — page:
+    <a href="https://www.lix.polytechnique.fr/~memari/">LIX</a>;</li>
+    <li>Her work on <em>distributed</em> Delaunay triangulations (Tile
+    &amp; Merge, IEEE Big Data 2019) extends chapter 3 to cloud scale:
+    meshing billions of points by cutting space into tiles whose Delaunay
+    triangulations stitch back together.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Common thread</span>
+  The two research programs meet on one principle: <em>a discretization must
+  preserve the structure</em> — differential identities on one side (Desbrun:
+  exact discrete Stokes), topological invariants on the other (Memari:
+  homeomorphism-type guarantees). This is the ridge line of the whole module:
+  represent <em>faithfully</em> before analyzing, then learn — the gateway to
+  Geometric Deep Learning (M2).
+</div>
+</section>
+<section class="exercises" id="ex">
+<h2>Exercises</h2>
+<ol>
+  <li><strong>Guided duality.</strong> For the sites \(p_1 = (0,0)\), \(p_2 =
+  (4,0)\), \(p_3 = (0,3)\) of Example 2.4: (a) verify that \((2, 1.5)\) is at
+  distance 2.5 from the three sites; (b) draw the three perpendicular bisectors
+  and the unbounded cell of \(p_2\); (c) add \(p_4 = (4,3)\) — why are the four
+  points cocircular, and which Delaunay triangulations does one obtain (lift the
+  degeneracy by perturbation)?</li>
+
+  <li><strong>Empty circle criterion.</strong> In a convex quadrilateral,
+  \(\angle abc = 70°\) and \(\angle adc = 125°\) (diagonal \(ac\)). (a) Decide
+  whether a flip is needed (Lemma 3.2). (b) After the flip, what is at least the
+  smallest of the angles opposite the new diagonal? (c) Prove point (ii) of the
+  proof: \(b \in \mathrm{disk}(a,c,d) \iff d \in \mathrm{disk}(a,b,c)\) for a
+  convex quadrilateral.</li>
+
+  <li><strong>Guided lift and incircle.</strong> (a) Implement the test of
+  Theorem 3.4: for each triangle of <code>Delaunay</code> (scipy), construct the
+  plane \(\Pi\) and verify that no lifted point is under \(\Pi\) (tolerance
+  \(10^{-12}\)). (b) Compare with the incircle determinant (signs:
+  interior/exterior). (c) Perturb a point toward the circumcircle of a
+  neighboring triangle: observe the flip in the computed triangulation.</li>
+
+  <li><strong>Lloyd.</strong> (a) Show that Lloyd relaxation decreases the
+  quantization energy \(\mathcal{E} = \sum_i \int_{\mathcal{V}(p_i)}
+  \|x - p_i\|^2\,dx\) (each iteration is an alternation: optimal cells for the
+  sites, then optimal centroids for the cells). (b) Implement and plot
+  \(\mathcal{E}\) (approximated by sampling) as a function of iterations on 100
+  points of the square.</li>
+
+  <li><strong>Guided shrinking.</strong> (a) Complete the proof of Theorem 5.2:
+  why does mode \(j\) decay exactly like \(\rho_j^k\)? What happens for
+  \(\lambda &gt; 1\)? (b) Simulate a ring of radius 1, \(n = 50\),
+  \(\lambda = 0.5\); plot the mean radius — by how much does it shrink in 100
+  iterations? (c) Apply Taubin \(\lambda = 0.5\), \(\mu = -0.53\) and measure.</li>
+
+  <li><strong>QEM.</strong> (a) Recover Example 6.3 (cube corner) in detail:
+  write \(A, b, c\), verify \(A = I\). (b) Two perpendicular planes \(x = 0,
+  y = 0\) plus a "ceiling" plane \(z = 1\): where does the optimal point fall
+  and what is the cost? (c) Implement quadric edge contractions on a torus mesh
+  (libigl) and plot the Hausdorff error as a function of the number of faces.</li>
+
+  <li><strong>Gauss–Bonnet.</strong> (a) Verify Theorem 7.3 on the tetrahedron
+  and the cube (by hand), then on the minimal \(3 \times 3\) torus (9 vertices,
+  27 edges, 18 faces — \(\chi = 0\)). (b) Show that an edge split does not
+  change \(\chi\) (counting). (c) Subdivide the cube 3 times and numerically
+  verify the invariance of the total deficit.</li>
+
+  <li><strong>Spectra.</strong> (a) Prove the formula of Example 8.2 for the
+  path (verify that \(u^{(k)}_i = \sin\frac{k\pi i}{n+1}\) is an eigenvector).
+  (b) Compute the first 10 cotangent eigenvalues of a flat strip mesh and of
+  the same bent strip (isometric); compare. (c) Discuss: why do the spectra
+  diverge in practice (sampling, triangulation) while theory predicts
+  equality?</li>
+
+  <li><strong>Guided persistence.</strong> (a) Build the alpha-shapes
+  filtration of a noisy ring (exercise of chapter 9); extract the \(H_1\)
+  barcode (gudhi or ripser). (b) Increase the noise until the long bar
+  disappears: at what σ does this happen, and why is the prediction "σ ≈
+  hole radius / 3" reasonable? (c) Replace the ring by two rings and verify
+  \(b_1 = 2\).</li>
+</ol>
+</section>
+<section class="chapter refs" id="refs">
+<h2>References</h2>
+<ul>
+  <li>M. Desbrun, A. Hirani, M. Leok, J. Marsden, <a href="https://arxiv.org/abs/math/0508341">Discrete Exterior Calculus</a>, 2005;
+  M. Desbrun, E. Kanso, Y. Tong, <a href="https://link.springer.com/chapter/10.1007/978-3-7643-8621-4_16">Discrete Differential Forms for Computational Modeling</a>;
+  M. Meyer, M. Desbrun, P. Schröder, A. Barr, Discrete Differential-Geometry Operators for Triangulated 2-Manifolds, 2003 (mixed Voronoi, deficits).</li>
+  <li>K. Crane, F. de Goes, M. Desbrun, P. Schröder, <a href="https://dl.acm.org/doi/10.1145/2504435.2504442">Digital Geometry Processing with Discrete Exterior Calculus</a>, SIGGRAPH Asia Courses 2013 — notes: <a href="https://www.cs.cmu.edu/~kmcrane/Projects/DDG/">DDG</a>.</li>
+  <li>O. Amini, J.-D. Boissonnat, P. Memari, <a href="https://arxiv.org/abs/1007.2452">Geometric Tomography with Topological Guarantees</a>, Discrete &amp; Computational Geometry, 2013 (<a href="https://link.springer.com/article/10.1007/s00454-013-9531-z">Springer</a> version); team page: <a href="https://www.lix.polytechnique.fr/~memari/">LIX — P. Memari</a>.</li>
+  <li>J.-D. Boissonnat, F. Chazal, M. Yvinec, Geometric and Topological Inference, Cambridge Texts, 2018 (sampling, reach, reconstruction); H. Edelsbrunner, Geometry and Topology for Mesh Generation, Cambridge, 2001 (alpha-shapes, filtrations).</li>
+  <li>N. Amenta, M. Bern, Surface Reconstruction by Voronoi Filtering, Discrete &amp; Computational Geometry, 1999; M. Kazhdan, M. Bolitho, H. Hoppe, Poisson Surface Reconstruction, SGP 2006; W. Lorensen, H. Cline, Marching Cubes, SIGGRAPH 1987.</li>
+  <li>M. Garland, P. Heckbert, Surface Simplification Using Quadric Error Metrics, SIGGRAPH 1997; G. Taubin, A Signal Processing Approach to Fairing (λ|μ), ICCV 1995; U. Pinkall, K. Polthier, Computing Discrete Minimal Surfaces (cotangents), 1993.</li>
+  <li>M. Reuter, F.-E. Wolter, N. Peinecke, Shape DNA (Laplace–Beltrami spectrum), CAD 2006; C. Gordon, D. Webb, S. Wolpert, One Cannot Hear the Shape of a Drum, Bull. AMS 1992; Sun, Ovsjanikov, Guibas, Heat Kernel Signature, SGP 2009.</li>
+  <li>H. Edelsbrunner, J. Harer, Persistent Homology — a Survey, Contemporary Mathematics 2008; the library <a href="https://gudhi.inria.fr">GUDHI</a> (Inria) for the labs.</li>
+  <li>Lab tools: <a href="https://www.scipy.org">SciPy</a> (<code>scipy.spatial</code>: Voronoi, Delaunay, cKDTree), <a href="https://libigl.github.io">libigl</a>, <a href="https://www.cgal.org">CGAL</a> (alpha-shapes, Delaunay, reconstruction), <a href="https://www.meshlab.net">MeshLab</a>.</li>
+</ul>
+</section>
+</main>
+<footer class="foot">
+<p><a href="../../index.html">← Master's program</a></p>
+</footer>
+</body>
+</html>

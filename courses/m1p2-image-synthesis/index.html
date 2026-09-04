@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Synthesis: Theory and Practice — LLGA</title>
+<link rel="stylesheet" href="../../assets/paper.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<p class="crumb"><a href="../../index.html">MSc&amp;T LLGA · Supports de cours</a></p>
+<main class="paper">
+<h1>Image Synthesis: Theory and Practice</h1>
+<p class="subtitle">CSC_52084_EP · Année 1 · Période 2</p>
+<nav class="toc">
+<p class="toc-title">Sommaire</p>
+<ol>
+<li><a href="#intro">Introduction et vue d'ensemble</a></li>
+<li><a href="#ch0">0. Rappels&nbsp;: probabilités, intégrales, EDO linéaires</a></li>
+<li><a href="#ch1">1. Radiométrie&nbsp;: la radiance</a></li>
+<li><a href="#ch2">2. L'équation du rendu</a></li>
+<li><a href="#ch3">3. BRDF et modèles de matériaux</a></li>
+<li><a href="#ch4">4. Caméras&nbsp;: le modèle sténopé</a></li>
+<li><a href="#ch5">5. Rastérisation contre lancer de rayons</a></li>
+<li><a href="#ch6">6. Path tracing Monte Carlo</a></li>
+<li><a href="#ch7">7. Accélération&nbsp;: intersection et BVH</a></li>
+<li><a href="#ch8">8. Bruit, débruitage, tone mapping</a></li>
+<li><a href="#ch9">9. Neural rendering&nbsp;: NeRF et Gaussiennes 3D</a></li>
+<li><a href="#ch10">10. Le temps réel&nbsp;: GPU, hybride, upscaling</a></li>
+<li><a href="#ch11">11. Travaux de l'enseignant</a></li>
+<li><a href="#ex">Exercices</a></li>
+<li><a href="#refs">Références</a></li>
+<li><a href="#code">Un path tracer complet en Python</a></li>
+</ol>
+</nav>
+<section class="chapter" id="intro">
+<h2>Introduction et vue d'ensemble</h2>
+<table class="tbl">
+<tr><th style="width:160px">Module</th><td>Image Synthesis <em>(intitulé officiel, catalogue SynapseS 2026-2027)</em></td></tr>
+<tr><th>Code</th><td>CSC_52084_EP</td></tr>
+<tr><th>Equipe et volume</th><td>Enseignant&nbsp;: Tamy Boubekeur (École Polytechnique) · 36&nbsp;h en présentiel, réparties en 18&nbsp;h de cours magistral et 18&nbsp;h de petite classe · 4,5&nbsp;ECTS (diplômes MScT&nbsp;; 5&nbsp;ECTS cursus ingénieur) · méthodes pédagogiques officielles&nbsp;: cours + travaux dirigés sur machine + projet · synthèse d'images réalistes&nbsp;: radiométrie, équation du rendu, BRDF, caméras, rastérisation contre lancer de rayons, path tracing Monte Carlo et ses accélérations, débruitage, neural rendering (NeRF, Gaussiennes 3D) et rendu temps réel — avec un mini ray tracer complet en Python. Page officielle du cours&nbsp;: <a href="https://moodle.polytechnique.fr/course/view.php?id=19339">Image Synthesis sur Moodle</a>.</td></tr>
+<tr><th>Période</th><td>Semestre Automne — période 2 (X-3A-P2)&nbsp;: du 04/01/2027 au 19/03/2027 · créneau X3A ME1</td></tr>
+<tr><th>Langue</th><td>Anglais &amp; Français</td></tr>
+<tr><th>Évaluation</th><td>Projet final (implémentation d'un article de recherche avec rapport), réalisé en dehors du temps de cours&nbsp;; rattrapage par un projet similaire&nbsp;; pas d'examen écrit ni oral&nbsp;; UE acquise si note finale ≥ 10 (modalités indiquées pour le cursus ingénieur&nbsp;; spécifique LLGA&nbsp;: non communiqué).</td></tr>
+<tr><th>Statut dans la formation</th><td><span class="badge option">Option P2</span><span class="badge position">Hors track recommandé</span> UE listée au parcours officiel LLGA&nbsp;1&nbsp;–&nbsp;S2 2026-2027.</td></tr>
+</table>
+
+<p>Ce module couvre la synthèse d'images réalistes de bout en bout&nbsp;: la physique de la lumière formalisée par l'équation du rendu, sa résolution par path tracing Monte Carlo, ses accélérations et son traitement du bruit, jusqu'au neural rendering (NeRF, Gaussiennes 3D) et au temps réel. C'est l'un des rares endroits du cursus où probabilités, calcul intégral et systèmes GPU se donnent la main pour produire des images. Le cours s'accompagne d'un path tracer complet en Python, à étudier, faire tourner et étendre.</p>
+
+<h3>Ce que vous saurez faire</h3>
+<ul>
+<li>Manipuler les grandeurs radiométriques, au premier rang desquelles la radiance.</li>
+<li>Énoncer l'équation du rendu et expliquer pourquoi sa résolution exacte est hors de portée.</li>
+<li>Choisir un modèle de matériaux (BRDF) selon l'effet visé.</li>
+<li>Modéliser une caméra par le sténopé et relier pixels et rayons.</li>
+<li>Comparer rastérisation et lancer de rayons, leurs compromis et leurs hybridations.</li>
+<li>Écrire un path tracer Monte Carlo et l'accélérer par structures d'intersection (BVH).</li>
+<li>Traiter bruit, débruitage et tone mapping pour passer de valeurs physiques à une image affichable.</li>
+<li>Situer NeRF et les Gaussiennes 3D dans le paysage du rendu, et les enjeux du temps réel.</li>
+</ul>
+
+<h3>Objectifs et programme officiel (catalogue 2026-2027)</h3>
+<p>L'objectif officiel de l'UE est de rendre capable de développer des systèmes de rendu 3D interactifs complets, et de donner une compréhension détaillée de la simulation du transport de la lumière et de la formation d'images numériques à partir d'une scène 3D. Le descriptif officiel couvre les modèles numériques de forme, d'apparence, d'éclairage et de capteurs d'une scène, l'équation du rendu et les modèles standards d'illumination, d'ombrage et de réflectance, les algorithmes de rendu (rastérisation projective, lancer de rayons), le temps réel, la programmation GPU et les structures spatiales hiérarchiques, avec une ouverture vers l'illumination globale. Le cours a une forte dimension pratique&nbsp;: les modèles et algorithmes sont mis en œuvre tout au long du trimestre (officiellement en C++ avec l'API OpenGL, notions techniques revues en cours&nbsp;; ce support utilise un path tracer Python comme fil rouge). Prérequis officiels&nbsp;: algorithmique et structures de données, calcul, programmation (C ou C++), notions d'algèbre linéaire.</p>
+<table class="tbl">
+<tr><th>Thème officiel (programme détaillé 2026-2027)</th><th>Section de ce module</th></tr>
+<tr><td>1. Introduction</td><td>Introduction (vue d'ensemble) et ch. 0 (rappels).</td></tr>
+<tr><td>2. Rendering Algorithms &amp; Visibility</td><td>ch. 5 (rastérisation contre lancer de rayons)&nbsp;; la visibilité y est traitée par l'occlusion.</td></tr>
+<tr><td>3. Appearance</td><td>ch. 3 (BRDF et modèles de matériaux).</td></tr>
+<tr><td>4. Textures</td><td><em>Manquant</em> — pas de chapitre dédié (le ch. 8 n'évoque l'échantillonnage qu'au passage).</td></tr>
+<tr><td>5. Shadows</td><td>Partiel&nbsp;: ch. 10 (shadow maps côté temps réel)&nbsp;; en lancer de rayons, les ombres sont traitées implicitement au ch. 6.</td></tr>
+<tr><td>6. Spatial Structures</td><td>ch. 7 (accélération, BVH).</td></tr>
+<tr><td>7. Global Illumination</td><td>ch. 6 (path tracing Monte Carlo).</td></tr>
+<tr><td>8. GPU – Graphics Processing Unit</td><td>ch. 10 (temps réel&nbsp;: GPU, hybride, upscaling).</td></tr>
+<tr><td>9. Global Illumination Approximation</td><td>Partiel&nbsp;: ch. 6-8 (Monte Carlo et débruitage)&nbsp;; les techniques dédiées (photon mapping, irradiance caching…) ne sont pas détaillées.</td></tr>
+<tr><td>10. Radiance Fields &amp; Neural Rendering</td><td>ch. 9 (NeRF et Gaussiennes 3D).</td></tr>
+</table>
+<div class="note">
+<span class="tag">Complément au programme officiel</span>
+Le ch. 4 (caméras, modèle sténopé) détaille la partie «&nbsp;capteurs&nbsp;» que le descriptif officiel annonce, le ch. 8 (bruit, débruitage, tone mapping), le ch. 11 (travaux de l'enseignant) et le path tracer Python compagnon dépassent le programme détaillé officiel publié. Les thèmes officiels «&nbsp;Textures&nbsp;» et, en partie, «&nbsp;Shadows&nbsp;» et «&nbsp;Global Illumination Approximation&nbsp;» ne sont pas couverts en tant que tels&nbsp;: ces supports ne remplacent pas le programme officiel.
+</div>
+
+<h3>Positionnement dans la formation</h3>
+<p>Option de la période 2 de M1, hors track recommandé. Trois cours de P1 s'y réinvestissent utilement&nbsp;: <a href="../m1p1-shapes/">Digital Representation and Analysis of Shapes</a> pour la représentation des surfaces 3D, <a href="../m1p1-signal-processing/">Signal Processing</a> pour le filtrage et l'analyse fréquentielle, et surtout <a href="../m1p1-probability-monte-carlo/">Probability Theory for ML: Monte Carlo and Generative Models</a>, dont les méthodes Monte Carlo sont le cœur du path tracing. Prérequis officiels&nbsp;: algorithmique et structures de données, calcul, programmation en C ou C++, notions d'algèbre linéaire — le path tracer Python du module en est le terrain d'application, la mise en œuvre officielle du cours étant en C++/OpenGL. En aval, le neural rendering (NeRF, Gaussiennes 3D) prépare <a href="../m1p2-multimodal-genai/">Multimodal Generative AI</a> de la même période, et la maîtrise des modèles génératifs d'images nourrit <a href="../m2-control-generative-ai/">Control in Generative AI</a> (M2).</p>
+
+<h3>Plan du cours</h3>
+<ul>
+<li><strong>Rappels&nbsp;: probabilités, intégrales, EDO linéaires</strong> — les mathématiques du rendu, remises en main.</li>
+<li><strong>Radiométrie&nbsp;: la radiance</strong> — les grandeurs physiques qui décrivent la lumière, et celle qui va tout porter.</li>
+<li><strong>L'équation du rendu</strong> — la formulation intégrale qui fonde toute la suite du module.</li>
+<li><strong>BRDF et modèles de matériaux</strong> — comment une surface répond à la lumière, du diffus au spéculaire.</li>
+<li><strong>Caméras&nbsp;: le modèle sténopé</strong> — former une image&nbsp;: projection, pixels et rayons.</li>
+<li><strong>Rastérisation contre lancer de rayons</strong> — les deux grandes familles d'algorithmes de rendu et leurs compromis.</li>
+<li><strong>Path tracing Monte Carlo</strong> — résoudre l'équation du rendu par échantillonnage aléatoire.</li>
+<li><strong>Accélération&nbsp;: intersection et BVH</strong> — rendre les calculs d'intersection rayon-scène abordables.</li>
+<li><strong>Bruit, débruitage, tone mapping</strong> — passer des valeurs physiques bruitées à une image finale affichable.</li>
+<li><strong>Neural rendering&nbsp;: NeRF et Gaussiennes 3D</strong> — quand les réseaux apprennent la scène et son rendu.</li>
+<li><strong>Le temps réel&nbsp;: GPU, hybride, upscaling</strong> — les stratégies qui rapprochent le réalisme des budgets interactifs.</li>
+<li><strong>Travaux de l'enseignant</strong> — les articles de recherche de Tamy Boubekeur, lus avec les outils du module.</li>
+<li><strong>Un path tracer complet en Python</strong> — le code compagnon du cours, à lire, exécuter et étendre.</li>
+<li><strong>Exercices</strong> — des calculs radiométriques et des extensions guidées du path tracer.</li>
+<li><strong>Références</strong> — les livres et articles de référence du rendu.</li>
+</ul>
+
+<h3>Comment travailler ce module</h3>
+<ul>
+<li>Faites tourner le path tracer Python dès les premiers chapitres&nbsp;: chaque concept du cours y a sa ligne de code.</li>
+<li>Recodez les briques par petites étapes — rayon, sphère, puis éclairage direct — plutôt que d'attaquer le tout d'un bloc.</li>
+<li>Dessinez les intégrandes&nbsp;: l'équation du rendu se comprend sur un schéma de lumière qui rebondit.</li>
+<li>Reliez le bruit de vos images au cours de probabilités de P1&nbsp;: variance, échantillonnage, convergence.</li>
+<li>Testez chaque idée sur des scènes minimales — une sphère, deux lumières — avant de monter en complexité.</li>
+<li>Gardez la chaîne complète en tête&nbsp;: radiométrie, rendu, débruitage, tone mapping — une erreur en amont se paie en aval.</li>
+</ul>
+
+<div class="note">
+<span class="tag">Le module dans le master LLGA</span>
+Le rendu est la physique générative du master&nbsp;: il fournit aux modèles génératifs une base quantitative — lumière, caméras, intégrales — que l'on retrouve dans le neural rendering des modules de génération et dans le contrôle des modèles génératifs du M2. Les compétences visées ouvrent sur les métiers de l'image de synthèse, du temps réel et de la recherche en computer graphics.
+</div>
+</section>
+<section class="chapter" id="ch0">
+<h2>0. Rappels&nbsp;: probabilités, intégrales, EDO linéaires</h2>
+
+<div class="recap">
+  <div class="recap-title">Rappels L3 mobilisés</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Espérance et variance</strong>&nbsp;: linéarité de l'espérance,
+    \(\mathrm{Var}(X) = \mathbb{E}[X^2] - \mathbb{E}[X]^2\), variance d'une moyenne
+    de \(N\) variables i.i.d. divisée par \(N\) — tout le bruit du rendu Monte
+    Carlo (chapitre 6) et son débruitage (chapitre 8) sont dans ces trois
+    lignes&nbsp;;</li>
+    <li><strong>Loi des grands nombres</strong>&nbsp;: \(\bar{X}_N \to \mathbb{E}X\)
+    presque sûrement — la convergence du path tracing&nbsp;; théorème central
+    limite&nbsp;: l'erreur typique décroît en \(\sigma/\sqrt{N}\)&nbsp;;</li>
+    <li><strong>Intégrales multiples</strong>, coordonnées sphériques, angle
+    solide \(d\omega = \sin\theta\, d\theta\, d\varphi\), aire de l'hémisphère
+    unité \(2\pi\) — le chapitre 1 vit sur la sphère&nbsp;;</li>
+    <li><strong>Changement de variable</strong> pour une densité&nbsp;: si
+    \(X \sim p_X\) et \(Y = g(X)\), alors \(p_Y(y) = p_X(g^{-1}(y))\,
+    |\det Dg^{-1}(y)|\) — l'échantillonnage de la lumière (chapitre 6)&nbsp;;</li>
+    <li><strong>EDO linéaire du premier ordre</strong>&nbsp;:
+    \(y' + a(t)\,y = b(t)\) se résout par le facteur intégrant
+    \(y(t) = e^{-\int a}\big(y_0 + \int b e^{\int a}\big)\) — la transmittance
+    du chapitre 9&nbsp;;</li>
+    <li><strong>Algèbre</strong>&nbsp;: produit scalaire et vectoriel, bases
+    orthonormées, matrices de changement de repère — la caméra (chapitre 4).</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 0.1 — La formule à retenir du chapitre 6</span>
+  Pour estimer \(I = \int_D f(x)\,dx\), échantillonner \(X_1, \dots, X_N\) i.i.d.
+  de densité \(p\) sur \(D\) (avec \(p &gt; 0\) où \(f \neq 0\)) et poser
+  $$\hat{I}_N = \frac{1}{N}\sum_{k=1}^N \frac{f(X_k)}{p(X_k)}.$$
+  Alors \(\mathbb{E}[\hat{I}_N] = I\) (estimateur sans biais) et
+  \(\mathrm{Var}(\hat{I}_N) = \mathrm{Var}(f(X)/p(X))/N\). Le rendu Monte Carlo
+  = choisir \(D\) (les chemins de lumière), \(f\) (la contribution radiative) et
+  \(p\) (la stratégie d'échantillonnage) — et tout l'art est dans \(p\).
+</div>
+</section>
+<section class="chapter" id="ch1">
+<h2>1. Radiométrie&nbsp;: la radiance</h2>
+
+<div class="def">
+  <span class="tag">Définition 1.1 — Flux, éclairement, exitance, radiance</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Flux</strong> (puissance)&nbsp;: \(\Phi\), en watts — l'énergie
+    lumineuse par seconde&nbsp;;</li>
+    <li><strong>Éclairement</strong> (irradiance) \(E(x)\) en W/m²&nbsp;: flux
+    reçu par unité d'aire en \(x\)&nbsp;; <strong>exitance</strong> \(M\)&nbsp;:
+    flux émis par unité d'aire&nbsp;;</li>
+    <li><strong>Angle solide</strong>&nbsp;: \(\omega = A/r^2\) (surface
+    découpée sur la sphère unité), en stéradians&nbsp;; l'hémisphère&nbsp;:
+    \(2\pi\) sr, la sphère&nbsp;: \(4\pi\) sr&nbsp;;</li>
+    <li><strong>Radiance</strong> \(L(x, \omega)\) en W/(m²·sr)&nbsp;: le flux
+    par unité d'aire <em>perpendiculaire à la direction</em> et par unité
+    d'angle solide,
+    $$d^2\Phi = L(x, \omega)\,\cos\theta\, dA\, d\omega,$$
+    où \(\theta\) est l'angle entre \(\omega\) et la normale en \(x\). C'est
+    <em>la</em> quantité du module&nbsp;: les capteurs (pixels, œil) répondent à
+    la radiance.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 1.2 — Invariance de la radiance le long d'un rayon</span>
+  Dans le vide (pas d'absorption, pas d'émission), la radiance est constante le
+  long d'un rayon&nbsp;: pour deux points \(x_1, x_2\) se «&nbsp;voyant&nbsp;»,
+  $$L(x_1 \to x_2) = L(x_2 \to x_1).$$
+  <div class="proof">
+    Considérons le faisceau délimité par deux petites surfaces \(dA_1\) (autour
+    de \(x_1\)) et \(dA_2\) (autour de \(x_2\)), à distance \(r\). Le flux qui
+    traverse ce faisceau s'écrit des deux côtés&nbsp;:
+    \(d^2\Phi = L_1 \cos\theta_1\, dA_1\, d\omega_1 = L_2 \cos\theta_2\,
+    dA_2\, d\omega_2\), et l'angle solide sous lequel \(dA_2\) est vue de
+    \(x_1\) vaut \(d\omega_1 = \cos\theta_2\, dA_2 / r^2\) (et symétriquement
+    \(d\omega_2 = \cos\theta_1\, dA_1 / r^2\)). En substituant&nbsp;:
+    $$L_1 \cos\theta_1 dA_1 \frac{\cos\theta_2 dA_2}{r^2}
+    = L_2 \cos\theta_2 dA_2 \frac{\cos\theta_1 dA_1}{r^2}
+    \;\Longrightarrow\; L_1 = L_2.$$
+    La conservation du flux dans le faisceau force l'égalité — tous les facteurs
+    géométriques se compensent exactement.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 1.3 — Une ampoule, des nombres ronds</span>
+    Une «&nbsp;ampoule&nbsp;» isotrope de flux \(\Phi = 800\) lm (≈ 1,2 W
+    radiométriques à 555 nm) à 2 m d'un mur. Flux dans un cône d'ouverture
+    \(d\omega = 0{,}01\) sr dirigé vers le mur&nbsp;: \(d\Phi = \Phi\,
+    d\omega/(4\pi) \approx 0{,}93\) mW. Tache éclairée&nbsp;:
+    \(dA = r^2\, d\omega/\cos\theta = 0{,}04\) m² (à incidence normale),
+    d'où éclairement \(E = d\Phi/dA \approx 23\) mW/m². À 4 m&nbsp;: même
+    calcul, \(dA\) multiplié par 4, \(E\) divisé par 4 (\(\approx 5{,}8\)
+    mW/m²) — la fameuse loi en \(1/r^2\) n'est <em>pas</em> une loi de la
+    radiance (constante&nbsp;!) mais de la géométrie du faisceau&nbsp;: les
+    pixels voient la même radiance, la surface projetée de la source
+    décroît en \(1/r^2\).
+</div>
+
+<div class="note">
+  <span class="tag">Pourquoi tant d'unités&nbsp;?</span>
+  La photométrie (lumens, candelas, lux) reprend la radiométrie (watts,
+  W/sr, W/m²) pondérée par la sensibilité de l'œil (fonction
+  \(V(\lambda)\), pic à 555&nbsp;nm où 1 W = 683 lm). Le rendu physique
+  calcule en radiance spectrale W/(m²·sr·nm) puis convertit en RGB par
+  intégration contre les fonctions de réponse des trois capteurs — le
+  «&nbsp;blanc&nbsp;» d'une image n'est qu'une convention de ces intégrales
+  (chapitre 8&nbsp;: tone mapping).
+</div>
+</section>
+<section class="chapter" id="ch2">
+<h2>2. L'équation du rendu</h2>
+
+<div class="def">
+  <span class="tag">Définition 2.1 — L'équation de transport de la lumière (LTE)</span>
+  En un point de surface \(x\) de normale \(\mathbf{n}\), la radiance sortante
+  \(L_o(x, \omega_o)\) dans une direction \(\omega_o\) de l'hémisphère vaut
+  (Kajiya, 1986)&nbsp;:
+  $$L_o(x, \omega_o) = L_e(x, \omega_o) + \int_{\Omega^+}
+  L_i(x, \omega_i)\, f_r(x, \omega_i \to \omega_o)\, \cos\theta_i\,
+  d\omega_i,$$
+  avec \(L_e\) l'émission propre, \(L_i\) la radiance incidente, \(f_r\) la
+  BRDF (chapitre 3) et \(\cos\theta_i = \omega_i \cdot \mathbf{n}\) le facteur
+  de projection. En écrivant \(L_i(x, \omega) = L_o(r(x, -\omega), \omega)\)
+  (le rayon lancé à rebours), l'équation devient <em>intégrale sur les
+  surfaces</em>&nbsp;: c'est une équation de Fredholm du second espèce,
+  $$L = L_e + T\,L, \qquad T\ \text{l'opérateur de transport (un rebond)}.$$
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 2.2 — Série des rebonds (Neumann) et convergence</span>
+  Si les matériaux ont un albédo borné \(\rho = \sup \int_{\Omega^+} f_r
+  \cos\theta_i\, d\omega_i &lt; 1\), alors \(T\) est contractante en norme
+  sup et l'unique solution de la LTE est la série
+  $$L = \sum_{k=0}^{\infty} T^k L_e = \underbrace{L_e}_{\text{émission}}
+  + \underbrace{T L_e}_{1^{\text{er}}\ \text{rebond}} +
+  \underbrace{T^2 L_e}_{2^e\ \text{rebond}} + \dots$$
+  avec une erreur de troncature \(\|T^{k+1} L\|_\infty \leq
+  \rho^{k+1} \|L\|_\infty\) — décroissance géométrique du poids des
+  rebonds.
+  <div class="proof">
+    Pour deux fonctions \(f, g\) sur les rayons, \(\|T f\|_\infty \leq
+    \sup_x \int_{\Omega^+} f_r \cos\theta_i d\omega_i \cdot \|f\|_\infty \leq
+    \rho \|f\|_\infty\). Par récurrence \(\|T^k L_e\|_\infty \leq
+    \rho^k \|L_e\|_\infty\)&nbsp;: la série converge normalement (série
+    géométrique de raison \(\rho &lt; 1\)), et \(L = \sum T^k L_e\)
+    vérifie \(L = L_e + T L\) en sommant. L'unicité suit de la
+    contractivité&nbsp;: si \(L, L'\) sont solutions,
+    \(\|L - L'\|_\infty = \|T(L - L')\|_\infty \leq \rho \|L - L'\|_\infty\)
+    force \(L = L'\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 2.3 — Deux surfaces face à face&nbsp;: la série en action</span>
+  Deux plans diffus d'albédo \(\rho = 0{,}5\), l'un émettant \(L_e = 1\)
+    vers l'autre. Radiance quittant le plan récepteur&nbsp;:
+    \(0{,}5\) (1<sup>er</sup> rebond) + \(0{,}25\) (2<sup>e</sup>&nbsp;:
+    aller-retour supplémentaire) + \(0{,}125 + \dots = 1\). Avec
+    \(\rho = 0{,}9\) (peinture blanche)&nbsp;: \(0{,}9 + 0{,}81 + \dots\)
+    — le 10<sup>e</sup> rebond porte encore \(0{,}9^{10} \approx 35\)%
+    de l'émission&nbsp;: les interréflexions <em>dominent</em> l'éclairage
+    direct dans une pièce blanche (un renfoncement blanc paraît plus lumineux
+    que le mur seul — c'est le «&nbsp;color bleeding&nbsp;» de l'illumination
+    globale).
+</div>
+
+<div class="note">
+  <span class="tag">Formes alternatives</span>
+  Selon le contexte on réécrit la LTE&nbsp;: en <em>intégrale de surface</em>
+  (intégrer \(L_i\) sur toutes les surfaces visibles, avec le facteur de
+  visibilité \(V(x \leftrightarrow y)\) et la géométrie
+  \(G = \cos\theta_x \cos\theta_y / \|x - y\|^2\)) — utile pour
+  l'échantillonnage des surfaces émissives (next event estimation,
+  chapitre 6)&nbsp;; ou en <em>équation de vol</em> (rendu volumique,
+  chapitre 9&nbsp;: le terme d'émission-diffusion \(\sigma_s \int p\, L\)
+    remplace la BRDF). Changer d'écriture = changer de stratégie
+  d'échantillonnage.
+</div>
+</section>
+<section class="chapter" id="ch3">
+<h2>3. BRDF et modèles de matériaux</h2>
+
+<div class="def">
+  <span class="tag">Définition 3.1 — BRDF</span>
+  La <strong>fonction de distribution de la réflectance bidirectionnelle</strong>
+  \(f_r(x,\ \omega_i \to \omega_o)\) relie radiance incidente et sortante&nbsp;:
+  $$L_o(x, \omega_o) = \int_{\Omega^+} L_i(\omega_i)\, f_r(\omega_i \to
+  \omega_o)\, \cos\theta_i\, d\omega_i \quad (\text{unités } \mathrm{sr}^{-1}).$$
+  Deux propriétés physiques&nbsp;: (i) <strong>réciprocité</strong> de
+  Helmholtz&nbsp;: \(f_r(\omega_i \to \omega_o) = f_r(\omega_o \to
+  \omega_i)\)&nbsp;; (ii) <strong>conservation de l'énergie</strong>&nbsp;:
+  \( \int f_r(\omega_i \to \omega_o) \cos\theta_o\, d\omega_o \leq 1\) pour
+  tout \(\omega_i\) (l'albédo du chapitre 2), et \(f_r \geq 0\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 3.2 — Le modèle de Lambert est \(f_r = \rho/\pi\)</span>
+  Une surface <em>parfaitement diffuse</em> (radiance sortante identique dans
+  toutes les directions) d'albédo \(\rho \in [0, 1]\) a pour BRDF constante
+  $$f_r = \frac{\rho}{\pi}.$$
+  <div class="proof">
+    Par hypothèse \(L_o\) est constante&nbsp;; l'exitance vaut
+    \(M = \int_{\Omega^+} L_o \cos\theta_o\, d\omega_o = L_o \int_0^{2\pi}
+    \int_0^{\pi/2} \cos\theta \sin\theta\, d\theta\, d\varphi = L_o \pi\).
+    L'éclairement reçu vaut \(E = \int L_i \cos\theta_i d\omega_i\), et
+    \(L_o = f_r E\). La définition de l'albédo (\(M = \rho E\)) donne
+    \(\pi f_r E = \rho E\), d'où \(f_r = \rho/\pi\). Le facteur \(\pi\)
+    disparaît&nbsp;: intégrer une constante contre \(\cos\theta\) sur
+    l'hémisphère produit \(\pi\) — il reviendra dans l'échantillonnage
+    cosinus du chapitre 6. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 3.3 — Phong, Blinn-Phong, microfacettes</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Phong</strong> (1975)&nbsp;: \(f_r = \tfrac{\rho_d}{\pi} +
+    k_s\, \dfrac{n+2}{2\pi}\, \cos^n\alpha\) avec \(\alpha\) l'angle à la
+    direction miroir — le spécular empirique&nbsp;; <em>Blinn-Phong</em>
+    remplace \(\alpha\) par l'angle au vecteur médian
+    \(\mathbf{h} = \mathrm{norm}(\omega_i + \omega_o)\)&nbsp;;</li>
+    <li><strong>Microfacettes</strong> (Cook–Torrance, 1982)&nbsp;: la surface
+    est un champ de micro-miroirs&nbsp;;
+    $$f_r = \frac{D(\mathbf{h})\, G(\omega_i, \omega_o)\, F(\omega_i)}
+    {4\, \cos\theta_i\, \cos\theta_o},$$
+    avec \(D\) la distribution des normales (GGX/Trowbridge-Reitz&nbsp;:
+    queues lourdes = reflets «&nbsp;flous&nbsp;» réalistes), \(G\) un facteur
+    de masquage-occlusion (Smith) et \(F\) le coefficient de Fresnel.
+    C'est la famille des matériaux PBR standards (film et jeux)&nbsp;;
+    les modèles <em>dupliqués</em> (Disney/Burley 2012) y ajoutent une
+    composante «&nbsp;sheen&nbsp;» et un lobe de rétrodiffusion.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 3.4 — Fresnel de Schlick, chiffres</span>
+  L'approximation de Schlick&nbsp;: \(F(\theta) = F_0 + (1 - F_0)(1 -
+  \cos\theta)^5\), avec \(F_0\) la réflectance à incidence normale. Diélectrique
+  typique (\(F_0 = 0{,}04\))&nbsp;: \(F(0°) = 0{,}04\), \(F(45°) \approx
+  0{,}05\), \(F(60°) = 0{,}04 + 0{,}96 \times 0{,}5^5 \approx 0{,}07\),
+  \(F(85°) = 0{,}04 + 0{,}96 \times (1 - 0{,}087)^5 \approx 0{,}65\). Lecture
+  physique&nbsp;: toutes les surfaces deviennent miroirs à l'incidence
+  rasante — d'où les bords brillants de l'eau ou du vernis. Pour l'or
+  (\(F_0 \approx (1{,}00,\ 0{,}71,\ 0{,}29)\)), même à incidence normale la
+  lumière réfléchie est déjà teintée&nbsp;: le métal «&nbsp;colore&nbsp;»
+  son reflet, un diélectrique non.
+</div>
+
+<table class="tbl">
+  <tr><th>Modèle</th><th>Paramètres</th><th>Réciprocité</th><th>Énergie</th><th>Usage</th></tr>
+  <tr><td>Lambert</td><td>\(\rho\)</td><td>oui</td><td>exacte (\(\rho \leq 1\))</td><td>mat, spectres</td></tr>
+  <tr><td>Phong / Blinn-Phong</td><td>\(\rho_d, k_s, n\)</td><td>Phong&nbsp;: non*</td><td>violée si mal calibré</td><td>historique, mobile</td></tr>
+  <tr><td>Cook–Torrance (GGX)</td><td>\(F_0\), rugosité, métal.</td><td>oui</td><td>construite pour</td><td>PBR, film et jeux</td></tr>
+  <tr><td>Mesurée (MERL&nbsp;1000)</td><td>table 4D</td><td>approx.</td><td>données</td><td>validation, étalons</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">*Une subtilité devenue un critère de qualité</span>
+  Le lobe spéculaire de Phong «&nbsp;classique&nbsp;» (autour de la direction
+  miroir de \(\omega_o\)) n'est pas symétrique en \((\omega_i,
+  \omega_o)\)&nbsp;; la variante autour du demi-vecteur \(\mathbf{h}\)
+  l'est. Les moteurs modernes exigent réciprocité et conservation&nbsp;:
+  elles garantissent que l'échange des positions lumière/caméra ne change
+  pas l'image — indispensable au path tracing (les chemins sont tracés
+  <em>à rebours</em>, de l'œil vers la lumière&nbsp;!). Une BRDF
+  non réciproque rend le rendu inverse physiquement incohérent.
+</div>
+</section>
+<section class="chapter" id="ch4">
+<h2>4. Caméras&nbsp;: le modèle sténopé</h2>
+
+<div class="def">
+  <span class="tag">Définition 4.1 — Le sténopé (pinhole)</span>
+  Une caméra idéale est un point \(O\) (centre optique) et un plan image à
+  distance \(f\) (focale). Tout rayon passant par \(O\) contribue&nbsp;: le
+  pixel correspondant à la direction \(\omega\) reçoit la radiance
+  \(L(\omega)\). En repère caméra (\(z\) vers l'avant), la projection
+  s'écrit
+  $$\pi(x, y, z) = \Big(\, f\,\frac{x}{z},\ \ f\,\frac{y}{z} \,\Big),
+  \qquad K = \begin{pmatrix} f_x &amp; 0 &amp; c_x \\ 0 &amp; f_y &amp; c_y
+  \\ 0 &amp; 0 &amp; 1 \end{pmatrix},$$
+  \(K\) regroupe focales en pixels \(f_x = f/\delta_x\) (taille de pixel
+  \(\delta\)) et centre optique \((c_x, c_y)\) (principal point)&nbsp;;
+  la pose caméra (extrinsèques) est la matrice de passage
+  monde \(\to\) caméra \( [R\,|\,t]\). Génération d'un rayon&nbsp;:
+  \(\mathbf{d} = \mathrm{norm}\big(R^\top K^{-1} (u, v, 1)^\top\big)\),
+  origine \(O\) — la boucle inverse de la projection.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 4.2 — Une projection centrale envoie les droites sur des droites</span>
+  L'image par un sténopé de toute droite 3D ne passant pas par \(O\) est une
+  droite (ou un point si la droite passe par \(O\)).
+  <div class="proof">
+    Soit \(\ell\) une droite 3D. Le plan \(\Pi = \mathrm{span}(O, \ell)\)
+    (plan contenant \(O\) et \(\ell\)) existe dès que \(\ell\) ne passe pas
+    par \(O\). Tout rayon issu d'un point de \(\ell\) est inclus dans
+    \(\Pi\)&nbsp;; l'image de \(\ell\) — l'ensemble des intersections de ces
+    rayons avec le plan image — est donc incluse dans
+    \(\Pi \cap \text{plan image}\), intersection de deux plans distinctes&nbsp;:
+    une droite. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 4.3 — Projeter puis pixéliser</span>
+  Capteur 640×480, pixels carrés de 50 µm ⟹ \(f_x = f_y =
+  f/\delta\)&nbsp;; pour \(f = 50\) mm&nbsp;: \(f_x = 1000\) px,
+  \(c = (320, 240)\). Point caméra \((x, y, z) = (1, 2, 5)\) m&nbsp;:
+  projection \((f x/z,\ f y/z) = (10\,;\,20)\) mm, puis pixels, en
+  convention image (\(y\) vers le bas)&nbsp;:
+  \(u = f_x\, x/z + c_x = 200 + 320 = 520\),
+  \(v = c_y - f_y\, y/z = 240 - 400 = -160\) — le point est <em>hors
+  champ</em> vertical&nbsp;: l'angle de champ vertical vaut
+  \(2\arctan(H/(2 f_x)) = 2 \arctan(480/2000) \approx 27°\) (demi-champ
+  13,5°), alors que la direction du point s'élève de
+  \(\arctan(2/5) \approx 22°\) au-dessus de l'axe — bien au-delà du bord
+  haut. Retenir&nbsp;: focale courte = grand champ = fortes perspectives&nbsp;;
+  focale longue = champ étroit = perspectives «&nbsp;téléobjectif&nbsp;»
+  compressées.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 4.4 — Au-delà du sténopé</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Lentille mince</strong>&nbsp;: ouverture de rayon \(r\) et
+    mise au point à distance \(D\)&nbsp;; les points hors focus forment sur le
+    capteur un disque ( cercle de confusion) de taille
+    \(\propto r\,|D - z|/z\) — le <strong>bokeh</strong>&nbsp;; en rendu&nbsp;:
+    échantillonner l'ouverture (lentille) et la mise au point, puis
+    moyenner&nbsp;;</li>
+    <li><strong>Distorsions</strong>&nbsp;: le modèle pinhole + lentille est
+    linéaire en coordonnées homogènes&nbsp;; les objectifs réels ajoutent une
+    distorsion radiale (\(r \mapsto r + k_1 r^3 + \dots\)) — le modèle
+    «&nbsp;fish-eye&nbsp;» du module de vision&nbsp;;</li>
+    <li><strong>Exposition</strong>&nbsp;: le capteur intègre la radiance
+    pendant \(\Delta t\) à ouverture donnée&nbsp;; le couple
+    (ouverture, temps) ne change pas la <em>radiance</em> de la scène,
+    seulement le signal mesuré — d'où le rendu en valeurs
+    haute dynamique (HDR, chapitre 8).</li>
+  </ul>
+</div>
+</section>
+<section class="chapter" id="ch5">
+<h2>5. Rastérisation contre lancer de rayons</h2>
+
+<div class="def">
+  <span class="tag">Définition 5.1 — Les deux ordres de parcours</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Rastérisation</strong> (ordre <em>objet</em>)&nbsp;: pour
+    chaque triangle, déterminer les pixels couverts et écrire le
+    framebuffer&nbsp;; complexité \(O(\sum_i A_i)\) (aire des triangles),
+    indépendante de la complexité de l'éclairage&nbsp;; matériel GPU
+    natif&nbsp;;</li>
+    <li><strong>Lancer de rayons</strong> (ordre <em>image</em>)&nbsp;: pour
+    chaque pixel, générer un rayon (chapitre 4) et chercher la première
+    intersection (chapitre 7)&nbsp;; complexité \(O(N_{pixels} \cdot
+    \log N_{triangles})\) avec une structure accélératrice&nbsp;; les
+    <em>rayons secondaires</em> (ombres, réflexions) sont naturels — c'est
+    l'argument décisif pour l'illumination globale.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 5.2 — Fonctions arête et coordonnées barycentriques</span>
+  Dans le plan image, posons la <strong>fonction arête</strong> de \(a\) vers
+  \(b\) en \(p\)&nbsp;: \(E_{ab}(p) = (b_x - a_x)(p_y - a_y) - (b_y - a_y)
+  (p_x - a_x)\) (produit vectoriel 2D). Alors \(p\) est dans le triangle
+  \((a, b, c)\) ssi \(E_{ab}, E_{bc}, E_{ca}\) sont de même signe en \(p\),
+  et les coordonnées barycentriques sont les rapports d'aires
+  $$\lambda_a = \frac{E_{bc}(p)}{E_{bc}(a)},\qquad
+  \lambda_b = \frac{E_{ca}(p)}{E_{ca}(b)},\qquad
+  \lambda_c = \frac{E_{ab}(p)}{E_{ab}(c)},\qquad \lambda_a + \lambda_b +
+  \lambda_c = 1.$$
+  De plus \(E_{ab}\) est <em>affine</em> en \(p\) ⟹ incrément mental&nbsp;:
+  \(E_{ab}(p + (1, 0)) = E_{ab}(p) + (b_y - a_y)\) — deux additions par
+  pixel.
+  <div class="proof">
+    \(E_{ab}(p)\) est (au signe près) l'aire du parallélogramme porté par
+    \((b - a)\) et \((p - a)\), donc l'aire orientée du triangle
+    \((a, b, p)\). Le point \(p\) est du même côté de \((ab)\) que \(c\)
+    ssi \(E_{ab}(p)\) et \(E_{ab}(c)\) ont même signe&nbsp;; les trois
+    conditions ensemble caractérisent l'intérieur du triangle
+    (convexité). Pour les barycentriques&nbsp;: \(p \mapsto
+    E_{bc}(p)/E_{bc}(a)\) est affine, vaut 1 en \(a\) et 0 en \(b\)
+    et \(c\) (bases de \((a,b,c)\))&nbsp;; c'est donc \(\lambda_a\), et la
+    somme vaut 1 car égale à 1 aux trois sommets (unicité de
+    l'interpolation barycentrique). L'affinité donne l'incrément par
+    dérivation&nbsp;: le gradient de \(E_{ab}\) est
+    \((-(b_y - a_y),\ b_x - a_x)\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 5.3 — Z-buffer et visibilité</span>
+  La rastérisation résout la visibilité par le <strong>z-buffer</strong>&nbsp;:
+  un tampon de profondeur initialisé à \(+\infty\)&nbsp;; pour chaque fragment
+  de profondeur \(z_p\) (interpolée), n'écrire la couleur que si
+  \(z_p &lt; z_{buffer}\). Coût mémoire&nbsp;: un flottant par pixel&nbsp;;
+  indépendant de l'ordre de dessin (contrairement au tri du peintre) — mais
+  ambigu aux profondeurs égales (z-fighting&nbsp;: ajouter un biais
+  polygonal). En lancer de rayons, la visibilité est résolue par
+  l'intersection la plus proche — le z-buffer y est inutile&nbsp;: les deux
+  familles diffèrent aussi sur <em> où</em> la visibilité est calculée
+  (par fragment contre par rayon).
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 5.4 — Un triangle sur des pixels, à la main</span>
+  Sommets projetés \(a = (1, 1)\), \(b = (5, 1)\), \(c = (1, 4)\) (repère
+  pixel). Fonctions arête&nbsp;:
+  \(E_{ab}(p) = (b - a) \times (p - a) = 4(p_y - 1)\)&nbsp;;
+  \(E_{bc}(p) = (c - b) \times (p - b) = -4(p_y - 1) - 3(p_x - 5)\)&nbsp;;
+  \(E_{ca}(p) = 3(1 - p_x)\). Test du pixel de centre \((1, 2)\)&nbsp;:
+  \(E_{ab} = 4\), \(E_{bc} = 8\), \(E_{ca} = 0\) — sur l'arête \([a, c]\),
+  dedans par la règle «&nbsp;top-left&nbsp;». Barycentriques&nbsp;:
+  \(\lambda_a = E_{bc}(p)/E_{bc}(a) = 8/12 = \tfrac23\),
+  \(\lambda_b = E_{ca}(p)/E_{ca}(b) = 0\),
+  \(\lambda_c = E_{ab}(p)/E_{ab}(c) = 4/12 = \tfrac13\) — cohérent&nbsp;:
+  \((1, 2)\) est au tiers de l'arête \([a, c]\). Le pixel \((2, 2)\)&nbsp;:
+  \(E_{ab} = 4\), \(E_{bc} = 1\), \(E_{ca} = -3\) — signes mêlés, dehors.
+  Le même calcul, répété et <em>incrémenté</em> (le gradient de \(E_{ab}\)
+  est constant), rend des dizaines de millions de triangles par seconde&nbsp;:
+  la rastérisation est l'arithmétique des différences fines.
+</div>
+
+<div class="note">
+  <span class="tag">Whitted et la synthèse des deux mondes</span>
+  Le «&nbsp;ray tracing&nbsp;» de Whitted (1980) suit les rayons miroir et de
+  réfraction puis arrête&nbsp;: réflexions parfaites, ombres dures — déjà
+  inaccessibles à la rastérisation pure. Les moteurs actuels sont
+  <em>hybrides</em>&nbsp;: rastérisation pour la visibilité primaire (rapide,
+  cohérente en mémoire), rayons à la demande pour ombres douces, réflexions,
+  illumination globale approximée (chapitre 10)&nbsp;; le path tracing
+  (chapitre 6) reste la référence du rendu d'architecture et du film
+  d'animation — quand l'heure de rendu se compte en heures par image.
+</div>
+</section>
+<section class="chapter" id="ch6">
+<h2>6. Path tracing Monte Carlo</h2>
+
+<div class="def">
+  <span class="tag">Définition 6.1 — L'estimateur du rendu</span>
+  Le <strong>path tracing</strong> estime la LTE (chapitre 2) en échantillonnant
+  des <strong>chemins</strong> \(\mathbf{x} = (x_0, \dots, x_k)\) de l'œil vers
+  les sources, avec densité \(p(\mathbf{x})\), par
+  $$\hat{L} = \frac{L_e\, f_r\, \cos\theta\, f_r \cos\theta \cdots}{p(\mathbf{x})}
+  \quad \text{(produit des facteurs de transport / probabilité du chemin)}.$$
+  Un chemin se construit rebond après rebond&nbsp;: à chaque rebond, tirer une
+  direction sortante selon une densité \(p(\omega)\) (uniforme hémisphérique,
+  ou <em>proportionnelle à \(\cos\theta/\pi\)</em> — l'échantillonnage
+  cosinus), accumuler les contributions, terminer par roulette russe
+  (définition 6.4). C'est un estimateur <em>sans biais</em> de la série
+  complète des rebonds — à opposer aux méthodes déterministes
+  (radiosité, photon mapping&nbsp;: biaisées mais moins bruitées).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.2 — Sans biais, et variance en \(\sigma/\sqrt{N}\)</span>
+  (i) \(\mathbb{E}\big[f(X)/p(X)\big] = \int_D f\) dès que \(p &gt; 0\) sur le
+  support de \(f\). (ii) Pour \(N\) échantillons i.i.d., l'estimateur moyen
+  \(\hat{I}_N\) vérifie \(\mathrm{Var}(\hat{I}_N) = \mathrm{Var}(f(X)/p(X))/N\)
+  et \(\hat{I}_N \to I\) presque sûrement. Pour diviser l'erreur typique par
+  2, il faut 4 fois plus d'échantillons — la malédiction du Monte Carlo
+  (et son salut&nbsp;: l'exposant \(-1/2\) est <em>indépendant de la
+  dimension</em>, d'où le triomphe du MC en rendu, dimension infinie des
+  chemins).
+  <div class="proof">
+    (i) \(\mathbb{E}[f/p] = \int (f/p)\, p = \int f\). (ii) la variance d'une
+    somme indépendante se sommant, \(\mathrm{Var}(\hat I_N) = \frac{1}{N^2}
+    \sum \mathrm{Var} = \mathrm{Var}/N\) — et la loi forte des grands nombres
+    donne la convergence. Pour l'erreur <em>typique</em>, le TCL donne
+    \(\hat I_N - I \approx \mathcal{N}(0, \mathrm{Var}/N)\)&nbsp;: écart-type
+    en \(\sqrt{\mathrm{Var}/N}\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 6.3 — Échantillonnage d'importance&nbsp;: l'optimum zéro-variance</span>
+  Parmi les densités \(p\), la variance de \(f(X)/p(X)\) est minimale (nulle)
+  pour \(p^\ast \propto |f|\)&nbsp;; en pratique on choisit \(p\) proche de
+  \(f\) là où \(f\) est grande. L'exemple parfait du module&nbsp;: pour
+  \(I = \int_{\Omega^+} \cos\theta\, d\omega = \pi\) (facteur de forme
+  ponctuel), l'échantillonnage uniforme (\(p = 1/2\pi\)) donne l'estimateur
+  \(2\pi\cos\theta\), de variance \(\pi^2/3\)&nbsp;; l'échantillonnage
+  cosinus (\(p = \cos\theta/\pi\)) donne l'estimateur <em>constant</em>
+  \(\pi\) — variance exactement nulle.
+  <div class="proof">
+    \(p^\ast = |f|/\int|f|\)&nbsp;: alors \(f/p^\ast = \pm\int|f|\) est
+    constant ⟹ variance nulle. Pour le calcul d'échantillonnage uniforme&nbsp;:
+    \(\mathbb{E}[X^2] = \int (2\pi\cos\theta)^2 \frac{d\omega}{2\pi} =
+    2\pi \int_{\Omega^+}\cos^2\theta\, d\omega = 2\pi \cdot \frac{2\pi}{3} =
+    \frac{4\pi^2}{3}\), et \(\mathbb{E}[X]^2 = \pi^2\), d'où
+    \(\mathrm{Var} = \frac{4\pi^2}{3} - \pi^2 = \frac{\pi^2}{3}\) (en
+    utilisant \(\int_{\Omega^+}\cos^2\theta\,d\omega =
+    \int_0^{2\pi}\!\!\int_0^{\pi/2} \cos^2\theta \sin\theta\, d\theta\,
+    d\varphi = \frac{2\pi}{3}\)). Pour le cosinus&nbsp;: \(f/p =
+    \cos\theta / (\cos\theta/\pi) = \pi\) pour tout tirage.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 6.4 — Les trois ingrédients d'un path tracer réel</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Next Event Estimation (NEE)</strong>&nbsp;: à chaque rebond,
+    connecter directement le point aux sources émissives (rayon d'ombre) au
+    lieu d'attendre qu'un chemin les touche par chance — échantillonnage
+    <em>multiple importance sampling</em> (MIS, Veach)&nbsp;: combiner la
+    stratégie «&nbsp;BRDF&nbsp;» et la stratégie «&nbsp;lumière&nbsp;» avec les
+    poids d'équilibre&nbsp;;</li>
+    <li><strong>Roulette russe</strong>&nbsp;: terminer le chemin avec
+    probabilité \(q\) (albédo du point), en pondérant les survivants par
+    \(1/(1-q)\)&nbsp;: sans biais, espérance de longueur bornée par la
+    réflectance — la série géométrique du théorème 2.2 échantillonnée&nbsp;;</li>
+    <li><strong>Échantillonnage des lumières étendues</strong>&nbsp;: une
+    laminaire de \(1\,\mathrm{m}^2\) vue à \(3\) m sous une incidence oblique
+    n'occupe que quelques millièmes de stéradians — tirer des points
+    <em>sur la source</em> (pondérés par son aire et la distance) plutôt que
+    des directions&nbsp;; c'est le facteur 100 entre un rendu «&nbsp;bruité en
+    10 minutes&nbsp;» et «&nbsp;propre en 10 secondes&nbsp;».</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Liens avec le reste du cursus</span>
+  L'estimation de la LTE est un problème d'intégration de grande dimension —
+  exactement le cadre des distances de Wasserstein et de leurs estimateurs
+  échantillonnaux (cf. module Optimal Transport&nbsp;: échantillonnage
+  d'importance, concentration, malédiction de la dimension)&nbsp;; le MIS est
+  un cas particulier de combinaison d'estimateurs (minimisation de variance
+  sous contrainte de non-biais). Les mêmes preuves servent au rendu et à
+  l'apprentissage&nbsp;; seule change la fonction intégrée.
+</div>
+</section>
+<section class="chapter" id="ch7">
+<h2>7. Accélération&nbsp;: intersection et BVH</h2>
+
+<div class="def">
+  <span class="tag">Définition 7.1 — Intersection rayon-triangle (Möller–Trumbore)</span>
+  Pour un rayon \(o + t\mathbf{d}\) et un triangle \((v_0, v_1, v_2)\), on
+  résout \(o + t\mathbf{d} = v_0 + u\,(v_1 - v_0) + v\,(v_2 - v_0)\) en
+  \((t, u, v)\)&nbsp;: un système \(3 \times 3\) linéaire résolu par la règle
+  de Cramer (2 produits vectoriels et quelques divisions), le triangle étant
+  touché ssi \(t &gt; 0\), \(u, v \geq 0\), \(u + v \leq 1\) — et le test
+  <em>retourne les barycentriques du théorème 5.2 gratuitement</em>
+  (interpolation de normales et d'UV). Coût&nbsp;: ~20 flops, contre ~36 pour
+  l'intersection rayon-sphère&nbsp;; d'où la conversion universelle des
+  scènes en triangles.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 7.2 — Hiérarchies de volumes englobants (BVH)</span>
+  Une <strong>BVH</strong> est un arbre binaire dont chaque nœud porte la
+  boîte englobante (AABB) de ses triangles&nbsp;; le parcours d'un rayon
+  descend un nœud ssi sa boîte est touchée (slab test&nbsp;: intersection de
+  3 intervalles, ~12 comparaisons)&nbsp;; les feuilles testent leurs
+  triangles. Coût moyen&nbsp;: \(O(\log n)\) boîtes pour \(n\) triangles
+  (scènes bien réparties), contre \(O(n)\) en force brute&nbsp;; construction
+  \(O(n \log^2 n)\) (médiane) en pratique quasi \(O(n \log n)\). Les
+  alternatives&nbsp;: <strong>kd-trees</strong> (plans de coupe, optimaux pour
+  les scènes statiques, construction chère) et <strong>grilles</strong>
+  uniformes (scènes uniformes, «&nbsp;teapot in a stadium&nbsp;» les
+  détruit). La BVH gagne en animation&nbsp;: <em>rafiner</em> l'arbre
+  (refit) quand les boîtes bougent est quasi gratuit.
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 7.3 — Heuristique SAH&nbsp;: l'aire commande la probabilité</span>
+  Pour un rayon de direction aléatoire uniforme, la probabilité de toucher
+  une AABB est proportionnelle à son aire surfacique&nbsp;;
+  $$P[\text{toucher } B] = \frac{A(B)}{A(B_{parent})}.$$ Il en découle
+  l'<strong>heuristique de surface</strong> (SAH) pour choisir une coupe&nbsp;:
+  $$\mathrm{cost}(x) = C_{trav} + P_L(x)\, C_L(x) + P_R(x)\, C_R(x),
+  \qquad P_{L,R} \propto A(B_{L,R}),$$
+  et l'on minimise \(\mathrm{cost}\) sur les positions candidates — le
+  partitionnement k-d/BVH optimal au premier ordre.
+  <div class="proof">
+    (Argument, en projection sur la sphère des directions.) Pour une boîte
+    convexe \(B\), l'ensemble des directions \(\omega\) telles qu'un rayon
+    lancé d'un point <em>uniforme dans \(B_{parent}\)</em> touche \(B\)
+    correspond, en projection sur la sphère unité, à l'aire projetée de
+    \(B\)&nbsp;; par le théorème de Cauchy (formule de l'aire projetée
+    moyenne), l'aire projetée moyenne d'un convexe est proportionnelle à son
+    aire surfacique \(A(B)\). En normalisant par l'aire projetée du parent,
+    \(P = A(B)/A(B_{parent})\). La formule de coût additionne alors les
+    espérances (linéarité)&nbsp;: traversée payée une fois, plus coût
+    d'intersection des enfants pondéré par leurs probabilités.
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 7.4 — Choisir une coupe au SAH, chiffres ronds</span>
+  Boîte mère cubique d'arête 2 (aire \(A = 24\)), 8 triangles&nbsp;: 5 dans la
+  moitié gauche, 3 dans la droite. <strong>Coupe médiane \(x = 0\)</strong>&nbsp;:
+  deux cubes d'arête 1, aires 6 et 6 ⟹
+  \(\mathrm{cost} = C_{trav} + \tfrac{6}{24}\cdot 5\,c_i + \tfrac{6}{24}\cdot
+  3\,c_i = C_{trav} + 2\,c_i\). <strong>Coupe à \(x = -0{,}5\)</strong> (boîte
+  gauche \((0{,}5 \times 2 \times 2)\), aire 12, pour les 5 triangles&nbsp;;
+  boîte droite \((1{,}5 \times 2 \times 2)\), aire 20, pour les 3)&nbsp;:
+  \(\mathrm{cost} = C_{trav} + \tfrac{12}{24}\cdot 5\,c_i + \tfrac{20}{24}
+  \cdot 3\,c_i = C_{trav} + 5\,c_i\) — moins bonne <em>ici</em>. La médiane
+  équilibre les <em>triangles</em>, le SAH équilibre les <em>aires</em>&nbsp;;
+  sur des scènes réelles (triangles concentrés sur les surfaces, larges
+  volumes vides), la coupe SAH s'écarte de la médiane pour «&nbsp;couper le
+  vide&nbsp;» et gagne typiquement 20–40&nbsp;% au temps de traversée — la
+  différence se lit directement dans le temps de rendu.
+</div>
+
+<div class="note">
+  <span class="tag">En pratique&nbsp;: cohérence et SIMD</span>
+  Les rayons primaires d'une image sont <em>cohérents</em> (voisins, directions
+  proches)&nbsp;: les traverser par paquets de 4–64 (SIMD) maximise le rejet
+  de branches entières de l'arbre. Les rayons de diffusion (chapitre 6) sont
+  incohérents&nbsp;: on les traite un par un, ou par <em>regroupement</em>
+  dynamique. Ces détails d'implémentation font 10× en performance —
+  c'est là que se joue le «&nbsp;temps réel&nbsp;» du chapitre 10.
+</div>
+</section>
+<section class="chapter" id="ch8">
+<h2>8. Bruit, débruitage, tone mapping</h2>
+
+<div class="def">
+  <span class="tag">Définition 8.1 — Le budget bruit/temps</span>
+  Un rendu MC à \(N\) échantillons par pixel (spp) a un bruit \(\propto
+  1/\sqrt{N}\)&nbsp;; l'erreur quadratique moyenne se décompose
+  biais² + variance&nbsp;; le path tracing pur est <em>sans biais</em>
+  (variance seulement), les méthodes à rebonds tronqués ou photon mapping
+  échangent un peu de biais contre beaucoup de variance. Chiffres
+  types&nbsp;: intérieur avec ciel par la fenêtre — 256 spp&nbsp;: bruit
+  visible dans les coins&nbsp;; 4096 spp&nbsp;: «&nbsp;propre&nbsp;» au
+  cinéma&nbsp;; 16–64 spp&nbsp;: cible des moteurs temps réel — puis
+  <em>débruitage</em>.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 8.2 — Trois familles de débruitage</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Filtres à noyau géométrique</strong>&nbsp;: moyenne pondérée
+    par des distances (position, normale, profondeur, albédo) — le filtre
+    <em>bilateral</em> et sa cascade multi-échelle «&nbsp;à-trous&nbsp;»
+    (5 niveaux, biais croissant, variance décroissante)&nbsp;; encore le
+    standard des rendus architecturaux&nbsp;;</li>
+    <li><strong>Décomposition du signal rendu</strong>&nbsp;: séparer
+    albédo × éclairage avant filtrage (le bruit vit surtout dans
+    l'éclairage)&nbsp;; filtrer puis recomposer — gagne les bords de
+    texture gratuits&nbsp;;</li>
+    <li><strong>Apprentissage</strong>&nbsp;: réseau récurrent
+    temporel (Chaitanya et al., 2017) accumulant les frames d'un rendu
+    interactif&nbsp;; OIDN / OptiX denoiser&nbsp;: CNN entraînés sur des
+    paires (bruité, référence) avec buffers auxiliaires — le débruitage ML
+    est aujourd'hui <em>plus précis que 4096 spp</em> sur les matériaux
+    diffus, et le maillon essentiel du temps réel (chapitre 10).</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 8.3 — Mesurer le gain</span>
+  Patch uniforme de radiance moyenne \(\bar{L} = 0{,}5\), écart-type du
+  bruit \(\sigma = 0{,}15\) à 16 spp (SNR ≈ 10,5 dB)&nbsp;: à 64 spp,
+  \(\sigma = 0{,}075\) (SNR ≈ 16,5 dB, +6 dB à chaque quadruplement)&nbsp;;
+  un filtre bilateral sur 9² voisins <em>de même normale et albédo</em>
+  divise la variance par ~81 (81 échantillons effectifs)&nbsp;: SNR ≈ 29 dB
+  à 16 spp — l'équivalent de 1300 spp. C'est l'arme du temps réel&nbsp;:
+  le filtre «&nbsp;sait&nbsp;» que le patch est plat, le MC ne le sait
+  pas. La difficulté est aux bords&nbsp;: normales différentes ⟹ moins de
+  voisins valides ⟹ résidu de bruit&nbsp;; d'où les cascades
+  multi-échelles.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 8.4 — Tone mapping et gamma</span>
+  La radiance est HDR (rapport 10⁴–10⁸ entre ombre et soleil)&nbsp;; l'écran
+  est LDR (8 bits, gamma 2,2)&nbsp;; l'œil est <em>relatif</em> (réponse
+  approximativement logarithmique). Le <strong>tone mapping</strong> compresse
+  l'échelle&nbsp;: opérateur de Reinhard \(L_d = L/(1 + L)\) (global),
+  extensions locales (dodge and burn par blocs), ou courbes artistiques
+  (filmic ACES). Puis correction gamma&nbsp;: \(V_{enc} = V_{lin}^{1/2{,}2}\).
+  Erreur classique&nbsp;: filtrer (antialiasing, mipmaps, débruitage) en
+  espace <em>sRGB</em> — non linéaire&nbsp;: les moyennes sont fausses&nbsp;;
+  tout le pipeline de ce module travaille en linéaire et ne convertit
+  <em>qu'à la sortie</em>.
+</div>
+
+<div class="note">
+  <span class="tag">L'aliasing est un bruit aussi</span>
+  L'antialiasing par suréchantillonnage stochastique (jitter par pixel,
+  chapitre code) est un estimateur MC de l'intégrale du pixel — même théorie
+  que le chapitre 6&nbsp;; l'aliasing déterministe (échantillon au centre)
+  est un biais de quadrature qui se transforme en motifs périodiques moirés.
+  Règle&nbsp;: dès qu'une intégrale est difficile, <em>jitteriser</em> —
+  le bruit gaussien est visuellement préféré au moiré structurel.
+</div>
+</section>
+<section class="chapter" id="ch9">
+<h2>9. Neural rendering&nbsp;: NeRF et Gaussiennes 3D</h2>
+
+<div class="def">
+  <span class="tag">Définition 9.1 — L'équation du rendu volumique</span>
+  Dans un milieu participatif de densité \(\sigma(x)\) (extinction, m⁻¹) et
+  d'émission colorée \(c(x, \omega)\), la radiance le long d'un rayon
+  \(r(t) = o + t\mathbf{d}\), \(t \in [s, \infty)\), vaut
+  $$L(r) = \int_s^{\infty} T(t)\, \sigma(r(t))\, c(r(t), \mathbf{d})\, dt,
+  \qquad T(t) = \exp\Big(\!-\int_s^{t} \sigma(r(u))\, du\Big),$$
+  où \(T\) est la <strong>transmittance</strong> — la probabilité que le
+  rayon «&nbsp;survive&nbsp;» (sans interaction) jusqu'à \(t\).
+</div>
+
+<div class="thm">
+  <span class="tag">Théorème 9.2 — La transmittance résout une EDO linéaire</span>
+  \(T\) est l'unique solution de
+  $$\frac{dT}{dt}(t) = -\,\sigma(r(t))\,T(t), \qquad T(s) = 1,$$
+  et pour \(\sigma\) constant par morceaux sur des intervalles
+  \([t_i, t_{i+1})\) de longueurs \(\delta_i\), le rendu volumique se
+  discrétise en <strong>alpha-composition</strong>
+  $$L \approx \sum_i \Big(\prod_{j&lt;i} (1 - \alpha_j)\Big)\, \alpha_i\, c_i,
+  \qquad \alpha_i = 1 - e^{-\sigma_i \delta_i}.$$
+  <div class="proof">
+    L'EDO est linéaire d'ordre 1 (rappel du chapitre 0)&nbsp;: en posant
+    \(\Sigma(t) = \int_s^t \sigma(r(u))\,du\), \(d(e^{\Sigma} T)/dt =
+    e^{\Sigma}(\Sigma' T + T') = e^{\Sigma}(\sigma T - \sigma T) = 0\),
+    donc \(e^{\Sigma(t)}T(t)\) est constant égal à \(T(s) = 1\) (car
+    \(\Sigma(s) = 0\))&nbsp;: \(T(t) = e^{-\Sigma(t)}\). Sur un intervalle
+    de \(\sigma_i\) constant, \(T(t_{i+1}) = T(t_i)\, e^{-\sigma_i\delta_i}\),
+    d'où la probabilité d'interaction \(\alpha_i = 1 - T(t_{i+1})/T(t_i)
+    = 1 - e^{-\sigma_i \delta_i}\)&nbsp;; sommer «&nbsp;interaction en \(i\)
+    ET survie avant&nbsp;» donne la série discrète (les produits
+    télescopiques \(\prod_{j&lt;i}(1-\alpha_j) = T(t_i)\)).
+    <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.3 — NeRF (Neural Radiance Fields)</span>
+  NeRF (Mildenhall et al., 2020) représente la scène par un réseau de
+  neurones \(F_\theta\)&nbsp;:
+  $$F_\theta\big(\gamma(x), \gamma(\mathbf{d})\big) = \big(\sigma(x),\ c(x, \mathbf{d})\big),$$
+  où \(\gamma\) est l'<strong>encodage positionnel</strong>
+  \(\gamma(u) = (u, \sin 2^k \pi u, \cos 2^k \pi u)_k\) — il donne au MLP le
+  spectre haute fréquence qu'il ne peut pas apprendre seul (le «&nbsp;théorème
+  spectral&nbsp;» de Tancik et al., 2020). L'entraînement minimise
+  l'erreur photométrique sur des rayons de photos calibrées (pose connue,
+  SfM)&nbsp;; l'évaluation rend 100–300 échantillons par rayon et
+  alpha-compose (théorème 9.2). Résultat&nbsp;: photoréalisme, vues
+  nouvelles — au prix d'heures d'entraînement et d'une seconde par
+  image&nbsp;; les successeurs (Instant-NGP et ses hash grids encodant
+  l'espace) ramènent l'entraînement à la minute.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 9.4 — Gaussiennes 3D (splatting)</span>
+  La représentation par <strong>Gaussiennes 3D</strong> (Kerbl et al., 2023)
+  remplace le réseau par 10⁵–10⁷ gaussiennes anisotropes (position,
+  covariance 3D, opacité, couleur sphérique harmonique)&nbsp;; un rayon les
+  accumule par alpha-composition <em>ordonnée par profondeur</em>, chaque
+  gaussienne étant projetée (rasterisée) en ellipse 2D. Les gradients de la
+  covariance rendent l'optimisation <em>différentiable et rapide</em> (le
+  nombre de gaussiennes s'adapte&nbsp;: clonage/scission)&nbsp;: entraînement
+  en minutes, rendu en <em>temps réel</em> — le standard actuel de la
+  capture de scène. La parenté avec le chapitre 5&nbsp;: c'est une
+  rastérisation (ordre objet&nbsp;!) de primitives volumiques — les deux
+  paradigms du chapitre 5 se réconcilient.
+</div>
+
+<div class="ex">
+  <span class="tag">Exemple 9.5 — Vérifier l'alpha-composition à la main</span>
+  Rayon traversant 4 intervalles égaux \(\delta = 0{,}5\), densités
+  \(\sigma = (2, 0, 4, 2)\). Alphas&nbsp;: \(\alpha_1 = 1 - e^{-1} \approx
+  0{,}632\), \(\alpha_2 = 0\), \(\alpha_3 = 1 - e^{-2} \approx 0{,}865\),
+  \(\alpha_4 = 0{,}632\). Couleurs \(c_i = (1, 0{,}5, 1, 0{,}25)\)&nbsp;:
+  $$L \approx 0{,}632 \cdot 1 + 0{,}368 \cdot 0 \cdot 0{,}5 + 0{,}368
+  \cdot 0{,}865 \cdot 1 + 0{,}368 \cdot 0{,}135 \cdot 0{,}632 \cdot 0{,}25
+  \approx 0{,}957,$$
+  (transmittances&nbsp;: \(T_1 = 1\), \(T_2 = 0{,}368\), \(T_3 = 0{,}368\),
+  \(T_4 = 0{,}0498\)) — à comparer à l'intégrale exacte \(L = \int T\sigma c\,
+  dt\) des densités constantes par morceaux&nbsp;: la quadrature
+  «&nbsp;échantillon au milieu&nbsp;» de NeRF introduit un <em>biais</em>
+  faible (échantillons aléatoires ⟹ sans biais en espérance).
+</div>
+
+<div class="note">
+  <span class="tag">Le rendu différentiable, paradigme commun</span>
+  NeRF, Gaussiennes 3D, débruitage ML (chapitre 8), upscaling (chapitre
+  10)&nbsp;: partout, un <em>rendu différentiable</em> relie paramètres et
+  image, et l'apprentissage fait le reste — l'équation du rendu devient la
+  couche finale d'un réseau (cf. module Machine Learning, chapitre
+  rétro-propagation&nbsp;; module Multimodal GenAI, chapitre sur la génération
+  3D). La théorie des chapitres 1–6 n'est pas remplacée&nbsp;: elle fournit
+  la <em>structure</em> (physique, estimateurs, biais/variance) que les
+  réseaux ne peuvent qu'exploiter.
+</div>
+</section>
+<section class="chapter" id="ch10">
+<h2>10. Le temps réel&nbsp;: GPU, hybride, upscaling</h2>
+
+<div class="def">
+  <span class="tag">Définition 10.1 — Le pipeline graphique matériel</span>
+  La rastérisation matérielle (OpenGL/Vulkan/DirectX) enchaîne&nbsp;:
+  vertex shading (transformations, chapitre 4) ⟹ assemblage/clipping ⟹
+  rastérisation (théorème 5.2 en silicium) ⟹ pixel/fragment shading
+  (matériaux, chapitre 3) ⟹ z-buffer ⟹ framebuffer. Cohérence
+  exploitée&nbsp;: les triangles couvrent des blocs de pixels contigus —
+  parallélisme massif (des milliers de cœurs SIMT), hiérarchies de rejet
+  précoce par profondeur. Budget&nbsp;: 16,6 ms/frame (60 Hz) pour
+  <em>tout</em> —
+  géométrie, matériaux, ombres, post-effets. Les techniques d'ombre douces
+  pré-MC restent essentielles&nbsp;: shadow maps filtrées (PCF, variance
+  shadow maps), ambient occlusion par écran (SSAO), lightmaps précalculées
+  — hiérarchie de compromis biais/variance.
+</div>
+
+<div class="def">
+  <span class="tag">Définition 10.2 — Hybride RTX et upscaling</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Ray tracing matériel</strong> (RTX, 2018)&nbsp;: unités
+    dédiées à la traversée de BVH (chapitre 7) — le <em>rayon à la
+    demande</em>&nbsp;: réflexions, ombres douces, GI à 1–2 rebonds
+    échantillonnés... puis débruités (chapitre 8) et recombinés sur la
+    rastérisation&nbsp;: le <em>hybride</em>&nbsp;;</li>
+    <li><strong>Upscaling temporel</strong> (DLSS, FSR)&nbsp;: rendre à
+    1080p, afficher à 4K&nbsp;; le réseau (ou le filtre) reçoit la frame
+    basse résolution + l'historique temporel re-projeté (mouvement) +
+    les buffers géométriques&nbsp;; la formulation est un problème inverse
+    supervisé — super-résolution vidéo avec le jeu de contraintes du
+    chapitre 8&nbsp;;</li>
+    <li><strong>Path tracing jeux</strong> (Cyberpunk 2077, Alan Wake 2)&nbsp;:
+    MC complet à 1–4 spp + débruitage récurrent + reconstruction
+    temporelle&nbsp;: la théorie des chapitres 6 et 8, en 16 ms.</li>
+  </ul>
+</div>
+
+<table class="tbl">
+  <tr><th>Rendu</th><th>Échantillons</th><th>Biais/variance</th><th>Temps/image</th><th>Usage</th></tr>
+  <tr><td>Rastérisation pure</td><td>1 rayon primaire</td><td>biais structurel</td><td>&lt; 8 ms</td><td>jeux, UI 3D</td></tr>
+  <tr><td>Hybride RTX</td><td>0,5–2 spp par effet</td><td>mixte, débruité</td><td>&lt; 16 ms</td><td>jeux AAA</td></tr>
+  <tr><td>Path tracing temps réel</td><td>1–4 spp</td><td>variance → ML</td><td>~16 ms</td><td>jeux haut de gamme</td></tr>
+  <tr><td>Path tracing production</td><td>256–4096 spp</td><td>sans biais</td><td>minutes–heures</td><td>film, architecture</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Ce que «&nbsp;temps réel&nbsp;» veut dire pour un ingénieur</span>
+  Le temps réel n'est pas une théorie différente&nbsp;: c'est le <em>même</em>
+  ensemble d'équations (chapitres 1–6) sous une contrainte de budget — et
+  donc une stratégie de dépense&nbsp;: où accepter du biais (ombres,
+  GI approximée), où garder la variance (reflets spéculaires, l'œil y est
+  sensible), où apprendre (débruitage, upscaling). La conception d'un
+  moteur moderne est un exercice de <em>gestion du biais et de la
+  variance par dollar de milliseconde</em> — les mêmes arbitrages qu'en
+  ML, transposés au rendu.
+</div>
+</section>
+<section class="chapter" id="ch11">
+<h2>11. Travaux de l'enseignant</h2>
+
+<div class="def">
+  <span class="tag">Tamy Boubekeur — géométrie pour le rendu, du temps réel au neural</span>
+  Professeur à l'École Polytechnique (en délégation de Télécom Paris, et Lab
+  Director / Senior Principal Research Scientist chez Adobe Research),
+  T. Boubekeur construit des représentations géométriques
+  <em>au service du rendu</em> — trois jalons reliés directement au cours&nbsp;:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Phong Tessellation</strong> (avec M. Alexa, SIGGRAPH Asia
+    2008, TOG&nbsp;27) — <a href="https://dl.acm.org/doi/10.1145/1457515.1409094">ACM
+    DL</a>&nbsp;: interpoler les <em>positions</em> comme Phong interpole les
+    normales — une ligne de shader qui donne aux maillages grossiers des
+    silhouettes lisses, en temps réel (chapitre 10)&nbsp;: la preuve que
+    «&nbsp;rendering&nbsp;» et «&nbsp;modeling&nbsp;» ne font qu'un quand la
+    primitive est bien choisie&nbsp;;</li>
+    <li><strong>Sphere-Meshes</strong> (avec J.-M. Thiery, E. Guy, SIGGRAPH
+    Asia 2013, TOG&nbsp;32) — <a href="https://dl.acm.org/doi/10.1145/2508363.2508384">ACM
+    DL</a>&nbsp;: approximation extrême de formes par interpolation de
+    sphères (quadriques sphériques en erreur exacte)&nbsp;: quelques
+    dizaines de primitives pour un personnage — les «&nbsp;proxies&nbsp;»
+    du rendu temps réel et de la compression de scène (chapitres 7 et
+    10)&nbsp;;</li>
+    <li><strong>AtlasNet</strong> (avec T. Groueix, S. Chaudhuri, D. Ceylan
+    et al., CVPR 2018) — <a href="https://arxiv.org/abs/1802.05384">arXiv
+    1802.05384</a>&nbsp;: générer des surfaces 3D comme collections de
+    patches paramétriques appris — le «&nbsp;papier mâché&nbsp;» neural&nbsp;:
+    la porte d'entrée de la génération 3D apprise (reprise au module
+    Multimodal GenAI)&nbsp;; voir aussi le tutoriel
+    <a href="https://geometry.cs.ucl.ac.uk/workshops/creativeai/">CreativeAI&nbsp;:
+    Deep Learning for Computer Graphics</a> (Eurographics/EGSR).</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">La ligne de force</span>
+  Du tessellation temps réel aux primitives apprises, ces travaux posent la
+  même question que le module&nbsp;: <em>quelle représentation de la scène
+  pour quel budget de rendu&nbsp;?</em> triangles (chapitre 5), hiérarchies
+  (chapitre 7), champs neuronaux et gaussiennes (chapitre 9)&nbsp;: chaque
+  saut de représentation a déplacé la frontière du possible en synthèse
+  d'images — et le mouvement ne fait qu'accélérer.
+</div>
+</section>
+<section class="exercises" id="ex">
+<h3>Exercices</h3>
+<ol>
+  <li><strong>Radiance guidé.</strong> (a) Reprendre la preuve du théorème 1.2
+  et la refaire avec un schéma aux dimensions explicites (\(dA_1 = 1\)
+  cm², \(dA_2 = 4\) cm², \(r = 0{,}5\) m, incidences 30° et 0°)&nbsp;:
+  vérifier numériquement \(L_1 = L_2\). (b) En déduire l'éclairement d'un
+  point à 1 m puis 3 m d'une source ponctuelle isotrope de 10 W —
+  expliquer le \(1/r^2\) <em>sans</em> invoquer la radiance.</li>
+
+  <li><strong>Série des rebonds.</strong> Deux plans face à face d'albédo
+  \(\rho = 0{,}9\), l'un émissif (\(L_e = 1\)). (a) Calculer la radiance
+  d'équilibre (série géométrique). (b) Combien de rebonds pour capturer
+  99&nbsp;% de l'énergie&nbsp;? 99,9&nbsp;%&nbsp;? (c) Quel lien avec la
+  profondeur de chemin par défaut (3–4) des moteurs temps réel&nbsp;?</li>
+
+  <li><strong>Lambert guidé.</strong> (a) Refaire la preuve du théorème 3.2
+  en détail (calcul de \(\int_{\Omega^+} \cos\theta\, d\omega = \pi\)).
+  (b) Vérifier la conservation d'énergie de Phong avec \(k_d = 0{,}7\),
+  \(k_s = 0{,}3\), \(n = 30\) (intégrale numérique sur l'hémisphère)&nbsp;;
+  que se passe-t-il pour \(n = 1\)&nbsp;? (c) Échantillonner la BRDF GGX par
+  la méthode de la distribution des normales (tirer \(\mathbf{h}\) selon
+  \(D(\mathbf{h})\cos\theta_h\), rebondir) — vérifier l'unbiais par
+  comparaison à une intégrale de référence.</li>
+
+  <li><strong>Fresnel.</strong> Tracer \(F(\theta)\) de Schlick pour
+  \(F_0 = 0{,}04\) et pour l'or \((1{,}00,\,0{,}71\,0{,}29)\) sur
+  \([0°, 90°]\)&nbsp;; retrouver les valeurs de l'exemple 3.4&nbsp;;
+  expliquer pourquoi l'herbe mouillée paraît brillante (couche d'eau
+  diélectrique sur diffuse).</li>
+
+  <li><strong>Caméra guidé.</strong> (a) Implémenter pixel ⟶ rayon (définition
+  4.1) et vérifier l'exemple 4.3. (b) Pour \(f_x = 1000\) px et une image de
+  1920×1080, calculer les angles de champ horizontal et vertical.
+  (c) Ajouter une lentille mince (échantillonner un disque de rayon \(r\)
+  dans le plan de la lentille, viser le point focal) et montrer que le
+  cercle de confusion croît linéairement avec \(r\).</li>
+
+  <li><strong>Rastérisation.</strong> (a) Rasteriser à la main le triangle
+  de l'exemple 5.4 sur la grille des pixels de centre entier — liste des
+  pixels couverts et barycentriques. (b) Construire un exemple à deux
+  triangles où le tri du peintre échoue et le z-buffer non. (c) Prouver
+  que la règle «&nbsp;top-left&nbsp;» évite les trous et les doubles
+  comptages entre triangles adjacents.</li>
+
+  <li><strong>Monte Carlo guidé.</strong> (a) Redémontrer le calcul de
+  variance du théorème 6.3 (échantillonnage uniforme&nbsp;: \(\pi^2/3\)).
+  (b) Implémenter les deux estimateurs de \(\int_{\Omega^+}\cos\theta\,
+  d\omega\) et tracer l'erreur en fonction de \(N\) (échelle log)&nbsp;;
+  vérifier les pentes \(-1/2\). (c) Généraliser&nbsp;: pour \(f(\theta) =
+  \cos^k\theta\), quelle est la densité zéro-variance&nbsp;? et une densité
+  réaliste approchée&nbsp;?</li>
+
+  <li><strong>BVH/SAH.</strong> (a) Construire à la main la BVH médiane de 8
+  triangles dans \([0,1]^3\) (2 niveaux)&nbsp;; compter les boîtes traversées
+  par un rayon diagonal. (b) Implémenter la coupe SAH (12 candidats par
+  axe) et comparer le coût traversé total avec (a) sur une scène de 1000
+  triangles aléatoires. (c) Que devient la BVH si tous les triangles
+  bougent&nbsp;? (refit contre rebuild — mesurer les deux.)</li>
+
+  <li><strong>Rendu volumique.</strong> (a) Vérifier l'exemple 9.5 contre
+  l'intégrale exacte (densités constantes par morceaux, intégration
+  analytique de \(\int T \sigma c\)). (b) Implémenter l'alpha-composition
+  sur 64 échantillons tirés aléatoirement (quadrature NeRF)&nbsp;: le biais
+  disparaît-il en moyenne&nbsp;? (c) Simuler une «&nbsp;gaussienne 3D&nbsp;»
+  (\(\sigma(x) = \sigma_0 e^{-\|x - c\|^2/2s^2}\)) et rendre un nuage —
+  pourquoi le nombre d'échantillons par rayon doit-il croître avec
+  \(1/s\)&nbsp;?</li>
+
+  <li><strong>Projet — étendre le mini tracer.</strong> (a) Matériaux
+  miroir/verre (réflexion + réfraction de Snell, schéma de Fresnel)&nbsp;;
+  (b) roulette russe explicite (terminaison \(q = 1 - \rho\), repondération)
+  et mesure&nbsp;: profondeur moyenne, variance par pixel&nbsp;;
+  (c) profondeur de champ&nbsp;; (d) débruitage bilateral guidé par les
+  buffers (normale, profondeur) et comparaison à equal-time contre plus de
+  spp. Conclusion&nbsp;: quel budget pour quelle qualité&nbsp;?</li>
+</ol>
+</section>
+<section class="chapter refs" id="refs">
+<h2>Références</h2>
+<ul>
+  <li>J. Kajiya, <a href="https://dl.acm.org/doi/10.1145/15922.15902">The Rendering Equation</a>, SIGGRAPH 1986 — l'article fondateur&nbsp;;
+  T. Whitted, <a href="https://dl.acm.org/doi/10.1145/358876.358882">An Improved Illumination Model for Shaded Display</a>, CACM 1980.</li>
+  <li>E. Veach, <a href="https://www.graphics.stanford.edu/papers/veach_thesis/">Robust Monte Carlo Methods for Light Transport Simulation</a>, thèse Stanford, 1997 (MIS, MLT — la référence MC du chapitre 6).</li>
+  <li>M. Pharr, W. Jakob, G. Humphreys, <a href="https://www.pbr-book.org">Physically Based Rendering: From Theory to Implementation</a> (pbrt, 4e éd. en ligne)&nbsp;; tutoriels&nbsp;: <a href="https://raytracing.github.io">Ray Tracing in One Weekend</a>&nbsp;; <a href="https://www.scratchapixel.com">Scratchapixel</a>.</li>
+  <li>B. Phong, Illumination for Computer Generated Pictures, CACM 1975&nbsp;; R. Cook, K. Torrance, A Reflectance Model for Computer Graphics, SIGGRAPH 1981&nbsp;; C. Schlick, An Inexpensive BRDF Model for Physically-based Rendering, CGF 1994&nbsp;; B. Burley, Physically-Based Shading at Disney, SIGGRAPH Course 2012.</li>
+  <li>T. Möller, B. Trumbore, Fast, Minimum Storage Ray-Triangle Intersection, JGT 1997&nbsp;; I. Wald, On fast Construction of SAH-based Bounding Volume Hierarchies, EGSR 2007.</li>
+  <li>B. Mildenhall, P. Srinivasan, M. Tancik, J. Barron, R. Ramamoorthi, N. Ng, <a href="https://arxiv.org/abs/2003.08934">NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis</a>, ECCV 2020&nbsp;;
+  B. Kerbl, G. Kopanas, T. Leimkühler, G. Drettakis, <a href="https://arxiv.org/abs/2308.04079">3D Gaussian Splatting for Real-Time Radiance Field Rendering</a>, SIGGRAPH 2023.</li>
+  <li>A. Tewari et al., <a href="https://arxiv.org/abs/2004.03805">State of the Art on Neural Rendering</a>, Computer Graphics Forum (EG STAR), 2020 — la synthèse du chapitre 9 (suivi par <a href="https://arxiv.org/abs/2111.05849">Advances in Neural Rendering</a>, 2021).</li>
+  <li>C. Chaitanya, A. Kaplanyan, C. Schied, M. Salvi, A. Lefohn, D. Nowrouzezahrai, T. Aila, Interactive Reconstruction of Monte Carlo Image Sequences Using a Recurrent Denoising Autoencoder, SIGGRAPH 2017&nbsp;; <a href="https://www.openimagedenoise.io">Open Image Denoise</a> pour les TP.</li>
+  <li>T. Boubekeur, M. Alexa, <a href="https://dl.acm.org/doi/10.1145/1457515.1409094">Phong Tessellation</a>, TOG 2008&nbsp;;
+  J.-M. Thiery, E. Guy, T. Boubekeur, <a href="https://dl.acm.org/doi/10.1145/2508363.2508384">Sphere-Meshes: Shape Approximation using Spherical Quadric Error Metrics</a>, TOG 2013&nbsp;;
+  T. Groueix, S. Chaudhuri, D. Ceylan, et al., <a href="https://arxiv.org/abs/1802.05384">AtlasNet: A Papier-Mâché Approach to Learning 3D Surface Generation</a>, CVPR 2018&nbsp;;
+  tutoriel <a href="https://geometry.cs.ucl.ac.uk/workshops/creativeai/">CreativeAI</a>.</li>
+</ul>
+</section>
+<section class="chapter" id="code">
+<h2>Un path tracer complet en Python</h2>
+
+<p>Le programme ci-dessous (~70 lignes, NumPy seul) met en œuvre les
+chapitres 4 (caméra), 6 (échantillonnage cosinus, roulette par profondeur),
+1–3 (radiance, Lambert, ombres) et 5/9 (rebonds&nbsp;: série du
+théorème 2.2). Réduire <code>W, H, SPP</code> pour tester&nbsp;; en pleine
+résolution, compter ~1 minute (interpréteur)&nbsp;: chaque pixel est un
+estimateur MC indépendant — la parallélisation est triviale.</p>
+
+<pre class="code"><code>import numpy as np
+
+W, H, SPP = 240, 180, 8
+def norm(v): return v / np.linalg.norm(v)
+
+# scene : spheres (centre, rayon, albedo, albédo rho)
+S = [(( 0.0, -100.0, -1.0), 100.0, (0.85, 0.80, 0.75), 0.6),   # sol
+     (( 0.0,    1.0, -5.0),   1.0, (0.75, 0.25, 0.20), 0.7),
+     ((-2.3,    0.7, -4.2),   0.7, (0.25, 0.70, 0.30), 0.7),
+     (( 2.3,    0.7, -4.2),   0.7, (0.25, 0.35, 0.90), 0.7)]
+Lp  = np.array([6.0, 9.0, 1.0])      # lumiere ponctuelle
+I   = np.array([180.0, 170.0, 150.0])
+SKY = np.array([0.45, 0.60, 0.85])   # radiance du ciel
+
+def intersect(o, d):
+    tbest, ibest = 1e9, -1           # premiere intersection (ch. 7 naive)
+    for i, (c, r, _, _) in enumerate(S):
+        oc = o - c; b = oc @ d; disc = b*b - (oc @ oc - r*r)
+        if disc > 0:
+            t = -b - np.sqrt(disc)
+            if 1e-3 &lt; t &lt; tbest: tbest, ibest = t, i
+    return tbest, ibest
+
+def trace(o, d):
+    col, att = np.zeros(3), np.ones(3)          # L = somme des T^k Le (th. 2.2)
+    for depth in range(4):                      # ... + roulette implicite
+        t, i = intersect(o, d)
+        if i &lt; 0:
+            return col + att * SKY * max(0.1, d[1])
+        c, r, albedo, rho = S[i]
+        p = o + t*d; n = norm(p - c)
+        # next event estimation : lumiere ponctuelle + rayon d'ombre (ch. 6)
+        Lv = Lp - p; dist = np.linalg.norm(Lv); L = Lv / dist
+        if intersect(p + 1e-3*n, L)[0] > dist:
+            col += att * rho * albedo * I / dist**2 * max(0.0, n @ L)
+        # rebond diffus : echantillonnage cosinus (p = cos/pi, th. 6.3)
+        d = norm(n + np.random.normal(size=3))
+        o, att = p + 1e-3*n, att * rho * albedo
+    return col
+
+img = np.zeros((H, W, 3))
+for y in range(H):
+    for x in range(W):
+        acc = np.zeros(3)
+        for _ in range(SPP):                    # AA stochastique (ch. 8)
+            u = (x + np.random.rand()) / W  - 0.5
+            v = 0.5 - (y + np.random.rand()) / H
+            acc += trace(np.array([0.0, 1.2, 0.0]), norm([u, v, -1.0]))
+        img[y, x] = acc / SPP
+
+img = np.clip(img, 0, None) ** (1.0 / 2.2)      # tone map gamma (ch. 8)
+img = img / img.max()                           # normalisation d'exposition
+with open("render.ppm", "wb") as f:
+    f.write(f"P6\n{W} {H}\n255\n".encode())
+    f.write((img * 255).astype(np.uint8).tobytes())
+</code></pre>
+
+<div class="note">
+  <span class="tag">Exercices de lecture du code</span>
+  (1) La ligne <code>d = norm(n + gaussienne)</code> est l'échantillonnage
+  cosinus du théorème 6.3 — pourquoi ce simple re-centrage réalise-t-il la
+  densité \(\cos\theta/\pi\) (indice&nbsp;: distribution de la projection
+  d'une gaussienne isotrope sur l'hémisphère)&nbsp;? (2) L'atténuation
+  <code>att</code> est le produit des facteurs de transport divisés par les
+  probabilités — identifier chaque terme de la définition 6.1.
+  (3) Remplacer la lumière ponctuelle par une sphère émissive et
+  échantillonner <em>sa surface</em>&nbsp;: le bruit des ombres s'effondre
+  (NEE sur lumière étendue, définition 6.4).
+</div>
+</section>
+</main>
+<footer class="foot">
+<p><a href="../../index.html">← Programme du master</a></p>
+</footer>
+</body>
+</html>

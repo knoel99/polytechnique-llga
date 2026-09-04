@@ -1,0 +1,1825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — LLGA</title>
+<link rel="stylesheet" href="../../assets/paper.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<p class="crumb"><a href="../../index.html">MSc&amp;T LLGA · Course notes</a></p>
+<main class="paper">
+<h1>Deep Learning</h1>
+<p class="subtitle">CSC_51054_EP · Year 1 · Period 1</p>
+<nav class="toc">
+<p class="toc-title">Contents</p>
+<ol>
+<li><a href="#intro">Introduction and overview</a></li>
+<li><a href="#ch0">0. Review: matrix differential calculus and numerical stability</a></li>
+<li><a href="#ch1">1. From the neuron to the deep network</a></li>
+<li><a href="#ch2">2. Backpropagation</a></li>
+<li><a href="#ch3">3. Optimization in practice</a></li>
+<li><a href="#ch4">4. Convolutional networks (CNN)</a></li>
+<li><a href="#ch5">5. Sequences: RNN, LSTM</a></li>
+<li><a href="#ch6">6. Attention and transformers</a></li>
+<li><a href="#ch7">7. Generative models: AE, VAE, GAN</a></li>
+<li><a href="#ch8">8. Transfer learning and fine-tuning</a></li>
+<li><a href="#ch9">9. Research of the teaching team</a></li>
+<li><a href="#ch10">10. Training in practice</a></li>
+<li><a href="#ex">Exercises</a></li>
+<li><a href="#refs">References</a></li>
+</ol>
+</nav>
+<section class="chapter" id="intro">
+<h2>Introduction and overview</h2>
+<table class="tbl">
+<tr><th style="width:160px">Module</th><td>Deep Learning — SynapseS sheet 2026-2027: "Programme d'approfondissement — Apprentissage automatique et apprentissage profond" (occurrence: "Machine and Deep learning", computer science department)</td></tr>
+<tr><th>Code</th><td>CSC_51054_EP</td></tr>
+<tr><th>Team and workload</th><td>Course coordinator: Michalis Vazirgiannis · official teaching team: Davide Buscaldi, Jérémie Dentan, Iakovos Evdaimon, Xiao Fei, Johannes Lutzeyer (occurrence coordinator), Christos Xypolopoulos (École Polytechnique) · 36&nbsp;h in person (lecture / small-class split not published on the sheet) · 4.5&nbsp;ECTS · teaching language: English · from perceptrons to transformers, with the "graph" reading that prepares the Graph ML module.</td></tr>
+<tr><th>Status in the program</th><td><span class="badge recommended">Recommended — LLGA track</span> M1 · S1 / Period&nbsp;1 (fall semester, from 17/09/26 to 18/12/26)</td></tr>
+</table>
+
+<p>This course builds, from perceptrons to transformers, the toolkit that today carries most of applied AI: deep networks, backpropagation, CNNs, RNNs, attention, generative models. The LLMs that give the LLGA program its name are transformers: without this module, neither their architecture, nor their training, nor their fine-tuning is understandable. The course offers as a guiding thread a "graph" reading of the architectures — a deep network <em>is</em> a computation graph, and attention will be reread as a GNN in Period&nbsp;2.</p>
+
+<h3>What you will be able to do</h3>
+<ul>
+<li>Build a neural network from scratch: layers, activations, initialization, and understand what depth buys.</li>
+<li>Unroll backpropagation by hand on a small network, and code it in PyTorch without copying a tutorial.</li>
+<li>Diagnose a failing training run: gradient explosion/vanishing, learning rate, normalization, numerical stabilization.</li>
+<li>Choose an architecture according to the data: CNNs for images, RNN/LSTM for sequences, transformers for everything else.</li>
+<li>Explain the attention mechanism and the transformer architecture, up to the explicit link with GNNs.</li>
+<li>Distinguish the generative families: autoencoders, VAEs, GANs — their objectives, their losses, their uses.</li>
+<li>Adapt a pretrained model to a new task by transfer learning and fine-tuning, with the right layer freezing/tuning reflexes.</li>
+<li>Launch a realistic training run: GPU, mixed precision, experiment tracking, reproducibility.</li>
+</ul>
+
+<h3>Official objectives and syllabus (2026-2027 catalog)</h3>
+<p><strong>Official objectives</strong>: the SynapseS sheet does not publish a separate "objectives" block ("not disclosed"); the intentions of the course can be read in its detailed syllabus and its official keywords — <em>machine learning, deep learning, artificial intelligence, graph neural networks</em>. Reformulated: build the complete path of machine learning, from the fundamental paradigms (supervised, unsupervised, reinforcement) to neural networks and deep learning (convolutional and recurrent architectures, modern NLP, generative models); the official presence of "graph neural networks" among the keywords confirms the "graph" reading adopted by this material. The following table maps the nine blocks of the official detailed syllabus to our chapters.</p>
+<table class="tbl">
+<tr><th style="width:340px">Block of the official syllabus</th><th>Course section that covers it</th></tr>
+<tr><td>General introduction to machine learning (paradigms, pipelines)</td><td>twin module <a href="../m1p1-machine-learning/">Machine Learning</a> (MDC_51006_EP), ch. 1 and 9; here, ch. 0 as immediate preparation</td></tr>
+<tr><td>Supervised learning (generative and non-generative methods, naive Bayes classification, decision trees)</td><td><a href="../m1p1-machine-learning/">Machine Learning</a> module, ch. 1, 2, 3 and 5 — the official course covers ML <em>and</em> DL in a single sheet; the "machine learning" half is carried by this twin module of the track</td></tr>
+<tr><td>Unsupervised learning (dimensionality reduction, clustering)</td><td><a href="../m1p1-machine-learning/">Machine Learning</a> module, ch. 6</td></tr>
+<tr><td>Advanced concepts (regularization, model selection, feature selection, ensemble methods)</td><td><a href="../m1p1-machine-learning/">Machine Learning</a> module, ch. 2, 5 and 9; here ch. 3 (regularization through optimization) and ch. 8 (reuse of pretrained models)</td></tr>
+<tr><td>Kernels (introduction, support vector machines)</td><td><a href="../m1p1-machine-learning/">Machine Learning</a> module, ch. 3 (SVM) and 4 (kernels and RKHS)</td></tr>
+<tr><td>Neural networks (perceptrons, backpropagation of the gradient)</td><td>ch. 1 (from the neuron to the deep network) and ch. 2 (backpropagation)</td></tr>
+<tr><td>Deep learning I (convolutional¹, recurrent networks, applications)</td><td>ch. 4 (CNN) and ch. 5 (RNN, LSTM)</td></tr>
+<tr><td>Deep learning II (modern natural language processing, unsupervised deep learning, embeddings, autoencoders, generative adversarial networks)</td><td>ch. 6 (attention and transformers), ch. 7 (AE, VAE, GAN) and ch. 8 (transfer learning)</td></tr>
+<tr><td>Reinforcement learning</td><td>section 1.4 "Beyond supervised: reinforcement learning" (introduction to the paradigm); the full treatment is in the <a href="../m1p2-reinforcement-learning/">Reinforcement Learning and Autonomous Agents</a> module (Period&nbsp;2)</td></tr>
+</table>
+<p>¹&nbsp;The official sheet writes "réseaux de neurones conventionnels" ("conventional neural networks"), to be read as "convolutional" in view of the listed applications. These materials follow the "deep learning" half of the course and refer the "machine learning" half to the twin module <a href="../m1p1-machine-learning/">Machine Learning</a>: this is an organizational choice of the LLGA track, honestly flagged here. In return, these materials go beyond the official syllabus on three points: the detailed treatment of attention and transformers (the syllabus stops at "modern natural language processing"), transfer learning and fine-tuning (ch. 8), and large-scale training in practice (ch. 10: GPU, mixed precision, reproducibility) — deliberate additions of the track.</p>
+<table class="tbl">
+<tr><th style="width:220px">Official field</th><th>Published value (SynapseS 2026-2027)</th></tr>
+<tr><th>Fields</th><td>Computer Science</td></tr>
+<tr><th>Workload</th><td>36&nbsp;h in person (lecture / small-class split not published) · enrollment / 156</td></tr>
+<tr><th>Period / language</th><td>Fall semester, period 1 (17/09/26 – 18/12/26) · English</td></tr>
+<tr><th>Prerequisites</th><td>Not disclosed (empty tab on the sheet)</td></tr>
+<tr><th>Assessment</th><td>Numerical grade out of 20 · resit allowed (depending on the degree: resit grade kept or max of the two); course validated if final grade ≥ 10 · the grade counts toward the GPA · ECTS: 5 for École Polytechnique degrees, masters and exchange programs; 4.5 for MScT tracks (value retained for the LLGA) · the breakdown of assessments is not published ("not disclosed")</td></tr>
+</table>
+
+<h3>Where this course fits in the program</h3>
+<p>Recommended option of the LLGA track in Year&nbsp;1 · Period&nbsp;1 (36&nbsp;h, 4.5&nbsp;ECTS), right after the <a href="../m1p1-machine-learning/">Machine Learning</a> module, of which it is the natural continuation: the perceptron is reread there as a linear model, optimization as stochastic gradient descent. The official 2026-2027 sheet publishes no formal prerequisites ("not disclosed"); the positioning below describes the foundations actually assumed. The two refreshers — <a href="../m1p1-refresher-statistics/">Refresher in Statistics</a> and <a href="../m1p1-refresher-cs/">Refresher in Computer Science</a> — are assumed acquired, notably NumPy matrix computation for the labs.</p>
+<p>Downstream, this module is the mandatory gateway to the whole "large models" part of the program: <a href="../m1p2-nlp-text-mining/">Introduction to Text Mining and NLP</a> and <a href="../m2-large-language-models/">Large Language Models</a> (M2) build directly on the "Attention and transformers" chapter; <a href="../m1p2-multimodal-genai/">Multimodal Generative AI</a> extends the generative models (VAE, GAN) and fine-tuning. The attention chapter is also reread as a GNN in the <a href="../m1p2-graph-ml/">Graph Machine and Deep Learning for Generative AI</a> module: a transformer processes a set of tokens as a complete graph, and this reading unifies the two sides of the program.</p>
+<p>The "Training in practice" chapter finally prepares the large-scale projects of Period&nbsp;2 and the internships: this is where research code becomes engineering code.</p>
+
+<h3>Course outline</h3>
+<ul>
+<li><strong>Review: matrix differential calculus and numerical stability</strong>: gradients of matrix functions and conditioning — the background that avoids 80% of training bugs.</li>
+<li><strong>From the neuron to the deep network</strong>: perceptron, activations, initialization, expressivity of depths — and, in closing (section&nbsp;1.4), the reinforcement learning paradigm required by the official syllabus.</li>
+<li><strong>Backpropagation</strong>: the chain rule on a computation graph, unrolled then automated.</li>
+<li><strong>Optimization in practice</strong>: SGD and variants (momentum, Adam), learning-rate scheduling, batch normalization.</li>
+<li><strong>Convolutional networks (CNN)</strong>: convolution, pooling, classical architectures — learned vision.</li>
+<li><strong>Sequences: RNN, LSTM</strong>: processing the sequential before attention, and understanding their limits.</li>
+<li><strong>Attention and transformers</strong>: the mechanism underlying LLMs, also read as message passing on a graph.</li>
+<li><strong>Generative models: AE, VAE, GAN</strong>: representing and generating data, three strategies compared.</li>
+<li><strong>Transfer learning and fine-tuning</strong>: reusing a pretrained model — the most frequent professional gesture.</li>
+<li><strong>Research of the teaching team</strong>: the research of Michalis Vazirgiannis, Johannes Lutzeyer and Ye Zhu, from transformers to graphs.</li>
+<li><strong>Training in practice</strong>: GPU, mixed precision, experiment tracking — from research code to reproducible code.</li>
+</ul>
+
+<h3>How to study this module</h3>
+<ul>
+<li>Take the review chapter seriously: numerical stability and matrix computation are presented there because they condition backpropagation, the pivotal chapter of the course.</li>
+<li>Unroll backpropagation by hand on a two-layer network before coding it: this is the exercise that separates those who understand from those who copy.</li>
+<li>Run all the notebooks: the course alternates derivation and experiment, and each chapter has its PyTorch lab whose reflexes (shapes, dtypes, device) serve until M2.</li>
+<li>After the attention chapter, redraw the transformer diagram from memory and identify where a "graph" would be: this reading will be asked of you again in the <a href="../m1p2-graph-ml/">Graph ML</a> module.</li>
+<li>Actually fine-tune a small pretrained model on your own data: the transfer learning chapter is a gesture, not a reading.</li>
+<li>If you have a gap in optimization or generalization, go back to the <a href="../m1p1-machine-learning/">Machine Learning</a> module: chapters 2 and 3 here are its direct continuation.</li>
+</ul>
+
+<div class="note">
+<span class="tag">A word from the teaching team</span>
+The LLGA program draws its identity from the crossing of LLMs and graphs: this module is its hub, since the transformer can already be read here as a neural network on a graph. Whether you aim for large-model engineering jobs or research, hands-on mastery of training — not only of architecture — is the common expectation.
+</div>
+</section>
+<section class="chapter" id="ch0">
+<h2>0. Review: matrix differential calculus and numerical stability</h2>
+
+<p>Deep learning is, 90% of it, differential calculus applied to functions with billions
+of parameters. This chapter consolidates the L3 tools we will need every
+week: differentiation of matrix functions, the central limit theorem (to understand why
+SGD works) and a bit of numerical stability (to understand why naive implementations
+produce <code>NaN</code>s).</p>
+
+<div class="recap">
+  <div class="recap-title">L3 review — the basic mechanics</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Chain rule</strong>: \((g \circ f)'(x) = g'(f(x))\, f'(x)\); in
+    dimension: \(\nabla (g \circ f)(x) = J_f(x)^\top \nabla g(f(x))\), where \(J_f\) is the
+    Jacobian matrix \((J_f)_{ij} = \partial f_i / \partial x_j\).</li>
+    <li><strong>Gradient of quadratic forms</strong>: \(\nabla_x \tfrac12\|Ax - b\|^2 = A^\top(Ax - b)\)
+    and \(\nabla_x x^\top A x = (A + A^\top)x\).</li>
+    <li><strong>Derivatives of the usual activations</strong>: \(\sigma' = \sigma(1-\sigma)\),
+    \(\tanh' = 1 - \tanh^2\), \(\mathrm{ReLU}' = \mathbf{1}_{x&gt;0}\), and for the softmax
+    \(\hat y = \mathrm{softmax}(z)\): \(\partial \hat y_k / \partial z_j = \hat y_k(\delta_{kj} - \hat y_j)\).</li>
+    <li><strong>CLT</strong>: the mean of \(m\) iid variables with variance \(\sigma^2\)
+    fluctuates around its expectation with standard deviation \(\sigma/\sqrt m\) (cf.
+    Refresher Statistics module).</li>
+  </ul>
+</div>
+
+<h3>0.1. Differentiation of matrix functions</h3>
+
+<p>A network's parameters are <em>matrices</em>; one must know how to differentiate with
+respect to a matrix. The most convenient convention: the gradient of a function
+\(f : \mathbb{R}^{m \times n} \to \mathbb{R}\) is the matrix \(G\) such that
+\(f(X + H) = f(X) + \langle G, H\rangle + o(\|H\|)\) with the Frobenius inner product
+\(\langle G, H \rangle = \mathrm{tr}(G^\top H)\). Three identities suffice for this whole
+course.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.1 — Useful differential identities</span>
+  For \(X \in \mathbb{R}^{m \times n}\), \(a \in \mathbb{R}^m\), \(b \in \mathbb{R}^n\),
+  \(A\) of compatible size:
+  $$\frac{\partial}{\partial X}\,\mathrm{tr}(A^\top X) = A, \qquad
+  \frac{\partial}{\partial X}\, a^\top X b = a\, b^\top, \qquad
+  \frac{\partial}{\partial X}\, \tfrac12\|X A - B\|_F^2 = (XA - B)A^\top.$$
+</div>
+
+<div class="proof">
+We prove the second (the others are identical). Write \(a^\top X b = \sum_{i,j} a_i X_{ij} b_j = \mathrm{tr}(b a^\top X)\).
+The differential is \(d(a^\top X b) = a^\top H b = \langle a b^\top, H\rangle\) for any perturbation \(H\),
+so the gradient (in the Frobenius sense) is \(ab^\top\). For the third:
+\(f(X) = \tfrac12\|XA - B\|_F^2\), \(df = \langle XA - B,\; HA\rangle = \langle (XA-B)A^\top,\; H\rangle\),
+using the cyclicity of the trace \(\mathrm{tr}(M^\top H A) = \mathrm{tr}((M A^\top)^\top H)\) with \(M = XA - B\).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Practical rule</span>
+  In a network, "the gradient climbs back through the transposes": if the forward
+  pass contains \(z = Wx\), the backward pass contains \(\nabla_x = W^\top \nabla_z\) and
+  \(\nabla_W = \nabla_z\, x^\top\). Always check the <em>dimensions</em>:
+  \(\nabla_W\) has the size of \(W\), \(\nabla_x\) that of \(x\). This is the most
+  effective quality control against backprop bugs.
+</div>
+
+<h3>0.2. CLT and mini-batch noise</h3>
+
+<p>Why optimize on <em>mini-batches</em> rather than on the whole dataset?
+Let \(\mathcal{D} = (\xi_1, \dots, \xi_N)\) be iid and the empirical loss
+\(L(\theta) = \frac1N \sum_i \ell(\theta; \xi_i)\). The mini-batch gradient
+\(B = (\xi_{i_1}, \dots, \xi_{i_m})\) is \(\hat g(\theta) = \frac1m \sum_{j=1}^m \nabla_\theta \ell(\theta; \xi_{i_j})\).</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.2 — The stochastic gradient is an unbiased estimator with \(1/\sqrt m\) noise</span>
+  \(\mathbb{E}[\hat g] = \nabla L\) and, if the individual gradients have finite covariance
+  \(\Sigma = \mathrm{Cov}(\nabla \ell(\theta; \xi))\), then
+  $$\mathrm{Cov}(\hat g) = \frac{1}{m}\,\Sigma.$$
+</div>
+
+<div class="proof">
+Linearity of expectation and uniform sampling: \(\mathbb{E}[\nabla \ell(\theta;\xi_i)] = \nabla L\).
+For the covariance, the draws are independent:
+\(\mathrm{Cov}(\tfrac1m\sum_j G_j) = \tfrac{1}{m^2}\sum_j \mathrm{Cov}(G_j) = \tfrac1m \Sigma\),
+where \(G_j = \nabla \ell(\theta; \xi_{i_j})\). The standard deviation of the estimation
+therefore decreases as
+\(\|\Sigma\|^{1/2}/\sqrt m\): multiplying the batch size by 100 divides the noise
+by only 10 — an economic argument for small batches, completed in chapter 3 (the noise
+also has a <em>beneficial</em> exploration effect).
+<span class="qed">∎</span>
+</div>
+
+<h3>0.3. Numerical stability: softmax and the log-sum-exp trick</h3>
+
+<p>The softmax \(\hat y_i = e^{z_i} / \sum_j e^{z_j}\) appears in all classification
+losses and in attention. In floating-point precision (float32, max \(\approx 3{,}4 \times 10^{38}\)),
+the naive implementation <em>overflows</em>: \(e^{1000} = \infty\), and
+\(\infty/\infty = \mathrm{NaN}\). The universal trick is to subtract the maximum
+before exponentiating.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 0.3 — log-sum-exp identity and stable softmax</span>
+  Set \(\mathrm{LSE}(z) = \log \sum_{j=1}^n e^{z_j}\) and \(m = \max_j z_j\). Then:
+  $$\mathrm{LSE}(z) = m + \log \sum_{j=1}^n e^{z_j - m}, \qquad
+  m \;\le\; \mathrm{LSE}(z) \;\le\; m + \log n,$$
+  $$\mathrm{softmax}(z)_i = \frac{e^{z_i - m}}{\sum_j e^{z_j - m}},$$
+  and this last form never overflows.
+</div>
+
+<div class="proof">
+Factorization: \(\sum_j e^{z_j} = e^{m} \sum_j e^{z_j - m}\), hence
+\(\mathrm{LSE}(z) = m + \log \sum_j e^{z_j - m}\). Since \(0 &lt; e^{z_j - m} \le e^0 = 1\)
+and at least one term equals exactly 1 (that of the maximum), the sum lives in
+\([1, n]\), giving the bracket. For the softmax, dividing numerator and denominator by
+\(e^m &gt; 0\) does not change the value. Stability: all the exponents \(z_i - m \le 0\),
+so each \(e^{z_i - m} \in (0, 1]\): no overflow, and the dominant term of the
+denominator equals exactly 1, so the result stays accurate even when the
+other terms underflow toward 0 (which is harmless: the softmax simply tends
+toward a one-hot).
+<span class="qed">∎</span>
+</div>
+
+<pre class="code"><code>import torch
+
+z = torch.tensor([1000., 1001., 999.])
+# print(torch.softmax(z, 0))          # NaN with a naive implementation
+print(torch.logsumexp(z, 0))          # 1001.4076: stable (PyTorch always applies it)
+print(torch.softmax(z - z.max(), 0))  # stable form: [0.2447, 0.6652, 0.0900]</code></pre>
+
+<div class="note">
+  <span class="tag">Numerical culture</span>
+  This section also prepares chapter 10: most NaNs during training
+  come from an unprotected softmax/exponent, from the log of a zero probability (one
+  minimizes \(-\log p\) via log-softmax, never \(-\log(\mathrm{softmax})\)), or from a
+  too-large learning rate. The rule: when a NaN appears, walk back up the forward
+  pass layer by layer until you find the first infinite activation.
+</div>
+</section>
+<section class="chapter" id="ch1">
+<h2>1. From the neuron to the deep network</h2>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Artificial neuron and MLP</span>
+  A neuron computes \(h = \sigma(\langle w, x\rangle + b)\) with \(\sigma\) a nonlinear
+  <strong>activation function</strong>. A <strong>multilayer perceptron</strong>
+  of depth \(L\) stacks:
+  $$h^{(0)} = x, \qquad h^{(\ell)} = \sigma\big(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\big), \qquad f_\theta(x) = W^{(L)} h^{(L-1)} + b^{(L)}.$$
+  Without \(\sigma\), the network would reduce to a single affine map (exercise 2):
+  nonlinearity is the price of expressivity. Parameter size:
+  \(|\theta| = \sum_\ell (n_{\ell} n_{\ell-1} + n_\ell)\).
+</div>
+
+<h3>1.1. The universal approximation theorem</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 1.2 — Universal approximation (Cybenko, 1989; Hornik, 1991)</span>
+  Let \(\sigma\) be continuous and <em>discriminatory</em> (it is not constant on any
+  interval where a nontrivial signed measure vanishes — the sigmoid and \(\tanh\)
+  qualify). Then for every \(f \in \mathcal{C}(K)\) on a compact
+  \(K \subset \mathbb{R}^d\) and every \(\varepsilon &gt; 0\), there exists
+  \(g(x) = \sum_{j=1}^{J} \alpha_j\, \sigma(w_j^\top x + b_j)\) (a single hidden layer)
+  such that \(\sup_{x \in K} |f(x) - g(x)| \le \varepsilon\).
+</div>
+
+<div class="proof">
+Guided sketch, in two parts — part (ii) is the technical core of Cybenko,
+part (i) gives its constructive intuition.
+
+<p><strong>(i) Construction by sigmoidal "gates" (one-dimensional case).</strong>
+Let \(f\) be continuous on \([0,1]\). A steep sigmoid \(\sigma(k(x-a))\) tends toward
+the indicator \(\mathbf{1}_{x &gt; a}\) as \(k \to \infty\); by taking differences,
+$$\pi_{k}(x) = \sigma(k(x - a)) - \sigma(k(x - b)), \qquad a &lt; b,$$
+tends toward \(\mathbf{1}_{[a,b]}(x)\) (a gate). Since \(f\) is uniformly continuous, the
+step function \(s_n = \sum_{i} f(t_i)\,\mathbf{1}_{[t_i, t_{i+1})}\) on a
+subdivision of step \(1/n\) satisfies \(\|f - s_n\|_\infty \le \omega_f(1/n) \to 0\).
+Replacing each indicator by a steep gate \(\pi_k\) with \(k\) large enough
+(the error is concentrated on two intervals of width \(\sim 1/k\) around \(a\)
+and \(b\), where it is bounded), one obtains \(\|f - g\|_\infty \le \varepsilon\) with
+\(g = \sum_i f(t_i)\,\pi_{k,i}\) — a finite linear combination of sigmoids.</p>
+
+<p><strong>(ii) Density by Hahn–Banach (the general argument).</strong>
+Let \(\mathcal{G}\) be the vector space spanned by the \(x \mapsto \sigma(w^\top x + b)\).
+Suppose the closure of \(\mathcal{G}\) for \(\|\cdot\|_\infty\) is not
+\(\mathcal{C}(K)\). By the Hahn–Banach theorem (separation of a missing dense
+subspace), there exists a nonzero finite signed measure \(\mu\) on \(K\) such that
+\(\int g \,d\mu = 0\) for every \(g \in \mathcal{G}\), hence in particular
+$$\int_K \sigma(w^\top x + b)\, d\mu(x) = 0 \qquad \forall\, w \in \mathbb{R}^d,\ b \in \mathbb{R}.$$
+Cybenko's technical lemma then asserts that \(\mu = 0\) — a contradiction. The idea of
+the lemma: if \(\hat\mu(t) = \int e^{t^\top x} d\mu(x)\) denotes the Fourier–Laplace
+transform of \(\mu\), the vanishing above for a "rich enough" sigmoid forces
+\(\hat\mu \equiv 0\) on an open set, hence \(\mu = 0\) by injectivity of the Fourier
+transform on finite measures.</p>
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">What the theorem does not say</span>
+  It guarantees the <em>existence</em> of good weights, not that one can <em>find</em>
+  them by optimization: the proof constructs sigmoids of slope \(k \to \infty\), a regime
+  gradient descent does not explore; and the required number of neurons \(J\)
+  can be exponential in \(d\). Depth partially corrects this last point.
+</div>
+
+<div class="note">
+  <span class="tag">Why depth?</span>
+  Some functions require an <em>exponential</em> number of neurons on one layer but
+  a <em>polynomial</em> number on several (e.g. parity, products). Depth
+  factorizes representations: edges → textures → objects (vision), characters →
+  words → syntax (NLP), neighbors → communities → graphs (Graph ML).
+</div>
+
+<h3>1.2. Initialization: derivation of Xavier and He</h3>
+
+<p>A bad initialization produces activations that explode or vanish <em>from the
+forward pass onward</em>. Analyze a linear layer
+\(a = Wh\) with \(h \in \mathbb{R}^{n_{\mathrm{in}}}\), \(W \in \mathbb{R}^{n_{\mathrm{out}} \times n_{\mathrm{in}}}\),
+iid centered weights of variance \(v_W\), iid centered inputs of variance \(v_h\),
+independent of the weights.</p>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — Forward and backward variance</span>
+  $$\mathrm{Var}(a_i) = n_{\mathrm{in}}\, v_W\, v_h \quad\text{(forward pass)}, \qquad
+  \mathrm{Var}\big[(\nabla_h)_j\big] = n_{\mathrm{out}}\, v_W\, v_\delta \quad\text{(backward pass, } \nabla_h = W^\top \delta\text{)}.$$
+  To preserve the variance in both directions, one needs \(v_W = 1/n_{\mathrm{in}}\) and
+  \(v_W = 1/n_{\mathrm{out}}\) simultaneously; the harmonic compromise of Glorot &amp;
+  Bengio (2010) is
+  \(v_W = 2/(n_{\mathrm{in}} + n_{\mathrm{out}})\).
+</div>
+
+<div class="proof">
+Forward pass: \(a_i = \sum_{j=1}^{n_{\mathrm{in}}} W_{ij} h_j\). The terms are
+independent and centered, so the variance of the sum is the sum of the variances:
+\(\mathrm{Var}(a_i) = \sum_j \mathrm{Var}(W_{ij})\,\mathrm{Var}(h_j) = n_{\mathrm{in}} v_W v_h\)
+(\(\mathbb{E}[W_{ij}h_j] = \mathbb{E}[W_{ij}]\mathbb{E}[h_j] = 0\)).
+Backward pass: symmetric computation on the columns,
+\((\nabla_h)_j = \sum_{i=1}^{n_{\mathrm{out}}} W_{ij} \delta_i\).
+Wanting \(n_{\mathrm{in}} v_W \approx 1\) and \(n_{\mathrm{out}} v_W \approx 1\),
+the harmonic mean \(2/(n_{\mathrm{in}}+n_{\mathrm{out}})\) approximates both constraints.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">He (2015) for ReLU</span>
+  ReLU zeroes half of its inputs: if \(h = \mathrm{ReLU}(a)\) with \(a\) centered,
+  then \(\mathbb{E}[h^2] = \tfrac12 \mathrm{Var}(a)\). To compensate this \(\tfrac12\)
+  factor, He et al. (2015) propose \(v_W = 2/n_{\mathrm{in}}\) (and similarly a
+  \(2/(n_{\mathrm{in}} n_{\mathrm{prev}}^{2})\)-style term for the backward pass). In
+  practice:
+  <code>nn.init.kaiming_normal_</code> for ReLU/GELU, <code>xavier_normal_</code> for
+  tanh. Finally, <em>zero</em> initialization breaks the symmetry forever: all the
+  neurons of a layer would receive the same gradient and remain identical.
+</div>
+
+<h3>1.3. Activation functions, compared</h3>
+
+<table class="tbl">
+<thead><tr><th>Activation</th><th>Definition / derivative</th><th>Advantages</th><th>Pathologies</th></tr></thead>
+<tbody>
+<tr><td>Sigmoid</td><td>\(\sigma' = \sigma(1-\sigma) \le \tfrac14\)</td><td>probabilities, LSTM gates</td><td>saturation, max gradient 1/4, not centered</td></tr>
+<tr><td>tanh</td><td>\(1 - \tanh^2\)</td><td>centered (Xavier)</td><td>saturation at the extremes</td></tr>
+<tr><td>ReLU</td><td>\(\max(0,x)\), derivative \(\mathbf{1}_{x&gt;0}\)</td><td>constant derivative 1, sparse, fast</td><td>dying ReLU: neuron stuck at 0 if pre-activation always negative</td></tr>
+<tr><td>Leaky ReLU</td><td>\(\max(\alpha x, x)\)</td><td>nonzero gradient for \(x&lt;0\)</td><td>hyperparameter \(\alpha\)</td></tr>
+<tr><td>GELU</td><td>\(x\,\Phi(x) = \tfrac{x}{2}\big(1 + \mathrm{erf}(x/\sqrt2)\big)\)</td><td>smooth, self-gated, transformers standard</td><td>cost of erf (usual tanh approximation)</td></tr>
+</tbody>
+</table>
+
+<p>The usual approximation of GELU, used in BERT/GPT, is
+\(0.5x\big(1 + \tanh\big(\sqrt{2/\pi}\,(x + 0.044715\,x^3)\big)\big)\). Note the
+kinship with ReLU — GELU weights \(x\) by the probability \(\Phi(x)\) that \(x\) is
+"activated" according to a standard Gaussian: it is a soft gate, differentiable
+at 0.</p>
+
+<h3>1.4. Beyond supervised: reinforcement learning</h3>
+
+<p>Everything in this chapter assumes labeled pairs \((x, y)\). The official
+syllabus of the course lists a third paradigm, <strong>reinforcement
+learning</strong>: an <em>agent</em> interacts with an <em>environment</em> through
+<em>actions</em> and observes no label, but a scalar <em>reward</em>. This section
+sets up the framework;
+the full treatment (algorithms, theory, autonomous agents) is in the
+<a href="../m1p2-reinforcement-learning/">Reinforcement Learning and Autonomous Agents</a>
+module (Period&nbsp;2).</p>
+
+<div class="def">
+  <span class="tag">Definition 1.4 — Markov decision process (MDP) and policy</span>
+  An MDP is a tuple \((\mathcal{S}, \mathcal{A}, P, r, \gamma)\): states,
+  actions, transition kernel \(P(s' \mid s, a)\), reward \(r(s, a)\), discount
+  factor \(\gamma \in [0,1)\). A <strong>policy</strong> \(\pi(a \mid s)\)
+  chooses the action as a function of the state; the objective of the agent is to maximize
+  the expectation of the discounted return
+  $$J(\pi) = \mathbb{E}_\pi\Big[\sum_{t \geq 0} \gamma^t\, r(S_t, A_t)\Big].$$
+  The <em>value function</em> \(V^\pi(s) = \mathbb{E}_\pi[\sum_t \gamma^t r_t \mid S_0 = s]\)
+  satisfies the Bellman equation
+  \(V^\pi(s) = \mathbb{E}_{a \sim \pi}\big[r(s,a) + \gamma\,\mathbb{E}_{s'} V^\pi(s')\big]\).
+  This is the recursion that underlies all the algorithms: evaluate \(V^\pi\) (prediction),
+  then improve \(\pi\) (control).
+</div>
+
+<div class="note">
+  <span class="tag">Why this paradigm concludes the chapter</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Reinforcement meets depth</strong> when \(V^\pi\), \(\pi\) or
+    the function \(Q(s,a)\) are <em>approximated by a network</em> (this chapter): this is
+    deep RL — DQN for \(Q\), parametrized policies \(\pi_\theta\) optimized by policy
+    gradient. The training machinery (ch. 2 and 3) applies as is, with in addition
+    non-stationarity: the data depend on the current policy.</li>
+    <li><strong>Sequence link</strong>: an agent produces a trajectory — the
+    exposure bias of RNNs (ch. 5) is a degenerate special case of it, where the
+    "reward" is the true past output.</li>
+    <li><strong>Program side</strong>: multi-agent RL meets the collaborative
+    learning of the <a href="../m1p1-emerging-ml/">Emerging Subjects in ML</a> module;
+    RL is also the framework for LLM alignment (RLHF) covered in M2.</li>
+  </ul>
+</div>
+</section>
+<section class="chapter" id="ch2">
+<h2>2. Backpropagation</h2>
+
+<h3>2.1. The theorem and its proof</h3>
+
+<div class="thm">
+  <span class="tag">Theorem 2.1 — Backpropagation (chain rule on a computation graph)</span>
+  Consider an acyclic computation graph whose nodes \(v\) carry tensors, each
+  node being a differentiable function of its predecessors, and \(L\) the loss node.
+  For every node \(v\) other than \(L\), with successors \(s_1, \dots, s_k\):
+  $$\frac{\partial L}{\partial v} = \sum_{i=1}^{k} \frac{\partial L}{\partial s_i}\, \frac{\partial s_i}{\partial v},$$
+  with base case \(\partial L/\partial L = 1\). In particular, for an MLP where
+  \(a^{(\ell)} = W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\) and
+  \(\delta^{(\ell)} = \partial \mathcal{L}/\partial a^{(\ell)}\):
+  $$\delta^{(L)} = \nabla_{a^{(L)}} \mathcal{L}, \qquad
+  \delta^{(\ell)} = \big(W^{(\ell+1)\top} \delta^{(\ell+1)}\big) \odot \sigma'(a^{(\ell)}), \qquad
+  \frac{\partial \mathcal{L}}{\partial W^{(\ell)}} = \delta^{(\ell)} \, h^{(\ell-1)\top}, \qquad
+  \frac{\partial \mathcal{L}}{\partial b^{(\ell)}} = \delta^{(\ell)}.$$
+</div>
+
+<div class="proof">
+By descending induction along a reverse topological order (from outputs toward inputs).
+<strong>Base.</strong> \(\partial L/\partial L = 1\). <strong>Heredity.</strong> Fix \(v\)
+and assume the formula true for all its successors \(s_i\). Since the graph is
+acyclic, \(L\) depends on \(v\) only through the values of \(s_1, \dots, s_k\);
+writing \(L = \Psi(s_1(v), \dots, s_k(v))\) locally, the multivariate chain rule
+gives exactly \(\frac{dL}{dv} = \sum_i \frac{\partial L}{\partial s_i}\frac{ds_i}{dv}\).
+The MLP matrix formulas are merely the coordinate-by-coordinate application of
+this identity; the product \(W^{(\ell+1)\top}\delta^{(\ell+1)}\) transposes the
+linearity \(a^{(\ell+1)} = W^{(\ell+1)}h^{(\ell)} + \dots\), and the term
+\(\odot\,\sigma'(a^{(\ell)})\) comes from \(h^{(\ell)} = \sigma(a^{(\ell)})\) applied
+component by component.
+<span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.2 — Backprop by hand on a 5-node graph</span>
+  Take \(f(w_1, w_2) = \tfrac12\big(w_2 \tanh(w_1 x) - t\big)^2\) with
+  \(x = 1{,}5\), \(w_1 = 0{,}3\), \(w_2 = -0{,}8\), \(t = 1\). Intermediate nodes:
+  \(a = w_1 x\), \(h = \tanh(a)\), \(y = w_2 h\), \(\mathcal{L} = \tfrac12(y-t)^2\).
+  <table class="tbl">
+  <thead><tr><th>Forward pass</th><th>value</th><th>Local derivatives</th></tr></thead>
+  <tbody>
+  <tr><td>\(a = w_1 x\)</td><td>\(0{,}45\)</td><td>\(\partial a/\partial w_1 = x = 1{,}5\), \(\partial a/\partial x = w_1\)</td></tr>
+  <tr><td>\(h = \tanh(a)\)</td><td>\(0{,}4219\)</td><td>\(\partial h/\partial a = 1-h^2 = 0{,}8220\)</td></tr>
+  <tr><td>\(y = w_2 h\)</td><td>\(-0{,}3375\)</td><td>\(\partial y/\partial w_2 = h\), \(\partial y/\partial h = w_2\)</td></tr>
+  <tr><td>\(\mathcal{L} = \tfrac12(y-t)^2\)</td><td>\(0{,}8944\)</td><td>\(\partial \mathcal{L}/\partial y = y - t = -1{,}3375\)</td></tr>
+  </tbody>
+  </table>
+  Backward pass (products of local derivatives):
+  $$\frac{\partial \mathcal{L}}{\partial w_2} = -1{,}3375 \times 0{,}4219 = -0{,}5643, \qquad
+  \frac{\partial \mathcal{L}}{\partial w_1} = \underbrace{(-1{,}3375)(-0{,}8)}_{\partial\mathcal{L}/\partial h = 1{,}0700} \times\; 0{,}8220 \times 1{,}5 = 1{,}3193.$$
+  The message \(\partial\mathcal{L}/\partial h = 1{,}07\) is literally the gradient
+  "passing backward" through the multiplication — same structure as the message
+  passing of GNNs, but on the computation graph.
+</div>
+
+<h3>2.2. Cost: memory, compute, and how to reduce them</h3>
+
+<ul>
+  <li><strong>Complexity.</strong> A single forward pass + one backward pass cost
+  \(\mathcal{O}(|\theta|)\) operations (up to a constant factor): the gradient of
+  <em>all</em> the weights for the price of about two evaluations — this is the decisive
+  contribution of reverse mode (Linnainmaa, 1970; Rumelhart, Hinton &amp; Williams,
+  1986) over forward-mode differentiation, which would require \(|\theta|\) passes.</li>
+  <li><strong>Memory.</strong> The backward pass needs the activations <em>of every
+  layer</em>: memory grows like the batch size \(\times\) the number of
+  activations, not like \(|\theta|\). For a transformer, this is the limiting factor.</li>
+  <li><strong>Checkpointing</strong> (Griewank; Chen, 2016): store only one layer out of
+  \(\sqrt L\) and recompute the missing intermediates during the backward
+  pass — \(\mathcal{O}(\sqrt L)\) memory instead of \(\mathcal{O}(L)\), for ~33%
+  extra compute. <code>torch.utils.checkpoint</code>.</li>
+  <li><strong>Mixed precision</strong>: store/compute in float16 or bfloat16
+  (2× memory and tensor throughput), while keeping float32 master copies of the weights
+  and scaling up the loss (<em>loss scaling</em>) to prevent small
+  gradients from canceling in fp16. bfloat16 has the same exponent range as fp32 — more
+  robust.</li>
+</ul>
+
+<pre class="code"><code>import torch
+
+x, y = torch.randn(8), torch.randn(2)
+W1 = torch.randn(64, 8, requires_grad=True)   # autograd tracks the operations
+W2 = torch.randn(2, 64, requires_grad=True)
+
+loss = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+loss.backward()          # automatic backprop
+print(W1.grad.shape, W2.grad.shape)           # same shapes as W1, W2
+
+# Verification by finite difference (do this for every new custom gradient)
+eps = 1e-6
+with torch.no_grad():
+    W2[0, 0] += eps; lp = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+    W2[0, 0] -= 2 * eps; lm = 0.5 * ((y - W2 @ torch.relu(W1 @ x))**2).sum()
+    W2[0, 0] += eps
+print((lp - lm) / (2 * eps), W2.grad[0, 0])   # ~ -0.0723 twice</code></pre>
+
+<div class="note">
+  <span class="tag">Computation graph</span>
+  <code>autograd</code> dynamically builds the graph of operations (vertices = tensors,
+  edges = operations) and applies the chain rule in reverse-mode differentiation.
+  Deep learning <em>is</em> computation on a graph — the same idea will be applied to
+  the data themselves in the Graph ML module. And since the graph is acyclic by
+  construction, the induction of theorem 2.1 always runs without deadlock;
+  RNNs (chapter 5) are "unrolled" in time precisely to recover an acyclic
+  graph.
+</div>
+</section>
+<section class="chapter" id="ch3">
+<h2>3. Optimization in practice</h2>
+
+<p>Training minimizes \(\mathcal{J}(\theta) = \mathbb{E}_{(x,y)\sim\mathcal{D}}\big[\ell(f_\theta(x), y)\big]\)
+by <em>stochastic</em> gradient descent: at each step, the gradient is estimated
+on a mini-batch (proposition 0.2). This chapter analyzes <em>why</em> each ingredient
+of the modern recipe (momentum, Adam, warmup, normalization, regularization) is there.</p>
+
+<h3>3.1. Convergence of SGD: the quadratic case, fully proved</h3>
+
+<p>The generic model of non-convexity is hard; the quadratic case, for its part,
+is solved exactly and illuminates all the others. Let
+\(f(\theta) = \tfrac12 \theta^\top A \theta - b^\top \theta\) with \(A\) symmetric positive
+definite, eigenvalues \(\lambda_1 \ge \dots \ge \lambda_d &gt; 0\), \(\lambda_1 = L\)
+(Lipschitz constant of the gradient), \(\lambda_d = \mu\), condition number
+\(\kappa = L/\mu\). The minimizer \(\theta^\star = A^{-1}b\) satisfies
+\(\nabla f(\theta^\star) = 0\),
+and the (for now deterministic) descent reads
+\(\theta_{k+1} = \theta_k - \eta (A\theta_k - b)\).</p>
+
+<div class="thm">
+  <span class="tag">Theorem 3.1 — Guaranteed decrease if and only if \(\eta &lt; 2/L\)</span>
+  Setting \(e_k = \theta_k - \theta^\star\):
+  $$e_{k+1} = (I - \eta A)\, e_k, \qquad \|e_k\| \le \rho^k \|e_0\|, \quad \rho = \max_i |1 - \eta\lambda_i|.$$
+  Convergence takes place for every \(e_0\) if and only if \(0 &lt; \eta &lt; 2/L\); the
+  optimal rate is reached for \(\eta = 2/(L+\mu)\) and equals
+  \(\rho = \frac{\kappa - 1}{\kappa + 1} \approx 1 - \frac{2}{\kappa}\).
+</div>
+
+<div class="proof">
+Since \(\theta^\star\) is a fixed point of the iteration,
+\(e_{k+1} = \theta_{k+1} - \theta^\star = (I - \eta A)(\theta_k - \theta^\star) = (I-\eta A)e_k\),
+hence \(e_k = (I - \eta A)^k e_0\). Diagonalize \(A = Q \Lambda Q^\top\) (orthonormal):
+\(I - \eta A = Q\,\mathrm{diag}(1 - \eta\lambda_i)\,Q^\top\), so in the eigenbasis
+\(\|e_k\|^2 = \sum_i (1-\eta\lambda_i)^{2k} (q_i^\top e_0)^2\). Each eigenmode
+contracts by \(|1-\eta\lambda_i|\) per step. The maximum \(\rho\) of the
+\(|1 - \eta\lambda_i|\)
+is reached at \(\lambda_1 = L\) or \(\lambda_d = \mu\): one wants \(1 - \eta L &gt; -1\)
+(i.e. \(\eta &lt; 2/L\)) to avoid expanding the stiff modes, and \(\eta\) large to
+contract the flat modes. The minimal
+\(\rho(\eta) = \max(|1-\eta L|,\, |1-\eta\mu|)\) equalizes the two terms,
+\(1 - \eta\mu = \eta L - 1\), i.e. \(\eta = 2/(L+\mu)\) and
+\(\rho = (L-\mu)/(L+\mu)\). For \(\kappa \gg 1\), \(\rho \approx 1 - 2/\kappa\):
+\(\mathcal{O}(\kappa)\) iterations are needed to divide the error by a constant.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Reading for what follows</span>
+  1) The step is bounded by the <em>stiff</em> directions but the slowness comes from the
+  <em>flat</em> directions: the whole art of deep optimization consists in
+  decoupling these scales — momentum (3.2), adaptive preconditioning (3.3),
+  activation normalization (3.5). 2) In noisy SGD, the same step \(2/L\) remains
+  the stability condition, and the residual noise fluctuates around the minimum at a
+  distance proportional to \(\eta\): decreasing \(\eta\) at the end of training
+  (scheduling) amounts to "annealing". 3) On real networks, the landscape
+  is non-convex, but saddle points — not local minima — are the main obstacle,
+  and SGD noise helps precisely to escape them.
+</div>
+
+<h3>3.2. Momentum: convergence rates</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.2 — SGD with momentum (Polyak's heavy ball)</span>
+  $$v_{k+1} = \beta v_k + \hat g_k, \qquad \theta_{k+1} = \theta_k - \eta\, v_{k+1}, \qquad \beta \in [0,1),$$
+  with \(\hat g_k\) the mini-batch estimator of the gradient. The velocity \(v\)
+  exponentially averages the past gradients: in a narrow valley where the gradient
+  alternates \(+g, -g, +g, \dots\) (zigzag), the average cancels in the direction of
+  the oscillation and accumulates in the direction of progress.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.3 — What momentum changes, mode by mode</span>
+  On the quadratic case of theorem 3.1 (exact gradient), the error follows
+  \(e_{k+1} = (1 + \beta - \eta\lambda)\, e_k - \beta\, e_{k-1}\). With the step
+  \(\eta = (1-\beta)/L\): (i) the stiff mode \(\lambda = L\) converges like
+  \((\sqrt\beta)^k\); (ii) on a flat mode, the effective rate is
+  \(1 - \frac{\eta}{1-\beta}\lambda\) — everything happens as if the step were multiplied
+  by \(1/(1-\beta)\) on the slow directions without destabilizing the stiff ones.
+  The complete analysis (Polyak, 1964) gives a global rate in
+  \(\mathcal{O}(1 - c/\sqrt\kappa)\) instead of \(\mathcal{O}(1 - c/\kappa)\), a rate
+  optimally reached by Nesterov's variant.
+</div>
+
+<div class="proof">
+Inject the iteration into \(e_k\):
+\(e_{k+1} = e_k - \eta A e_k + \beta(e_k - e_{k-1})\), giving the announced difference
+equation. Per eigenmode (\(e_k\) collinear with the eigenvector \(q_i\)), the solutions
+are of the form \(e_k = z^k q_i\) where \(z\) solves the characteristic polynomial
+$$z^2 - (1 + \beta - \eta\lambda)\, z + \beta = 0.$$
+Write \(s = 1 + \beta - \eta\lambda\). The product of the two roots equals \(\beta\).
+
+<p><strong>(i) Stiff modes.</strong> The roots are complex conjugates as soon as
+\(s^2 \le 4\beta\), and their modulus then equals \(\sqrt{\beta}\) (product = \(\beta\),
+equal modulus for two conjugates). With \(\eta = (1-\beta)/L\) and \(\lambda \le L\), one has
+\(\eta\lambda \le 1-\beta\), so \(s \in [\,2\beta,\; 1+\beta)\). For \(\lambda = L\):
+\(s = 2\beta\), and \(2\beta \le 2\sqrt\beta\) whenever \(\beta \le 1\) — condition
+satisfied, the stiff mode is damped by \(\sqrt\beta\) per step.</p>
+
+<p><strong>(ii) Flat modes.</strong> For \(\eta\lambda \ll 1\), look for the root
+close to 1 in the form \(z = 1 - c\,\eta\lambda + o(\eta\lambda)\). Expanding
+\(z^2 - sz + \beta = 0\) to first order with \(s = 1 + \beta - \eta\lambda\):
+\((1 - 2c\eta\lambda) - (1 + \beta - \eta\lambda)(1 - c\eta\lambda) + \beta
+= \eta\lambda\big(1 - c(1-\beta)\big) + o(\eta\lambda) = 0\), hence
+\(c = 1/(1-\beta)\) and \(z_+ \approx 1 - \frac{\eta\lambda}{1-\beta}\): the
+effective step of the flat modes is \(\eta/(1-\beta)\) — the moving average amplifies
+the displacement in the directions where the gradient is coherent, whereas (i) shows
+that it bounds the oscillation in the directions where it alternates.</p>
+<span class="qed">∎</span>
+</div>
+
+<h3>3.3. Adam, derived step by step</h3>
+
+<div class="thm">
+  <span class="tag">Algorithm 3.4 — Adam (Kingma &amp; Ba, 2014)</span>
+  At each step \(t\), with stochastic gradient \(g_t\), \(\beta_1 = 0{,}9\),
+  \(\beta_2 = 0{,}999\):
+  $$m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t \quad\text{(moving average of the gradient)},$$
+  $$v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2 \quad\text{(moving average of squares, element-wise)},$$
+  $$\hat m_t = \frac{m_t}{1 - \beta_1^t}, \qquad \hat v_t = \frac{v_t}{1 - \beta_2^t} \quad\text{(bias correction)},$$
+  $$\theta_{t+1} = \theta_t - \eta\, \frac{\hat m_t}{\sqrt{\hat v_t} + \varepsilon}.$$
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.5 — Why the bias correction is exact</span>
+  If the gradient is constant \(g_t \equiv g\), then \(m_t = (1 - \beta_1^t)\, g\) and
+  \(v_t = (1-\beta_2^t)\, g^2\) (element by element). The correction therefore divides
+  precisely by the underestimation factor: \(\hat m_t = g\), \(\hat v_t = g^2\).
+</div>
+
+<div class="proof">
+By induction. \(m_t = (1-\beta_1)\sum_{k=1}^{t} \beta_1^{t-k} g_k\). If \(g_k \equiv g\):
+\(m_t = (1-\beta_1)\, g \sum_{j=0}^{t-1} \beta_1^{j} = (1-\beta_1)\, g\, \frac{1 - \beta_1^t}{1 - \beta_1} = (1-\beta_1^t)\, g\)
+(geometric sum). Without correction, the moving average would start from \(m_0 = 0\)
+and underestimate the gradient by a factor \(1-\beta_1^t\) — by 90% at step 1 with
+\(\beta_1 = 0{,}9\); Adam's first step would be ~10× too small (and for \(v\),
+with \(\beta_2 = 0{,}999\), ~1000× too small, which would make the update
+\(\hat m/\sqrt{\hat v}\) <em>explode</em>). The computation is identical for \(v_t\)
+with \(g^2\).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">What Adam does, intuitively</span>
+  If the gradient is constant, \(\hat m_t / \sqrt{\hat v_t} \approx g/|g| = \mathrm{sign}(g)\):
+  Adam moves by a step of size ~\(\eta\) <em>per coordinate</em>, independent of
+  the gradient scale — a diagonal preconditioner that solves the decoupling
+  \(\lambda_{\max}/\lambda_{\min}\) of theorem 3.1. It is also its weakness:
+  the weight of "calm" coordinates is relatively amplified, and the
+  \(\varepsilon\) in the denominator must stay small (\(10^{-8}\)) so as not to crush
+  small gradients.
+</div>
+
+<table class="tbl">
+<thead><tr><th>Optimizer</th><th>Update</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>SGD</td><td>\(\theta \leftarrow \theta - \eta\, \hat g\)</td><td>useful noise (escapes saddle points); \(\eta &lt; 2/L\)</td></tr>
+<tr><td>Momentum</td><td>\(v \leftarrow \beta v + \hat g\); \(\theta \leftarrow \theta - \eta v\)</td><td>inertia, damps zigzags (prop. 3.3)</td></tr>
+<tr><td>RMSProp</td><td>adaptive normalization by \(v\) alone</td><td>per-coordinate step, no momentum</td></tr>
+<tr><td>Adam</td><td>bias-corrected first and second moments</td><td>universal default; tune <code>lr</code> first</td></tr>
+<tr><td>AdamW</td><td>Adam + decoupled decay</td><td>see 3.6 — the transformers standard</td></tr>
+</tbody>
+</table>
+
+<h3>3.4. Step scheduling and warmup</h3>
+
+<ul>
+  <li><strong>Warmup</strong> (linear from 0 to \(\eta\) over a few hundred/thousand
+  steps): at the very start of training, the features are random and the
+  first gradients have a large norm; moreover, the bias correction of
+  \(\hat v_t\) (prop. 3.5) divides by \(1 - \beta_2^t\), which varies fast when \(t\)
+  is small — the ratio \(\hat m/\sqrt{\hat v}\) is then very noisy. A small step at
+  the start lets the statistics settle. Pre-norm architectures
+  (chapter 6) strongly reduce this need.</li>
+  <li><strong>Decay</strong>: cosine \(\eta_t = \eta_{\min} + \tfrac12(\eta - \eta_{\min})(1 + \cos(\pi t/T))\),
+  or steps (\(\times 1/10\)). Quadratic motif (theorem 3.1): close to the minimum,
+  too large a step makes the SGD noise orbit around the solution — decreasing \(\eta\)
+  divides the oscillation radius.</li>
+  <li><strong>LR range test</strong> (Smith, 2015): grow \(\eta\)
+  geometrically over one epoch and plot the loss; the optimal \(\eta\) sits
+  just before the minimum of this curve (chapter 10).</li>
+</ul>
+
+<h3>3.5. BatchNorm and LayerNorm</h3>
+
+<div class="def">
+  <span class="tag">Definition 3.6 — BatchNorm (Ioffe &amp; Szegedy, 2015) and LayerNorm (Ba et al., 2016)</span>
+  BatchNorm normalizes each <em>feature</em> over the batch (the \(j\)-th coordinate of
+  the activations, for a batch of size \(m\)):
+  $$\hat h_{ij} = \frac{h_{ij} - \mu_j}{\sqrt{\sigma_j^2 + \varepsilon}}, \qquad
+  \mu_j = \frac1m \sum_i h_{ij}, \quad \sigma_j^2 = \frac1m \sum_i (h_{ij} - \mu_j)^2, \qquad
+  y_{ij} = \gamma_j \hat h_{ij} + \beta_j.$$
+  At inference, \(\mu, \sigma\) are frozen moving averages. LayerNorm normalizes
+  each <em>example</em> over its features (same formulas, but the means are taken
+  over \(j\) at fixed \(i\)): independent of the batch, it is the norm of
+  transformers.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.7 — Reparameterization invariance</span>
+  BatchNorm makes the layer output invariant when one replaces \(W\) by \(cW\)
+  and \(b\) by \(cb\) (\(c &gt; 0\)): the statistics become \(c\mu, c^2\sigma^2\),
+  and \(\hat h\) is unchanged. The scaling effect is absorbed by \(\gamma\).
+</div>
+
+<div class="proof">
+If \(h' = cWh + cb = c\,h\), then \(\mu' = c\mu\), \({\sigma^2}' = c^2\sigma^2\) and
+\(\hat h' = (ch - c\mu)/\sqrt{c^2\sigma^2 + \varepsilon}\). For \(\varepsilon\) small
+compared to \(\sigma^2\), \(\hat h' \approx c(h-\mu)/(c\sigma) = \hat h\). The gradient
+of the loss with respect to the scale \(c\) of the weights is then ~zero: the
+optimization no longer "wastes" capacity correcting the scale of the activations,
+only their direction.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">The ICS controversy</span>
+  The historical explanation — "reducing internal covariate shift" — was
+  largely debunked by Santurkar et al. (2018): BatchNorm works mainly
+  because it <em>reparameterizes</em> the problem in a Lipschitz way (smoother loss
+  landscape, better-conditioned gradients), not because it stabilizes
+  distributions. Practical consequences: BatchNorm requires fairly large batches
+  (the statistics become noisy otherwise) and behaves badly at inference with
+  batch size 1; LayerNorm has no such dependencies. In transformers,
+  LayerNorm is applied before each sub-block (pre-norm, chapter 6).
+</div>
+
+<h3>3.6. Regularization: the complete tour</h3>
+
+<ul>
+  <li><strong>Dropout</strong> (Srivastava et al., 2014): during training, each
+  activation is multiplied by an iid mask \(M_j \sim \mathrm{Bernoulli}(1-p)\) then
+  divided by \(1-p\) ("inverted"); at inference, identity.
+  <em>Proof that the expectation is preserved</em>:
+  \(\mathbb{E}[M_j/(1-p)] = 1\), hence \(\mathbb{E}[\tilde h_j] = h_j\) — no scaling
+  is needed at test time. Ensemble interpretation: each mask defines a
+  sub-network; training samples \(2^{n}\) architectures sharing their
+  weights, and inference approximately averages their consensus (the exact
+  "mean network" approximation holds for a single final linear block;
+  Gal &amp; Ghahramani, 2016, give it a Bayesian reading, cf. Emerging ML module).</li>
+  <li><strong>Weight decay</strong> \(\tfrac{\lambda}{2}\|\theta\|^2\): SGD + decay
+  gives \(\theta \leftarrow (1 - \eta\lambda)\theta - \eta \hat g\) — multiplicative
+  shrinkage at each step (implicit ridge). <strong>AdamW</strong> (Loshchilov &amp;
+  Hutter, 2017) applies the decay <em>directly</em> to the weights and not through
+  Adam's preconditioner: via \(\hat m/\sqrt{\hat v}\), the decay would undergo a
+  per-coordinate normalization that makes it uneven; decoupled, it becomes a
+  homogeneous ridge again. It is the standard for transformers (typically
+  \(\lambda \sim 10^{-2}\),
+  much larger than in the SGD era).</li>
+  <li><strong>Label smoothing</strong> \(\varepsilon \in [0{,}05, 0{,}2]\): the
+  target becomes \(q_k = (1 - \varepsilon)\,\mathbf{1}[k = y] + \varepsilon/K\). The
+  cross-entropy penalizes \(-\log p_k \to \infty\) as \(p_k \to 0\): a hard
+  target pushes the model toward \(\log p^\star \to \infty\) (overconfidence), the
+  smoothed target bounds the optimum at \(p^\star = q &lt; 1\) and improves
+  calibration.</li>
+  <li><strong>Data augmentation</strong>: inject the known invariances
+  (rotations/crops in vision, synonyms in NLP) — the cheapest regularization in
+  parameters; it acts on the <em>data</em>, not on the model.</li>
+  <li><strong>Early stopping</strong>: stop when the validation loss rises
+  again — a regularization at zero compute cost, equivalent to an implicit
+  penalization of the norm (cf. Machine Learning module, bias-variance).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Overfitting, order of profitability</span>
+  Diagnosis: a train/validation gap that opens while the train loss decreases.
+  Remedies in order: 1) more data / augmentation, 2) augmentation,
+  3) dropout, 4) weight decay, 5) shrink the model as a last resort. A model
+  that cannot overfit a small batch (chapter 10) is often too small or badly
+  wired — the capacity to overfit is first and foremost a <em>health check</em>.
+</div>
+</section>
+<section class="chapter" id="ch4">
+<h2>4. Convolutional networks (CNN)</h2>
+
+<h3>4.1. Discrete convolution: general definition and dimension arithmetic</h3>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — 1D convolution with stride, padding, dilation</span>
+  For an input \(x\) of length \(I\), a kernel \(k\) of length \(K\), stride
+  \(s \in \mathbb{N}^*\), padding \(p\) (zeros added on each side) and dilation
+  \(d\) (gap between the kernel taps):
+  $$(x * k)(u) = \sum_{j=0}^{K-1} x(u + d j - d(K-1))\; k(K{-}1{-}j),$$
+  the output being sampled at positions \(u = u_0 + s\,t\), \(t = 0, 1, 2, \dots\)
+  In 2D, the same formula applies on each axis (kernel \(K_1 \times K_2\)). The same
+  filter is applied at every point: <strong>shared weights</strong> ⇒ translation
+  invariance and a parameter count independent of the image size —
+  \(\#\)params \(= C_{\mathrm{in}} K_1 K_2 C_{\mathrm{out}} + C_{\mathrm{out}}\).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.2 — Output dimension formula (and proof)</span>
+  $$O = \left\lfloor \frac{I + 2p - d(K-1) - 1}{s} \right\rfloor + 1.$$
+</div>
+
+<div class="proof">
+With padding \(p\), the effective input has valid indices in
+\([-p,\, I - 1 + p]\). An output position \(t\) places the kernel's <em>first</em> tap
+at \(u = s\,t - p\) and the last at \(u + d(K-1)\); the convolution is
+defined only if <em>all</em> the taps fall within the valid indices:
+\(s t - p \ge 0\) and \(s t - p + d(K-1) \le I - 1\). The number of allowed steps
+\(t\) is therefore the number of integers in
+\(\big[0,\; \frac{I - 1 + p - d(K-1)}{s}\big]\), that is
+\(\lfloor (I + 2p - d(K-1) - 1)/s \rfloor + 1\) (length of a discrete interval
+\([0, n]\) = \(n + 1\), with a floor for stride alignment).
+<span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 4.3 — Immediate checks</span>
+  Conv 3×3, padding 1, stride 1 (\(I=I'\)): \(\lfloor (I + 2 - 2 - 1)/1 \rfloor + 1 = I\).
+  Downsampling /2 with 3×3, padding 1: \(\lfloor (I + 2 - 2 - 1)/2 \rfloor + 1 = \lfloor (I-1)/2 \rfloor + 1\)
+  (for \(I = 224\) (ImageNet): 112). Two 3×3 convs (stride 1) have the same
+  receptive field as a 5×5 conv for ~2.7× fewer parameters and more nonlinearity —
+  VGG's argument.
+</div>
+
+<h3>4.2. Receptive field</h3>
+
+<div class="prop">
+  <span class="tag">Proposition 4.4 — Receptive field, formula by induction</span>
+  For convolutional layers with kernels \(k_\ell\), strides \(s_\ell\) (dilation 1),
+  the receptive field of a unit of layer \(\ell\) equals
+  $$\mathrm{RF}_1 = k_1, \qquad \mathrm{RF}_\ell = \mathrm{RF}_{\ell-1} + (k_\ell - 1)\prod_{i &lt; \ell} s_i.$$
+</div>
+
+<div class="proof">
+By induction. <em>Initialization</em>: a unit of layer 1 reads \(k_1\) pixels.
+<em>Heredity</em>: let \(\Delta_{\ell}\) be the distance (in input pixels) between
+the receptive fields of two <em>adjacent</em> units of layer \(\ell\).
+Clearly \(\Delta_1 = s_1\) (shifting the output by one unit shifts the window by
+\(s_1\)), and \(\Delta_\ell = s_\ell \Delta_{\ell-1} = \prod_{i \le \ell} s_i\). A unit
+of layer \(\ell\) aggregates \(k_\ell\) <em>contiguous</em> units of layer
+\(\ell - 1\): its field covers the field of one unit (RF\(_{\ell-1}\)) plus the gap
+between the centers of the first and last aggregated neighbors,
+\((k_\ell - 1)\Delta_{\ell-1}\).
+Hence the formula.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Two stacked 3×3 convs</span>
+  RF \(= 3 + 2\times 1 = 5\): stacking beats a large kernel — depth again.
+  In practice the theoretical receptive fields quickly exceed the image, but the
+  <em>effective</em> field (visualized by occlusion or Cadieu et al.) grows much
+  more slowly; low layers encode edges, high layers concepts.
+</div>
+
+<h3>4.3. Transposed conv (deconvolution)</h3>
+
+<p>The gradient of the convolution with respect to the <em>input</em> is itself a
+convolution, by the flipped kernel and with adjusted padding — called transposed
+convolution, and used as is to upsample (GANs, segmentation,
+autoencoders). Case with no stride, no dilation: a "valid" conv
+(\(p=0\)) maps \(I \to O = I - K + 1\); its transpose maps
+\(O \to I = O + K - 1\) by inserting \(K-1\) border zeros and convolving with the
+flipped kernel (proof: write \(\mathrm{conv}\) as a linear map
+\(y = Cx\) by blocks; then \(\nabla_x = C^\top \nabla_y\), and \(C^\top\) is the
+matrix of the transposed conv). With stride and padding, the general formula:
+$$I' = s\,(O - 1) - 2p + d(K-1) + \mathrm{op} + 1,$$
+where \(\mathrm{op}\) is an optional extra padding — the exact mirror image of
+theorem 4.2.
+Tap overlap when \(s &gt; 1\) creates "checkerboard" artifacts,
+fixed by upsample + conv.</p>
+
+<h3>4.4. Historical architectures, parameters on the counter</h3>
+
+<table class="tbl">
+<thead><tr><th>Network</th><th>Year</th><th>Key idea</th><th>Parameters</th></tr></thead>
+<tbody>
+<tr><td>LeNet-5</td><td>1998</td><td>conv + pooling + FC, gradient by backpropagation</td><td>\(\sim\)60&nbsp;k</td></tr>
+<tr><td>AlexNet</td><td>2012</td><td>ReLU, dropout, GPU, augmentation — wins ImageNet</td><td>\(\sim\)60&nbsp;M</td></tr>
+<tr><td>VGG-16</td><td>2014</td><td>uniformity: only 3×3, depth 16-19</td><td>\(\sim\)138&nbsp;M</td></tr>
+<tr><td>ResNet-50</td><td>2015</td><td>residual connections, 50 layers and more</td><td>\(\sim\)25.6&nbsp;M</td></tr>
+</tbody>
+</table>
+
+<div class="ex">
+  <span class="tag">Example 4.5 — Counting VGG-16 parameters (a computation to redo)</span>
+  A 3×3 block from \(C_{\mathrm{in}} \to C_{\mathrm{out}}\) channels costs
+  \(9\,C_{\mathrm{in}} C_{\mathrm{out}} + C_{\mathrm{out}}\). The first (3 → 64):
+  \(9 \times 3 \times 64 + 64 = 1\,792\). A 64 → 64 block:
+  \(9 \times 64^2 + 64 = 36\,928\). Summing the five stages (64, 128, 256, 512, 512),
+  the convolutions total \(\approx 14{,}7\) M — but the three fully
+  connected layers (after flattening \(7 \times 7 \times 512 = 25\,088\) features)
+  weigh \(25\,088 \times 4\,096 + 4\,096 \times 4\,096 + 4\,096 \times 1\,000 \approx 123\) M:
+  90% of the parameters live in the classifier! Hence global
+  pooling (GoogLeNet) then residual blocks: ResNet-50 does better with 25.6 M — of
+  which ~23 M in 1×1/3×3 bottleneck convs.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.6 — Why residuals allow depth</span>
+  A residual block learns \(h^{(\ell+1)} = h^{(\ell)} + F(h^{(\ell)})\) (then
+  activation/normalization). 1) <em>Trivial identity</em>: the choice
+  \(F \equiv 0\) realizes the exact identity — with standard initialization, \(F\)
+  is small, so every added block starts "close to the identity": adding
+  layers no longer degrades the initial model. 2) <em>Gradient without
+  attenuation</em>: by the chain rule,
+  $$\frac{\partial \mathcal{L}}{\partial h^{(\ell)}} = \frac{\partial \mathcal{L}}{\partial h^{(\ell+1)}}\Big( I + \frac{\partial F}{\partial h^{(\ell)}} \Big),$$
+  the \(I\) term transports the gradient as is, whatever the depth — direct
+  contrast with the product of \(L\) factors \(&lt;1\) of RNNs (chapter 5).
+  3) Landscape: loss-function visualizations (Li et al., 2018)
+  show markedly smoother valleys along the residual directions.
+</div>
+
+<div class="note">
+  <span class="tag">Residuals everywhere</span>
+  We will find <em>exactly</em> these skip connections in transformers
+  (\(x + \mathrm{Attention}(\mathrm{LN}(x))\), chapter 6) and GNNs (skip
+  connections of message passing, Graph ML module): everywhere one stacks
+  blocks, the identity path protects the gradient.
+</div>
+
+<pre class="code"><code>import torch.nn as nn
+
+conv = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+# parameters: 3*3*3*32 + 32 = 896, independent of the H x W size
+x = torch.randn(16, 3, 64, 64)        # batch of 16 RGB 64x64 images
+print(conv(x).shape)                   # [16, 32, 64, 64]  (theorem 4.2 formula)
+
+class ResBlock(nn.Module):
+    def __init__(self, c):
+        super().__init__()
+        self.conv1 = nn.Conv2d(c, c, 3, padding=1)
+        self.conv2 = nn.Conv2d(c, c, 3, padding=1)
+        self.norm1, self.norm2 = nn.BatchNorm2d(c), nn.BatchNorm2d(c)
+    def forward(self, x):
+        h = torch.relu(self.norm1(self.conv1(x)))
+        return torch.relu(x + self.norm2(self.conv2(h)))   # skip connection</code></pre>
+
+<div class="note">
+  <span class="tag">CNNs and graphs</span>
+  A convolution is a filter applied to a regular neighborhood (a grid). The GNNs of
+  the Graph ML module generalize this idea to <em>irregular</em> neighborhoods: the
+  filter becomes a function of the aggregated neighbors. Same DNA: weight sharing +
+  local aggregation. For the full link with signal processing (circular
+  convolution, convolution theorem, spectral graph filters), cf. the Signal
+  Processing module and the Graph ML module.
+</div>
+</section>
+<section class="chapter" id="ch5">
+<h2>5. Sequences: RNN, LSTM</h2>
+
+<h3>5.1. RNN and backpropagation through time</h3>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — RNN (Elman)</span>
+  $$h_t = \tanh(W_h h_{t-1} + W_x x_t + b), \qquad y_t = W_y h_t$$
+  A hidden state that summarizes the past; weights shared across time (like the CNN
+  kernel across space). The sequence \((x_1, \dots, x_T)\) is processed by
+  <em>unrolling</em>
+  the network: \(T\) copies of the same block — the computation graph becomes acyclic
+  again (chapter 2), and backprop applies to it "through time"
+  (BPTT). Memory cost: \(\mathcal{O}(T)\) activations.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.2 — Exponential explosion or vanishing of the gradient</span>
+  For a loss at the final step \(T\), writing \(D_t = \mathrm{diag}\big(\tanh'(a_t)\big)\):
+  $$\frac{\partial \mathcal{L}_T}{\partial h_0} = \Big( \prod_{t=1}^{T} D_t\, W_h^\top \Big) \frac{\partial \mathcal{L}_T}{\partial h_T}
+  \quad\Rightarrow\quad
+  \Big\| \frac{\partial \mathcal{L}_T}{\partial h_0} \Big\| \;\le\; \|W_h\|^{T}\, \prod_{t=1}^{T}\|\tanh'(a_t)\|_\infty\, \Big\| \frac{\partial \mathcal{L}_T}{\partial h_T} \Big\|.$$
+  If \(\|W_h\| \cdot \max_t \|\tanh'(a_t)\|_\infty &lt; 1\), the gradient decays
+  exponentially with \(T\) (vanishing); if \(\|W_h\| &gt; 1\) with
+  activations away from saturation, it explodes.
+</div>
+
+<div class="proof">
+By theorem 2.1 applied to the unrolled graph, \(\partial \mathcal{L}_T/\partial h_{t-1}
+= (\partial h_t / \partial h_{t-1})^\top \partial \mathcal{L}_T/\partial h_t\) since
+\(h_{t-1}\) has only one successor \(h_t\). Now \(h_t = \tanh(W_h h_{t-1} + W_x x_t + b)\),
+so the Jacobian equals \(J_t = D_t W_h\) with \(D_t\) diagonal (derivative of tanh
+component by component). Composing from \(t = T\) down to \(t = 1\) and using
+sub-multiplicativity \(\|ABC\| \le \|A\|\,\|B\|\,\|C\|\) (operator norm):
+\(\|\prod_t J_t^\top\| \le \prod_t \|J_t^\top\| \le \prod_t \|D_t\|\,\|W_h\|\), and
+\(\|D_t\| = \max_i |\tanh'(a_{t,i})| \le 1\), with strict inequality &lt; 1 as soon as one
+coordinate approaches saturation. Hence the bound: exponential decay
+in \(T\) as soon as the per-step factor is &lt; 1, possible exponential growth when
+\(\|W_h\| &gt; 1\) (the bound is only an upper bound, but experiments confirm both
+regimes; explosion is handled by <em>gradient clipping</em> — truncating
+\(\|\hat g\|\) at a threshold — vanishing, for its part, is structural).
+<span class="qed">∎</span>
+</div>
+
+<h3>5.2. LSTM: complete equations and the role of the gates</h3>
+
+<div class="def">
+  <span class="tag">Definition 5.3 — LSTM (Hochreiter &amp; Schmidhuber, 1997)</span>
+  Four "gates" (vectors of \([0,1]^d\) via sigmoids, acting as multiplicative
+  valves) and a cell state \(c_t\) that transitions <em>additively</em>:
+  $$f_t = \sigma(W_f h_{t-1} + U_f x_t), \qquad i_t = \sigma(W_i h_{t-1} + U_i x_t),$$
+  $$o_t = \sigma(W_o h_{t-1} + U_o x_t), \qquad \tilde c_t = \tanh(W_c h_{t-1} + U_c x_t),$$
+  $$c_t = f_t \odot c_{t-1} + i_t \odot \tilde c_t, \qquad h_t = o_t \odot \tanh(c_t).$$
+</div>
+
+<ul>
+  <li><strong>\(f_t\), forget gate</strong>: fraction of the old memory
+  kept — it is what carries long memory; often initialized with
+  \(b_f &gt; 0\) (positive forget bias) so that \(f \approx 1\) at the start.</li>
+  <li><strong>\(i_t\), input gate</strong>: how much of the candidate
+  \(\tilde c_t\) is written; <strong>\(\tilde c_t\)</strong>: the proposed content.</li>
+  <li><strong>\(o_t\), output gate</strong>: how much of the cell is exposed
+  in \(h_t\).</li>
+  <li><strong>Why it mitigates vanishing</strong>: the cell follows
+  \(c_t = f_t \odot c_{t-1} + (\dots)\), an <em>additive highway</em> — the gradient
+  \(\partial c_t/\partial c_{t-1} = \mathrm{diag}(f_t) + i_t\)-terms stays close to
+  the identity when \(f_t \approx 1\) and \(i_t\) modest, where the RNN systematically
+  multiplied by \(W_h^\top D_t\). The product of the Jacobians can stay ~1 over
+  long horizons: long dependencies get through. (The problem is not
+  <em>solved</em>: for very long dependencies, attention will fix it —
+  chapter 6.)</li>
+</ul>
+
+<div class="note">
+  <span class="tag">GRU (Cho et al., 2014) and comparison</span>
+  $$z_t = \sigma(W_z h_{t-1} + U_z x_t), \quad r_t = \sigma(W_r h_{t-1} + U_r x_t), \quad
+  h_t = (1 - z_t) \odot h_{t-1} + z_t \odot \tanh\big(W h_{t-1} \odot r_t + U x_t\big).$$
+  Two gates instead of three, no separate cell state (\(z_t\) merges forget and
+  write, \(r_t\) filters the read past): ~25% fewer parameters,
+  generally comparable performance. In practice LSTM for long series,
+  GRU for small datasets.
+</div>
+
+<div class="note">
+  <span class="tag">Teacher forcing and exposure bias</span>
+  When training a sequence-to-sequence model, the decoder is fed the <em>true</em>
+  tokens (teacher forcing): the loss is computed in a single parallel
+  pass, but the model only learns to predict <em>given the exact past</em>. At
+  inference, it feeds on its own (possibly wrong) outputs — an exposure
+  mismatch that makes long generations drift; mitigated by
+  scheduled sampling or reinforcement learning (cf. RL module, and NLP module).
+</div>
+</section>
+<section class="chapter" id="ch6">
+<h2>6. Attention and transformers</h2>
+
+<h3>6.1. Scaled dot-product: why \(\sqrt{d_k}\)</h3>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — Scaled dot-product attention (Vaswani et al., 2017)</span>
+  For tokens \(i = 1..n\) with embeddings \(x_i\), one computes
+  $$q_i = W_q x_i,\quad k_i = W_k x_i,\quad v_i = W_v x_i,$$
+  $$\mathrm{Attention}(Q, K, V) = \mathrm{softmax}\!\Big(\frac{Q K^\top}{\sqrt{d_k}}\Big) V, \qquad
+  \alpha_{ij} = \frac{\exp(q_i^\top k_j / \sqrt{d_k})}{\sum_{j'} \exp(q_i^\top k_{j'} / \sqrt{d_k})}.$$
+  <strong>Multi-head</strong>: \(h\) attention heads in parallel (projections
+  \(W^q_m, W^k_m, W^v_m\), dimensions \(d_k = d/h\)), concatenated then projected —
+  several independent "communication channels".
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — The variance of the scores grows like \(d_k\)</span>
+  If the components of \(q\) and \(k\) are iid, centered, with variance 1, then
+  \(q^\top k = \sum_{\ell=1}^{d_k} q_\ell k_\ell\) is centered with variance
+  exactly \(d_k\). Without normalization, the standard deviation of the scores is
+  \(\sqrt{d_k}\)
+  (32 for \(d_k = 1024\)): the softmax becomes a one-hot argmax, its gradients
+  vanish — saturation, cf. chapter 0, proposition 0.3. Dividing by
+  \(\sqrt{d_k}\) brings the variance back to 1, independent of the dimension.
+</div>
+
+<div class="proof">
+Centering: \(\mathbb{E}[q_\ell k_\ell] = \mathbb{E}[q_\ell]\,\mathbb{E}[k_\ell] = 0\)
+(independence). Variance: the terms \(q_\ell k_\ell\) are mutually iid, so
+\(\mathrm{Var}(\sum_\ell q_\ell k_\ell) = \sum_\ell \mathrm{Var}(q_\ell k_\ell) =
+d_k\, \mathbb{E}[q_\ell^2]\mathbb{E}[k_\ell^2] = d_k\). After dividing by
+\(\sqrt{d_k}\), the variance of the normalized score equals \(1\). Consequence for
+saturation: the typical gaps between normalized scores are \(\mathcal{O}(1)\),
+the exponential ratios \(\exp(s_i - s_j)\) stay in a reasonable range and
+the softmax keeps a nonzero gradient; without scaling, gaps of order
+\(\sqrt{d_k} \gg 1\) produce a near one-hot distribution, whose gradient
+(\(\hat y_k(\delta_{kj} - \hat y_j)\)) tends to 0.
+<span class="qed">∎</span>
+</div>
+
+<h3>6.2. Block architecture: pre-norm, RoPE</h3>
+
+<ul>
+  <li><strong>Post-norm</strong> (Vaswani et al., original):
+  \(y = \mathrm{LN}(x + \mathrm{Att}(x))\) — the residual connection passes
+  <em>through</em>
+  the normalization. <strong>Pre-norm</strong> (GPT-2 and after):
+  \(y = x + \mathrm{Att}(\mathrm{LN}(x))\) — the identity path is <em>intact</em>
+  (proposition 4.6): the gradient reaches the input without attenuation, which makes
+  training stable at large depth and reduces the need for warmup; a
+  final LayerNorm compensates for the absence of output normalization. The current
+  standard.</li>
+  <li><strong>RoPE</strong> (rotary position embedding, Su et al., 2021): instead
+  of <em>adding</em> a positional code, one <em>rotates</em> each pair of
+  coordinates \((q_{2i}, q_{2i+1})\) by an angle \(m\,\theta_i\) depending on the
+  position \(m\) of the token (and on \(i\)), with \(\theta_i = b^{-2i/d}\). Proof of
+  the "relative" character: planar rotations commute and
+  \(R(m)^\top R(n) = R(n - m)\), so
+  $$\langle R(m)\, q,\; R(n)\, k \rangle = q^\top R(m)^\top R(n)\, k = q^\top R(n-m)\, k,$$
+  the score depends only on the gap \(n - m\): position is encoded
+  <em>within</em> the interaction, with unbounded length support — this is the encoding
+  of modern LLMs (cf. LLMs module, M2).</li>
+</ul>
+
+<h3>6.3. Costs and efficient attention</h3>
+
+<ul>
+  <li><strong>Complexity</strong>: \(\mathcal{O}(n^2 d)\) time and
+  \(\mathcal{O}(n^2)\) memory (\(QK^\top\) matrix of size \(n \times n\) per
+  head) — the LLM bottleneck. The MLP is \(\mathcal{O}(n d^2)\): attention
+  dominates as soon as \(n \gtrsim d\).</li>
+  <li><strong>FlashAttention</strong> (Dao et al., 2022): <em>exact</em>, but
+  IO-aware — it tiles the computation of softmax(QK^T)V into blocks loaded into SRAM
+  (the GPU's fast memory) and <em>never</em> writes the \(n \times n\) matrix to HBM,
+  maintaining online log-sum-exp statistics (proposition 0.3 makes the
+  softmax incremental: blocks are merged with \(m\) and the partial sum).
+  Result: same FLOPs, \(\mathcal{O}(n)\) memory, ×2 to ×4 speed in
+  practice.</li>
+  <li><strong>Approximations</strong>: sparse, linear, sliding window
+  (cf. LLMs module, M2).</li>
+</ul>
+
+<div class="note">
+  <span class="tag">"Graph" reading (Karpathy, 2025-2026) — the bridge to the Graph ML module</span>
+  A transformer is a <strong>neural network on a dynamic graph</strong>:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>each <strong>token = a node</strong> carrying a vector;</li>
+    <li>attention computes <strong>weighted edges</strong> \(\alpha_{ij}\) <em>from the
+    data</em> (dynamic graph, unlike GNNs);</li>
+    <li>\(\sum_j \alpha_{ij} v_j\) is a <strong>message passing</strong>: the nodes
+    exchange their "values";</li>
+    <li>the <strong>MLP block = the local computation</strong> of each node;
+    residual + LayerNorm = plumbing so that the "graph" stays trainable;</li>
+    <li>a transformer layer = <em>communication</em> (attention) then
+    <em>computation</em> (MLP), exactly the alternation of a GNN.</li>
+  </ul>
+  The LLGA program exploits this double reading: the same mathematical object seen
+  "from inside the LLM" (M2 module) and "on structured data" (Graph ML module).
+</div>
+
+<h3>6.4. A complete block in PyTorch</h3>
+
+<pre class="code"><code>import torch, torch.nn as nn, torch.nn.functional as F
+
+class Block(nn.Module):
+    """A pre-norm transformer block: multi-head causal attention + MLP."""
+    def __init__(self, d, n_heads, p_drop=0.1):
+        super().__init__()
+        self.ln1, self.ln2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.n_heads, self.d_head = n_heads, d // n_heads
+        self.qkv = nn.Linear(d, 3 * d)
+        self.proj = nn.Linear(d, d)
+        self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))
+        self.drop = nn.Dropout(p_drop)
+
+    def forward(self, x):                          # x: (B, n, d)
+        B, n, d = x.shape
+        q, k, v = self.qkv(self.ln1(x)).chunk(3, -1)
+        # multi-head: (B, n, d) -> (B, n, h, d_head) -> (B, h, n, d_head)
+        def split(t): return t.view(B, n, self.n_heads, self.d_head).transpose(1, 2)
+        q, k, v = split(q), split(k), split(v)
+        mask = torch.tril(torch.ones(n, n, device=x.device))     # causal mask
+        att = F.scaled_dot_product_attention(q, k, v,            # softmax(QK^T/sqrt(d_head))V
+                                             attn_mask=mask, dropout_p=0.0)
+        att = att.transpose(1, 2).reshape(B, n, d)               # merge the heads back
+        x = x + self.drop(self.proj(att))                        # residual 1 (pre-norm)
+        x = x + self.drop(self.mlp(self.ln2(x)))                 # residual 2
+        return x
+
+torch.manual_seed(0)
+x = torch.randn(2, 16, 128)
+model = nn.Sequential(*[Block(128, 4) for _ in range(4)])
+print(model(x).shape)                              # [2, 16, 128]
+
+# Position: the transformer is permutation-invariant -> RoPE or encoding added to x
+max_n, d = 512, 128</code></pre>
+
+<ul>
+  <li><strong>Position</strong>: attention does not know the order → <em>positional
+  encodings</em> (sinusoidal, learned, or RoPE, 6.2) — and on graphs: the analogue
+  is the problem of <em>positional/structural encodings</em>, at the heart of chapter 9
+  and of the Advanced GNN module (M2);</li>
+  <li><strong>MLP</strong>: two layers with GELU, expansion ratio ~4 — this is where
+  most of the parameters live (~2/3);</li>
+  <li><strong>Causal mask</strong>: forbid \(j &gt; i\) for autoregression —
+  exactly the factorization \(\mathbb{P}(x) = \prod_t \mathbb{P}(x_t \mid x_{&lt;t})\)
+  of chapter 7.</li>
+</ul>
+</section>
+<section class="chapter" id="ch7">
+<h2>7. Generative models: AE, VAE, GAN</h2>
+
+<h3>7.1. Deterministic autoencoder and its pathology</h3>
+
+<p>An autoencoder compresses \(x\) into a code \(z = E_\phi(x)\) and reconstructs
+\(\hat x = D_\theta(z)\), trained on \(\|x - \hat x\|^2\). Useful for
+representation learning though it is, it is not a <em>generative</em> model:
+the latent space has no imposed structure — sampling \(z\) at random gives
+aberrant reconstructions. The VAE corrects precisely this.</p>
+
+<h3>7.2. VAE: the ELBO fully derived</h3>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — VAE (Kingma &amp; Welling, 2013)</span>
+  Diagonal Gaussian encoder \(q_\phi(z \mid x) = \mathcal{N}\big(\mu_\phi(x), \mathrm{diag}(\sigma_\phi^2(x))\big)\),
+  decoder \(p_\theta(x \mid z)\), prior \(z \sim \mathcal{N}(0, I)\). One maximizes the
+  <strong>ELBO</strong> (evidence lower bound):
+  $$\mathcal{L}(\theta, \phi; x) = \mathbb{E}_{q_\phi}\big[\log p_\theta(x \mid z)\big] - \mathrm{KL}\big(q_\phi(z \mid x)\,\|\,\mathcal{N}(0, I)\big).$$
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 7.2 — Exact decomposition of the log-likelihood</span>
+  $$\log p_\theta(x) = \mathcal{L}(\theta, \phi; x) + \mathrm{KL}\big(q_\phi(z\mid x)\,\big\|\,p_\theta(z \mid x)\big) \;\ge\; \mathcal{L}(\theta, \phi; x).$$
+  Maximizing the ELBO = maximizing a lower bound of \(\log p_\theta(x)\) <em>and</em>
+  bringing \(q_\phi(z|x)\) closer to the exact posterior \(p_\theta(z|x)\).
+</div>
+
+<div class="proof">
+Start from the definition of the KL between \(q_\phi(\cdot \mid x)\) and the posterior
+\(p_\theta(\cdot \mid x)\), both over \(z\) (at fixed \(x\)), and expand with
+\(p_\theta(x, z) = p_\theta(x \mid z)\, p(z)\) (Bayes):
+$$\mathrm{KL}\big(q_\phi \| p_\theta(\cdot|x)\big)
+= \mathbb{E}_q[\log q] - \mathbb{E}_q[\log p_\theta(x|z)] - \mathbb{E}_q[\log p(z)] + \log p_\theta(x).$$
+Now, by definition of the KL against the prior,
+\(\mathbb{E}_q[\log q] - \mathbb{E}_q[\log p(z)] = \mathrm{KL}(q_\phi \| \mathcal{N}(0,I))\).
+Substituting:
+$$\mathrm{KL}\big(q_\phi \| p_\theta(\cdot|x)\big) = \mathrm{KL}(q_\phi \| \mathcal{N}) - \mathbb{E}_q[\log p_\theta(x|z)] + \log p_\theta(x),$$
+that is, rearranging:
+$$\log p_\theta(x) = \underbrace{\mathbb{E}_q[\log p_\theta(x|z)] - \mathrm{KL}(q_\phi \| \mathcal{N})}_{=\ \mathcal{L}(\theta,\phi;x)} + \mathrm{KL}\big(q_\phi \| p_\theta(\cdot|x)\big).$$
+The KL is nonnegative (Jensen applied to \(\mathbb{E}_q[\log(q/p)] \ge -\log
+\mathbb{E}_q[p/q] = 0\)), giving the bound. Equality iff \(q_\phi(z|x) = p_\theta(z|x)\)
+exactly.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Reading the proof</span>
+  One cannot optimize \(\log p_\theta(x) = \log \int p_\theta(x|z)\, p(z)\, dz\)
+  directly: the integral is intractable. The ELBO is the only quantity that
+  requires only (i) <em>samples</em> from \(q_\phi\) (Monte Carlo: a single one
+  suffices in practice) and (ii) a <em>closed-form</em> KL. It is the same trade-off as
+  in EM (Machine Learning module): the residual KL measures exactly what the
+  bound loses.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.3 — Reparameterization: why \(z = \mu + \sigma \odot \varepsilon\) works</span>
+  If \(\varepsilon \sim \mathcal{N}(0, I)\) and \(z = \mu_\phi(x) + \sigma_\phi(x) \odot \varepsilon\),
+  then \(z \sim \mathcal{N}(\mu_\phi(x), \mathrm{diag}(\sigma_\phi^2(x)))\) <em>and</em>
+  \(\nabla_\phi \mathbb{E}_{q_\phi}[f(z)] = \mathbb{E}_\varepsilon\big[\nabla_\phi f(\mu_\phi + \sigma_\phi \odot \varepsilon)\big]\):
+  the gradient gets through. Sampling \(z \sim q_\phi\) directly blocks the gradient
+  (the sampling operation has no derivative with respect to its parameters).
+</div>
+
+<div class="proof">
+The law of \(z\) is obtained by an affine change of variable (the Jacobian
+\(\partial z/\partial \varepsilon = \mathrm{diag}(\sigma)\) is constant): the
+density of \(z\) is that of a Gaussian with mean \(\mu\), covariance
+\(\mathrm{diag}(\sigma^2)\). For the gradient: the expectation under \(q_\phi\)
+rewrites as an expectation under the <em>fixed</em> law of \(\varepsilon\),
+\(\mathbb{E}_{q_\phi}[f(z)] = \mathbb{E}_{\varepsilon}[f(\mu_\phi + \sigma_\phi \odot \varepsilon)]\);
+the distribution is <em>no longer</em> parameterized by \(\phi\) — \(\phi\) now appears only
+in the integrand, which gradient descent knows how to differentiate (theorem 2.1).
+<span class="qed">∎</span>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.4 — Closed-form KL between diagonal Gaussians</span>
+  For \(q = \mathcal{N}(\mu, \mathrm{diag}(\sigma^2))\) and \(p = \mathcal{N}(0, I)\) in
+  dimension \(k\):
+  $$\mathrm{KL}(q \| p) = \frac12 \sum_{i=1}^{k} \big(\mu_i^2 + \sigma_i^2 - 1 - \log \sigma_i^2\big).$$
+</div>
+
+<div class="proof">
+\(\mathrm{KL}(q\|p) = \mathbb{E}_q[\log q(z) - \log p(z)]\). Coordinate by
+coordinate (the densities factorize), with \(\varphi\) the standard Gaussian
+density:
+\(\log q(z_i) - \log \varphi(z_i) = -\tfrac12\log\sigma_i^2 - \frac{(z_i - \mu_i)^2}{2\sigma_i^2} + \frac{z_i^2}{2}\).
+Under \(q\), \(z_i \sim \mathcal{N}(\mu_i, \sigma_i^2)\), so
+\(\mathbb{E}_q[(z_i - \mu_i)^2] = \sigma_i^2\) and
+\(\mathbb{E}_q[z_i^2] = \mu_i^2 + \sigma_i^2\). Taking the expectation:
+\(-\tfrac12\log\sigma_i^2 - \tfrac12 + \tfrac12(\mu_i^2 + \sigma_i^2)\), that is
+\(\tfrac12(\mu_i^2 + \sigma_i^2 - 1 - \log \sigma_i^2)\). Along the way one checks that
+each term is \(\ge 0\), zero iff \(\mu_i = 0, \sigma_i = 1\) (study of
+\(u - 1 - \log u \ge 0\)).
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">The ELBO trade-off in practice</span>
+  First term: reconstruction. Second: a regularizer that keeps the
+  codes close to the prior — too strong, everything blurs together (codes ignored,
+  blurry sampling); too weak, the latent space develops "holes" (partial
+  posterior collapse). The connection with variational inference and EM is taken up
+  again in the Machine Learning module; the extensions (\(\beta\)-VAE, VQ-VAE) are
+  in Multimodal Generative AI.
+</div>
+
+<h3>7.3. GAN: the minimax game and its equilibrium</h3>
+
+<div class="def">
+  <span class="tag">Definition 7.5 — GAN (Goodfellow et al., 2014)</span>
+  Minimax game between a generator \(G\) (often \(G(z)\) with \(z \sim \mathcal{N}(0, I)\))
+  and a discriminator \(D : \mathcal{X} \to (0,1)\):
+  $$\min_G \max_D \ V(G, D), \qquad V(G, D) = \mathbb{E}_{x \sim p_{\mathrm{data}}}\big[\log D(x)\big] + \mathbb{E}_{z \sim p(z)}\big[\log(1 - D(G(z)))\big].$$
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 7.6 — Optimal discriminator and global equilibrium</span>
+  1) For fixed \(G\), the maximand reads \(V(G,D) = \int \big[p_{\mathrm{data}}(x)\log D(x) + p_G(x) \log(1 - D(x))\big] dx\)
+  (with \(p_G\) the law of \(G(z)\)), maximized pointwise at
+  $$D^\star(x) = \frac{p_{\mathrm{data}}(x)}{p_{\mathrm{data}}(x) + p_G(x)}.$$
+  2) The value of the game is then \(V(G, D^\star) = -\log 4 + 2\,\mathrm{JSD}(p_{\mathrm{data}} \| p_G)\),
+  minimized over \(G\) exactly when \(p_G = p_{\mathrm{data}}\): the global
+  equilibrium exists and coincides with the law of the data.
+</div>
+
+<div class="proof">
+<strong>1)</strong> For each fixed \(x\), maximize
+\(a\log D + b\log(1-D)\) with \(a = p_{\mathrm{data}}(x)\), \(b = p_G(x)\): the
+derivative \(a/D - b/(1-D) = 0\) gives \(D^\star = a/(a+b)\) (strict concavity in
+\(D \in (0,1)\)). <strong>2)</strong> Rewrite
+\(\log D^\star = \log \frac{p_{\mathrm{data}}}{p_{\mathrm{data}}+p_G} = \log\frac{p_{\mathrm{data}}}{m} - \log 2\)
+and \(\log(1 - D^\star) = \log \frac{p_G}{m} - \log 2\), where
+\(m = \frac12(p_{\mathrm{data}} + p_G)\).
+Then
+$$V(G, D^\star) = \int p_{\mathrm{data}} \log\frac{p_{\mathrm{data}}}{m} + \int p_G \log\frac{p_G}{m} - 2\log 2 = 2\,\mathrm{JSD}(p_{\mathrm{data}} \| p_G) - \log 4,$$
+by definition of the Jensen–Shannon divergence (average of the KLs toward \(m\)).
+Since \(\mathrm{JSD} \ge 0\) with equality if and only if \(p_{\mathrm{data}} = p_G\)
+almost everywhere (the two laws share the same harmonic mean \(m\)), the minimum
+\(-\log 4\) is reached exactly at equilibrium. <strong>Gaussian case</strong>:
+if \(p_{\mathrm{data}} = \mathcal{N}(\mu_d, \sigma_d^2)\) and
+\(G(z) = \mu + \sigma z\), then \(p_G = \mathcal{N}(\mu, \sigma^2)\) and the equilibrium
+corresponds to the exact parameters \((\mu, \sigma) = (\mu_d, \sigma_d)\); the
+logit of \(D^\star\), \(\log p_{\mathrm{data}} - \log p_G\), is a degree-2 polynomial
+in \(x\) — a quadratic discriminator suffices.
+<span class="qed">∎</span>
+</div>
+
+<div class="note">
+  <span class="tag">Why it is unstable nonetheless</span>
+  The theorem describes the equilibrium, not the <em>dynamics</em>: the two players
+  descend their gradients <em>simultaneously</em>, and if \(D\) becomes too good too
+  fast, the gradient of \(G\) vanishes (\(\log(1 - D)\) saturates). Emblematic
+  pathology: <strong>mode collapse</strong> — \(G\) concentrates on the "easiest"
+  modes of \(p_{\mathrm{data}}\) (a few very credible faces instead of all of them).
+  Historical remedies: Wasserstein-GAN (transportation distance
+  instead of JSD — cf. Optimal Transport module), gradient penalization,
+  feature matching. In imaging, the family was superseded by <strong>diffusion</strong>
+  (iterative denoising): Ye Zhu's models (chapter 9) are recent
+  developments of it, and the Multimodal Generative AI module treats them in detail.
+  LLMs, for their part, remain autoregressive: \(\mathbb{P}(x_t \mid x_{&lt;t})\),
+  cross-entropy loss over tokens (LLMs module, M2).
+</div>
+
+<table class="tbl">
+<thead><tr><th>Family</th><th>Principle</th><th>Sampling</th><th>In the program</th></tr></thead>
+<tbody>
+<tr><td>VAE</td><td>ELBO, Gaussian latent</td><td>decoder from \(z \sim \mathcal{N}\)</td><td>Multimodal GenAI</td></tr>
+<tr><td>GAN</td><td>adversarial min-max</td><td>implicit</td><td>Multimodal GenAI</td></tr>
+<tr><td>Diffusion</td><td>iterative noising/denoising</td><td>(reverse) process</td><td>Multimodal GenAI</td></tr>
+<tr><td>Autoregressive</td><td>modeling \(\mathbb{P}(x_t \mid x_{&lt;t})\)</td><td>token by token</td><td>LLMs (M2), Graph GenAI</td></tr>
+</tbody>
+</table>
+</section>
+<section class="chapter" id="ch8">
+<h2>8. Transfer learning and fine-tuning</h2>
+
+<p>Training "from scratch" has become the exception: the dominant practice
+consists in starting from a model pre-trained on immense corpora (ImageNet for
+vision, terabytes of text for LLMs) and adapting it. This chapter gives the
+framework and the vocabulary; the LLMs module (M2) applies it at scale.</p>
+
+<h3>8.1. The three adaptation regimes</h3>
+
+<ul>
+  <li><strong>Frozen features / linear probing</strong>: freeze the whole backbone,
+  train a linear classifier (or a small head) on the pre-trained representations.
+  A valuable diagnostic: feature quality is measured by the performance of a
+  simple softmax on top (see exercise 12).</li>
+  <li><strong>Full fine-tuning</strong>: retrain all the weights with a smaller
+  step (typically 10 to 100× smaller than pre-training) — the risk of
+  <em>catastrophic forgetting</em> (loss of pre-trained knowledge) is managed by
+  a decaying step and few epochs.</li>
+  <li><strong>Parameter-efficient fine-tuning (PEFT)</strong>: train only a small
+  fraction of new parameters, the rest staying frozen — all the more relevant
+  as models grow.</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Why it works</span>
+  The low layers learn quasi-universal features (chapter 4: edges, textures;
+  chapter 9: graph morphology); task specificity lives in the high layers. The
+  performance versus number of labeled domain examples curve shifts massively to
+  the left — this is the most measurable practical benefit of modern deep learning.
+</div>
+
+<h3>8.2. Domain adaptation, in a nutshell</h3>
+
+<p>When the target has <em>no</em> labels (labeled source domain → unlabeled
+target domain), domain adaptation aligns the distributions:
+adversarial (a discriminator tries to guess the domain from the features:
+they must become non-discriminative), or via distribution distances (MMD,
+Wasserstein distances — see the Optimal Transport module). The guiding idea:
+learn representations <em>invariant</em> to the domain but
+<em>discriminative</em> for the task.</p>
+
+<h3>8.3. LoRA: a mathematical sketch</h3>
+
+<div class="def">
+  <span class="tag">Definition 8.1 — LoRA (Hu et al., 2021)</span>
+  For a pre-trained matrix \(W_0 \in \mathbb{R}^{d_{\mathrm{out}} \times d_{\mathrm{in}}}\),
+  one freezes \(W_0\) and learns a low-rank update:
+  $$W = W_0 + \Delta W = W_0 + \frac{\alpha}{r}\, B A, \qquad B \in \mathbb{R}^{d_{\mathrm{out}} \times r},\ A \in \mathbb{R}^{r \times d_{\mathrm{in}}},\ r \ll \min(d_{\mathrm{in}}, d_{\mathrm{out}}),$$
+  with \(B\) initialized to zero and \(A\) Gaussian: \(\Delta W = 0\) at the start,
+  training departs exactly from the pre-trained model. \(\alpha/r\) sets the effective
+  scale of the update.
+</div>
+
+<div class="note">
+  <span class="tag">Why a low rank suffices</span>
+  The working hypothesis, backed by Aghajanyan et al. (2020), is that weight updates
+  during adaptation have a low "intrinsic rank":
+  \(\Delta W\) is well approximated by a product \(BA\) of small rank \(r\) (4 to 64 in
+  practice). Let us count: adapting a \(d \times d\) layer with \(r = 8\) costs
+  \(2dr = 16d\) parameters instead of \(d^2\) — for \(d = 4096\), a factor of 1000.
+  Other benefits: a single \(W_0\) kept in memory + per-task interchangeable \((A, B)\)
+  pairs (instant swap); and for inference latency,
+  one can merge \(W = W_0 + BA\) at no extra cost. The generalizations (QLoRA:
+  quantized backbone + LoRA) are covered in the LLMs module (M2).
+</div>
+
+<pre class="code"><code>import torch, torch.nn as nn
+
+class LoRALinear(nn.Module):
+    def __init__(self, base: nn.Linear, r=8, alpha=16):
+        super().__init__()
+        self.base = base                       # W0 frozen
+        for p in self.base.parameters(): p.requires_grad = False
+        self.A = nn.Parameter(torch.randn(r, base.in_features) * 0.01)
+        self.B = nn.Parameter(torch.zeros(base.out_features, r))
+        self.scale = alpha / r
+    def forward(self, x):
+        return self.base(x) + self.scale * (x @ self.A.T @ self.B.T)
+# trainable params: r*(in+out) instead of in*out</code></pre>
+</section>
+<section class="chapter" id="ch9">
+<h2>9. Research of the teaching team</h2>
+
+<p>This chapter connects the course to the current research of the three
+instructors, all three rooted in the previous chapters. The arXiv references
+are in the bibliography.</p>
+
+<h3>9.1. Michalis Vazirgiannis: from the "Graph of Words" to textual GNNs</h3>
+
+<div class="ex">
+  <span class="tag">Worked example — Graph of Words (Rousseau &amp; Vazirgiannis, CIKM 2013)</span>
+  The <em>bag-of-words</em> representation throws away syntactic and
+  order structure; the <strong>word graph</strong> restores it at almost no cost:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Construction</strong>: each distinct term of the document = one node;
+    a <em>sliding window</em> of size \(w\) over the text creates an edge between two
+    terms if they co-occur in the window (weighted by the co-occurrence
+    frequency). The document becomes a small, sparse weighted graph.</li>
+    <li><strong>From TF-IDF to TW-IDF</strong>: in a bag of words, the weight of a term
+    is its frequency; in a word graph, it is its <em>centrality</em> —
+    TW-IDF weights the term by its average weighted degree across documents — the
+    group then used the k-core decomposition of the word graph for keyword
+    extraction (Rousseau, Kiagias &amp; Vazirgiannis, ECIR 2015). "Ad hoc"
+    retrieval gains over TF-IDF: structurally
+    important words emerge even when they are rare.</li>
+    <li><strong>Positioning with respect to the course</strong>: this is the first
+    building block of the program — <em>the data itself becomes a graph</em>. The NLP
+    module reuses these representations; the Graph ML module generalizes them.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">GNN lineage: texts, expressivity, generation</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Inductive text classification via GNNs</strong> (Skianis, Rousseau
+    &amp; Vazirgiannis, ACL 2020): each <em>document</em> is its own word
+    graph; a GNN applied to the document graph can then process words
+    never seen at training time (inductivity) whereas TextGCN (Yao et al., AAAI 2019)
+    built a single corpus graph.</li>
+    <li><strong>DGoW-GNN</strong> (Abbahaddou, Lutzeyer &amp; Vazirgiannis, NeurIPS 2023):
+    <em>discriminative</em> word graphs — the edges are no longer fixed co-occurrences
+    but are filtered/learned for the task, then a GNN propagates the
+    representations. The loop is closed with chapter 2: the computation
+    graph (backprop) and the data graph (message passing) answer each other.</li>
+    <li><strong>PathNN</strong> (Michel, Nikolentzos &amp; Vazirgiannis, ICML 2023):
+    going beyond classical message passing by aggregating <em>paths</em> (shortest
+    paths, simple paths) emanating from each node; two variants are
+    strictly more expressive than the Weisfeiler–Lehman test. This is the language of the
+    Graph ML module, expanded in Advanced GNN (M2).</li>
+  </ul>
+</div>
+
+<h3>9.2. Johannes Lutzeyer: where are the parameters? Expressivity and position</h3>
+
+<div class="note">
+  <span class="tag">Sparsifying the update step (Lutzeyer, Wu &amp; Vazirgiannis, 2021)</span>
+  An MPNN (message passing neural network) chains two phases: the aggregation of
+  neighbor messages and an "update step" — precisely the
+  linear transformation + non-linearity of chapter 1, applied node by node. The
+  paper's question: what remains if one <em>sparsifies</em> this
+  trainable step, initializing it directly sparse (ExpanderGNN, with a tunable
+  sparsity rate) or even reducing it to a non-linearity alone (Activation-Only GNN)?
+  Key result: performance comparable to dense models with far fewer
+  parameters — a direct empirical insight into how expressivity is distributed between
+  aggregation (structure, not parametrized) and the update (parametrized), in
+  the spirit of ch. 1 (what, in a network, carries the expressivity?).
+</div>
+
+<div class="note">
+  <span class="tag">Positional encodings on graphs (SHAKE-GNN, Cui, Lutzeyer et al., 2025)</span>
+  Chapter 6 showed that a transformer needs a positional <em>encoding</em>
+  because attention is permutation-invariant. On a graph, the problem is
+  deeper: there is <em>no canonical ordering</em> of the nodes — the
+  "position" of a node is a <em>structural</em> notion (Laplacian
+  spectrum, distances, spanning forests). SHAKE-GNN proposes hierarchical encodings
+  based on Kirchhoff forests, computed in a scalable way. The
+  parallel to remember: RoPE (relative absolute position, suited to sequences)
+  vs spectral/structural encodings (position defined by the geometry of the graph);
+  both answer the same fundamental invariance (exercise 4). The Advanced
+  GNN module (M2) systematizes this question.
+</div>
+
+<h3>9.3. Ye Zhu: steering diffusion models</h3>
+
+<div class="note">
+  <span class="tag">From the loss to semantic control</span>
+  Chapter 7 left diffusion in sketch form (noising/denoising); the
+  work of Ye Zhu shows how to <em>steer</em> it:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>BoundaryDiffusion</strong> (Zhu et al., NeurIPS 2023): control
+    the semantics of generation <em>without retraining</em> (learning-free), by
+    warping the decision boundaries of the model's latent space in the guidance
+    plane — an elegant point of contact with prop. 7.6: where the GAN
+    sought an equilibrium, here already-learned latent regions are moved
+    geometrically.</li>
+    <li><strong>Discrete contrastive diffusion</strong> (ICLR 2023) and <strong>Diffusion
+    in Diffusion</strong> (ICLR 2024): <em>discrete</em> cross-modal music-image
+    diffusion and cyclic text-vision conditioning — the argument of the ch. 7
+    table ("multimodal") made concrete.</li>
+    <li><strong>NoiseQuery</strong> (ICCV 2025): the initial noise \(z_T\) as an
+    <em>implicit control signal</em> for goal-guided generation —
+    it reverses the perspective: the "noise" becomes a structured
+    input, which connects to the sensitivity to the initial noise studied for
+    GANs/diffusion.</li>
+  </ul>
+  This work directly extends ch. 7 and is expanded in the Multimodal
+  Generative AI module.
+</div>
+</section>
+<section class="chapter" id="ch10">
+<h2>10. Training in practice</h2>
+
+<p>A network that does not learn almost always has a mundane bug. This chapter is the
+diagnostic protocol we will apply in the labs, in the order in which it must
+be applied.</p>
+
+<h3>10.1. The training recipe, in order</h3>
+
+<ol>
+  <li><strong>Shape sanity check</strong>: one forward pass without errors, the
+  dimensions of every activation verified (rule of ch. 0: gradients have the
+  shape of their variable).</li>
+  <li><strong>Overfit a single batch</strong>: 32 examples, train until the loss is
+  \(\approx 0\). If the model cannot do it, the bug is <em>structural</em> (data,
+  loss, initialization, wild learning rate) — no point training longer.&nbsp;A
+  model unable to memorize 32 examples is broken or too small; this is THE test
+  that avoids weeks of silent error.</li>
+  <li><strong>LR range test</strong> (Smith, 2015): \(\eta\) increasing
+  geometrically from \(10^{-7}\) to \(10^{0}\), plot the loss: plateau →
+  descent → divergence. Take the \(\eta\) at the dip (or slightly before): it sets
+  AdamW/SGD in one epoch.</li>
+  <li><strong>Small full training run</strong> on ~10% of the data, with the
+  train/val curves: check that the dynamics are healthy before scaling up.</li>
+  <li><strong>Scaling + regularization</strong>: larger batch (or gradient
+  accumulation), mixed precision, data augmentation, dropout, weight decay — in that
+  order of payoff (ch. 3).</li>
+  <li><strong>Checkpointing</strong>: save regularly (weights + optimizer
+  state + current step + data generator seed), to resume exactly.</li>
+</ol>
+
+<h3>10.2. Monitoring: reading your curves</h3>
+
+<table class="tbl">
+<thead><tr><th>Symptom</th><th>Likely cause</th><th>Response</th></tr></thead>
+<tbody>
+<tr><td>loss = NaN</td><td>lr too large, log(0), unprotected softmax (ch. 0), fp16 overflow</td><td>divide lr by 10, log-softmax, loss scaling</td></tr>
+<tr><td>one-off loss spikes</td><td>aberrant batch, lr near the edge of 2/L (thm. 3.1)</td><td>inspect the data, lower the lr, gradient clipping</td></tr>
+<tr><td>exploding gradient norm</td><td>poorly conditioned recurrences (ch. 5)</td><td>clip \(\|\hat g\|\) to a threshold (standard: 1.0)</td></tr>
+<tr><td>train goes down, val stagnates</td><td>overfitting</td><td>ch. 3.6, in order of payoff</td></tr>
+<tr><td>neither train nor val moves</td><td>lr too small, blockage (dead ReLUs), loss mis-wired</td><td>LR range test, per-layer activation statistics</td></tr>
+</tbody>
+</table>
+
+<p>Tools: tensorboard/wandb; systematically log the loss, accuracy,
+gradient norm, weight norm, the fraction of zero activations (dying ReLU), and
+the activation histograms of a few layers.</p>
+
+<h3>10.3. GPU: the levers that matter</h3>
+
+<ul>
+  <li><strong>Mixed precision</strong> (bf16 preferably): ~2× throughput,
+  memory divided by ~2 — the first reflex (ch. 2).</li>
+  <li><strong>Batch and accumulation</strong>: saturate the GPU (measure
+  utilization); if memory runs out, accumulate small batches;
+  adjust the BatchNorm statistics accordingly.</li>
+  <li><strong>DataLoader</strong>: workers &gt; 0, pin_memory, prefetch — a GPU
+  waiting for data is a wasted GPU (CPU preprocessing is often the
+  real bottleneck).</li>
+  <li><strong>torch.compile</strong>, fused kernels (FlashAttention, ch. 6),
+  avoid CPU→GPU synchronizations inside the loop (the .item() / prints at each step).</li>
+</ul>
+
+<h3>10.4. Reproducibility</h3>
+
+<pre class="code"><code>import torch, numpy as np, random
+
+def seed_everything(seed=42):
+    random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+seed_everything(42)
+torch.backends.cudnn.deterministic = True    # determinism (speed cost)
+torch.backends.cudnn.benchmark = False       # disable non-deterministic autotuning</code></pre>
+
+<p>Set the seeds (python/numpy/torch/cuda), the data shuffling, and record
+the library versions; some CUDA kernels remain non-deterministic by
+nature (atomics); aim for reproducibility <em>up to a tolerance</em> rather
+than bit-for-bit, and document configurations and seeds in every experiment. Reproducibility
+is also a debugging tool: a random bug you know how to
+reproduce is half fixed.</p>
+</section>
+<section class="exercises" id="ex">
+<h2>Exercises</h2>
+<ol>
+  <li><strong>Backprop on paper.</strong> Recover the formulas of example 2.2 (two layers,
+  ReLU), then check them numerically by finite differences
+  \(\frac{\mathcal{L}(\theta + \epsilon e_j) - \mathcal{L}(\theta - \epsilon e_j)}{2\epsilon}\)
+  on a small network.</li>
+
+  <li><strong>Activation.</strong> Show that if \(\sigma\) is linear, an MLP of arbitrary depth
+  represents exactly the affine maps. Deduce why
+  <em>linear cascades</em> are useless.</li>
+
+  <li><strong>He initialization.</strong> Recover the factor 2 of He initialization:
+  for \(h = \mathrm{ReLU}(a)\) with \(a\) symmetric zero-mean, compute
+  \(\mathbb{E}[h^2]\) then the variance of the next layer.</li>
+
+  <li><strong>1D attention by hand.</strong> For \(n = 3\) tokens, \(d_k = 2\), compute by hand
+  \(QK^\top/\sqrt{d_k}\), the row-wise softmax, and the result \(\mathrm{softmax}(\cdot)V\).
+  Implement it, compare, and check that the rows of the attention matrix sum to 1.</li>
+
+  <li><strong>Permutation-invariance.</strong> Check experimentally that a transformer
+  block <em>without</em> positional encoding is invariant to the permutation of tokens, and
+  that adding a positional encoding breaks this invariance.</li>
+
+  <li><strong>Quadratic SGD.</strong> For \(A = \mathrm{diag}(4, 1)\), \(b = 0\),
+  \(\theta_0 = (1, 1)\): write the sequence \((\theta_k)\) for \(\eta = 1/2\) then
+  \(\eta = 1\), and verify theorem 3.1 (per-mode contraction, bound \(2/L\)).</li>
+
+  <li><strong>Adam bias correction.</strong> Prove proposition 3.5 for
+  \(v_t\) (second moment), then compute the update \(\hat m_1/\sqrt{\hat v_1}\)
+  at the first step and explain why the warmup protects.</li>
+
+  <li><strong>Convolution arithmetic.</strong> A \(32 \times 32\) input, three successive convs
+  (5×5, stride 2, padding 2; 3×3, stride 1, padding 1;
+  3×3, stride 1, padding 1, dilation 2): intermediate output sizes and
+  final receptive field (proposition 4.4).</li>
+
+  <li><strong>Gaussian KL.</strong> Derive the formula of proposition 7.4 in
+  dimension 1, plot \(\mathrm{KL}(\mathcal{N}(\mu, \sigma^2) \| \mathcal{N}(0,1))\)
+  as a function of \(\mu\) and \(\sigma\), and locate the minimum.</li>
+
+  <li><strong>Gaussian GAN.</strong> For \(p_{\mathrm{data}} = \mathcal{N}(0, 1)\) and
+  \(p_G = \mathcal{N}(\mu, \sigma^2)\), write the logit of \(D^\star\) (difference of the
+  log-densities) and check that it is a trinomial in \(x\). Where does the equilibrium
+  lie?</li>
+
+  <li><strong>LoRA.</strong> Count the trainable parameters of a GPT-like model with 12 blocks
+  (\(d = 768\), attention + MLP) adapted by LoRA \(r = 8\) on the attention
+  projections only, and compare with full fine-tuning.</li>
+
+  <li><strong>Project.</strong> In PyTorch: classify MNIST with (a) an MLP, (b) a small
+  CNN, (c) a mini-transformer on patches (16 patches of 4×4). Plot the
+  train/val curves, compare the parameter counts and accuracy, comment with the
+  bias-variance decomposition, then apply the protocol of chapter 10 (overfitting
+  a batch, LR range test).</li>
+</ol>
+
+<div class="note">
+  <span class="tag">Solutions and hints (even-numbered exercises)</span>
+  <p><strong>Ex. 2.</strong> By induction: if
+  \(h^{(\ell)} = \sigma(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)})\) with
+  \(\sigma(t) = \alpha t\), then \(h^{(\ell)} = \alpha W^{(\ell)} h^{(\ell-1)} + \alpha b^{(\ell)}\)
+  remains affine in \(h^{(0)} = x\) — composing, \(f_\theta(x) = W x + c\) with
+  \(W = \prod_\ell \alpha W^{(\ell)}\): a single matrix, all the deep layers
+  collapse into one.&nbsp;
+  <strong>Ex. 4.</strong> The row-wise softmax makes each row a vector of positive weights
+  of sum 1; the multiplication by \(V\) makes each output a weighted average
+  of the <em>values</em>: this is a convex interpolation, exactly the message
+  passing of chapter 6.&nbsp;
+  <strong>Ex. 6.</strong> Decoupled modes: \((\theta_k)_1 = (1 - 4\eta)^k\),
+  \((\theta_k)_2 = (1-\eta)^k\). For \(\eta = 1/2\): factors \(-1\) (oscillation
+  without decay: exactly \(\eta = 2/L\), limiting case) and \(1/2\). For
+  \(\eta = 1\): factors \(-3\) (divergence: \(\eta &gt; 2/L\)) and \(0\)
+  (convergence in one step: \(\eta = 1/\lambda_2\)).&nbsp;
+  <strong>Ex. 8.</strong> Theorem 4.2: \(32 \to 16 \to 16 \to 14\)
+  (the third one: \(\lfloor (16 + 2 - 2\cdot 2 - 1)/1 \rfloor + 1 = 14\)).
+  Receptive field (proposition 4.4, with dilation: replace \((k-1)\) by
+  \(d(k-1)\)): \(\mathrm{RF}_1 = 5\), \(\mathrm{RF}_2 = 5 + 2 \cdot 2 = 9\),
+  \(\mathrm{RF}_3 = 9 + (2 \cdot 2)\cdot 2 = 17\) pixels, for a product of strides
+  \(\prod s = 2\).&nbsp;
+  <strong>Ex. 10.</strong> Unique global minimum at \((\mu, \sigma) = (0, 1)\);
+  the logit of \(D^\star\) is
+  \(\frac{x^2}{2}\big(\frac{1}{\sigma^2} - 1\big) - \frac{x\mu}{\sigma^2} + \frac{\mu^2}{2\sigma^2} + \log\sigma\):
+  a trinomial in \(x\), identically zero at the equilibrium \((\mu, \sigma) = (0, 1)\).</p>
+</div>
+
+<div class="note">
+  <span class="tag">Hints (odd-numbered exercises)</span>
+  <p><strong>Ex. 1.</strong> Take \(\epsilon \sim 10^{-6}\) in float64 for the
+  check; the error of the central finite difference is
+  \(\mathcal{O}(\epsilon^2)\).&nbsp;
+  <strong>Ex. 3.</strong> \(\mathbb{E}[h^2] = \mathbb{E}[a^2 \mathbf{1}_{a&gt;0}] = \tfrac12\mathbb{E}[a^2]\)
+  by symmetry of \(a\): the variance of the next layer is halved,
+  hence \(\mathrm{Var}(W) = 2/n_{\mathrm{in}}\).&nbsp;
+  <strong>Ex. 5.</strong> Permute the rows of the input batch
+  (\(x[\mathrm{perm}]\)) and compare the outputs up to a transformation: the
+  property is exact (not an approximation), the softmax being unchanged by
+  re-indexing.&nbsp;
+  <strong>Ex. 7.</strong> Re-derive the geometric sum with \(g_k^2\) constant;
+  at step 1, \(\hat m_1 = g_1\) and \(\hat v_1 = g_1^2\) — the ratio is
+  \(\mathrm{sign}(g_1)\), a step of size \(\eta\) whether \(g_1\) is tiny or
+  huge: hence the caution of the warmup when \(g_1\) is atypical.&nbsp;
+  <strong>Ex. 9.</strong> The minimum of \(\tfrac12(\mu^2 + \sigma^2 - 1 - \log\sigma^2)\)
+  zeroes \(\mu\) and \(\sigma\) (derivative with respect to \(\sigma^2\):
+  \(\tfrac12(1 - 1/\sigma^2) = 0\)).&nbsp;
+  <strong>Ex. 11.</strong> Per block: 4 attention matrices \(d \times d\), i.e.
+  \(4 \times 2 \times 8 \times 768 = 49{,}152\) LoRA parameters, versus
+  \(4 \times 768^2 \approx 2.36\) M for full — and the MLP is not adapted;
+  LoRA total ~0.6 M for ~85 M full.</p>
+</div>
+</section>
+<section class="chapter refs" id="refs">
+<h2>References</h2>
+
+<h3>Textbooks and courses</h3>
+<ul>
+  <li>I. Goodfellow, Y. Bengio, A. Courville, <em>Deep Learning</em>, MIT Press, 2016 — <a href="https://www.deeplearningbook.org/">free online</a>; chapters 6-8 for this module.</li>
+  <li>A. Zhang, Z. Lipton, M. Li, A. Smola, <em>Dive into Deep Learning</em>, 2023 — <a href="https://d2l.ai">d2l.ai</a>: code-first interactive course (PyTorch), very close to the labs.</li>
+  <li>A. Karpathy, <a href="https://karpathy.ai/zero-to-hero.html">Neural Networks: Zero to Hero</a> — building a GPT from scratch; and his "transformer = graph" reading (<em>Software 3.0</em>, Stanford, 2025-2026) which grounds the LLGA bridge.</li>
+  <li>S. Raschka, <em>Machine Learning with PyTorch and Scikit-Learn</em>, Packt, 2022 — for practice.</li>
+</ul>
+
+<h3>Founding papers (course chronology)</h3>
+<ul>
+  <li>G. Cybenko, <em>Approximation by Superpositions of a Sigmoidal Function</em>, Mathematics of Control, Signals and Systems, 1989 — theorem 1.2.</li>
+  <li>X. Glorot, Y. Bengio, <em>Understanding the Difficulty of Training Deep Feedforward Neural Networks</em>, AISTATS 2010 — Xavier initialization.</li>
+  <li>A. Krizhevsky, I. Sutskever, G. Hinton, <em>ImageNet Classification with Deep CNNs</em>, NeurIPS 2012 (AlexNet); K. Simonyan, A. Zisserman, <a href="https://arxiv.org/abs/1409.1556">Very Deep Convolutional Networks</a> (VGG), ICLR 2015.</li>
+  <li>D. Kingma, J. Ba, <a href="https://arxiv.org/abs/1412.6980">Adam: A Method for Stochastic Optimization</a>, ICLR 2015 — algorithm 3.4, derived step by step.</li>
+  <li>K. He et al., <a href="https://arxiv.org/abs/1502.01852">Delving Deep into Rectifiers</a> (He init), ICCV 2015; <a href="https://arxiv.org/abs/1512.03385">Deep Residual Learning for Image Recognition</a> (ResNet), CVPR 2016.</li>
+  <li>S. Ioffe, C. Szegedy, <a href="https://arxiv.org/abs/1502.03167">Batch Normalization</a>, ICML 2015; J. Ba, J. Kiros, G. Hinton, <a href="https://arxiv.org/abs/1607.06450">Layer Normalization</a>, 2016; S. Santurkar et al., <a href="https://arxiv.org/abs/1805.11604">How Does Batch Normalization Help Optimization?</a>, NeurIPS 2018.</li>
+  <li>N. Srivastava et al., <em>Dropout</em>, JMLR 15, 2014; I. Loshchilov, F. Hutter, <a href="https://arxiv.org/abs/1711.05101">Decoupled Weight Decay Regularization</a> (AdamW), ICLR 2019.</li>
+  <li>D. Hendrycks, K. Gimpel, <a href="https://arxiv.org/abs/1606.08415">Gaussian Error Linear Units</a> (GELU), 2016.</li>
+  <li>A. Vaswani et al., <a href="https://arxiv.org/abs/1706.03762">Attention Is All You Need</a>, NeurIPS 2017 — the paper to read line by line.</li>
+  <li>J. Su et al., <a href="https://arxiv.org/abs/2104.09864">RoFormer: Enhanced Transformer with Rotary Position Embedding</a>, 2021; T. Dao et al., <a href="https://arxiv.org/abs/2205.14135">FlashAttention</a>, NeurIPS 2022.</li>
+  <li>D. Kingma, M. Welling, <a href="https://arxiv.org/abs/1312.6114">Auto-Encoding Variational Bayes</a>, ICLR 2014; I. Goodfellow et al., <a href="https://arxiv.org/abs/1406.2661">Generative Adversarial Nets</a>, NeurIPS 2014.</li>
+  <li>E. Hu et al., <a href="https://arxiv.org/abs/2106.09685">LoRA: Low-Rank Adaptation of Large Language Models</a>, ICLR 2022; Aghajanyan et al., <em>Intrinsic Dimensionality</em>, ICML 2021.</li>
+  <li>L. Smith, <a href="https://arxiv.org/abs/1506.01186">Cyclical Learning Rates for Training Neural Networks</a>, WACV 2017 (LR range test); T. Chen et al., <a href="https://arxiv.org/abs/1604.06174">Training Deep Nets with Sublinear Memory Cost</a>, 2016 (checkpointing).</li>
+</ul>
+
+<h3>Research of the teaching team</h3>
+<ul>
+  <li>F. Rousseau, M. Vazirgiannis, <em>Graph-of-Word and TW-IDF: New Approach to Ad Hoc IR</em>, CIKM 2013 — the "Graph of Words" of chapter 9; F. Rousseau, E. Kiagias, M. Vazirgiannis, <a href="https://link.springer.com/chapter/10.1007/978-3-319-16354-3_42">Main Core Retention on Graph-of-Words for Single-Document Keyword Extraction</a>, ECIR 2015.</li>
+  <li>D. Skianis, F. Rousseau, M. Vazirgiannis, <a href="https://aclanthology.org/2020.acl-main.31.pdf">Inductive Text Classification via Graph Neural Networks</a>, ACL 2020.</li>
+  <li>G. Michel, G. Nikolentzos, M. Vazirgiannis, <a href="https://arxiv.org/abs/2306.05955">Path Neural Networks: Expressive and Accurate Graph Neural Networks</a>, ICML 2023.</li>
+  <li>J. Lutzeyer, C. Wu, M. Vazirgiannis, <a href="https://arxiv.org/abs/2109.00909">Sparsifying the Update Step in Graph Neural Networks</a>, 2021.</li>
+  <li>Y. Abbahaddou, J. Lutzeyer, M. Vazirgiannis, <a href="https://arxiv.org/abs/2410.20469">Graph Neural Networks on Discriminative Graphs of Words</a>, NeurIPS 2023 (extended version).</li>
+  <li>Z. Cui, J. Lutzeyer et al., <a href="https://arxiv.org/abs/2509.22100">SHAKE-GNN: Scalable Hierarchical Kirchhoff-Forest Graph Neural Network</a>, 2025.</li>
+  <li>Y. Zhu et al., <a href="https://arxiv.org/abs/2302.08357">Boundary Guided Learning-Free Semantic Control with Diffusion Models</a>, NeurIPS 2023; <a href="https://arxiv.org/abs/2206.07771">Discrete Contrastive Diffusion for Cross-Modal Music and Image Generation</a>, ICLR 2023; <a href="https://arxiv.org/abs/2306.08247">Diffusion in Diffusion</a>, ICLR 2024; <a href="https://arxiv.org/abs/2412.05101">The Silent Assistant: NoiseQuery as Implicit Guidance</a>, ICCV 2025.</li>
+</ul>
+</section>
+</main>
+<footer class="foot">
+<p><a href="../../index.html">← Master's program</a></p>
+</footer>
+</body>
+</html>

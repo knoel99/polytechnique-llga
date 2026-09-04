@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataBase Management System — LLGA</title>
+<link rel="stylesheet" href="../../assets/paper.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<p class="crumb"><a href="../../index.html">MSc&amp;T LLGA · Course notes</a></p>
+<main class="paper">
+<h1>DataBase Management System</h1>
+<p class="subtitle">CSC_51053_EP · Year 1 · Period 1</p>
+<nav class="toc">
+<p class="toc-title">Contents</p>
+<ol>
+<li><a href="#intro">Introduction and overview</a></li>
+<li><a href="#ch0">0. Review: sets, relations, complexity</a></li>
+<li><a href="#ch1">1. The relational model and algebra</a></li>
+<li><a href="#ch2">2. SQL: queries, aggregates, windowing</a></li>
+<li><a href="#ch3">3. Design: dependencies and normal forms</a></li>
+<li><a href="#ch4">4. Storage: pages, files, external sorting</a></li>
+<li><a href="#ch5">5. Indexes: B+ trees and hashing</a></li>
+<li><a href="#ch6">6. Transactions and concurrency</a></li>
+<li><a href="#ch7">7. The log and crash recovery</a></li>
+<li><a href="#ch8">8. Query optimization</a></li>
+<li><a href="#ch9">9. Beyond relational: NoSQL, graphs, vectors</a></li>
+<li><a href="#ch10">10. Web data and heterogeneous integration</a></li>
+<li><a href="#ch11">11. Research of the teaching team</a></li>
+<li><a href="#ex">Exercises</a></li>
+<li><a href="#refs">References</a></li>
+</ol>
+</nav>
+<section class="chapter" id="intro">
+<h2>Introduction and overview</h2>
+<table class="tbl">
+<tr><th style="width:160px">Module</th><td>DataBase Management Systems (official catalog title: "Système de Gestion de Base de Données")</td></tr>
+<tr><th>Code</th><td>CSC_51053_EP</td></tr>
+<tr><th>Team and workload</th><td>Coordinator: Madhulika Mohanty (Inria Saclay, CEDAR team · École Polytechnique) · 36&nbsp;h in person · 4.5 ECTS · from the relational model and SQL to transactions, B+ trees, and query optimization — up to knowledge graphs, vector databases, and data fact-checking, the research themes of the CEDAR team.</td></tr>
+<tr><th>Period</th><td>Fall 2026 · period 1 (from 09/17/2026 to 12/18/2026) · course taught in English</td></tr>
+<tr><th>Assessment</th><td>50% final written exam (paper documents allowed) · 50% three 30-minute tests in small classes starting mid-October</td></tr>
+<tr><th>Status in the program</th><td><span class="badge option">P1 elective</span><span class="badge position">Outside the recommended track</span></td></tr>
+</table>
+
+<p>No model, no LLM, no knowledge graph exists without data that is stored, queried, and made trustworthy: that is the role of database management systems. This course covers the complete chain — relational model, SQL, design, storage, indexes, transactions, crash recovery, optimization — then opens onto graph databases, vector databases, and the integration of heterogeneous web data. It is the "data" side of the LLGA master's program: the RAG of LLMs and the GraphRAG of GNNs literally rest on these systems, and this is a skill immediately monetizable in industry.</p>
+
+<h3>What you will be able to do</h3>
+<ul>
+<li>Express a query in both relational algebra and SQL, including aggregates and window functions.</li>
+<li>Design a clean schema: functional dependencies, normal forms, and know when to denormalize wisely.</li>
+<li>Explain how a query actually executes: pages, files, external sorting, B+ trees, hashing.</li>
+<li>Reason about a transaction: ACID, isolation levels, concurrency, deadlocks.</li>
+<li>Describe the crash recovery guarantee provided by the log (WAL) — what makes a database trustworthy.</li>
+<li>Read an execution plan and optimize a slow query (indexes, rewriting, cost).</li>
+<li>Choose between relational, NoSQL, graph database, and vector database depending on the workload and the data model.</li>
+<li>Integrate heterogeneous web data and assess its trustworthiness, up to data fact-checking.</li>
+</ul>
+
+<h3>Official objectives and syllabus (2026-2027 catalog)</h3>
+<p>In the official catalog, the course unit <em>Système de Gestion de Base de Données</em> (X3A&nbsp;VE3) sets itself the objective of a "broad and in-depth presentation of the fundamental concepts in very large-scale data management", drawing on PostgreSQL to introduce declarative queries, query optimization, data modeling, concurrency control and crash recovery, with labs where students load and query a real database, including through a web application. This is exactly the arc followed by these materials, from the relational model to optimization — and our opening chapters (NoSQL, web data) extend this foundation toward the RAG and GraphRAG systems of the master's program. The sheet lists no prerequisites (not disclosed); the assessment combines a final written exam and three graded tests in small classes.</p>
+<table class="tbl">
+<tr><th>Official program theme</th><th>Course section</th></tr>
+<tr><td>Data modeling: entity-association model, relational model</td><td>Chapter 1 (Def. 1.1 for the relational model, Def. 1.8 for the entity-association → relational mapping), extended in chapter 3</td></tr>
+<tr><td>Relational algebra, relational calculus</td><td>Chapter 1 (Def. 1.3 and Th. 1.7 — algebra/calculus equivalence)</td></tr>
+<tr><td>The query language of relational databases: SQL</td><td>Chapter 2</td></tr>
+<tr><td>Quality of relational schemas, normal forms</td><td>Chapter 3</td></tr>
+<tr><td>Subsystem of relational DBMS: disks, files, buffers</td><td>Chapter 4 (Def. 4.1 for pages and files, Def. 4.5 for the buffer pool)</td></tr>
+<tr><td>Indexing: tree structures, array structures</td><td>Chapter 5 (B+ trees and hashing)</td></tr>
+<tr><td>Evaluation of relational operators</td><td>Chapter 8 (Def. 8.2 for joins, Def. 8.5 for selection access paths)</td></tr>
+<tr><td>Optimization of SQL queries</td><td>Chapter 8</td></tr>
+<tr><td>Transaction management</td><td>Chapter 6</td></tr>
+<tr><td>Concurrency control</td><td>Chapter 6</td></tr>
+</table>
+<p>Every official theme of the syllabus is covered; crash recovery, mentioned in the official description, is the subject of chapter 7. Our additions, beyond the official syllabus: the review chapter 0 (sets, relations, complexity), chapter 9 (NoSQL, graph and vector databases), chapter 10 (web data and heterogeneous integration) and chapter 11 (the work of the CEDAR team). Note: this course unit does not appear in the LLGA-1-S1 track list of the 2026-2027 catalog, although its sheet remains published there and scheduled in period 1.</p>
+
+<h3>Where this course fits in the program</h3>
+<p>Elective of Year&nbsp;1 · Period&nbsp;1 (36&nbsp;h, 4.5&nbsp;ECTS), outside the recommended track: the "data" choice of the period. Official prerequisites: not stated on the sheet; these materials lay down the <a href="../m1p1-refresher-cs/">Refresher in Computer Science</a> module as their foundation, whose sets, relations and complexity analysis they constantly mobilize — external sorting and indexes are reasoned about in algorithmic cost.</p>
+<p>Downstream, this module feeds three parts of the master's program. The <a href="../m1p2-graph-ml/">Graph Machine and Deep Learning for Generative AI</a> module builds on the graph databases seen in the "Beyond relational" chapter, up to GraphRAG architectures that combine GNNs and graph querying; the M2 module <a href="../m2-large-language-models/">Large Language Models</a> assumes the culture of vector databases and RAG (retrieval-augmented generation) laid down here; <a href="../m2-mlops-llm-engineering/">ML Ops and LLM Engineering Principles</a> reuses transactions, reliability, and data pipeline integration for industrialization. The research of the CEDAR team (Inria) on knowledge graphs and fact-checking also announces concrete internship topics.</p>
+
+<h3>Course outline</h3>
+<ul>
+<li><strong>Review: sets, relations, complexity</strong>: the mathematical and algorithmic foundation taken up from the Refresher in Computer Science.</li>
+<li><strong>The relational model and algebra</strong>: the theory behind SQL — operators, semantics, equivalences.</li>
+<li><strong>SQL: queries, aggregates, windowing</strong>: the most directly reusable skill of the master's program.</li>
+<li><strong>Design: dependencies and normal forms</strong>: designing schemas without redundancy or anomalies.</li>
+<li><strong>Storage: pages, files, external sorting</strong>: what happens under the query, when data overflows memory.</li>
+<li><strong>Indexes: B+ trees and hashing</strong>: fetching information without reading everything — the real performance gain.</li>
+<li><strong>Transactions and concurrency</strong>: ACID, isolation, locks — many users, one consistent database.</li>
+<li><strong>The log and crash recovery</strong>: why a well-designed database loses nothing, even on a crash.</li>
+<li><strong>Query optimization</strong>: execution plans, rewrites, costs — diagnosing and speeding up.</li>
+<li><strong>Beyond relational: NoSQL, graphs, vectors</strong>: the modern database families, and when each one wins — the pivotal chapter for GraphRAG and RAG.</li>
+<li><strong>Web data and heterogeneous integration</strong>: confronting multiple, inconsistent, sometimes false sources.</li>
+<li><strong>Research of the teaching team</strong>: the research of the CEDAR team (Inria) — knowledge graphs and data fact-checking.</li>
+</ul>
+
+<h3>How to study this module</h3>
+<ul>
+<li>Practice SQL from the first week on a real database (SQLite or PostgreSQL): the SQL chapter is a gesture, kept up by typing queries.</li>
+<li>For each internal mechanism (index, log, external sorting), ask yourself "what happens if the data is a hundred times the memory?" — that is the question that structures the course.</li>
+<li>Go back if needed to the complexity chapter of the <a href="../m1p1-refresher-cs/">Refresher in Computer Science</a> module: B+ trees and optimization are reasoned about in big-O.</li>
+<li>Build a small schema yourself, populate it, then deliberately degrade it (concurrency, wild deletions) to observe transactions and the log at work.</li>
+<li>Pay particular attention to the "Beyond relational" chapter: it is the one that directly connects to <a href="../m1p2-graph-ml/">Graph ML</a> and to the M2 LLMs.</li>
+<li>Do the optimization exercises on real execution plans (EXPLAIN): knowing how to read a plan is highly valued in internships and jobs alike.</li>
+</ul>
+
+<div class="note">
+<span class="tag">A word from the teaching team</span>
+Crossing LLMs and graphs — the identity of the LLGA master's program — requires knowing where and how data lives: relational databases, graph databases, vector databases. This module provides this command of the data foundation, shared by the engineers who deploy RAG systems and the researchers who make knowledge graphs speak.
+</div>
+</section>
+<section class="chapter" id="ch0">
+<h2>0. Review: sets, relations, complexity</h2>
+
+<div class="recap">
+  <div class="recap-title">L3 review material used</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Sets and Cartesian products</strong>: \(A_1 \times \cdots \times A_k\),
+    cardinality of the product \(|A_1 \times A_2| = |A_1|\cdot|A_2|\), subsets, differences;
+    a <em>relation</em> in the database sense is a subset of a Cartesian product;</li>
+    <li><strong>Binary relations</strong>: reflexivity, transitivity, transitive closure —
+    the hidden tool behind the theory of functional dependencies (ch. 3) and recursive
+    queries (ch. 2);</li>
+    <li><strong>First-order logic</strong>: quantifiers \(\forall, \exists\),
+    negation of quantifiers (\(\neg\forall x\, P \equiv \exists x\, \neg P\)) — SQL
+    is nothing but an evaluable fragment of this logic;</li>
+    <li><strong>Complexity</strong>: notations \(O, \Theta, \Omega\), logarithms
+    (\(\log_b x = \ln x / \ln b\)), average complexity of hash tables (L3
+    algorithms review), sorting and merging;</li>
+    <li><strong>A bit of probability</strong>: uniform draws, expectation, the
+    "\(n\) balls into \(m\) bins" paradigm used in ch. 5 (hashing).</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 0.1 — Sizes of products and projections</span>
+  Let \(R \subseteq A \times B\) be a finite binary relation. Then
+  $$|\pi_A(R)| \leq |R| \leq |\pi_A(R)| \cdot |\pi_B(R)|,$$
+  where \(\pi_A\) denotes the projection (the set of values of \(A\) actually
+  present). The left bound is attained as soon as one value of \(A\) appears in
+  several pairs; the right one is attained for the complete product
+  \(R = \pi_A(R) \times \pi_B(R)\). These bounds, trivial in appearance, are the
+  foundation of <em>all</em> the cardinality estimates of chapter 8: an optimizer
+  never knows the exact content of the tables, only statistics (number of
+  distinct values, histograms), and must bracket the sizes of intermediate
+  results in order to choose an execution plan.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Why this module in an LLGA master's program?</span>
+  Every model lives on data: extracting it, cleaning it, integrating it,
+  indexing it, then serving models in production (vector search). This
+  module covers the layer beneath ML: where the <em>Machine Learning</em>
+  module (ch. 1) assumes clean tables, we explain where they come from.
+  Links given along the way: Graph ML (ch. 9), LLMs
+  (ch. 9-10), NLP (ch. 10).
+</div>
+</section>
+<section class="chapter" id="ch1">
+<h2>1. The relational model and algebra</h2>
+
+<p>The relational model, proposed by E.&nbsp;F. Codd in 1970, rests on a radically
+simple idea: representing data as (mathematical) <em>relations</em>, that is, sets
+of tuples, and querying them with operations that are <em>closed</em> on these
+sets. The physical structure is invisible: this separation between the
+declarative and the physical is what made the model successful, and it is what
+will make the automatic optimization of chapter 8 possible.</p>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Schema, relation, instance</span>
+  A <strong>relation schema</strong> is a name and a list of attributes
+  \(R(A_1\!: D_1, \dots, A_n\!: D_n)\), where \(D_i\) is a domain of values. An
+  <strong>instance</strong> of \(R\) is a finite set
+  \(r \subseteq D_1 \times \cdots \times D_n\) (no duplicates: a relation is a
+  <em>set</em>). A <strong>database schema</strong> is a set of relation
+  schemas. A <strong>key constraint</strong> \(K \subseteq \{A_1,\dots,A_n\}\)
+  requires that two distinct tuples do not coincide on \(K\).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 1.2 — Running example database</span>
+  Three relations suffice for the whole chapter:
+  <table class="tbl">
+    <tr><th>Student (<span style="text-decoration:underline">id</span>, name, major)</th><th>Course (<span style="text-decoration:underline">code</span>, title, credits)</th></tr>
+    <tr><td>(1043, Anna, DS)&nbsp;· (1088, Bruno, AI)&nbsp;· (2101, Chloé, DS)</td>
+        <td>(DB, Databases, 4)&nbsp;· (DL, Deep Learning, 5)&nbsp;· (OT, Optimal Transport, 3)</td></tr>
+  </table>
+  and the association relation <code>Enrolled(id, code, year)</code> with the tuples
+  (1043, DB, 2025), (1043, DL, 2026), (1088, DB, 2025), (1088, OT, 2025),
+  (2101, DL, 2025). The pair (id, code) is the key of <code>Enrolled</code>.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.3 — Relational algebra</span>
+  Relational algebra is the smallest family of operations, all closed
+  (an operation on relations returns a relation):
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>selection</strong> \(\sigma_p(R)\): tuples of \(R\) satisfying the
+    predicate \(p\) (comparisons and logical connectives);</li>
+    <li><strong>projection</strong> \(\pi_L(R)\): restriction to the attributes of \(L\),
+    with duplicate elimination;</li>
+    <li><strong>Cartesian product</strong> \(R \times S\), <strong>union</strong> \(R \cup S\)
+    (compatible schemas), <strong>difference</strong> \(R - S\), <strong>renaming</strong>
+    \(\rho_{A \to B}(R)\);</li>
+    <li><strong>join</strong> \(R \Join_p S := \sigma_p(R \times S)\) and
+    <strong>natural join</strong> \(R \Join S\) (equality of identically named
+    attributes, then projection of duplicated columns);</li>
+    <li><strong>aggregation</strong> \({}_G\gamma_{f(A)}(R)\): partition of \(R\)
+    according to the attributes \(G\), computation of the group function \(f\)
+    (\(\texttt{count},
+    \texttt{sum}, \texttt{avg}, \texttt{min}, \texttt{max}\)) — an extension of
+    Codd's initial algebra, indispensable in practice.</li>
+  </ul>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.4 — Fundamental equivalence laws</span>
+  The following equivalences hold for all instances (verified by expanding the
+  set-theoretic definitions):
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li>\(\sigma_{p_1 \wedge p_2}(R) = \sigma_{p_1}(\sigma_{p_2}(R))\) and
+    \(\sigma_{p_1}(\sigma_{p_2}(R)) = \sigma_{p_2}(\sigma_{p_1}(R))\) (commutativity);</li>
+    <li>if \(p\) only involves attributes of \(R\):
+    \(\sigma_p(R \Join S) = \sigma_p(R) \Join S\) — this is the
+    <em>selection push-down</em> law, the heart of the heuristics of ch. 8;</li>
+    <li>\(\pi_{L_1}(\pi_{L_2}(R)) = \pi_{L_1}(R)\) whenever \(L_1 \subseteq L_2\);</li>
+    <li>\(R \Join_p S = S \Join_p S'\) with symmetrized predicate (commutativity) and
+    \((R \Join S) \Join T = R \Join (S \Join T)\) (associativity) — hence the freedom
+    of choice of the <em>join order</em>, exponential but fruitful.</li>
+  </ul>
+</div>
+
+<div class="proof">
+Proof of the push-down law (the others are in the same style). Let \(t\) be a tuple of
+\(R \Join S\) that satisfies \(p\). By definition \(t = (u, v)\) with \(u \in R\),
+\(v \in S\), and the join predicate satisfied; since \(p\) mentions only
+attributes of \(R\), \(p(t)\) depends only on \(u\), hence \(u \in \sigma_p(R)\) and
+\(t \in \sigma_p(R) \Join S\). Conversely the inclusion is immediate since
+\(\sigma_p(R) \subseteq R\). <span class="qed">∎</span>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 1.5 — Step-by-step evaluation</span>
+  "Majors of the students enrolled in 2025 in a course of at least 4 credits":
+  $$\pi_{\texttt{major}}\Big(\sigma_{\texttt{year}=2025}\big(\texttt{Enrolled}\big)
+  \Join \pi_{\texttt{code}}\big(\sigma_{\texttt{credits}\geq 4}(\texttt{Course})\big)
+  \Join \texttt{Student}\Big).$$
+  On Example 1.2: the courses kept are {DB, DL}; \(\sigma_{2025}\)
+  keeps (1043, DB), (1088, DB), (1088, OT), (2101, DL); the join eliminates
+  (1088, OT); after the join with Student and projection:
+  {DS, AI, DS} → {DS, AI} by eliminating duplicates. The order of the operations
+  above (the most restrictive first) is not the only possible one: starting with
+  \(\texttt{Enrolled} \Join \texttt{Student}\) would be correct but more costly —
+  the whole subject of ch. 8.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.6 — Relational division</span>
+  The <strong>division</strong> \(R \div S\) (with the schema of \(S\) included in
+  that of \(R\)) returns the tuples \(u\) over the remaining attributes such that
+  \(\{u\} \times S \subseteq R\). It expresses the <em>universal</em> quantifier:
+  "the \(x\) associated with <strong>all</strong> the \(y\) of \(S\)". It is
+  programmed without a dedicated operator by the scheme \(\pi_X(R) - \pi_X\big((\pi_X(R) \times S) - R\big)\),
+  where \(X\) are the attributes of \(R\) absent from \(S\).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 1.7 — Codd: algebra and relational calculus</span>
+  Relational algebra (with renaming) is <em>equivalent</em> to the safe tuple
+  relational calculus: every query expressible in one is expressible in the
+  other. This result (1972) establishes the <strong>relational completeness</strong>
+  of SQL: everything that is computable in a finite, set-oriented way on
+  relations is expressible in SQL. On the other hand, neither the basic algebra
+  nor SQL can express the <em>transitive closure</em> of a graph (queries of the
+  "ancestors" type), except by using the recursion of ch. 2 or specific
+  extensions.
+  <div class="proof" style="margin-top:.5rem;">Sketch. For the calculus → algebra
+  direction, one translates a safe formula \( \{x \mid \varphi(x)\} \) by
+  structural induction:
+  the positive use of \(\exists\) becomes a projection of a product (with renaming
+  for the free variables), conjunction a join, negation a difference —
+  safeness (domains remain finite) guarantees that these constructions terminate.
+  The algebra → calculus direction is an immediate induction over the operators.
+  The inexpressiveness of transitive closure is proved by bounding arguments
+  (any non-recursive query "sees" a number of joins fixed in advance, hence a
+  bounded diameter in the graph). <span class="qed">∎</span></div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.8 — Entity-association (E-A) model and the move to relational</span>
+  Design starts at the <em>conceptual</em> level, before any relation schema:
+  an <strong>entity-association</strong> model describes <strong>entities</strong>
+  (students, courses), their <strong>attributes</strong>, and
+  <strong>associations</strong> between them, each association carrying a
+  <em>cardinality</em> (1-1, 1-N, N-M) — for example <code>Student</code>—Enrolled(year)—<code>Course</code>
+  is an N-M association carrying the attribute <code>year</code>. The translation to
+  the relational model is mechanical: each entity becomes a relation (its
+  identifier becomes the key); a 1-N association is absorbed by a foreign key
+  on the N side; an N-M association becomes a relation in its own right whose
+  key is the union of the keys of the linked entities (exactly the
+  <code>Enrolled</code> relation of Example 1.2). This E-A → relational passage is the
+  first step of the normalized design of ch. 3.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Set semantics vs. multiset semantics</span>
+  The algebra described here is <em>set-based</em> (no duplicates). Real engines
+  manipulate <em>multisets</em>: without <code>DISTINCT</code>,
+  duplicates survive, and the cardinalities of ch. 8 account for them.
+  Duplicate elimination costs a sort or a hash — never free;
+  that is why SQL does not do it by default.
+</div>
+</section>
+<section class="chapter" id="ch2">
+<h2>2. SQL: queries, aggregates, windowing</h2>
+
+<p>SQL is a <em>declarative</em> language: one describes the result, not the
+algorithm. Its logical semantics is understood in three stages, which one must
+know in order to predict what a query returns — and which every optimizer
+rewrites in its own way (ch. 8):
+<code>FROM</code> produces the Cartesian product/joins, <code>WHERE</code>
+selects row by row, then <code>GROUP BY</code> + <code>SELECT</code>
+group, aggregate, and project.</p>
+
+<div class="def">
+  <span class="tag">Definition 2.1 — Semantics of the basic block</span>
+  The query <code>SELECT [DISTINCT] L FROM R1, …, Rk WHERE p</code> returns
+  $$\pi_L\big(\sigma_p(R_1 \times \cdots \times R_k)\big)$$
+  (multiset if <code>DISTINCT</code> is absent, set otherwise). A
+  <strong>subquery</strong> is a nested query; <code>IN</code> and
+  <code>EXISTS</code> correspond to semi-joins:
+  <code>WHERE EXISTS (SELECT …)</code> tests that the answer is non-empty, which
+  makes it possible in particular to express differences with <code>NOT EXISTS</code>.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.2 — Translating quantifiers</span>
+  "The \(x\) such that \(\forall y \in S,\; \theta(x,y)\)" is translated in SQL
+  by anti-join:
+  <code>… WHERE NOT EXISTS (SELECT 1 FROM S WHERE NOT θ)</code>.
+  "There exists" is a simple <code>EXISTS</code>. This double negation is the
+  direct legacy of the fact that SQL has no universal quantifier — and of
+  Proposition 1.7: the division of ch. 1 does not exist as an operator, it is
+  programmed.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 2.3 — Aggregates and the HAVING clause</span>
+  A query with <code>GROUP BY g</code> partitions the selected rows according to
+  the values of \(g\), and each group produces <em>one</em> row: the
+  <code>SELECT</code> may mention only \(g\) and aggregates. The
+  <code>HAVING</code> clause filters <em>the groups</em> (after aggregation),
+  whereas <code>WHERE</code> filters the rows (before): $$\pi_{g,f}\big({}_g\gamma_f(
+  \sigma_p(R))\big) \;=\; \texttt{SELECT g, f(a) … WHERE p GROUP BY g HAVING q(f)}.$$
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.4 — Windowing (window functions)</span>
+  Window functions compute an aggregate <em>without grouping</em>: each
+  row keeps its identity and additionally receives the value computed over its
+  "window"
+  (all the rows sharing its partition, possibly ordered). On:
+  <table class="tbl">
+    <tr><th>student</th><th>subject</th><th>grade</th></tr>
+    <tr><td>Anna</td><td>ALG</td><td>16</td></tr>
+    <tr><td>Anna</td><td>PROG</td><td>14</td></tr>
+    <tr><td>Anna</td><td>STATS</td><td>12</td></tr>
+    <tr><td>Bruno</td><td>PROG</td><td>18</td></tr>
+    <tr><td>Chloé</td><td>ALG</td><td>15</td></tr>
+    <tr><td>Chloé</td><td>PROG</td><td>17</td></tr>
+  </table>
+  the query <code>SELECT student, grade,
+  ROW_NUMBER() OVER (PARTITION BY student ORDER BY grade DESC) AS personal_rank,
+  AVG(grade) OVER (PARTITION BY student) AS average,
+  RANK()       OVER (ORDER BY grade DESC)        AS global_rank
+  FROM Grades</code> returns:
+  <table class="tbl">
+    <tr><th>student</th><th>grade</th><th>personal_rank</th><th>average</th><th>global_rank</th></tr>
+    <tr><td>Anna</td><td>16</td><td>1</td><td>14.0</td><td>3</td></tr>
+    <tr><td>Anna</td><td>14</td><td>2</td><td>14.0</td><td>5</td></tr>
+    <tr><td>Anna</td><td>12</td><td>3</td><td>14.0</td><td>6</td></tr>
+    <tr><td>Bruno</td><td>18</td><td>1</td><td>18.0</td><td>1</td></tr>
+    <tr><td>Chloé</td><td>17</td><td>1</td><td>16.0</td><td>2</td></tr>
+    <tr><td>Chloé</td><td>15</td><td>2</td><td>16.0</td><td>4</td></tr>
+  </table>
+  Note the behavior of <code>RANK()</code> (ties = same rank, next rank
+  shifted: after two 5s there would be a 7) and the partition/global
+  difference. Windows, standardized in 2003, are today the standard tool for
+  top-\(k\) per group, running totals (running sums via <code>ROWS BETWEEN
+  UNBOUNDED PRECEDING AND CURRENT ROW</code>), and cross-period comparisons.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 2.5 — NULL and three-valued logic</span>
+  SQL distinguishes "unknown value" (<code>NULL</code>) from actual values.
+  Any comparison with <code>NULL</code> returns <code>UNKNOWN</code>, and
+  <code>WHERE</code> keeps only the <code>TRUE</code> rows — the
+  <code>UNKNOWN</code> ones are silently eliminated. Truth tables extend
+  naturally:
+  <table class="tbl">
+    <tr><th>AND</th><th>T</th><th>U</th><th>F</th></tr>
+    <tr><td>T</td><td>T</td><td>U</td><td>F</td></tr>
+    <tr><td>U</td><td>U</td><td>U</td><td>F</td></tr>
+    <tr><td>F</td><td>F</td><td>F</td><td>F</td></tr>
+  </table>
+  Trapping consequence: <code>NOT (a = 1)</code> is not <code>a != 1</code> if
+  <code>a</code> can be <code>NULL</code>; one needs <code>a IS DISTINCT FROM 1</code>
+  (SQL:1999) or an explicit <code>OR a IS NULL</code>. Aggregates ignore
+  <code>NULL</code>s (<code>AVG</code> divides by the number of non-<code>NULL</code>
+  values), while <code>COUNT(*)</code> counts them — two <code>COUNT</code>s that
+  differ are the classic symptom of incomplete data.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 2.6 — Recursion: WITH RECURSIVE</span>
+  SQL:1999 filled the gap of Theorem 1.7: a recursive CTE
+  <code>WITH RECURSIVE T AS (base UNION ALL SELECT … FROM T …)</code> computes the
+  <em>least fixed point</em> of the equation: one starts from the
+  <code>base</code> query and iterates the recursive part until no new tuples are
+  produced. This is exactly a transitive closure: DBMSs implement it as a
+  semi-naive data graph (a "delta" rewrite that re-evaluates only the new
+  tuples), and ch. 9 will find this fixed-point semantics again for querying
+  knowledge graphs.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.7 — Ancestors in a tree in SQLite</span>
+<pre class="code"><code>-- directed graph parent(y, x): y is a parent of x
+WITH RECURSIVE ancestor(a, d) AS (          -- a ancestor of d
+  SELECT parent, child FROM parent
+  UNION                                    -- UNION (without ALL) = deduplicated
+  SELECT p.parent, a.d
+  FROM ancestor a JOIN parent p ON p.child = a.a
+)
+SELECT d, COUNT(DISTINCT a) AS num_ancestors FROM ancestor GROUP BY d;
+-- semantics: fixed point; at each iteration, only the tuples
+-- produced at the previous iteration are expanded (semi-naive evaluation).
+</code></pre>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.8 — SQLite and SQLAlchemy in Python</span>
+<pre class="code"><code>import sqlite3
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, ForeignKey, select
+
+# --- 1. SQLite: everything lives in one file, ACID transactions included
+con = sqlite3.connect("school.db")
+con.execute("PRAGMA foreign_keys = ON")        # optional but recommended
+con.executescript("""
+CREATE TABLE IF NOT EXISTS student(
+  id INTEGER PRIMARY KEY, name TEXT NOT NULL, major TEXT);
+CREATE TABLE IF NOT EXISTS course(
+  code TEXT PRIMARY KEY, title TEXT, credits INTEGER CHECK (credits > 0));
+CREATE TABLE IF NOT EXISTS enrolled(
+  id INTEGER REFERENCES student(id),
+  code TEXT REFERENCES course(code),
+  year INTEGER, PRIMARY KEY (id, code));
+""")
+con.executemany("INSERT OR IGNORE INTO student VALUES (?,?,?)",
+                [(1043, "Anna", "DS"), (1088, "Bruno", "AI"), (2101, "Chloé", "DS")])
+
+# average per student, with a window to rank each one's courses
+q = """
+SELECT e.name, c.title, i.year,
+       RANK() OVER (PARTITION BY e.id ORDER BY i.year) AS year_rank,
+       COUNT(*) OVER (PARTITION BY e.id)                AS num_courses
+FROM enrolled i
+JOIN student e ON e.id = i.id
+JOIN course   c ON c.code = i.code
+WHERE c.credits >= 3
+"""
+for row in con.execute(q):
+    print(row)
+
+# explicit transaction: all or nothing
+try:
+    con.execute("BEGIN")
+    con.execute("UPDATE student SET major='AI' WHERE id=2101")
+    con.execute("INSERT INTO enrolled VALUES (2101, 'DB', 2026)")
+    con.commit()
+except sqlite3.IntegrityError as err:        # e.g. foreign key violated
+    con.rollback()
+    print("cancelled:", err)
+
+# execution plan (useful for ch. 8):
+for row in con.execute("EXPLAIN QUERY PLAN " + q):
+    print(row)
+
+# --- 2. SQLAlchemy Core: composable queries, DBMS-independent
+engine = create_engine("sqlite:///school.db", echo=False)
+md = MetaData()
+student = Table("student", md, Column("id", Integer, primary_key=True),
+                 Column("name", String), Column("major", String))
+enrolled = Table("enrolled", md, Column("id", Integer, ForeignKey("student.id"),
+                 primary_key=True), Column("code", String, primary_key=True),
+                 Column("year", Integer))
+with engine.connect() as cn:
+    stmt = (select(student.c.name, enrolled.c.code)
+            .join(enrolled, student.c.id == enrolled.c.id)
+            .where(enrolled.c.year == 2025).order_by(student.c.name))
+    print(cn.execute(stmt).fetchall())
+</code></pre>
+</div>
+
+<div class="note">
+  <span class="tag">Note — Views and constraints</span>
+  A <strong>view</strong> is a named, stored query, reused like a
+  table (re-evaluated or materialized depending on the engine): an abstraction
+  on a par with a function. Constraints (<code>PRIMARY KEY</code>,
+  <code>FOREIGN KEY</code>, <code>CHECK</code>, <code>UNIQUE</code>,
+  <code>NOT NULL</code>) are checked <em>at every write</em>: postponing
+  validation until after loading (the "data lake" approach of ch. 10)
+  shifts the cost, it does not remove it.
+</div>
+</section>
+<section class="chapter" id="ch3">
+<h2>3. Design: dependencies and normal forms</h2>
+
+<p>A poorly designed database leads to the three classic <em>anomalies</em>:
+insertion (impossible to record one fact without another), deletion (losing one
+fact while deleting another), update (repeating the same fact in several
+places). Normalization theory, also due to Codd and developed by Bernstein,
+Rissanen and others, diagnoses and corrects these defects through
+<strong>functional dependencies</strong>.</p>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — Functional dependency (FD)</span>
+  Let \(R\) be a schema and \(r\) an instance. A <strong>functional dependency</strong>
+  \(X \to Y\) (where \(X, Y\) are sets of attributes) is satisfied by \(r\) if
+  $$\forall\, t_1, t_2 \in r,\quad t_1[X] = t_2[X] \;\Rightarrow\; t_1[Y] = t_2[Y].$$
+  \(X\) "functionally determines" \(Y\): knowing \(X\) suffices
+  (in \(r\)) to know \(Y\). A set \(F\) of FDs is a <em>logical</em> object:
+  it is required to hold for <em>all</em> instances allowed by the
+  schema. \(X \to Y\) with \(Y \subseteq X\) is called <em>trivial</em>.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.2 — Armstrong's axioms (validity and completeness)</span>
+  The following three rules are <strong>valid</strong> (every derivable FD is
+  satisfied by every instance satisfying \(F\)):
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>reflexivity</strong>: if \(Y \subseteq X\) then \(X \to Y\);</li>
+    <li><strong>augmentation</strong>: if \(X \to Y\) then \(XZ \to YZ\);</li>
+    <li><strong>transitivity</strong>: if \(X \to Y\) and \(Y \to Z\) then \(X \to Z\).</li>
+  </ul>
+  They are moreover <strong>complete</strong>: every FD logically implied
+  by \(F\) is derivable by these rules.
+  <div class="proof" style="margin-top:.5rem;">Validity (direct proofs). Reflexivity:
+  if \(t_1[X]=t_2[X]\) and \(Y\subseteq X\), the restrictions to \(Y\) coincide.
+  Augmentation: assume \(X\to Y\) and \(t_1[XZ]=t_2[XZ]\); then
+  \(t_1[X]=t_2[X]\) hence \(t_1[Y]=t_2[Y]\), and \(t_1[Z]=t_2[Z]\) by hypothesis;
+  therefore \(t_1[YZ]=t_2[YZ]\). Transitivity: \(t_1[X]=t_2[X]\) gives
+  \(t_1[Y]=t_2[Y]\), which gives \(t_1[Z]=t_2[Z]\). Completeness: one shows that if
+  \(X \to Y\) is not derivable, then the two-tuple instance built as follows
+  violates it while satisfying \(F\): \(t_1\) carries distinct values per
+  equivalence class of \(X^{+}\) (the closure of Def. 3.3), \(t_2\) equals \(t_1\) on
+  \(X^{+}\) and differs elsewhere; every FD \(V \to W \in F\) is then preserved
+  (either \(V \subseteq X^{+}\) and \(W\) stays there, or \(V \not\subseteq X^{+}\) and
+  the tuples already differ on \(V\)), while \(X\to Y\) is violated.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.3 — Closure \(X^+\) and key</span>
+  The <strong>closure</strong> of \(X\) under \(F\) is
+  \(X^{+} = \{A \mid X \to A \text{ derivable from } F \text{ by Armstrong}\}\);
+  it is computed in \(O(|F|)\) passes (greedy algorithm: add the attributes
+  determined by what we already have, up to a fixed point). \(K\) is a
+  <strong>key</strong> if \(K^{+}\) contains all the attributes and no proper
+  subset of \(K\) does; attributes belonging to some key are called
+  <strong>prime</strong>.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.4 — Normal forms</span>
+  Let \(R\) be equipped with \(F\), and \(K\) a key:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>1NF</strong>: all values are atomic (no lists or structured
+    values in a cell);</li>
+    <li><strong>2NF</strong>: 1NF and no FD \(X \to Y\) with \(X\) a <em>strict</em>
+    subset of a key and \(Y\) non-prime (no <em>partial</em> dependency on the
+    key);</li>
+    <li><strong>3NF</strong>: 2NF and for every nontrivial FD \(X \to Y\):
+    \(X\) is a superkey, <em>or</em> \(Y\) is prime;</li>
+    <li><strong>BCNF</strong> (Boyce-Codd): for every nontrivial FD
+    \(X \to Y\), \(X\) is a superkey — the purest condition, without the "prime
+    attribute" escape hatch.</li>
+  </ul>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.5 — Lossless binary decomposition</span>
+  Let \(R\) be decomposed into \(\rho = (R_1, R_2)\), with \(R_1 \cup R_2 = R\). The
+  decomposition is <strong>lossless</strong> (for every instance \(r\) satisfying
+  \(F\): \(r = \pi_{R_1}(r) \Join \pi_{R_2}(r)\)) if and only if
+  $$(R_1 \cap R_2) \to R_1 \quad\text{or}\quad (R_1 \cap R_2) \to R_2 \;\in\; F^{+}.$$
+  <div class="proof" style="margin-top:.5rem;">Forward direction (the only one proved
+  in full). Assume \(X = R_1 \cap R_2\) and \(X \to R_1\). The inclusion
+  \(r \subseteq \pi_{R_1}(r) \Join \pi_{R_2}(r)\) always holds. Conversely,
+  take \(t_1 \in \pi_{R_1}(r)\) and \(t_2 \in \pi_{R_2}(r)\) agreeing on \(X\), and
+  let us show that their join \(s = t_1 \circ t_2\) is in \(r\). Let \(u_1, u_2
+  \in r\) be witnesses (\(u_1[R_1] = t_1\), \(u_2[R_2] = t_2\)). Since \(t_1\) and
+  \(t_2\) agree on \(X\), we have \(u_1[X] = u_2[X]\); the FD \(X \to R_1\)
+  forces \(u_1[R_1] = u_2[R_1]\), so \(u_2\) equals \(t_1\) on \(R_1\) and \(t_2\) on
+  \(R_2\): \(u_2 = s\) after all, and \(s \in r\). (The converse is proved by
+  exhibiting, when neither FD holds, a two-tuple instance whose join produces a
+  spurious tuple.) <span class="qed">∎</span></div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 3.6 — Normalizing an orders table</span>
+  \(R(\text{order}, \text{item}, \text{qty}, \text{customer}, \text{city},
+  \text{unit\_price})\) with
+  \(F = \{\)order·item \(\to\) qty,&nbsp; order \(\to\) customer,&nbsp; customer \(\to\)
+  city,&nbsp; item \(\to\) unit_price\(\}\). Key: \(\{\)order, item\(\}\) (its
+  closure generates everything). Visible anomalies: a customer's city is
+  repeated on each of their lines (update anomaly); an item with no
+  order cannot exist (insertion). Normalization:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>2NF</strong>: order \(\to\) customer depends on a <em>part</em> of the
+    key → extract Order(order, customer) and Line(order, item, qty); likewise
+    item \(\to\) unit_price → Item(item, unit_price);</li>
+    <li><strong>3NF</strong>: in Order(order, customer, city), the FD
+    customer \(\to\) city has a determinant that is not a superkey and city is not
+    prime → extract Customer(customer, city);</li>
+    <li>result: Line(order, item, qty), Order(order, customer),
+    Customer(customer, city), Item(item, unit_price) — each binary decomposition
+    is validated by Theorem 3.5 (remember to check the intersection at each
+    step).</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Note — 3NF vs BCNF, and real life</span>
+  Every relation admits a 3NF decomposition that is <em>lossless</em> and
+  <em>dependency-preserving</em> (Bernstein synthesis: minimal cover,
+  one schema per determinant, plus a key); some relations, on the other hand,
+  have <em>no</em> BCNF decomposition that is both lossless and dependency-preserving
+  — classic case: \(R(\text{city}, \text{street},
+  \text{zip\_code})\) with \{city, street\} \(\to\) zip_code and
+  zip_code \(\to\) city. 3NF is thus the minimal guarantee, BCNF the ideal
+  when it preserves. In practice, warehouses <em>deliberately</em> denormalize
+  (joins paid at write time rather than at read time): theory says what to
+  pay, not whether to pay.
+</div>
+</section>
+<section class="chapter" id="ch4">
+<h2>4. Storage: pages, files, external sorting</h2>
+
+<p>A DBMS lives on a hierarchy of memories with performance gaps of several
+orders of magnitude. The whole discipline of storage follows from this brute
+fact:</p>
+
+<table class="tbl">
+  <tr><th>Level</th><th>Order of magnitude</th><th>Access</th></tr>
+  <tr><td>Registers / L1-L3 cache</td><td>1-100 ns</td><td>words</td></tr>
+  <tr><td>RAM</td><td>~100 ns, a few tens of GB</td><td>bytes</td></tr>
+  <tr><td>NVMe SSD</td><td>~20-100 µs per access, TB</td><td>pages (4-16 KiB)</td></tr>
+  <tr><td>SATA SSD / HDD</td><td>~100 µs / ~5-10 ms, tens of TB</td><td>blocks</td></tr>
+  <tr><td>Network / object store</td><td>~10-100 ms, unlimited</td><td>objects</td></tr>
+</table>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — Page, record, organization</span>
+  The <strong>page</strong> (block) is the unit of input/output: one reads and
+  writes whole pages (typically 4 to 16 KiB), never isolated bytes.
+  Records are stored in pages with <em>slots</em> (<em>slotted
+  pages</em>: a directory at the head of the page gives the address of each
+  record, allowing insertions, deletions, and variable-length records). A
+  <strong>file organization</strong> defines how pages are linked:
+  <em>heap</em> (append at the end, sequential read),
+  <em>sorted</em> (order maintained: costly insertion, binary search), or
+  <em>hashed</em> (ch. 5).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.2 — Cost of a sequential scan</span>
+  For a file of \(N\) pages and a sequential throughput \(D\) pages/s, a full
+  scan costs \(N/D\). Worked example: a 10 GB table in 8 KiB pages occupies
+  \(N = 10^{10}/8192 \approx 1.22\times 10^6\) pages;
+  on HDD at 150 MB/s: \(\approx 67\) s; on NVMe SSD at
+  3 GB/s: \(\approx 3.3\) s; in random accesses at
+  10,000 IOPS: 122 s — hence the DBMS obsession with
+  sequential access and prefetching.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.3 — External merge sort</span>
+  With \(M\) pages of buffer memory available and \(N\) pages to sort, external
+  merge sort produces sorted initial <em>runs</em> of \(M\) pages, then merges
+  them with arity \(M-1\) (one output page). The number of passes equals
+  $$p \;=\; 1 + \Big\lceil \log_{M-1} \lceil N/M \rceil \Big\rceil,$$
+  and the total I/O cost is \(2Np\) (each pass rereads and rewrites everything).
+  <div class="proof" style="margin-top:.5rem;">Pass 0 reads \(N\) pages and writes
+  \(\lceil N/M\rceil\) sorted runs: cost \(2N\). At each merge pass, at most
+  \(M-1\) runs are consumed into one run (fan-in \(M-1\) because one buffer page
+  must be kept for output): the number of runs is divided by at least \(M-1\),
+  hence \(\lceil\log_{M-1}\lceil N/M\rceil\rceil\) merges. Each merge rereads/rewrites
+  the pages involved, hence \(2N\) per pass. <span class="qed">∎</span></div>
+  <div class="ex" style="margin-top:.4rem;">
+  <span class="tag">Example 4.4 — Numbers</span>  \(N = 1000\) pages, \(M = 50\):
+  initial runs: 20; \(\log_{49}(20) \to 1\) merge pass (fan-in
+  49&nbsp;≥&nbsp;20); \(p = 2\), cost \(2\times1000\times2 = 4000\) pages
+  read+written. With \(N = 10^6\), \(M = 10^3\): 1000 runs, fan-in 999,
+  \(\lceil\log_{999}(1001)\rceil = 2\), \(p=3\), cost \(6\times10^6\) — at
+  10,000 pages/s, about ten minutes: sorting remains
+  <em>nearly linear</em> in practice thanks to the base (not the factor) of the
+  logarithm.</div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 4.5 — Buffer pool</span>
+  Between the disk and the processor, the DBMS manages a <strong>buffer
+  pool</strong>: a RAM cache of page bytes, organized into <em>frames</em> the
+  size of a page, with a <strong>page-to-frame mapping table</strong>. Every
+  read goes through it: <em>hit</em> (the page is already there, RAM access) or
+  <em>miss</em> (disk read then installation in a free frame). When no frame is
+  free, a <strong>replacement policy</strong> chooses the victim — LRU as a
+  first approximation, but real DBMSs prefer variants (LRU-K, clock with a
+  reference bit, <em>least-frequently-used</em>): a massive sequential scan must
+  not evict hot pages (hence the usage counter of scans). Writes: a modified
+  page becomes <em>dirty</em>
+  and is rewritten to disk only upon eviction — or earlier, by checkpointing
+  (ch. 7). The parameter \(M\) of the sort and join algorithms (ch. 8)
+  is precisely the share of the buffer pool allocated to the operator: the whole
+  physics of queries plays out in this cache.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Storing columns, not just rows</span>
+  Modern warehouses (Parquet, BigQuery, Snowflake, DuckDB) store tables
+  <em>by columns</em>: reading 3 columns out of 100 reads only ~3% of the
+  data, with adapted encodings (dictionary, RLE) and min/max statistics per
+  block to skip chunks. The logical model remains relational:
+  a perfect illustration of logical/physical independence — and reading
+  columns fast is producing learning matrices fast (see the
+  <em>Machine Learning</em> module, ch. 6).
+</div>
+</section>
+<section class="chapter" id="ch5">
+<h2>5. Indexes: B+ trees and hashing</h2>
+
+<p>An index is a secondary structure that speeds up locating records without
+scanning them all. Two families dominate: <strong>B+ trees</strong> for range
+queries and sorting, <strong>hashing</strong> for exact equality. The DBMS
+maintains the index at every write: each additional index slows down
+insertions — there is no free index.</p>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — B+ tree</span>
+  A B+ tree of order \(d\) is a balanced tree in which every node contains
+  between \(d\) and \(2d\) keys (only the root may contain fewer, at least 1),
+  every internal node has (number of keys + 1) children, all
+  the data resides in the leaves, and the leaves are chained together
+  (range scan without going back up). The keys of an internal node are
+  separators: the subtree between two keys contains the records of the
+  corresponding open interval. When a leaf splits, the median key is
+  <em>copied</em> to the parent (it remains present in the right
+  leaf); when an internal node splits, it is <em>moved</em> up to the parent.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 5.2 — Height of a B+ tree</span>
+  A B+ tree of order \(d\) containing \(n\) entries has height
+  $$h \;\leq\; 2 + \log_{d+1}(n/2),$$
+  so that search, insertion, and deletion cost \(\Theta(\log_d n)\) logical
+  I/Os — in practice 3 to 5 pages.
+  <div class="proof" style="margin-top:.5rem;">Count the minimal number of leaves
+  of a tree of height \(h\) (root at level 1, leaves at level \(h\),
+  \(h \geq 2\)). The root has at least 2 children; every internal non-root node
+  has at least \(d+1\) children (because at least \(d\) keys); every leaf carries
+  at least \(d\) entries. The number of leaves is therefore at least
+  \(2\,(d+1)^{h-2}\), and each contains at least \(d\) entries:
+  \(n \geq 2d\,(d+1)^{h-2} \geq 2\,(d+1)^{h-2}\) (since \(d \geq 1\)), hence
+  \((d+1)^{h-2} \leq n/2\) and the announced bound. Search: one page per
+  level; insertion: descent plus possible split cascades upward,
+  one page per level; both are \(\Theta(h)\).
+  <span class="qed">∎</span></div>
+  <div class="ex" style="margin-top:.4rem;">
+  <span class="tag">Example 5.3 — A billion entries in 4 hops</span>
+  With 8 KiB pages, 16 B keys+pointers, a node holds up to ~512 keys: take
+  \(d = 63\) (fan-out 64 to 128). For
+  \(n = 10^9\) entries:
+  \(h \leq 2 + \log_{64}(5\times10^8) = 2 + \frac{\ln(5\times10^8)}{\ln 64}
+  = 2 + \frac{20.03}{4.16} \approx 6.8\), hence \(h \leq 6\) (and even 5 for a
+  fan-out of 128). The upper levels fit in RAM: an equality
+  search costs 1-2 page reads instead of the \(1.2\times10^6\) of the full scan
+  (Prop. 4.2).</div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.4 — Cascading insertions (d = 1)</span>
+  Insert 10, 20, 5, 15, 30, 25, 35, 40, 45 into a B+ tree of order 1 (1 to 2
+  keys per node). After 10, 20: leaf [10, 20]. The 5 overflows:
+  split into [5, 10] and [20], copy of 20 to the new root. The 15 refills the
+  first leaf: [5,10,15] → [5,10] and [15], root [15, 20], three
+  leaves. The 30 fills the right leaf [20, 30]. The 25 makes it overflow:
+  [20,25] / [30], copy of 30 — the root [15,20,30] overflows in turn:
+  <em>internal</em> split, key 20 is moved to the new root [20].
+  The 35, the 40 (split of [30,35,40] → [30,35] / [40], copy of 40) and the 45
+  lead to the final tree (height 3):
+<pre class="code"><code>                    [20]
+             ┌────────┴────────┐
+           [15]              [30, 40]
+         ┌──┴──┐        ┌──────┼──────┐
+      [5,10]  [15]   [20,25] [30,35] [40,45]
+      ──────── leaves chained ────────▶
+</code></pre>
+  Each leaf has between 1 and 2 keys, the root at least 1: the structure stays
+  at least half full after each deletion rebalanced by borrowing or
+  merging — this is what guarantees Theorem 5.2 <em>over time</em>.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 5.5 — Static and extendible hashing</span>
+  An <strong>on-disk hash table</strong> applies \(h(k) = k \bmod B\) to
+  store the record with key \(k\) in bucket \(h(k)\): exact equality in
+  1 + (overflows) I/Os. <strong>Extendible hashing</strong> grows \(B\)
+  dynamically: a directory of \(2^g\) pointers (global
+  depth \(g\)) pointing to buckets, each of which uses only the \(p_i \leq g\)
+  high-order bits of the hash (local depth); when a bucket overflows, double
+  the directory if needed (\(g{+}{=}g{+}1\)) then split the bucket according to
+  bit \(p_i{+}1\). Example: buckets of 2 slots, hashes 4 (100), 12 (1100) and
+  20 (10100) — all in 00; at \(g=2\) bucket 00 overflows, moves to
+  depth 1 and splits into 0 (4, 20) and 1 (12) without doubling the directory.
+  The load factor stays
+  under control without global reorganization; Litwin's <em>linear hashing</em>
+  achieves the same effect without a directory.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.6 — What each index can do</span>
+  <table class="tbl">
+    <tr><th>Criterion</th><th>B+ tree</th><th>Hashing</th></tr>
+    <tr><td>Equality (=)</td><td>\(\log\) pages</td><td>1 page (ideal)</td></tr>
+    <tr><td>Range, prefix, order</td><td>excellent (leaves chained)</td><td>impossible</td></tr>
+    <tr><td>Insertion</td><td>\(\log\), balance guaranteed</td><td>amortized O(1), overflows</td></tr>
+    <tr><td>Typical uses</td><td>primary keys, filtered/sorted columns, foreign keys</td><td>exact join tables, hash joins (ch. 8), in-memory dedup</td></tr>
+  </table>
+  Composite index rule: a B+ index on (a, b, c) serves predicates on
+  \(a\), then (a, b), then (a, b, c) — but <em>not</em> b alone: the keys are
+  sorted like a dictionary (a first). An index can also <em>cover</em> a
+  query (all requested columns are in the index: the table is
+  never read — a <em>covering index</em> often divides times by 10).
+</div>
+</section>
+<section class="chapter" id="ch6">
+<h2>6. Transactions and concurrency</h2>
+
+<p>Several programs access the same data at the same time. The
+<strong>transaction</strong> is the unit of consistency: a sequence
+of read (r) and write (w) operations that must execute <em>as if</em> it
+were alone. The ACID acronym summarizes the contract: <em>Atomicity</em> (all
+or nothing), <em>Consistency</em> (constraints hold), <em>Isolation</em>
+(equivalence to a serial execution), <em>Durability</em> (a commit survives a
+crash — the subject of ch. 7).</p>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — Schedules, conflicts, serializability</span>
+  A <strong>schedule</strong> \(H\) is a sequence of operations from several
+  transactions, preserving the internal order of each. Two operations are
+  <strong>in conflict</strong> if they belong to different transactions, bear on
+  the same object, and at least one is a write.
+  \(H\) is <strong>conflict-serializable</strong> (CSR) if it is equivalent by
+  conflicts to a serial schedule; the <strong>serialization graph</strong>
+  \(SG(H)\) has one vertex per transaction and an edge \(T_i \to T_j\) as soon
+  as a conflicting pair of operations places an operation of \(T_i\) before one
+  of \(T_j\).
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.2 — The serialization graph criterion</span>
+  \(H\) is conflict-serializable if and only if \(SG(H)\) is acyclic;
+  in that case, every topological order of \(SG(H)\) gives an equivalent serial
+  execution.
+  <div class="proof" style="margin-top:.5rem;">If \(H\) is equivalent to the serial
+  schedule \(T_{\sigma(1)} \dots T_{\sigma(k)}\), every edge \(T_i \to T_j\) of
+  \(SG(H)\) must be respected by \(\sigma\) (conflict equivalence preserves the
+  order of all conflicting pairs): the graph is embedded in a total order, hence
+  acyclic. Conversely, if \(SG(H)\) is acyclic with topological order
+  \(\sigma\), one checks that the associated serial schedule has the same
+  conflicting pairs in the same order: for a given pair, the directed edge in
+  \(SG(H)\) (which exists by definition) imposes the same relative order as
+  \(\sigma\).
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 6.3 — Lost update</span>
+  Let \(H = r_1(X)\, r_2(X)\, w_1(X)\, w_2(X)\, c_1\, c_2\) with X a stock counter
+  worth 100, \(T_1\) adding 50 and \(T_2\) subtracting 30. Serialized
+  (\(T_1;T_2\)): \(100 \to 150 \to 120\). In \(H\): both reads
+  see 100, \(w_1\) writes 150, then \(w_2\) overwrites with 70: the update of
+  \(T_1\) is <em>lost</em>. Conflicts on X:
+  \(r_1(X) &lt; w_2(X)\) gives \(T_1 \to T_2\), and \(r_2(X) &lt; w_1(X)\) gives
+  \(T_2 \to T_1\): a cycle, \(H\) is not serializable — the graph had
+  announced it even before reading the values.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 6.4 — Two-phase locking (2PL)</span>
+  A transaction follows <strong>2PL</strong> if it acquires all its locks
+  before releasing a single one: growing phase (acquisitions), lock
+  point, shrinking phase (releases). <strong>Strict 2PL</strong>
+  (or rigorous) releases a write's locks only after commit — it avoids
+  cascading aborts. Locks can be shared (read) or
+  exclusive (write), with S-S the only compatibility.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.5 — Every legal 2PL execution is serializable</span>
+  If a schedule \(H\) respects 2PL (for each transaction, legality of the locks
+  being ensured: no lock acquired while the conflicting lock has not been
+  released), then \(SG(H)\) is acyclic, hence \(H\) is CSR.
+  <div class="proof" style="margin-top:.5rem;">Reason by contradiction and assume
+  a cycle \(T_1 \to T_2 \to \cdots \to T_k \to T_1\). For each edge
+  \(T_i \to T_j\) there exists an object \(q\) and a conflicting pair
+  \(o_i[q] &lt; o_j[q]\); since at least one of the two operations is a
+  write, the locks of \(T_i\) and \(T_j\) on \(q\) are incompatible, hence do not
+  overlap: legality imposes
+  \(\text{unlock}_i(q) &lt; \text{lock}_j(q)\). Let \(u_i\) be the instant when
+  \(T_i\) releases its <em>first</em> lock (its lock point);
+  then \(u_i \leq \text{unlock}_i(q) &lt; \text{lock}_j(q) \leq u_j\), the last
+  inequality coming from 2PL: \(T_j\) cannot acquire a lock after \(u_j\),
+  so \(\text{lock}_j(q) \leq u_j\). Chaining along the cycle:
+  \(u_1 &lt; u_2 &lt; \cdots &lt; u_k &lt; u_1\) — contradiction.
+  <span class="qed">∎</span></div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.6 — Deadlock and isolation levels</span>
+  2PL creates waiting cycles: \(T_1\) holds X and wants Y, \(T_2\) holds Y
+  and wants X. DBMSs detect (wait-for graph, cycle = deadlock) and <em>abort a
+  victim</em> (rollback then retry). The standard levels offered by SQL:
+  <table class="tbl">
+    <tr><th>Level</th><th>Dirty read</th><th>Non-repeatable read</th><th>Phantoms</th><th>Mechanism</th></tr>
+    <tr><td>READ UNCOMMITTED</td><td>possible</td><td>possible</td><td>possible</td><td>no read locks</td></tr>
+    <tr><td>READ COMMITTED</td><td>no</td><td>possible</td><td>possible</td><td>short read locks</td></tr>
+    <tr><td>REPEATABLE READ</td><td>no</td><td>no</td><td>possible</td><td>long row locks</td></tr>
+    <tr><td>SERIALIZABLE</td><td>no</td><td>no</td><td>no</td><td>full 2PL / predicates</td></tr>
+    <tr><td>SNAPSHOT (MVCC)</td><td>no</td><td>no</td><td>no*</td><td>reads on a dated version, no read locks</td></tr>
+  </table>
+  (*) at the price of write collisions detected a posteriori (PostgreSQL:
+  error 40001, to be replayed). <strong>MVCC</strong> (multi-version
+  concurrency control) keeps several dated versions of each row: each
+  transaction reads a consistent snapshot of the past — readers never block
+  writers. This is the default strategy of PostgreSQL and of MySQL's InnoDB
+  engine.
+</div>
+</section>
+<section class="chapter" id="ch7">
+<h2>7. The log and crash recovery</h2>
+
+<p>Durability requires writing to persistent storage <em>before</em> answering
+"commit", and atomicity requires being able to undo — even after a crash right
+in the middle. Both requirements are solved by one and the same structure: the
+<strong>log</strong> (<em>write-ahead log</em>, WAL), an ordered sequence
+of records describing every modification, written sequentially (hence
+fast, see ch. 4).</p>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — WAL, LSN, STEAL/FORCE policy</span>
+  Each log record receives a sequence number (<strong>LSN</strong>).
+  For a page write by a transaction: &lt;LSN, T, page, row,
+  before-image, after-image, previous-LSN-of-T&gt;. The <strong>WAL</strong> rule:
+  the log fragment of a modification must reach the disk <em>before</em> the
+  modified page. Possible policies: <strong>STEAL</strong> (one may evict an
+  uncommitted modified page from the buffer → one must know how to undo) vs
+  NO-STEAL; <strong>FORCE</strong> (all pages are written at commit → no need
+  to redo) vs NO-FORCE. Every serious DBMS chooses STEAL/NO-FORCE — the most
+  performant, the one that requires both <em>undo</em> and <em>redo</em>.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 7.2 — Idempotence and ARIES recovery</span>
+  The recovery passes must be <em>idempotent</em> (replayed twice, same
+  effect): this holds if redo/undo are driven by the LSNs stored in the
+  pages. The <strong>ARIES</strong> algorithm (Mohan et al., 1992), deployed in
+  all major DBMSs, recovers in three phases:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>Analysis</strong>: reread the log since the last
+    <em>checkpoint</em> to rebuild the table of in-progress transactions and the
+    dirty page table;</li>
+    <li><strong>Redo</strong>: replay, in LSN order, the after-image of
+    every modification whose LSN exceeds the one recorded in the page
+    (repeating history, including uncommitted transactions);</li>
+    <li><strong>Undo</strong>: cancel, in <em>reverse</em> LSN order,
+    the modifications of uncommitted transactions, writing compensation
+    records (CLR) — if the machine crashes again during recovery, one resumes
+    where one had stopped.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.3 — Rolling out a recovery by hand</span>
+  Log (LSN: 1-7) then crash:
+  <table class="tbl">
+    <tr><th>LSN</th><th>Record</th><th>Effect</th></tr>
+    <tr><td>1</td><td>checkpoint</td><td>T1 active</td></tr>
+    <tr><td>2</td><td>T1: update X (before 10 → after 15)</td><td>page P1 dirty</td></tr>
+    <tr><td>3</td><td>T2: update Y (before 5 → after 8)</td><td>page P2 dirty</td></tr>
+    <tr><td>4</td><td>T1: commit</td><td>T1 completed</td></tr>
+    <tr><td>5</td><td>T2: update X (before 15 → after 20)</td><td>P1 dirty</td></tr>
+    <tr><td>6</td><td>T3: update Z (before 3 → after 7)</td><td>P3 dirty</td></tr>
+    <tr><td>7</td><td>T2: … (no commit)</td><td>crash here</td></tr>
+  </table>
+  ARIES recovery: analysis → T2 and T3 in progress, T1 committed, pages P1-P3
+  potentially dirty. Redo: LSN 2, 3, 5, 6 replayed (X=20, Y=8, Z=7).
+  Undo (reverse order): LSN 6 canceled (Z=3, CLR written), then LSN 5 (X=15)
+  and LSN 3 (Y=5); T2 and T3 are rolled back, T1 survives. Note that redo
+  reapplies LSN 5 (a write of T2, uncommitted) before undoing it: this is the
+  mark of ARIES — "repeat history" — and the reason for the CLR, which makes
+  undo itself restartable.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Checkpoints and the cost of durability</span>
+  A fuzzy <em>checkpoint</em> forces the buffer to disk and bars a record in
+  the log, bounding the length of the redo; without it, recovery would reread
+  the whole log. In exchange, every commit waits for at least one
+  sequential log write (<em>group commit</em>: concurrent commits share a
+  single flush): typically ~1 ms — the measurable price of ACID.
+</div>
+</section>
+<section class="chapter" id="ch8">
+<h2>8. Query optimization</h2>
+
+<p>SQL is declarative: the <strong>execution plan</strong> — the order of
+operations, the join algorithms, the indexes used — is chosen by the
+optimizer. The principle: rewrite the query as an algebraic tree, generate
+the equivalent plans via the laws of Proposition 1.4, estimate their cost
+with a model, keep the cheapest. It is a closed loop between theory
+(equivalences) and physics (the cost model of ch. 4).</p>
+
+<div class="def">
+  <span class="tag">Definition 8.1 — Cost model and selectivity</span>
+  For each table, the catalog stores \(n\) (number of tuples), \(b\) (pages),
+  and for each column \(ND(A)\) (number of distinct values) or even a histogram.
+  The <strong>selectivity</strong> of a predicate is the expected fraction of
+  rows: \(sel(A = c) \approx 1/ND(A)\), \(sel(A &lt; c)\) via histogram,
+  \(sel(p_1 \wedge p_2) \approx sel(p_1)\cdot sel(p_2)\) (independence — a
+  false but convenient assumption, corrected by modern engines via dynamic
+  sampling). Estimated cardinality of a node = selectivity × cardinality of
+  the child.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 8.2 — Join algorithms</span>
+  Let \(R\) (\(B_R\) pages) and \(S\) (\(B_S\) pages), with a buffer of \(M\)
+  pages:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>nested loops</strong> (NLJ): for each page of \(R\),
+    scan \(S\) — cost \(B_R + B_R\!\cdot\!B_S\); by blocks of \(M-1\)
+    pages: \(B_R + \lceil B_R/(M-1)\rceil \cdot B_S\);</li>
+    <li><strong>sort-merge join</strong>: sort \(R\) and \(S\) (Thm 4.3)
+    then merge — cost \(2B_R(1+\lceil\log_{M-1}\lceil B_R/M\rceil\rceil) + 2B_S(\dots) + B_R + B_S\),
+    zero if already sorted (B+ index);</li>
+    <li><strong>hash join</strong>: partition both relations
+    on the join key with the same hash (one pass if everything fits in
+    \(M\)), then build a hash table per partition and probe — cost
+    \(\approx 3(B_R+B_S)\), in memory if \(B_R\) or \(B_S\) fits in RAM.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 8.3 — Numbers: the winning plan cannot be guessed</span>
+  \(B_R = 1000\) pages, \(B_S = 500\), \(M = 50\). Simple nested loops:
+  \(1000 + 1000\times500 = 501\,000\) pages. By blocks:
+  \(1000 + \lceil 1000/49\rceil \times 500 = 1000 + 21\times500 = 11\,500\).
+  Sort-merge: sorting \(R\) in 2 passes → 4000, sorting \(S\) in 2 passes → 2000,
+  merge 1500: total 7500. Hash: \(3\times(1000+500) = 4500\) —
+  and if \(S\) fits in memory, \(1000 + 500 = 1500\). <table class="tbl">
+  <tr><th>Algorithm</th><th>Cost (I/O pages)</th><th>Success conditions</th></tr>
+  <tr><td>naive NLJ</td><td>501,000</td><td>none</td></tr>
+  <tr><td>block NLJ</td><td>11,500</td><td>\(M \geq 3\)</td></tr>
+  <tr><td>sort-merge</td><td>7,500</td><td>all; optimal if inputs sorted</td></tr>
+  <tr><td>hash</td><td>4,500</td><td>partitions ≤ \(M\) pages</td></tr>
+  </table>
+  The optimizer makes this table for <em>every</em> join and <em>every</em>
+  nesting order: a query with 10 joins admits \(\sim 10!\times 2^{10}\)
+  equivalent trees. System&nbsp;R's dynamic programming (sets of
+  relations, Cartesian joins avoided) makes the exploration polynomial in
+  \(2^n\) tables; the general case is NP-hard, and beyond a dozen tables
+  engines switch to randomized searches.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 8.4 — Safe heuristic rewrites</span>
+  Before any cost-based search, one applies the "always winning" rewrites:
+  push down selections (Prop. 1.4), push down
+  projections (reduce tuple width), reject Cartesian products outside
+  useful joins, eliminate redundant subqueries, transform
+  <code>IN</code> into semi-joins. Each selection pushed down divides the
+  cardinality of the subtree involved: with \(sel = 1/100\), filtering \(10^6\)
+  rows before rather than after a join gains a factor ~100 on that
+  stream. Engines add costly but profitable rewrites:
+  elimination of unnecessary joins (a join by foreign key without reading
+  the columns of \(S\) and without multiplicity is superfluous), materialized
+  CTEs, plan reuse (plan cache).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 8.5 — Evaluating selection: access paths</span>
+  Even before the joins, each <strong>relational operator</strong> comes in
+  several <em>implementations</em> that the optimizer compares:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>selection</strong>: sequential scan (\(B_R\) pages, Def. 4.2),
+    or B+ tree descent when an index covers the predicate (\(\lceil \log_F B_R \rceil + 1\)
+    pages), or an <em>index-only scan</em> if the index contains all requested
+    columns (zero table access);</li>
+    <li><strong>projection and aggregation</strong>: tuple stream, with sorting or
+    hashing to eliminate duplicates and group (sort-agg vs hash-agg, depending
+    on available memory);</li>
+    <li><strong>union, difference</strong>: merge of sorted streams or hash
+    tables, in the same spirit as the joins of Def. 8.2.</li>
+  </ul>
+  The cost of each variant combines the selectivity model (Def. 8.1), the
+  buffer pool (Def. 4.5), and the available indexes (ch. 5): reading an
+  <code>EXPLAIN</code> is seeing this choice materialized node by node.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Reading an EXPLAIN</span>
+  <code>EXPLAIN QUERY PLAN</code> (SQLite) or <code>EXPLAIN (ANALYZE, BUFFERS)</code>
+  (PostgreSQL) shows the chosen tree and the real cardinalities. Typical
+  diagnosis: an estimate off by a factor of 1000 (stale statistics,
+  unmodeled correlation) → nested loops where hashing would be needed.
+  Reflex: compare estimated vs actual <code>rows</code> node by node, and trace
+  back to the first divergence.
+</div>
+</section>
+<section class="chapter" id="ch9">
+<h2>9. Beyond relational: NoSQL, graphs, vectors</h2>
+
+<p>The relational model dominates transactional workloads, but three
+developments of the 2000-2020 period seeded new models: horizontal scale
+(NoSQL), data as graphs (knowledge graphs), and search by
+<strong>similarity</strong> over vectors — the fuel of learning systems and of
+RAG (see the <em>Large Language Models</em> module, chapter 7).</p>
+
+<div class="thm">
+  <span class="tag">Theorem 9.1 — CAP (Brewer, 2000; Gilbert-Lynch, 2002)</span>
+  In a distributed system subject to <em>network failures</em> (partitions), one
+  cannot simultaneously guarantee strong consistency (C) and availability (A):
+  one must choose, at least during the partition.
+  <div class="proof" style="margin-top:.5rem;">Sketch. Partition the network into two
+  components \(\Gamma_1, \Gamma_2\). One client writes into \(\Gamma_1\), another
+  reads from \(\Gamma_2\). If both operations succeed (A), the read cannot
+  see the write: inconsistency (not C). To stay consistent, \(\Gamma_2\) must
+  refuse or block (not A). <span class="qed">∎</span></div>
+  NoSQL systems therefore claim AP with <em>eventual</em> consistency
+  (BASE); so-called CP systems sacrifice availability during
+  partitions. The trade-off is managed per query (readable / writable
+  consistency levels, quorum \(r + w &gt; n\)).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 9.2 — NoSQL families</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>key-value</strong> (Redis, DynamoDB): a distributed hash
+    table (ch. 5 at cluster scale, consistent hashing);</li>
+    <li><strong>documents</strong> (MongoDB): identified JSON trees,
+    queried by fields — 1NF is deliberately abandoned in order to group
+    what is read together;
+    <pre class="code"><code>{ "_id": "ord1043", "customer": { "name": "Anna", "city": "Palaiseau" },
+  "lines": [ { "item": "DB", "qty": 2 }, { "item": "DL", "qty": 1 } ],
+  "status": "shipped" }</code></pre></li>
+    <li><strong>columns</strong> (Cassandra, Bigtable): sparse rows
+    physically grouped by column family and sorted by clustering
+    key — SSTables and the <em>log-structured merge tree</em> (memtable
+    → levels of sorted files, reads bounded by Bloom filters)
+    replace the B+ tree;</li>
+    <li><strong>graphs</strong>: see below — the only model where the
+    recursive join is a first-class citizen.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 9.3 — Property graphs and RDF</span>
+  A <strong>property graph</strong> (Neo4j; GQL standard) is a
+  multi-relational graph whose nodes and edges carry key-value properties. The
+  <strong>Cypher</strong> language queries by patterns:
+<pre class="code"><code>MATCH (a:Person {name: "Anna"})-[:ENROLLED_IN*1..3]->(c:Course)
+WHERE c.credits >= 3
+RETURN DISTINCT c.code;</code></pre>
+  The <strong>RDF</strong> model (W3C) represents everything as <em>triples</em>
+  (subject, predicate, object) forming a global labeled directed graph, with
+  <em>IRIs</em> (universal identifiers) and ontologies (RDFS, OWL) for
+  reasoning. SPARQL takes up SQL (SELECT/WHERE) on graph patterns:
+<pre class="code"><code>SELECT DISTINCT ?code WHERE {
+  :Anna :enrolledIn+ ?c .            # path of length ≥ 1 (SPARQL 1.1)
+  ?c :credits ?cr . FILTER(?cr >= 3)
+  ?c :code ?code . }</code></pre>
+  <table class="tbl">
+    <tr><th>Criterion</th><th>Property graph</th><th>RDF</th></tr>
+    <tr><td>Identifiers</td><td>local to the database</td><td>global IRIs → natural federation</td></tr>
+    <tr><td>Edge properties</td><td>yes, first-class</td><td>by reification (statement-node)</td></tr>
+    <tr><td>Schema</td><td>flexible, local constraints</td><td>RDFS/OWL ontologies, inference</td></tr>
+    <tr><td>Queries</td><td>Cypher/GQL, patterns + paths</td><td>SPARQL, federated, reasoning</td></tr>
+    <tr><td>Ecosystem</td><td>apps, recommendation, integration</td><td>web of data, science, libraries</td></tr>
+  </table>
+  For learning on graphs (node embeddings, GNNs, message passing),
+  both models project onto sparse matrices — see the <em>Graph ML</em>
+  module, chapters 1 (why graphs?) and 5 (GNNs).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 9.4 — Vector databases and ANN search</span>
+  A <strong>vector store</strong> indexes embeddings \(x_i \in
+  \mathbb{R}^d\) (produced by encoders — see the <em>NLP</em> module, ch. 3, and
+  <em>Multimodal GenAI</em>, ch. 5) with a distance (cosine, \(L^2\)) and answers
+  "the \(k\) nearest neighbors of \(q\)". <em>Exact</em> search costs
+  \(O(nd)\): for \(n = 10^7\), \(d = 768\), that is \(7.7\times10^{10}\)
+  multiplications per query — prohibitive in service.
+  <strong>Approximate</strong> (ANN) search trades a bit of recall for orders
+  of magnitude of speed:
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+    <li><strong>IVF</strong> (inverted file): partition the space into
+    \(n_{list}\) cells by k-means (see the <em>Machine Learning</em>
+    module, ch. 6); explore only the \(n_{probe}\) closest cells.
+    \(n_{list} = 4096\), \(n_{probe} = 16\) over \(10^7\) vectors: ~
+    \(39\,000\) distances instead of \(10^7\) — 250× less work, typical
+    recall &gt; 95%;</li>
+    <li><strong>HNSW</strong> (Malkov-Yashunin): hierarchical
+    "navigable small-world" graph. Layer 0 contains all the vectors,
+    the upper layers increasingly sparse vertices (a node
+    appears at layer \(\ell\) with probability \(p^{-\ell}\)). The search
+    starts from the top layer's vertex and performs <em>greedy routing</em>
+    (move to the neighbor that gets closest to \(q\)) while going down layer
+    by layer; insertion links the new node to its \(M\) nearest
+    neighbors found this way. The long links of the upper layers (chosen by a
+    diversity heuristic) provide the nearly logarithmic shortcut;
+    practical cost ~\(O(\log n)\), tunable recall, at the price of costly
+    construction and an in-memory graph;</li>
+    <li><strong>quantization</strong> (PQ): split \(x \in
+    \mathbb{R}^d\) into \(m\) sub-vectors each quantized over \(2^8\)
+    centroids; the distance becomes a sum of terms read from tables — memory
+    divided by ~\(d\), at the price of an approximate distance.</li>
+  </ul>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 9.5 — Vector search in Python (full scan + IVF)</span>
+<pre class="code"><code>import numpy as np
+from sklearn.cluster import MiniBatchKMeans
+
+rng  = np.random.default_rng(0)
+X    = rng.normal(size=(100_000, 64)).astype("float32")   # vector "database"
+q    = rng.normal(size=(64,)).astype("float32")
+
+def normalize(A): return A / np.linalg.norm(A, axis=1, keepdims=True)
+Xn, qn = normalize(X), q / np.linalg.norm(q)
+
+# --- 1. exact search (brute force): O(n d)
+d_all = Xn @ qn
+top10_exact = set(np.argsort(d_all)[-10:])
+
+# --- 2. IVF: nlist cells by k-means, we probe nprobe cells
+nlist, nprobe = 256, 8
+km = MiniBatchKMeans(n_clusters=nlist, n_init=3, random_state=0).fit(Xn)
+cell_of_X = km.labels_
+d_centro  = np.linalg.norm(km.cluster_centers_ - qn, axis=1)
+probes    = np.argsort(d_centro)[:nprobe]
+cand      = np.where(np.isin(cell_of_X, probes))[0]
+top10_ivf = set(cand[np.argsort(Xn[cand] @ qn)[-10:]])
+
+print(len(top10_exact & top10_ivf) / 10, "recall@10")     # typically 0.9-1.0
+print(f"exact: {len(Xn)} distances; IVF: {len(cand) + nlist} distances")
+</code></pre>
+  Recall <code>@k</code> is traded against cost: it is the same trade-off
+  as for B+ trees (exact, logarithmic, constrained by prefixes) — but with an
+  assumed probabilistic tolerance. Relational DBMSs today integrate
+  these indexes as extensions (pgvector; the <em>Large Language
+  Models</em> module, ch. 7, shows the complete RAG pipeline that consumes
+  them).
+</div>
+</section>
+<section class="chapter" id="ch10">
+<h2>10. Web data and heterogeneous integration</h2>
+
+<p>The web is the largest database in the world — without schema, without keys,
+without constraints. The data feeding learning (and data journalism) arrives
+as HTML pages, semi-structured files (JSON, XML), tables, documents. This
+chapter addresses the specific problems: extract, match, merge.</p>
+
+<div class="def">
+  <span class="tag">Definition 10.1 — Semi-structured data and the web of data</span>
+  Data is <strong>semi-structured</strong> when its schema is implicit,
+  carried by the data itself (JSON/XML trees, RDF graphs). The <strong>web of
+  data</strong> (linked data) publishes RDF with shared IRIs, and also nestles
+  into ordinary pages via embedded annotations
+  (schema.org in JSON-LD): search engines derive "rich
+  snippets" from them. Interoperability rests on <strong>ontologies</strong>
+  (shared vocabularies: FOAF, Dublin Core, schema.org) and
+  <strong>alignments</strong> (<em>owl:sameAs</em> between IRIs denoting the
+  same real-world entity).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 10.2 — Extraction, entity linking, entity resolution</span>
+  <strong>Extraction</strong> turns unstructured data into structured data:
+  DOM wrappers for pages, table extraction (header row
+  detection, column typing), information extraction by models — the
+  <em>NLP</em> module (ch. 6: NER) is its engine. <strong>Entity linking</strong>
+  attaches a text mention ("Macron", "E. Macron")
+  to a reference entity (the president…); <strong>entity
+  resolution</strong> (record linkage) decides whether two records describe
+  the same thing. Typical signature: Jaccard similarity over sets of
+  n-grams, \(J(A,B) = |A \cap B|\,/\,|A \cup B|\), e.g.:
+  \(\{AL, LG, LGA\}\) vs \(\{LG, GA, GAX\}\): intersection {LG, GA} (2),
+  union 4 → \(J = 0.5\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 10.3 — Blocking: making quadratic matching practical</span>
+  Comparing \(n = 10^6\) records pairwise costs \(n(n-1)/2 \approx
+  5\times10^{11}\) comparisons. <strong>Blocking</strong> compares only the
+  pairs sharing a blocking key (name prefix, soundex, locality). With 1000
+  balanced blocks of 1000 records: \(1000 \times \binom{1000}{2}
+  \approx 5\times10^8\) comparisons — 1000× fewer. The risk is the
+  <em>false negative</em> (two duplicates in different blocks); one therefore
+  multiplies the blocking keys and divides the comparisons by filtering
+  (pairs whose name similarity is below a threshold are discarded before the
+  costly comparisons).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 10.4 — Integration: matching, fusion, provenance</span>
+  Integrating \(k\) sources requires: (i) schema <strong>matching</strong>
+  ("Prenom" ≈ "first_name", by similarity of names,
+  types, values), (ii) <strong>fusion</strong> of conflicting values
+  (voting, freshness, trust in the source), (iii)
+  <strong>provenance</strong> — which source produced which value, in order
+  to audit and correct. Architectures: ETL toward a schematized warehouse,
+  or ELT (load raw, transform at query time); the <em>data lake</em>
+  stores raw data, the <em>lakehouse</em> adds transactions and a catalog.
+  These topics (and data-assisted fact-checking) are the home ground of the
+  CEDAR team — the subject of the next chapter.
+</div>
+
+<div class="note">
+  <span class="tag">Note — Quality and trust</span>
+  The GIGO rule (<em>garbage in, garbage out</em>) is constant: data
+  preparation consumes the majority of ML project time. Knowing
+  where data is born and how it is merged is not "data
+  plumbing": it is the condition for model reproducibility —
+  and for the credibility of published figures.
+</div>
+</section>
+<section class="chapter" id="ch11">
+<h2>11. Research of the teaching team</h2>
+
+<p>The module is led by Madhulika Mohanty, Inria researcher (chargée de
+recherche) in the <strong>CEDAR</strong> team (Inria Saclay — École
+Polytechnique), founded and led by Ioana Manolescu, Inria senior researcher
+(directrice de recherche), a specialist in complex and heterogeneous data
+management. The team's work draws the arc of this
+module: from the foundations of data systems to the web of data, then
+to the use of data to verify information — Madhulika Mohanty contributes in
+particular on the querying and exploration of graph data. Verified
+selection:</p>
+
+<ul style="margin:.4rem 0; padding-left:1.3rem;">
+  <li><strong>Foundations and teaching of the field.</strong> S.&nbsp;Abiteboul,
+  I.&nbsp;Manolescu, P.&nbsp;Rigaux, M.-C.&nbsp;Rousset, P.&nbsp;Senellart,
+  <em>Web Data Management</em>, Cambridge University Press, 2011 — the reference
+  treatise on web data management, <a href="http://webdam.inria.fr/Jorge/">freely
+  available online</a>. With T.&nbsp;Kaoudi and M.&nbsp;Zampetakis, she also
+  published <em>Cloud-Based RDF Data Management</em> (Morgan&nbsp;&amp;&nbsp;Claypool,
+  2020) — the RDF of ch. 9 seen from the cloud and distribution side.</li>
+  <li><strong>RDF graph summaries.</strong> Real knowledge
+  graphs are too large to be "seen" at a glance:
+  G.&nbsp;Goasdoué, M.&nbsp;Guzewicz, I.&nbsp;Manolescu, <a href="https://dblp.org/pid/m/IoanaManolescu">"RDF
+  Graph Summarization for First-Sight Structure Discovery"</a>, VLDB Journal
+  29(5), 2020 — building quotient summaries that approximate the graph in
+  small fractions of its size, with a guarantee of exactness for
+  "typical" query answers.</li>
+  <li><strong>Heterogeneous integration: ConnectionLens.</strong> The
+  <em>ConnectionLens</em> platform (demo PVLDB 11(12), 2018, with
+  C.&nbsp;Chanial,
+  M.&nbsp;Dziri, M.&nbsp;Galhardas, J.&nbsp;Leblay, M.&nbsp;Le&nbsp;Nguyen)
+  integrates relational databases, JSON, CSV, XML
+  trees, and texts into a <em>single graph</em>; the long version (Anadiotis,
+  Balalau, Bouganim,
+  Chimienti, Galhardas, Haddad, Horel, Manolescu, Youssef,
+  <em>Graph integration of structured, semistructured and unstructured data for
+  data journalism</em>, Information Systems 104, 2022) formalizes the model:
+  the direct follow-up of ch. 10. A spectacular application: the
+  automated detection of <a href="https://arxiv.org/abs/2102.04141">scientific
+  conflicts of interest</a> (CIKM 2021) by crossing author statements,
+  patents, clinical trials, and funding.</li>
+  <li><strong>Fact-checking and data journalism.</strong> Starting with
+  "Computational fact-checking: a content management perspective"
+  (S.&nbsp;Cazalens, J.&nbsp;Leblay, I.&nbsp;Manolescu, X.&nbsp;Lamarre,
+  T.&nbsp;Tannier, PVLDB 11(12), 2018), the team treats claim
+  verification as a <em>data management</em> problem:
+  finding the sources, aligning them, evaluating the claims. The line
+  continued with the verification of <em>numbers</em> (Balalau et al., TTO/TLS
+  2022, StatCheck demonstrator) then with the generation of factual
+  counter-arguments; the ANR/DGA <a href="https://www.inria.fr/en/sourcessay">SourceSay</a>
+  project (with the Décodeurs of <em>Le Monde</em>) equips journalists to
+  find the <em>first source</em> of a digital rumor.</li>
+  <li><strong>AI × data.</strong> CEDAR's current program connects
+  information extraction (LLMs and graphs: FactSpotter, Findings of EMNLP
+  2023), heterogeneous data querying, and trust — the meeting of ch. 10
+  with the <em>NLP</em> and <em>LLMs</em> modules of the master's program.
+  See the <a href="https://www.inria.fr/en/cedar">CEDAR page</a> and the
+  <a href="https://dblp.org/pid/m/IoanaManolescu">dblp list</a>.</li>
+</ul>
+
+<div class="note">
+  <span class="tag">Note — What this changes for you</span>
+  Project topics draw on this work: summarizing an RDF graph,
+  integrating two heterogeneous sources with provenance, verifying a published
+  statistic against open datasets — modeling (ch. 3), querying
+  efficiently (ch. 5-8), assessing trust (ch. 10).
+</div>
+</section>
+<section class="exercises" id="ex">
+<h2>Exercises</h2>
+<ol>
+  <li><strong>Algebra and SQL (solved).</strong> On the database of Example 1.2,
+  express in algebra then in SQL: (a) the majors of the students
+  enrolled in the DB course; (b) the students enrolled in <em>all</em>
+  courses of at least 4 credits; (c) the courses with no enrollee.
+  <em>Solution.</em> (a) \(\pi_{\texttt{major}}(\texttt{Student} \Join
+  \sigma_{\texttt{code}=DB}(\texttt{Enrolled}))\) — SQL: join + WHERE.
+  (b) division: \(\pi_{\texttt{id}}(\texttt{Enrolled}) \div
+  \pi_{\texttt{code}}(\sigma_{\texttt{credits}\geq4}(\texttt{Course}))\) then
+  join with Student; in SQL, <code>NOT EXISTS (SELECT … FROM Course c
+  WHERE credits >= 4 AND NOT EXISTS (SELECT … FROM Enrolled i WHERE i.id = e.id
+  AND i.code = c.code))</code> — the double negation of Prop. 2.2, applied
+  to the division of ch. 1. (c) \(\pi_{\texttt{code}}(\texttt{Course}) -
+  \pi_{\texttt{code}}(\texttt{Enrolled})\), SQL: <code>NOT EXISTS</code> or
+  <code>LEFT JOIN … WHERE i.id IS NULL</code> — the anti-join.</li>
+
+  <li><strong>Closure and 3NF (solved).</strong> \(R(A,B,C,D,E)\),
+  \(F = \{A \to B,\; BC \to D,\; D \to E\}\). (a) Compute the keys.
+  (b) Is the relation in 3NF? (c) Decompose into 3NF without
+  loss and verify each step with Theorem 3.5.
+  <em>Solution.</em> (a) \((AC)^{+}\): \(A\) gives \(B\), \(ABC\)
+  gives \(D\), \(D\) gives \(E\) → everything: \(AC\) is a key (\(A^{+} = AB\),
+  \(C^{+} = C\): neither \(A\) nor \(C\) alone). Prime attributes: \(A, C\).
+  (b) \(D \to E\): \(D\) is not a superkey (\(D^{+} = DE\)) and \(E\)
+  is not prime → not 3NF (2NF yes: no FD from a strict
+  subset of the key). (c) By 3NF synthesis (minimal cover
+  \(\{A\to B, BC\to D, D\to E\}\), one schema per determinant, plus a key):
+  \((AB, BCD, DE, AC)\) — lossless and FD-preserving. The "by hand"
+  decomposition \((ABCD, DE)\) then \((AB, ACD)\) preserves \(\{A\to B\}\)
+  but <em>loses</em> \(BC \to D\) (check with Thm 3.5: the intersection
+  \(B\) determines nothing): synthesis avoids precisely this pitfall.</li>
+
+  <li><strong>B+ by hand (solved).</strong> Insert in order 2, 4, 6, 8,
+  10, 12, 14 into a B+ tree of order \(d=1\); give the final tree and its
+  height (same conventions as Example 5.4: when a leaf
+  \([a,b,c]\) splits, the copied separator is \(c\), the first key of the
+  right leaf).
+  <em>Solution.</em> 2 then 4: leaf [2,4]. The 6 overflows
+  [2,4,6] → [2,4] / [6], copy of 6: root [6]. The 8: leaf
+  [6,8]. The 10: [6,8,10] → [6,8] / [10], copy of 10: root [6,10],
+  leaves [2,4] [6,8] [10]. The 12: leaf [10,12]. The 14:
+  [10,12,14] → [10,12] / [14], copy of 14: the root [6,10,14] overflows
+  (3 keys); <em>internal</em> split: the median key 10 is
+  moved to the new root, internal children [6] and [14]. The 14 already
+  placed: final tree
+<pre class="code"><code>              [10]
+          ┌──────┴──────┐
+        [ 6 ]         [ 14 ]
+      ┌──┴──┐        ┌──┴──┐
+    [2,4] [6,8]   [10,12] [14]
+</code></pre>
+  Height: 3. Check: all leaves at the same level, 1 ≤ keys
+  ≤ 2 everywhere — the invariants of Definition 5.1 hold at every step.</li>
+
+  <li><strong>Serializability (solved).</strong> Let \(H = r_1(X)\, r_2(X)\,
+  w_1(X)\, w_2(X)\, r_1(Y)\, w_1(Y)\, c_1\, c_2\). Build \(SG(H)\);
+  is \(H\) serializable? recoverable? What would 2PL do?
+  <em>Solution.</em> Conflicts on X: \(r_1&lt;w_2\) (T1→T2),
+  \(r_2&lt;w_1\) (T2→T1), \(w_1&lt;w_2\) (T1→T2). On Y: T2 does not write
+  Y. Graph: T1↔T2 → cycle → not serializable (Thm 6.2). Recoverable?
+  T2 reads X (original value) then writes X after \(w_1\): T2 reads nothing
+  written by T1 → yes, recoverable — but with a lost update. Under 2PL,
+  \(T_1\) keeping its X lock until its lock point (after
+  \(w_1(Y)\)), \(w_2(X)\) waits: the forbidden interleaving is simply
+  impossible — Theorem 6.5 in action.</li>
+
+  <li><strong>External sort.</strong> \(N = 2\times10^5\) pages, \(M = 500\).
+  Compute the initial runs, passes, total I/O cost; how long on a
+  disk at 20,000 pages/s? <em>Hint.</em> 400 runs, fan-in 499
+  → \(\lceil\log_{499} 400\rceil = 1\), \(p = 2\), cost \(2Np = 8\times10^5\)
+  pages → 40 s.</li>
+
+  <li><strong>Plan choice.</strong> Join \(R \Join S\) with
+  \(B_R = 200\), \(B_S = 10\,000\), \(M = 52\), a selection on \(R\) of
+  selectivity \(1/100\) that can be pushed before the join. Compare:
+  sort-merge on \((R,S)\); hashing; and the order \(S \Join \sigma(R)\) in
+  block nested loops. <em>Hint.</em> \(\sigma(R)\) fits in RAM
+  (2 pages); NLJ with \(R\) filtered on the outside:
+  \(2 + 1\times10\,000\) … the index changes everything: think "small
+  relation in memory = outer loop".</li>
+
+  <li><strong>SQLite recursion.</strong> Write in recursive SQL: (a) the
+  degree (distance) of separation of each pair of users of a
+  network (table <code>follow(a,b)</code>); (b) the connected components of an
+  undirected graph. <em>Hint.</em> (a) propagate the length by
+  accumulating and take the MIN per pair (window or GROUP BY);
+  (b) propagate the MIN of reached identifiers up to the fixed point.</li>
+
+  <li><strong>Vectors: sizing.</strong> \(10^7\) embeddings in
+  \(d = 768\) (float32): memory size? Number of multiplications
+  for an exact k-NN? With IVF \(n_{list} = 4096\), \(n_{probe} = 32\)
+  (balanced cells): comparative work performed, and gain?
+  <em>Hint.</em> 30.7 GB; \(7.68\times10^{10}\) products;
+  IVF: \(10^7/4096 \times 32 \approx 78\,000\) vectors probed +
+  distances to the centroids, i.e. ~1% of the exact work, at the price of
+  recall.</li>
+
+  <li><strong>Open design.</strong> A journalist receives 5 CSV
+  files (elections, demographics, funding, companies, press). Propose an
+  architecture to cross-check and trace the numerical claims of an article:
+  target schema, indexes, provenance, typical queries (reread ch. 10-11).</li>
+</ol>
+</section>
+<section class="chapter refs" id="refs">
+<h2>References</h2>
+<ul>
+  <li>E.&nbsp;F. Codd, "A Relational Model of Data for Large Shared Data
+  Banks", <em>Communications of the ACM</em> 13(6), 1970 —
+  <a href="https://dl.acm.org/doi/10.1145/362384.362685">the founding paper</a> of the
+  relational model.</li>
+  <li>S. Abiteboul, R. Hull, V. Vianu, <em>Foundations of Databases</em>,
+  Addison-Wesley, 1995 — the theoretical reference: algebra/calculus (Thm 1.7),
+  dependencies, chase, normal forms.</li>
+  <li>A. Silberschatz, H. Korth, S. Sudarshan, <em>Database System Concepts</em>,
+  7th ed., McGraw-Hill, 2019 — the course textbook: storage, B+ trees,
+  transactions,
+  ARIES, distributed.</li>
+  <li>H. Garcia-Molina, J. Ullman, J. Widom, <em>Database Systems: The Complete
+  Book</em>, 2nd ed., Prentice Hall, 2008 — ch. 13-14 (B+), 17-18 (concurrency),
+  15-16 (recovery).</li>
+  <li>D. Comer, "The Ubiquitous B-Tree", <em>ACM Computing Surveys</em>
+  11(2), 1979 — <a href="https://dl.acm.org/doi/10.1145/356770.356776">the classic
+  survey</a> on B-trees.</li>
+  <li>G. Graefe, "Query Evaluation Techniques for Large Databases",
+  <em>ACM Computing Surveys</em> 25(2), 1993 —
+  <a href="https://dl.acm.org/doi/10.1145/152610.152611">joins, costs,
+  optimization</a>, the source of ch. 8.</li>
+  <li>P. Bernstein, V. Hadzilacos, N. Goodman, <em>Concurrency Control and Recovery
+  in Database Systems</em>, Addison-Wesley, 1987 — the theorems of ch. 6
+  (2PL, serializability), freely consultable online.</li>
+  <li>C. Mohan, D. Haderle, B. Lindsay, H. Pirahesh, P. Schwarz, "ARIES: A
+  Transaction Recovery Method Supporting Fine-Granularity Locking and Roll-Backs
+  Using Write-Ahead Logging", <em>ACM TODS</em> 17(1), 1992 —
+  <a href="https://dl.acm.org/doi/10.1145/128936.128942">the paper of ch. 7</a>.</li>
+  <li>S. Gilbert, N. Lynch, "Brewer's Conjecture and the Feasibility of
+  Consistent, Available, Partition-Tolerant Web Services",
+  <em>SIGACT News</em> 33(2), 2002 —
+  <a href="https://dl.acm.org/doi/10.1145/564585.564601">the formalization of
+  CAP</a> (Thm 9.1).</li>
+  <li>N. Francis et al., "Cypher: An Evolving Query Language for Property
+  Graphs", <em>SIGMOD</em> 2018 —
+  <a href="https://dl.acm.org/doi/10.1145/3183713.3183738">the language of
+  property graphs</a>; on the RDF side: W3C,
+  <a href="https://www.w3.org/TR/rdf11-concepts/">RDF 1.1 Concepts</a> and
+  <a href="https://www.w3.org/TR/sparql11-query/">SPARQL 1.1</a>.</li>
+  <li>Y. Malkov, D. Yashunin, "Efficient and Robust Approximate Nearest
+  Neighbor Search Using Hierarchical Navigable Small World Graphs",
+  <em>IEEE TPAMI</em> 2018 — <a href="https://arxiv.org/abs/1603.09320">arXiv
+  1603.09320</a>; H. Jégou, M. Douze, C. Schmid, "Product
+  Quantization for Nearest Neighbor Search", <em>IEEE TPAMI</em> 33(1),
+  2011 — the two pillars of ch. 9.</li>
+  <li>J. Johnson, M. Douze, H. Jégou, "Billion-scale Similarity Search with
+  GPUs", <em>IEEE Trans. Big Data</em> 2017 —
+  <a href="https://arxiv.org/abs/1702.08734">arXiv 1702.08734</a>: the
+  FAISS library, the standard tool for vector labs.</li>
+  <li>S. Abiteboul, I. Manolescu, P. Rigaux, M.-C. Rousset, P. Senellart,
+  <em>Web Data Management</em>, Cambridge University Press, 2011 —
+  <a href="http://webdam.inria.fr/Jorge/">free online edition</a>; T.
+  Kaoudi, I. Manolescu, M. Zampetakis, <em>Cloud-Based RDF Data Management</em>,
+  Morgan &amp; Claypool, 2020.</li>
+  <li>T. Chanial et al., "ConnectionLens: Finding Connections across
+  Heterogeneous Data Sources", <em>PVLDB</em> 11(12), 2018;
+  A. Anadiotis et al., "Graph integration of structured, semistructured and
+  unstructured data for data journalism", <em>Information Systems</em> 104,
+  2022 — the CEDAR team in action (ch. 10-11);
+  <a href="https://dblp.org/pid/m/IoanaManolescu">complete publication list
+  on dblp</a>.</li>
+  <li>Documentation: <a href="https://www.sqlite.org/windowfunctions.html">SQLite
+  window functions</a>, <a href="https://www.postgresql.org/docs/current/mvcc.html">MVCC
+  in PostgreSQL</a>, <a href="https://www.mongodb.com/docs/manual/">MongoDB
+  manual</a>, <a href="https://github.com/pgvector/pgvector">pgvector</a>.</li>
+</ul>
+</section>
+</main>
+<footer class="foot">
+<p><a href="../../index.html">← Master's program</a></p>
+</footer>
+</body>
+</html>

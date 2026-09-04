@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Learning — LLGA</title>
+<link rel="stylesheet" href="../../assets/paper.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<p class="crumb"><a href="../../index.html">MSc&amp;T LLGA · Course notes</a></p>
+<main class="paper">
+<h1>Deep Learning</h1>
+<p class="subtitle">APM_52183_EP · Year 1 · Period 2</p>
+<nav class="toc">
+<p class="toc-title">Contents</p>
+<ol>
+<li><a href="#intro">Introduction and overview</a></li>
+<li><a href="#ch0">0. Compact refresher: the P1 foundation</a></li>
+<li><a href="#ch1">1. Counting: FLOPs, memory, scaling laws</a></li>
+<li><a href="#ch2">2. Theoretical complexity of training</a></li>
+<li><a href="#ch3">3. Parallelism: data, tensor, pipeline</a></li>
+<li><a href="#ch4">4. Communication: all-reduce and friends</a></li>
+<li><a href="#ch5">5. Memory efficiency: checkpointing, ZeRO, mixed precision</a></li>
+<li><a href="#ch6">6. Efficient inference</a></li>
+<li><a href="#ch7">7. Real systems: roofline, GPU, and the complete budget of a 7B LLM</a></li>
+<li><a href="#ch8">8. Research of the instructor</a></li>
+<li><a href="#ex">Exercises</a></li>
+<li><a href="#refs">References</a></li>
+</ol>
+</nav>
+<section class="chapter" id="intro">
+<h2>Introduction and overview</h2>
+<table class="tbl">
+<tr><th style="width:160px">Module</th><td>Deep Learning — <em>official title (SynapseS 2026-2027 catalog): &ldquo;Apprentissage profond de la théorie à la pratique&rdquo;</em></td></tr>
+<tr><th>Code</th><td>APM_52183_EP</td></tr>
+<tr><th>Team and volume</th><td>Coordinator: Alain Durmus (École Polytechnique, CMAP) · instructional engineering team: C. Battiloro, P. Bianchi, C. Bonet, B. Bonev · occurrence coordinator: B. Galerne · 36&nbsp;h in person · 4.5&nbsp;ECTS (MScT degrees; 5&nbsp;ECTS engineering curriculum and exchange programs) · the foundations and practice of deep learning, reread here through the lens of <strong>cost</strong>: counting FLOPs and bytes, parallelizing training, compressing inference — and knowing the lower bounds that say what cannot be done better.</td></tr>
+<tr><th>Period</th><td>Fall semester — period 2 (X-3A-P2): from 04/01/2027 to 19/03/2027 · X3A MA3 slot · min./max. enrollment 1/80 (occurrence: –/85)</td></tr>
+<tr><th>Language</th><td>French, English</td></tr>
+<tr><th>Assessment</th><td>Numerical grade out of 20 (literal conversion / American grade); project-based validation indicated for the X and exchange curricula; resit allowed (max of the two grades); course unit earned if final grade ≥ 10. Modalities specific to the LLGA track: not communicated.</td></tr>
+<tr><th>Status in the program</th><td><span class="badge option">P2 Option</span><span class="badge position">Outside recommended track</span> Course unit listed in the official LLGA&nbsp;1&nbsp;–&nbsp;S2 2026-2027 track.</td></tr>
+</table>
+
+<p>This module takes up the foundation of the P1 Deep Learning course and rereads it through the lens of cost: how many FLOPs, how many bytes, what communications — and what the complexity lower bounds say about what cannot be done better. Around this guiding thread, training parallelization, memory efficiency and inference efficiency become quantitative problems, down to the actual behavior of a 7B LLM on GPU. This is the course where deep learning meets systems.</p>
+
+<h3>What you will be able to do</h3>
+<ul>
+<li>Count the FLOPs and memory of a model, and connect these counts to scaling laws.</li>
+<li>Explain the theoretical complexity bounds of training and what they rule out.</li>
+<li>Choose a parallelism strategy — data, tensor, pipeline — and justify it quantitatively.</li>
+<li>Analyze collective communications (all-reduce and friends) and their effective cost.</li>
+<li>Reduce the memory footprint of a training run with checkpointing and ZeRO.</li>
+<li>Make inference efficient and know at what performance price.</li>
+<li>Read a roofline and predict the behavior of a real system, from GPU to 7B LLM.</li>
+</ul>
+
+<h3>Official objectives and syllabus (2026-2027 catalog)</h3>
+<p>Officially, the APM_52183_EP course unit offers an in-depth presentation of the <em>practical</em> and <em>theoretical</em> aspects of deep learning: on the one hand the mastery of Python / PyTorch implementation (implementation, debugging, visualization), on the other the analysis of foundations (automatic differentiation, universality results, non-convex optimization, equivariant models). The stated objective is twofold: give an overview of the deep learning landscape and its applications, and make students able to train by themselves a deep network of several million parameters. Official prerequisites: <em>basics in Machine Learning</em> and <em>coding in Python</em>.</p>
+<table class="tbl">
+<tr><th>Official theme (2026-2027 detailed syllabus)</th><th>Section of this module</th></tr>
+<tr><td>1. Introduction and presentation of the field</td><td>Introduction and ch. 0 (refresher of the foundation).</td></tr>
+<tr><td>2. Training pipeline in PyTorch</td><td><em>Not covered as such</em>: ch. 1 deals with the cost of the pipeline (FLOPs, memory), not its PyTorch implementation.</td></tr>
+<tr><td>3. Optimization for deep learning</td><td>Partial: ch. 2 (complexity and optimality bounds); applied stochastic optimization is not detailed.</td></tr>
+<tr><td>4. Image analysis</td><td><em>Missing.</em></td></tr>
+<tr><td>5. Regression and classification of sequential data</td><td><em>Missing.</em></td></tr>
+<tr><td>6. Text generation (Transformers)</td><td>Partial: ch. 7 (7B LLM case study, systems side); the Transformer architecture is not built there.</td></tr>
+<tr><td>7. Stability and robustness</td><td><em>Missing</em> (ch. 2 only gives the complexity perspective).</td></tr>
+<tr><td>8. Deep reinforcement learning</td><td><em>Missing.</em></td></tr>
+<tr><td>9. Generative models</td><td><em>Missing.</em></td></tr>
+</table>
+<div class="note">
+<span class="tag">Complement to the official syllabus</span>
+Chapters 1 to 7 of this module deepen a &ldquo;cost and systems&rdquo; angle (FLOPs and memory counting, data/tensor/pipeline parallelism, collective communications, checkpointing and ZeRO, efficient inference, roofline) that does not appear as such in the official syllabus; conversely, official themes 2, 4, 5, 7, 8 and 9 are not developed in it. These materials therefore complement the official syllabus on the systems side — they do not replace it.
+</div>
+
+<h3>Where this course fits in the program</h3>
+<p>An option of period 2 of M1, outside the recommended track: this is the P2 variant of the P1 course, <a href="../m1p1-deep-learning/">Deep Learning</a>, whose foundation it assumes (or an equivalent); chapter 0 offers compact reminders of it. Official prerequisites: <em>basics in Machine Learning</em> and <em>coding in Python</em> — exactly what chapter 0 brings back up to level before the cost chapters. Downstream, the module directly prepares <a href="../m2-mlops-llm-engineering/">ML Ops and LLM Engineering Principles</a> (M2), where these cost accounts become deployment decisions, and <a href="../m2-advanced-topics-llms/">Advanced Topics in Large Language Models</a> (M2), whose large-scale analyses build on the same scaling laws and budgets.</p>
+
+<h3>Course outline</h3>
+<ul>
+<li><strong>Compact refresher: the P1 foundation</strong> — the essentials of the P1 Deep Learning course, restated in cost vocabulary.</li>
+<li><strong>Counting: FLOPs, memory, scaling laws</strong> — the module's basic discipline: quantify before asserting.</li>
+<li><strong>Theoretical complexity of training</strong> — the bounds that say what no trick will ever beat.</li>
+<li><strong>Parallelism: data, tensor, pipeline</strong> — the three main ways of distributing a training run, and their trade-offs.</li>
+<li><strong>Communication: all-reduce and friends</strong> — the collectives that connect the workers, and their share of total time.</li>
+<li><strong>Memory efficiency: checkpointing, ZeRO</strong> — fitting models and states that do not fit.</li>
+<li><strong>Efficient inference</strong> — cutting the cost of the trained model at the moment it serves.</li>
+<li><strong>Real systems: roofline, GPU, 7B LLM</strong> — confronting theoretical accounts with hardware, on a textbook case.</li>
+<li><strong>Research of the instructor</strong> — the research papers of Kevin Scaman, read with the module's tools.</li>
+<li><strong>Exercises</strong> — counts, bounds and parallelism choices to defend.</li>
+<li><strong>References</strong> — the systems and theory papers underlying each chapter.</li>
+</ul>
+
+<h3>How to study this module</h3>
+<ul>
+<li>Work through chapter 0 seriously, even if the P1 course is fresh: the cost vocabulary is introduced there.</li>
+<li>Quantify everything: for every architecture encountered elsewhere, practice estimating FLOPs and memory before looking up the answer.</li>
+<li>Never separate theory from hardware: a complexity bound is read facing a roofline.</li>
+<li>Recompute the systems chapter's examples on paper, then check against GPU orders of magnitude.</li>
+<li>Cross-reference with the optimization module of the same period: convergence rates ground the training analyses there.</li>
+<li>Do the exercises by estimating first, computing second: the order of magnitude first is the target skill.</li>
+</ul>
+
+<div class="note">
+<span class="tag">The module in the LLGA master's program</span>
+The LLMs that structure the M2 of the master's program are first and foremost objects of cost: counting them, parallelizing them and compressing them is the condition for deploying them. This module provides this language of budgets, common to the systems courses and the M2 LLM courses — and directly marketable in careers in large-scale ML engineering as in research on distributed learning.
+</div>
+</section>
+<section class="chapter" id="ch0">
+<h2>0. Compact refresher: the P1 foundation</h2>
+
+<div class="recap">
+  <div class="recap-title">Reminders — the P1 Deep Learning module, in eight points (each point refers to the corresponding chapter of the Deep Learning module)</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Neuron and network</strong> (ch. 1): \(h = \sigma(Wx)\); depth =
+    composition; initialization and normalization to keep the variance stable
+    across layers.</li>
+    <li><strong>Backpropagation</strong> (ch. 2): chain rule on the computation
+    graph; the cost of a backward pass ≈ 2× that of the forward pass (remember:
+    this is a complexity fact, not a software approximation — see ch. 1
+    here).</li>
+    <li><strong>Optimization</strong> (ch. 3): SGD, momentum, Adam/AdamW;
+    warmup and decay — the analytical detail is in the Optimization for AI
+    module, ch. 2–5 and 10.</li>
+    <li><strong>CNN</strong> (ch. 4): shared weights, receptive fields; cost
+    dominated by the convolutions.</li>
+    <li><strong>Transformers</strong> (ch. 6): multi-head attention
+    \(\mathrm{softmax}(QK^\top/\sqrt{d})V\), 4\(d\) MLP, residual connections;
+    this is the architecture of all the case studies in this module.</li>
+    <li><strong>Generative models</strong> (ch. 7): AE/VAE/GAN — their
+    sampling cost will be revisited in ch. 6.</li>
+    <li><strong>Transfer learning</strong> (ch. 8): fine-tuning vs
+    pre-training — the dividing line of budgets (ch. 1 and 7 here).</li>
+    <li><strong>Training in practice</strong> (ch. 10): mixed precision,
+    distributed data parallel, monitoring — ch. 5 here provides the
+    theory.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">The pedagogical contract of the P2 variant</span>
+  The P1 course answers "how does it work?"; this variant answers "how much
+  does it cost, and how far can one go?". Three questions organize
+  everything: (Q1) <em>count</em> — predict the FLOPs and memory of a
+  training run <em>before</em> launching it (ch. 1, 7); (Q2)
+  <em>parallelize</em> — decompose the compute time over several machines,
+  and know what theory forbids (ch. 2–5); (Q3) <em>compress</em> — reduce
+  the inference cost at nearly equal quality (ch. 6). The instructor is a
+  theorist of distributed optimization (ch. 8): this module is the place in
+  the master's program where one proves <em>lower bounds</em>, not just
+  algorithms.
+</div>
+</section>
+<section class="chapter" id="ch1">
+<h2>1. Counting: FLOPs, memory, scaling laws</h2>
+
+<p>The module's first skill: <strong>exact counting</strong>. An engineer who
+can estimate the FLOPs of a training run by hand saves GPU-days — and
+catches configuration errors before they explode.</p>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Units: FLOP, FLOPs, FLOP/s</span>
+  A <strong>FLOP</strong> (floating-point operation) = one elementary
+  operation (+, ×); we count a multiply-add \(a \cdot b + c\) as
+  <strong>2 FLOPs</strong> (the module's convention, aligned with the
+  systems literature); <strong>FLOP/s</strong> = throughput. An A100 GPU:
+  ≈ 19.5 TFLOP/s fp32, 312 TFLOP/s tensor-core bf16; an H100: ≈ 1000
+  TFLOP/s bf16 (sparse modes excluded). The <strong>MFU</strong> (model
+  FLOPs utilization) = achieved FLOP/s ÷ peak FLOP/s: 35–50% is a good LLM
+  training run; the rest is lost to memory, communication and subtasks
+  (ch. 7).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.2 — Cost of a linear layer and a transformer (proved)</span>
+  (i) A matrix-matrix product \(A \in \mathbb{R}^{m \times n}\) by
+  \(B \in \mathbb{R}^{n \times p}\) costs \(2mnp\) FLOPs. (ii) A linear
+  layer \(d_\mathrm{in} \to d_\mathrm{out}\) applied to \(n\) tokens costs
+  \(2\,n\,d_\mathrm{in}d_\mathrm{out}\) FLOPs and has
+  \(d_\mathrm{in}d_\mathrm{out}\) parameters — that is, <strong>2 FLOPs
+  per parameter and per token</strong>. (iii) Transformer block of width
+  \(d\), over a sequence of \(n\) tokens: QKVO \(4 \times 2d^2 = 8d^2\),
+  scores \(QK^\top\) and product with \(V\): \(2 \times 2n^2 d\), MLP
+  (width \(4d\)): \(2 \times 2 \times 4d^2 = 16d^2\) — that is,
+  <em>per token</em>: \(\;24d^2 + 4nd\) FLOPs.
+  <div class="proof">
+  (i) Each of the \(mp\) entries of \(C=AB\) is a dot product of length
+  \(n\) (n multiplications + n−1 additions ≈ 2n FLOPs). (ii) special case
+  with \(m=n\) tokens, \(p = d_\mathrm{out}\). (iii): apply (ii) to each
+  projection; for \(QK^\top\) (an \(n \times d\) by \(d \times n\)
+  matrix): \(2n^2 d\), likewise for \((\cdot)V\) (\(n \times n\) by
+  \(n \times d\)); MLP = two layers \(d \to 4d\) then \(4d \to d\). Divide
+  the total by \(n\) tokens to express it per token: QKV projections
+  (\(3 \times 2d^2\)) + output (\(2d^2\)) = \(8d^2\), quadratic part of
+  attention \(4nd\), MLP \(16d^2\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 1.3 — The rule \(C \approx 6\,N\,D\) (proved)</span>
+  Pre-training a model with \(N\) parameters (dense transformer) on
+  \(D\) tokens costs
+  $$C \;\approx\; 6\,N\,D \;\;\text{FLOPs} \qquad (\text{forward} \approx 2ND,\; \text{backward} \approx 4ND).$$
+  <div class="proof">
+  Forward pass: the model is a composition of linear layers and
+  negligible operations (normalizations, softmax: \(O(nd)\) or \(O(n^2)\)
+  without a \(d^2\) factor); each parameter is used exactly once per
+  token, at 2 FLOPs each (prop. 1.2 ii) — hence \(2ND\). Backward pass:
+  for each layer, the gradient is computed by (a) applying the transpose
+  of the weight to the upstream gradient (\(2ND\)) and (b) multiplying the
+  upstream gradient by the local input to form the weight gradient
+  (\(2ND\)) — that is \(2 \times 2ND\). Total \(6ND\). Experience
+  (profiling of large training runs) confirms within ±10%, the gap coming
+  from (shared) embeddings, the vocabulary and the heads.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.4 — Training memory, line by line (Adam, mixed precision)</span>
+  For \(N\) parameters:
+  <table class="tbl">
+  <thead><tr><th>Tensor</th><th>Precision</th><th>Bytes/parameter</th></tr></thead>
+  <tbody>
+  <tr><td>weights (bf16/fp16)</td><td>2 bytes</td><td>2</td></tr>
+  <tr><td>gradients (bf16)</td><td>2</td><td>2</td></tr>
+  <tr><td>Adam states \(m, v\) (fp32)</td><td>4 + 4</td><td>8</td></tr>
+  <tr><td>fp32 master weights (stability)</td><td>4</td><td>4</td></tr>
+  <tr><td><strong>total states</strong></td><td></td><td><strong>16</strong></td></tr>
+  <tr><td>activations (depend on \(n, d\), number of layers) — see ch. 5</td><td>2</td><td>\(\sim 2\,n\,d\) per layer and per token</td></tr>
+  </tbody>
+  </table>
+  Order of magnitude to remember: <strong>16 bytes per parameter</strong>
+  of states + activations. A 7B model with Adam: \(7\times10^9 \times 16\)
+  ≈ 112&nbsp;GB — before any activation: a single 80&nbsp;GB GPU is not
+  enough (ch. 5 and 7).
+</div>
+
+<div class="note">
+  <span class="tag">Scaling laws: from Kaplan to Chinchilla (the budget as a primary dimension)</span>
+  <strong>Kaplan et al. 2020</strong>: over decades, the loss follows a
+  power law \(L(N, D) \approx (N_c/N)^{\alpha_N} + (D_c/D)^{\alpha_D} +
+  L_\infty\) — first reading: enlarging the model helps more than
+  enlarging the data.
+  <strong>Hoffmann et al. 2022 (Chinchilla)</strong>: with the compute
+  budget \(C = 6ND\) <em>fixed</em>, the optimum is reached for
+  \(D \approx 20 N\) — the models of the Kaplan era were
+  <em>undertrained</em>; GPT-3 (300B tokens for 175B parameters) was "too
+  big" for its data, and a 70B on 1.5T tokens dominates it at equal
+  budget. Method lesson for this module: the budget \(C\) is not a side
+  constraint, it is the axis along which one <em>designs</em> the model.
+  (The M2 LLMs module, ch. 3, revisits these laws in detail; the "energy"
+  angle is in the Optimization and Responsible AI for Sustainability
+  module, ch. 1.)
+</div>
+
+<pre class="code"><code>def flops_transformer(N_params, D_tokens, fwd_ratio=2.0, bwd_ratio=4.0):
+    return (fwd_ratio + bwd_ratio) * N_params * D_tokens
+
+C = flops_transformer(6.7e9, 1e12)                  # LLaMA-7B ~ 6.7B params, 1T tokens
+print(f"{C:.2e} FLOPs")                              # 4.02e22
+peak, mfu = 312e12, 0.45                             # A100 bf16, 45% MFU
+hours = C / (peak * mfu) / 3600
+print(f"{hours:,.0f} GPU-hours")                     # ~80,000 -- see ch. 7 and Touvron et al. 2023</code></pre>
+</section>
+<section class="chapter" id="ch2">
+<h2>2. Theoretical complexity of training</h2>
+
+<p>Before stacking GPUs, a theory question: is there a <em>limit</em> to
+what parallelism can buy? Answer: yes, and it is <em>provable</em>. This
+chapter is the module's signature (and the instructor's — ch. 8).</p>
+
+<div class="def">
+  <span class="tag">Definition 2.1 — Decentralized distributed optimization over a graph</span>
+  \(P\) machines, each with its own convex function \(f_i\), connected by
+  a graph \(G\) (each machine talks only to its neighbors); common goal:
+  $$\min_x\; f(x) = \frac{1}{P}\sum_{i=1}^{P} f_i(x).$$
+  The <strong>execution time</strong> counts two currencies: the number
+  of <em>local</em> iterations (compute: gradients up to the condition
+  number — see the Optimization for AI module, ch. 2–3) and the
+  <strong>communication rounds</strong> (one gossip round = mixing the
+  vectors between neighbors). The quality of the network is summarized by
+  the <strong>spectral gap</strong> \(\gamma \in [0,1)\) of the gossip
+  matrix \(W\) (second largest eigenvalue in modulus): mixing converges
+  as \(\gamma^t\) — the closer \(\gamma \to 1\), the slower the network
+  reaches consensus.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 2.2 — Lower bounds and optimality (Scaman, Bach, Bubeck, Lee, Massoulié, ICML 2017; statement)</span>
+  For \(f = \frac1P \sum f_i\) \(\mu\)-strongly convex and \(L\)-smooth
+  (\(\kappa = L/\mu\)), <em>every</em> distributed algorithm (in the sense
+  of def. 2.1) requires a time
+  $$T \;=\; \Omega\!\Big(\sqrt{\kappa}\;\cdot\;\frac{1}{\sqrt{1-\gamma}}\Big) \qquad\text{(up to constants, in homogeneous time)},$$
+  and this order is <strong>attained</strong> by the combination: Nesterov
+  accelerated gradient descent (see the Optimization for AI module, ch. 3)
+  + <em>Chebyshev accelerated gossip</em> (replacing \(W\) by a degree
+  \(m\) polynomial in \(W\) chosen to flatten the spectrum over
+  \([\gamma, 1]\) — the same trick that accelerates gradients, applied to
+  the graph). The JMLR 2019 version extends the result to the non-strongly
+  convex case: \(\Omega(\sqrt{L/\varepsilon})\) is compounded by a
+  network factor.
+  <div class="proof">
+  <em>Sketch of the lower bound (the "adversary" argument).</em> One
+  constructs a family of "local" quadratics at each node, whose solution
+  \(x^\star\) depends on spread-out information: for machine \(i\) to
+  learn what machine \(j\) knew, the information must travel along the
+  graph, and the <em>mixing of the graph</em> imposes
+  \(\Omega(1/\sqrt{1-\gamma})\) communication rounds (each gossip
+  multiplies the imbalance by only \(\gamma\)); independently, even
+  sequentially, a quadratic with condition number \(\kappa\) requires
+  \(\Omega(\sqrt\kappa)\) gradient accesses (Nesterov's bound —
+  Optimization for AI module, ch. 3). The construction crosses the two
+  obstacles into a quadratic <em>on the product</em> graph × condition
+  number: no algorithm can beat the product of the two bounds.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Reading: the two regimes, and why they structure practice</span>
+  <table class="tbl">
+  <thead><tr><th>Regime</th><th>Condition</th><th>Dominant time</th><th>Practical equivalent</th></tr></thead>
+  <tbody>
+  <tr><td><strong>sequential (compute)</strong></td><td>fast network, small \(\gamma\) (NVLink, \(\gamma \approx 0{,}1\))</td><td>\(\sqrt{\kappa}\): Nesterov reigns</td><td>a single node, 8 welded GPUs</td></tr>
+  <tr><td><strong>parallel (communication)</strong></td><td>slow network, \(\gamma \to 1\) (Ethernet, large clusters)</td><td>\(\sqrt{\kappa/(1-\gamma)}\): the network caps everything</td><td>multi-datacenter, federated (see the Emerging ML module, ch. 3)</td></tr>
+  </tbody>
+  </table>
+  Engineering consequence: <strong>adding machines does not reduce the
+  time below the communication floor</strong>. This is the exact analogue
+  of Amdahl's law (ch. 7) for optimization: the "sequential" part is no
+  longer a program but the geometry of the network. All of ch. 4
+  (all-reduce, compression, overlap) is a war against this
+  \(\sqrt{1/(1-\gamma)}\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.3 — What parallelism <em>can</em> buy: the "finite sum" regime</span>
+  The bound of theorem 2.2 concerns the time to <em>reach</em> an
+  \(\varepsilon\)-optimal point when the data are <em>partitioned</em>
+  (each \(f_i\) is opaque). If instead all machines can evaluate the
+  <em>same</em> function (replicated data), parallelism reduces the
+  variance of SGD (mini-batching: Optimization for AI module, ch. 5) —
+  but the optimal statistical rate bounds the gain (Dieuleveut et al.,
+  see the Optimization for AI module, ch. 11). In short: parallelism
+  speeds up <em>compute</em>, never (or marginally) the <em>statistical
+  complexity</em> — a distinction that commercial announcements like to
+  forget.
+</div>
+</section>
+<section class="chapter" id="ch3">
+<h2>3. Parallelism: data, tensor, pipeline</h2>
+
+<p>Three axes for splitting a training run — often combined (the "3D
+parallelism" of large systems). For each: the principle, the time
+decomposition, the communication cost.</p>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — Data parallelism (DP)</span>
+  Each GPU holds a <em>complete</em> copy of the model, processes a
+  different mini-batch (\(B/P\) examples), then the gradients are
+  averaged by an <strong>all-reduce</strong> (ch. 4). Time per step
+  (batch size \(B\), forward+backward time \(\tau_\mathrm{calc}(B)\),
+  gradient of size \(S\) bytes):
+  $$T_\mathrm{DP} \;=\; \underbrace{\tau_\mathrm{calc}(B/P)}_{\text{compute, divided by } P} \;+\; \underbrace{2\,(P-1)\,\alpha + \tfrac{2(P-1)}{P}\tfrac{S}{b}}_{\text{ring all-reduce (ch. 4)}}.$$
+  <em>Strong</em> scalability (at fixed \(B\)): the compute term shrinks,
+  the communication term grows — the balance point defines the effective
+  batch size; hence increasing \(B\) with the step (LARS: Optimization
+  for AI module, ch. 10). This is the default mode of PyTorch DDP.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.2 — Tensor parallelism (TP — Megatron, Shoeybi et al. 2019)</span>
+  One splits the <em>matrices</em> of the model: the layer \(Y = XW_1
+  W_2\) (MLP block) is distributed column/row-wise: each GPU holds a
+  slice \(W_1^{[i]}, W_2^{[i]}\), computes \(X W_1^{[i]}\) (no
+  communication: column split), then an <strong>all-reduce</strong>
+  reassembles \(Y = \sum_i XW_1^{[i]} W_2^{[i]}\)... precisely: the
+  column-then-row split makes the MLP block communication-frugal (1
+  all-reduce forward + 1 backward per block), attention is split
+  <em>per head</em>. TP lives on the fastest links (intra-node NVLink):
+  every layer pays a communication — this is the "mandatory high
+  bandwidth" parallelism.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.3 — Pipeline parallelism: the bubble (proved)</span>
+  \(p\) stages (consecutive layers on each GPU), \(m\) micro-batches,
+  each micro-batch costs \(\tau\) per stage. Under "1F1B" scheduling
+  (one forward pass, one backward pass, staggered), the total time is
+  $$T_\mathrm{pipe} \;=\; (m + p - 1)\,\tau, \qquad \eta \;=\; \frac{m}{m + p - 1} \;\xrightarrow[m \to \infty]{}\; 1,$$
+  where \(\eta\) is the efficiency; the "bubble" (stage idle time)
+  accounts for \(\frac{p-1}{m+p-1}\) of the total.
+  <div class="proof">
+  Fill-up: the first micro-batch crosses the \(p\) stages in
+  \(p\,\tau\) (stage \(j\) starts at \(j\tau\)); afterwards each
+  following micro-batch exits every \(\tau\) units (the stages work
+  staggered): the \(m\)-th exits at \((p + m - 1)\tau\). Ideal work
+  (without bubble): each stage processes \(m\) micro-batches, i.e.
+  \(m\tau\) busy; efficiency is the ratio \(m\tau / (m+p-1)\tau\). Each
+  stage stays idle for \((p-1)\tau\) in total (fill-up and drain
+  combined), i.e. a fraction \((p-1)/(m+p-1)\) of the total time.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<table class="tbl">
+<thead><tr><th>Mode</th><th>What is split</th><th>Communication</th><th>Required hardware</th><th>Typical use</th></tr></thead>
+<tbody>
+<tr><td>DP (3.1)</td><td>the batch</td><td>1 gradient all-reduce per step</td><td>decent inter-node network (InfiniBand)</td><td>default, up to hundreds of GPUs</td></tr>
+<tr><td>TP (3.2)</td><td>the matrices</td><td>all-reduce at <em>every layer</em> (forward+backward)</td><td>intra-node NVLink (8 GPUs)</td><td>very wide models (≥ 30B), or huge width</td></tr>
+<tr><td>PP (3.3)</td><td>the layers</td><td>point-to-point activations between stages</td><td>any network, bubble to amortize</td><td>depth; combined with DP/TP ("3D")</td></tr>
+<tr><td>ZeRO (ch. 5)</td><td>the <em>states</em> (optimizer, gradients, weights)</td><td>like DP (all-reduce) + on-the-fly gathers</td><td>same as DP</td><td>replacing TP when memory, not compute, is the blocker</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <span class="tag">Choosing: the practitioner's decision tree</span>
+  (1) Does the model fit on one GPU with activations? → DP, end of
+  story. (2) The Adam states do not fit → ZeRO-2/3 (ch. 5), not TP: less
+  communication. (3) The weights alone do not fit (\(2N\) bytes &gt;
+  memory) → TP intra-node (8 NVLink GPUs) + PP inter-node + DP on top;
+  tune \(m\) ≥ 4\(p\) to keep the bubble under 20% (theorem 3.3). (4)
+  Always measure the MFU (ch. 1): below 35%, the hierarchy is poorly
+  chosen.
+</div>
+</section>
+<section class="chapter" id="ch4">
+<h2>4. Communication: all-reduce and friends</h2>
+
+<p>The real bottleneck of distributed training is almost never compute:
+it is the <strong>exchange of gradients</strong>. A single operator to
+truly know — the all-reduce — and two reductions: bandwidth or
+latency.</p>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — All-reduce</span>
+  \(P\) machines each hold a vector \(g_i\) of \(S\) bytes; all must
+  receive \(\bar g = \frac1P\sum_i g_i\) (the gradient average in DP).
+  Homogeneous network: latency \(\alpha\) per message, bandwidth
+  \(b\) bytes/s.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.2 — Ring all-reduce: bandwidth-optimal (proved)</span>
+  Arranging the \(P\) machines in a ring and cutting the vector into
+  \(P\) chunks of \(S/P\) bytes, the all-reduce proceeds in two phases
+  (reduce-scatter then all-gather) of \(P-1\) steps each:
+  $$T_\mathrm{ring} \;=\; 2\,(P-1)\,\alpha \;+\; \frac{2(P-1)}{P}\cdot\frac{S}{b} \;\xrightarrow[P \to \infty]{}\; 2\alpha P + \frac{2S}{b}.$$
+  The <em>bandwidth</em> term becomes independent of \(P\) — each
+  machine never sends more than \(\approx 2S/P\) ... that is, at most
+  \(2S(P-1)/P &lt; 2S\) bytes in total: optimal up to constants.
+  <div class="proof">
+  <em>Reduce-scatter.</em> At step \(t\), machine \(i\) sends a chunk
+  (already partially summed) to \(i+1\) and receives from \(i-1\) a
+  different chunk which it adds to its own: after \(P-1\) steps,
+  machine \(i\) holds the <em>complete</em> sum of chunk \(i\) — each
+  machine has sent \((P-1)\cdot S/P\) bytes. <em>All-gather.</em>
+  Same round in broadcast direction: the complete sums circulate,
+  \((P-1)\cdot S/P\) bytes sent per machine. Total per machine:
+  \(2(P-1)S/P\) bytes at rate \(b\), that is \(2(P-1)S/(Pb)\) — and
+  the critical path is indeed the sequence of \(2(P-1)\) steps of
+  latency \(\alpha\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 4.3 — Tree all-reduce: latency-optimal</span>
+  In a binary tree: reduction in \(\log_2 P\) steps then broadcast in
+  \(\log_2 P\) steps, but each step transmits the <em>entire</em> vector:
+  \(T_\mathrm{tree} = 2\log_2 P\,(\alpha + S/b)\). For small \(S\)
+  (short gradients, many small tensors): the tree wins (latency); for
+  large \(S\) (LLM gradients): the ring wins (bandwidth). Real libraries
+  (NCCL) choose dynamically — and compose partial rings over the actual
+  topology (intra NVLink, inter IB).
+</div>
+
+<div class="note">
+  <span class="tag">Three wars against \(\gamma\): overlap, bucketing, compression</span>
+  <ul style="margin:.3rem 0; padding-left:1.2rem;">
+  <li><strong>Overlap</strong>: while the GPU computes layer \(k+1\),
+  the gradient of layer \(k\) is already on the network (async by
+  buckets); provided \(T_\mathrm{comm} \leq T_\mathrm{calc}\),
+  communication disappears from the critical path — the raison d'être
+  of PyTorch DDP's "bucketing".</li>
+  <li><strong>Gradient compression</strong>: quantizing the gradients
+  (8 bits, even 1 bit) before exchange divides \(S\) by 2–16;
+  <em>error feedback</em> (compensating the quantization error at the
+  next step) preserves convergence — at the price of a delicate
+  variance/theory trade-off (see the Emerging ML module, ch. 2–3 for
+  the federated case, where communication is the limiting factor).</li>
+  <li><strong>Locality</strong>: reducing the number of communications
+  (local steps, gossip) is exactly the strategy dictated by the bound
+  of ch. 2: fewer rounds, but more steps — the optimum of Scaman et
+  al. is a precise point on this frontier.</li>
+  </ul>
+</div>
+</section>
+<section class="chapter" id="ch5">
+<h2>5. Memory efficiency: checkpointing, ZeRO, mixed precision</h2>
+
+<div class="thm">
+  <span class="tag">Theorem 5.1 — Activation checkpointing: \(O(\sqrt{L})\) memory (proved)</span>
+  A network of depth \(L\), activations \(a\) bytes per layer (per
+  token/batch): (i) without precautions, the backward pass requires
+  \(M_\mathrm{full} = L\,a\) bytes of activations; (ii) by storing only
+  the inputs of a partition into \(\sqrt{L}\) segments of \(\sqrt{L}\)
+  layers and recomputing each segment during the backward pass (gradient
+  checkpointing, Chen et al. 2016):
+  $$M_\mathrm{ckpt} \;\approx\; 2\sqrt{L}\,a \;+\; O(a), \qquad \text{additional cost} \approx +\tfrac{1}{3}\ \text{of time (one extra forward pass per segment).}$$
+  <div class="proof">
+  <em>Memory.</em> We store \(\sqrt L\) boundary activations; during the
+  backward pass of a segment, we replay its local forward: at most
+  \(\sqrt L\) simultaneous activations <em>inside</em> the segment (which
+  can itself be recursively checkpointed: the memory/time trade-off can
+  be tuned over the whole range \([a, La]\), see the \(\sqrt\) "compass").
+  Total \(\sqrt L + \sqrt L = 2\sqrt L\) live activations. <em>Time.</em>
+  Each layer is recomputed exactly once more in the forward direction:
+  the forward pass accounts for \(1/3\) of the total cost (theorem 1.3:
+  2ND vs 6ND), hence about +33%. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 5.2 — ZeRO (Rasley et al. 2020): partitioning the states</span>
+  Instead of replicating the training states on every GPU (classical DP:
+  \(16N\) bytes <em>per GPU</em>), ZeRO <em>partitions</em> them:
+  <table class="tbl">
+  <thead><tr><th>Stage</th><th>What is partitioned</th><th>Memory/GPU (states)</th><th>Communication</th></tr></thead>
+  <tbody>
+  <tr><td>ZeRO-1</td><td>Adam states (\(m, v\), masters): 12N</td><td>\(4N + 12N/P\)</td><td>= DP</td></tr>
+  <tr><td>ZeRO-2</td><td>+ gradients (\(2N\))</td><td>\(4N + 14N/P\)</td><td>= DP</td></tr>
+  <tr><td>ZeRO-3</td><td>+ weights (\(2N\))</td><td>\(16N/P\)</td><td>slightly &gt; DP (on-the-fly gathers)</td></tr>
+  </tbody>
+  </table>
+  Example 7B on 8 GPUs: ZeRO-3 brings the states down to \(112/8 = 14\)
+  GB per GPU — the model becomes trainable on a single node, without TP
+  or pipeline bubble (ch. 3); DeepSpeed/FSDP implement exactly this
+  continuum.
+</div>
+
+<div class="note">
+  <span class="tag">Mixed precision: the "free" compression</span>
+  Computing in bf16 (2 bytes) instead of fp32 (4): half the memory and
+  (on tensor cores) 2–8× the throughput; fp32 is kept for accumulators
+  and master weights (long sums and small updates; historical fp16
+  additionally required <em>loss scaling</em> — see the Deep Learning
+  module, ch. 10). Theorem 1.3 remains valid: we count FLOPs, precision
+  changes the price of a FLOP. <em>Integer</em> quantization (int8/int4)
+  only serves <em>inference</em> — ch. 6; its error analysis is in the
+  Optimization and Responsible AI for Sustainability module, ch. 3
+  (proved proposition: error \(\leq \sum_\ell \frac{\Delta_\ell}{2}\prod_{m&gt;\ell}\mathrm{Lip}_m\)).
+</div>
+</section>
+<section class="chapter" id="ch6">
+<h2>6. Efficient inference</h2>
+
+<p>At scale (millions of requests), inference dominates the total cost:
+it deserves its own tools. Four levers, from the simplest to the
+deepest.</p>
+
+<div class="def">
+  <span class="tag">Definition 6.1 — The memory-bandwidth wall of autoregressive inference</span>
+  Generating one token requires <em>rereading all the weights</em> (2N
+  bytes in bf16) and the <strong>KV cache</strong> — the keys/values of
+  past layers, to be kept for attention:
+  $$\text{KV cache} \;=\; 2\;(\text{K and V})\times n_\mathrm{layers}\times n_\mathrm{ctx}\times d_\mathrm{model}\times 2\ \text{bytes} \;=\; 4\,n_\mathrm{layers}\,n_\mathrm{ctx}\,d_\mathrm{model}\ \text{bytes (bf16)}.$$
+  For 7B (32 layers, \(d = 4096\), context 2048): \(4 \times 32 \times
+  2048 \times 4096 \approx 1{,}1\) GB — more than some believe, and
+  <em>growing with the context</em>. Peak throughput (one GPU, memory
+  bandwidth \(B_\mathrm{mem}\)):
+  $$\text{tokens/s} \;\lesssim\; \frac{B_\mathrm{mem}}{2N\ \text{bytes}} \qquad (\text{e.g. } 2\,\text{TB/s} \div 14\,\text{GB} \approx 140\ \text{tok/s}).$$
+  This ceiling — and not FLOPs — governs token-by-token generation (ch.
+  7, roofline); batching fills the compute units without moving the
+  wall.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.2 — PTQ/QAT quantization, pruning, distillation (compact map)</span>
+  <table class="tbl">
+  <thead><tr><th>Lever</th><th>Idea</th><th>Memory/speed effect</th><th>Ref. / cross-reference</th></tr></thead>
+  <tbody>
+  <tr><td>int8/int4 PTQ</td><td>round the trained weights, calibration only</td><td>2–8× memory, up to 4× CPU/latency</td><td>Jacob et al. 2018; error bounds: Responsible AI module, ch. 3</td></tr>
+  <tr><td>QAT</td><td>simulate rounding <em>during</em> training (STE)</td><td>int8 nearly lossless, int4 on large models</td><td>Jacob et al. 2018</td></tr>
+  <tr><td>Structured pruning</td><td>remove whole heads/channels/layers</td><td><em>effective</em> speedup (unlike unstructured)</td><td>Han et al. 2016</td></tr>
+  <tr><td>Distillation</td><td>student trained on the teacher's logits (temperature \(\tau\))</td><td>10–100× fewer parameters at similar quality on the target task</td><td>Hinton et al. 2015; Responsible AI module, ch. 3 (full lab)</td></tr>
+  <tr><td>Speculative decoding</td><td>small model proposes, large model verifies <em>in parallel</em> — same distribution in theory</td><td>2–3× tokens/s without loss</td><td>Leviathan et al. 2023</td></tr>
+  <tr><td>IO-aware attention</td><td>rewrite attention for the GPU memory hierarchy (tiling, no fusion)</td><td>2–4× training/inference on long contexts, \(O(n)\) memory</td><td>Dao et al. 2022 (FlashAttention, see M2 LLMs ch. 2)</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 6.3 — Comparing honestly: the module's protocol</span>
+  Any compression claim is verified in four columns: (1) <em>quality
+  metric</em> (perplexity/accuracy — not "it feels better"); (2)
+  <em>latency</em> at p50 and p99 (tail latency pays for cache misses);
+  (3) <em>throughput</em> (aggregate tokens/s); (4) <em>energy per
+  request</em> (J/request — Optimization and Responsible AI for
+  Sustainability module, ch. 6). An improvement on three columns with
+  the fourth constant is a result; on a single one, it is a
+  communication angle.
+</div>
+</section>
+<section class="chapter" id="ch7">
+<h2>7. Real systems: roofline, GPU, and the complete budget of a 7B LLM</h2>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — Roofline model (why a "312 TFLOP/s" GPU delivers 45%)</span>
+  An operation has an <strong>arithmetic intensity</strong>
+  \(I = \mathrm{FLOPs}/\mathrm{bytes\ read+written}\). The achievable
+  throughput is
+  $$P_\mathrm{achievable} \;=\; \min\big(P_\mathrm{peak},\; B_\mathrm{mem}\cdot I\big)$$
+  with \(P_\mathrm{peak}\) the compute throughput and \(B_\mathrm{mem}\)
+  the memory bandwidth. A huge GEMM (large \(I\)): compute-bound; an
+  activation, a normalization, a tokenizer, token-by-token generation
+  (low \(I\)): <em>memory</em>-bound — increasing the GPU's FLOP/s
+  changes nothing there. The 35–50% MFU of LLMs is precisely the share
+  of layers actually in the compute regime; FlashAttention (prop. 6.2)
+  wins by <em>reducing bytes</em>, not FLOPs — a pure roofline move.
+</div>
+
+<div class="thm">
+  <span class="tag">Proposition 7.2 — Amdahl's law (proved) — the ceiling of all parallelism</span>
+  If a fraction \(s\) of the work is sequential (inevitably so), the
+  speedup on \(P\) processors is capped:
+  $$A(P) \;=\; \frac{1}{s + (1-s)/P} \;\leq\; \frac{1}{s}.$$
+  <div class="proof">
+  Sequential time \(T_1 = T_s + T_p\) with \(s = T_s/T_1\). On \(P\)
+  processors, the parallel part divides at best by \(P\):
+  \(T_P = T_s + T_p/P\), hence \(A(P) = T_1/T_P = 1/(s + (1-s)/P)\),
+  increasing in \(P\) and bounded above by \(1/s\). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.3 — Complete case study: training a "7B" LLM (end-to-end computation)</span>
+  Assumptions (close to Touvron et al. 2023): \(N = 6{,}7\times10^9\)
+  parameters, \(D = 10^{12}\) tokens, A100-80GB bf16 (312 TFLOP/s peak,
+  2 TB/s HBM, 400 W), one node = 8 GPUs + NVLink.
+  <table class="tbl">
+  <thead><tr><th>Question</th><th>Computation</th><th>Result</th></tr></thead>
+  <tbody>
+  <tr><td>Total FLOPs</td><td>\(6ND = 6 \times 6{,}7\times10^9 \times 10^{12}\)</td><td>\(4{,}0\times10^{22}\) FLOPs</td></tr>
+  <tr><td>GPU-hours (45% MFU)</td><td>\(4\times10^{22} / (312\times10^{12}\times0{,}45) / 3600\)</td><td>≈ 79,000 GPU·h — the paper announces 82,432: the \(6ND\) rule is accurate to ±5%</td></tr>
+  <tr><td>States memory</td><td>\(16\,N = 16 \times 6{,}7\times10^9\)</td><td>107 GB &gt; 80 GB: ZeRO-2/3 or TP required (ch. 3, 5)</td></tr>
+  <tr><td>Activations (checkpointing, batch 4×2048 tokens)</td><td>\(\approx 2\sqrt{32}\times(\text{layer act.})\)</td><td>a few GB/GPU: checkpointing (th. 5.1) makes the batch viable</td></tr>
+  <tr><td>Time on 256 GPUs (32 nodes)</td><td>79,000/256 h</td><td>≈ 13 days — hence the vital importance of MFU (half the time = 6 days saved)</td></tr>
+  <tr><td>GPU-only energy</td><td>79,000 h × 0.4 kW (+ PUE, see the Responsible AI module, ch. 6)</td><td>≈ 32 MWh before PUE; emissions by region: 1.6 t (FR) to ~15 t (world average)</td></tr>
+  <tr><td>fp16 inference</td><td>weights \(2N\) = 13.4 GB; KV cache 2048 ctx ≈ 1.1 GB (def. 6.1)</td><td>fits on 1 80 GB GPU; throughput ≈ 140 tok/s (memory wall)</td></tr>
+  </tbody>
+  </table>
+  This table — reused in exercise 7 — is the module's typical
+  deliverable: a quantified budget, every line traceable to a theorem of
+  the course (1.3, 5.1, 6.1, 7.1), and an engineer's conclusion (where
+  to invest the next euro: MFU? memory? quantization?).
+</div>
+
+<div class="note">
+  <span class="tag">The system's keyboard: what to know about a GPU</span>
+  Memory hierarchy (registers → SRAM ~20 MB → HBM ~80 GB → NVLink →
+  IB); each level ~10× slower; winning kernels are those that maximize
+  locality (tiling, fusion — FlashAttention again); "tensor cores" do
+  bf16 GEMMs in 16×16×16 blocks — hence the importance of dimensions
+  that are multiples of powers of 2, and why padding genuinely wastes.
+  For the ML engineer: profile <em>before</em> optimizing (nsight,
+  PyTorch profiler), look at the roofline's "memory bound" line, and
+  remember that the best code optimizer is a better algorithm (ch. 6).
+</div>
+</section>
+<section class="chapter" id="ch8">
+<h2>8. Research of the instructor</h2>
+
+<p><strong>Team update (2026-2027 catalog):</strong> the APM_52183_EP course unit
+&ldquo;Apprentissage profond de la théorie à la pratique&rdquo; is officially
+led by Alain Durmus (CMAP, École Polytechnique), with C. Battiloro, P. Bianchi,
+C. Bonet and B. Bonev on the instructional engineering team. The works presented
+below are those of Kevin Scaman (CMAP; previously MSR–INRIA), author
+of the lower-bound results underlying chapter 2: they are cited
+as classic references of the field, not as the works of the current
+official team. Three papers to know:</p>
+
+<div class="note">
+  <span class="tag">Optimality of distributed optimization (the heart of ch. 2)</span>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+  <li>K. Scaman, F. Bach, S. Bubeck, Y. T. Lee, L. Massoulié,
+  <a href="https://arxiv.org/abs/1702.08704">Optimal Algorithms for Smooth and
+  Strongly Convex Distributed Optimization in Networks</a>, ICML 2017 — the
+  paper establishing the lower bound of theorem 2.2 <em>and</em> the
+  optimal algorithm (Nesterov × Chebyshev gossip): the optimal time
+  depends on the product condition number × topology. This is the first
+  complete characterization of the compute/communication trade-off over
+  networks.</li>
+  <li>K. Scaman, F. Bach, S. Bubeck, L. Massoulié,
+  <a href="http://www.jmlr.org/papers/volume20/19-543/19-543.pdf">Optimal Convergence
+  Rates for Convex Distributed Optimization in Networks</a>, JMLR 2019 — the
+  journal version, extended to the non-strongly convex case: the two
+  regimes of chapter 2 are characterized there optimally.</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Complexity of neural networks: Lipschitz regularity</span>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+  <li>A. Virmaux, K. Scaman, <a href="https://arxiv.org/abs/1805.10965">Lipschitz
+  regularity of deep neural networks: analysis and efficient estimation</a>,
+  NeurIPS 2018 — proving that computing <em>exactly</em> the Lipschitz
+  constant of a deep network is NP-hard, and designing the estimator
+  (SeqLip, layer-wise power iteration) that became standard. The link
+  with this module: the propagation bound of prop. 6.2/Responsible AI 3.2
+  involves precisely these \(\mathrm{Lip}_m\) constants — and the paper
+  says how far one can (not) compute them; on the robustness side, the
+  Lipschitz constant is the certificate of adversarial guarantees (see
+  the Emerging ML module, ch. 1).</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Reading thread</span>
+  L1: read the ICML 2017 focusing on (i) the construction of the lower
+  bound (theorem 2.2 above); L2: re-prove the pipeline bubble (3.3) on
+  paper; L3: profile a mini distributed training run (exercise 8) and
+  empirically verify the ring all-reduce formula 4.2. This is the theory
+  → system → measurement chain that defines this module.
+</div>
+</section>
+<section class="exercises" id="ex">
+<h2>Exercises</h2>
+<ol>
+  <li><strong>Counting.</strong> Prove the "per token" formula
+  \(24d^2 + 4nd\) of a transformer block (prop. 1.2), then verify
+  theorem 1.3 on a GPT-2 small (\(N \approx 124\)M, 12 blocks,
+  \(d = 768\)): compute \(C\) for \(D = 3\)B tokens and compare with a
+  <code>torch.profiler</code> (or <code>flops-profiler</code>) profile
+  within ±10%. <em>Expected solution</em>: \(6ND \approx
+  2{,}2\times10^{21}\) FLOPs.</li>
+
+  <li><strong>Pipeline bubble.</strong> Re-prove theorem 3.3 (draw the
+  1F1B Gantt chart for \(p=4\), \(m=8\)). Then: what minimal \(m\) for
+  an efficiency ≥ 90% with \(p = 16\) stages?
+  <em>Solution</em>: \(m/(m+15) \geq 0{,}9 \Rightarrow m \geq 135\).</li>
+
+  <li><strong>All-reduce.</strong> Prove theorem 4.2 on the
+  reduce-scatter (induction on the steps); then plot \(T_\mathrm{ring}\)
+  and \(T_\mathrm{tree}\) (prop. 4.3) for \(S = 1\) GB,
+  \(\alpha = 2\,\mu s\), \(b = 25\) GB/s, \(P = 2 \dots 512\) on a log
+  scale. Crossover? Which mode for a bf16 LLM-13B gradient?
+  <em>Partial solution</em>: the ring wins as soon as \(S/P \gg \alpha
+  b\).</li>
+
+  <li><strong>Checkpointing.</strong> A model with 30 blocks,
+  activations 1.2 GB per block, 10 GB of memory available for
+  activations. (a) Verify that full-recompute does not fit; (b) apply
+  theorem 5.1: how many segments, what memory, what time overhead? (c)
+  Generalize: for a memory budget \(M\), show that the time overhead is
+  \(\Theta(L\,a/M)\) recomputed activations — and not \(+\tfrac13\) —
+  when \(M \ll \sqrt{L}\,a\).</li>
+
+  <li><strong>Inference memory wall.</strong> (a) Recover the KV cache
+  formula (def. 6.1) for a model with grouped-query attention (GQA:
+  \(g\) head groups instead of \(h\)) — what saving? (b) Compute the
+  peak throughput of a 13B fp16 on an A100 (2 TB/s) and on a 1 TB/s
+  GPU; (c) show that int4 <em>exactly</em> doubles this ceiling (and
+  why batching changes nothing there). <em>Solution</em>: (a) factor
+  \(g/h\); (b) ≈ 77 then 38 tok/s; (c) in int4, the weights go from
+  \(2N\) to \(N/2\) bytes — the wall thus exactly doubles.</li>
+
+  <li><strong>Roofline.</strong> A kernel reads \(X \in
+  \mathbb{R}^{m \times n}\) and \(w \in \mathbb{R}^n\) and computes
+  \(Xw\) (\(2mn\) FLOPs, \((mn + n + m)\times4\) bytes). (a)
+  Intensity \(I(m)\) as \(m \to \infty\) (at fixed \(n=4096\))? (b) On
+  an A100 (312 TFLOP/s, 2 TB/s), for which \(m\) is the GEMV
+  memory-bound? (c) Deduce why autoregressive decoding is memory-bound
+  and what batching changes there (hint: \(I\) grows with batch size —
+  but not the wall per token).</li>
+
+  <li><strong>Complete budget (the capstone lab).</strong> Take up the
+  table 7.3 with \(N = 13\)B, \(D = 300\)B tokens (a
+  "Chinchilla-lite" budget: comment on the \(D/N\) ratio), on 64 H100
+  GPUs (≈ 990 TFLOP/s bf16, 40% MFU, 700 W). Compute: FLOPs,
+  GPU-hours, calendar time, states memory (ZeRO-3 over 8 nodes?),
+  energy, FR/world emissions. Conclude with three sentences of
+  architecture recommendation. <em>Partial answers</em>:
+  \(2{,}3\times10^{22}\) FLOPs; ≈ 16,500 GPU·h; ≈ 11 days; 208 GB of
+  states → ZeRO mandatory.</li>
+
+  <li><strong>Paper + measurement.</strong> Choose: Megatron (TP), ZeRO,
+  or FlashAttention. (a) Summarize the mechanism in 10 lines with the
+  module's formulas; (b) measure an effect on a small real setup (2
+  GPUs suffice): DP scaling 1→2→4 on a model that fits in memory
+  (verify the \(\frac{2(P-1)}{P}\frac{S}{b}\) term of theorem 4.2 with
+  <code>torch.distributed</code> and a barrier-timer); (c) present in
+  10 minutes: key figure, one reproduced number, one limitation.
+  <em>Grid</em>: accuracy of the quoted formulas, honesty of the
+  measurement (error bars!), relevance of the chosen limitation.</li>
+</ol>
+</section>
+<section class="chapter refs" id="refs">
+<h2>References</h2>
+<ul>
+  <li>K. Scaman, F. Bach, S. Bubeck, Y. T. Lee, L. Massoulié, <a href="https://arxiv.org/abs/1702.08704">Optimal Algorithms for Smooth and Strongly Convex Distributed Optimization in Networks</a>, ICML 2017.</li>
+  <li>K. Scaman, F. Bach, S. Bubeck, L. Massoulié, <a href="http://www.jmlr.org/papers/volume20/19-543/19-543.pdf">Optimal Convergence Rates for Convex Distributed Optimization in Networks</a>, JMLR, 2019.</li>
+  <li>A. Virmaux, K. Scaman, <a href="https://arxiv.org/abs/1805.10965">Lipschitz regularity of deep neural networks: analysis and efficient estimation</a>, NeurIPS 2018.</li>
+  <li>J. Kaplan et al., <a href="https://arxiv.org/abs/2001.08361">Scaling Laws for Neural Language Models</a>, 2020.</li>
+  <li>J. Hoffmann et al., <a href="https://arxiv.org/abs/2203.15556">Training Compute-Optimal Large Language Models</a> (Chinchilla), NeurIPS 2022.</li>
+  <li>H. Touvron et al., <a href="https://arxiv.org/abs/2302.13971">LLaMA: Open and Efficient Foundation Language Models</a>, 2023 — the source of the 82,432 GPU-hours of ch. 7.</li>
+  <li>M. Shoeybi et al., <a href="https://arxiv.org/abs/1909.08053">Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism</a>, 2019 — tensor parallelism.</li>
+  <li>Y. Huang et al., <a href="https://arxiv.org/abs/1811.06965">GPipe: Efficient Training of Giant Neural Networks using Pipeline Parallelism</a>, NeurIPS 2019.</li>
+  <li>S. Rasley et al., <a href="https://arxiv.org/abs/1910.02054">ZeRO: Memory Optimizations Toward Training Trillion Parameter Models</a>, SC 2020.</li>
+  <li>T. Chen et al., <a href="https://arxiv.org/abs/1604.06174">Training Deep Nets with Sublinear Memory Cost</a> (checkpointing), 2016.</li>
+  <li>T. Dao, D. Y. Fu, S. Ermon, A. Rudra, C. Ré, <a href="https://arxiv.org/abs/2205.14135">FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness</a>, NeurIPS 2022.</li>
+  <li>P. Micikevicius et al., <a href="https://arxiv.org/abs/1710.03740">Mixed Precision Training</a>, ICLR 2018.</li>
+  <li>B. Jacob et al., <a href="https://arxiv.org/abs/1712.05877">Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference</a>, CVPR 2018.</li>
+  <li>S. Han, H. Mao, W. J. Dally, <a href="https://arxiv.org/abs/1510.00149">Deep Compression</a>, ICLR 2016.</li>
+  <li>G. Hinton, O. Vinyals, J. Dean, <a href="https://arxiv.org/abs/1503.02531">Distilling the Knowledge in a Neural Network</a>, 2015.</li>
+  <li>Y. Leviathan, M. Kalman, Y. Matias, <a href="https://arxiv.org/abs/2211.17192">Fast Inference from Transformers via Speculative Decoding</a>, ICML 2023.</li>
+  <li>Z. You et al., <a href="https://arxiv.org/abs/1708.03888">Large Batch Training of Convolutional Networks</a> (LARS), 2017.</li>
+  <li>Y. Nesterov, <em>Introductory Lectures on Convex Optimization</em>, Kluwer, 2004 — the foundation of ch. 2 (see the Optimization for AI module, ch. 3).</li>
+  <li><a href="https://pytorch.org/tutorials/distributed.html">PyTorch Distributed (DDP/FSDP)</a> and <a href="https://developer.nvidia.com/nccl-guide">NCCL</a> — the lab tools.</li>
+</ul>
+</section>
+</main>
+<footer class="foot">
+<p><a href="../../index.html">← Master's program</a></p>
+</footer>
+</body>
+</html>

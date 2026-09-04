@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Topological Data Analysis — LLGA</title>
+<link rel="stylesheet" href="../../assets/paper.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<p class="crumb"><a href="../../index.html">MSc&amp;T LLGA · Course notes</a></p>
+<main class="paper">
+<h1>Topological Data Analysis</h1>
+<p class="subtitle">CSC_51056_EP · Year 1 · Period 1</p>
+<nav class="toc">
+<p class="toc-title">Contents</p>
+<ol>
+<li><a href="#intro">Introduction and overview</a></li>
+<li><a href="#ch0">0. Refresher: topology, distances, algebra</a></li>
+<li><a href="#ch1">1. Simplices and simplicial complexes</a></li>
+<li><a href="#ch2">2. From point cloud to complex: Rips and Čech</a></li>
+<li><a href="#ch3">3. Simplicial homology</a></li>
+<li><a href="#ch4">4. Persistent homology: the algorithm</a></li>
+<li><a href="#ch5">5. Diagrams, barcodes and landscapes</a></li>
+<li><a href="#ch6">6. Stability and statistics</a></li>
+<li><a href="#ch7">7. The Mapper algorithm</a></li>
+<li><a href="#ch8">8. TDA × machine learning</a></li>
+<li><a href="#ch9">9. Research of the teaching team</a></li>
+<li><a href="#ch10">10. Hands-on: GUDHI, scikit-tda, ripser</a></li>
+<li><a href="#ex">Exercises</a></li>
+<li><a href="#refs">References</a></li>
+</ol>
+</nav>
+<section class="chapter" id="intro">
+<h2>Introduction and overview</h2>
+<table class="tbl">
+<tr><th style="width:160px">Module</th><td>Topological Data Analysis</td></tr>
+<tr><th>Code</th><td>CSC_51056_EP</td></tr>
+<tr><th>Team and workload</th><td>Head: Steve Oudot (École Polytechnique · Inria, Datashapes team) · 36 h (18 h of lectures + 18 h of small-class sessions) · 4.5 ECTS · making the <em>shape</em> of data speak: simplicial complexes, persistent homology, persistence diagrams and Mapper — the algebraic backbone that GNNs cannot see, and the favorite tool of the Inria Datashapes team.</td></tr>
+<tr><th>Period</th><td>Autumn 2026 · period 1 (from 17/09/2026 to 18/12/2026) · materials in English; course taught in French or English depending on the students' preference</td></tr>
+<tr><th>Assessment</th><td>Written final exam, with the possibility of adding a graded lab course</td></tr>
+<tr><th>Status in the program</th><td><span class="badge option">P1 option</span><span class="badge position">Outside recommended track</span></td></tr>
+</table>
+
+<p>Two datasets can share the same descriptive statistics yet have very different "shapes": clusters, loops, cavities, branches. Topological Data Analysis (TDA) extracts this shape by building simplicial complexes from a point cloud, then measuring the persistence of holes at all scales. Within the LLGA master's program, this module teaches you to read in the data a structure that linear methods and GNNs do not capture natively: it is the favorite tool of the Inria Datashapes team and one of the best gateways toward a research orientation.</p>
+
+<h3>What you will be able to do</h3>
+<ul>
+<li>Build simplicial complexes (Rips, Čech) from a point cloud and understand what they encode.</li>
+<li>Compute simplicial homology groups by hand on small complexes.</li>
+<li>Run the persistent homology algorithm and read diagrams, barcodes and landscapes.</li>
+<li>State the stability theorems and leverage them to do statistics on diagrams.</li>
+<li>Vectorize persistence in order to plug it into a machine learning pipeline.</li>
+<li>Apply the Mapper algorithm to visually explore a complex dataset.</li>
+<li>Carry out TDA in practice with the GUDHI, scikit-tda and ripser libraries.</li>
+</ul>
+
+<h3>Official objectives and syllabus (2026-2027 catalog)</h3>
+<p>The official course description presents topological data analysis as "a recent branch of machine learning and data mining", whose idea is to leverage tools from algebraic topology to analyze complex datasets whose observations lie on or near non-trivial geometric structures, which can fool classical methods; the goal is to familiarize students with this topic "at the crossing of pure mathematics, applied mathematics and computer science", with an emphasis on the methods, their theoretical guarantees and hands-on work on complex data (notably multimedia: images, 3D shapes). The official course alternates lectures with exercise or machine sessions, and suggests the readings of Edelsbrunner&nbsp;&amp;&nbsp;Harer, Oudot and Munkres (repeated in our references).</p>
+<table class="tbl">
+<tr><th>Official syllabus topic</th><th>Course section</th></tr>
+<tr><td>Introduction to topological persistence through a data clustering application</td><td>Chapter 4 (filtration and algorithm), read as the answer to fragmented clustering; chapter 7 (Mapper) gives the exploratory angle</td></tr>
+<tr><td>Simplicial and singular homology</td><td>Chapter 3 (simplicial homology, def. 3.8 for singular homology)</td></tr>
+<tr><td>Persistence theory</td><td>Chapters 4 (decomposition, algorithm) and 6 (bottleneck and algebraic stability)</td></tr>
+<tr><td>Topological inference</td><td>Chapter 6 (prop. 6.4: reach, union of balls and sampling guarantees), supported by the nerve theorem of chapter 2</td></tr>
+<tr><td>Topological descriptors</td><td>Chapter 5 (diagrams, barcodes, landscapes) and chapter 2 (Euler–Poincaré characteristic)</td></tr>
+<tr><td>Topological statistics and machine learning</td><td>Chapters 6 (bootstrap, confidence bands) and 8 (TDA × machine learning)</td></tr>
+</table>
+<p>All the topics of the official syllabus are covered, singular homology (def. 3.8) and topological inference (prop. 6.4) having been added to calibrate these materials to the 2026-2027 course description. Our extensions, beyond the official syllabus: the refresher chapter 0, chapter 7 (the Mapper algorithm), chapter 9 (the work of the Inria Datashapes team) and chapter 10 (hands-on with GUDHI, scikit-tda, ripser). Official prerequisites: "solid foundations in linear and bilinear algebra", notions of general topology, a background in statistics useful but not indispensable on the mathematics side; a background in algorithms and programming on the computer science side (the École Polytechnique engineering students must moreover have validated the FMA_51057_EP course unit).</p>
+
+<h3>Where this course fits in the program</h3>
+<p>Module of period 1 of M1 (36 h, 4.5 ECTS), offered as an option outside the recommended track: a "data analysis" specialization choice particularly well suited to research-oriented profiles or demanding data science.</p>
+<ul>
+<li><strong>Prerequisites</strong> — official: solid foundations in linear and bilinear algebra, notions of general topology, a background in algorithms and programming. Internally: the probabilistic background of the <a href="../m1p1-refresher-statistics/">Refresher in Statistics</a> and linear algebra (vector spaces, eigenvalues); the refresher section covers topology, distances and algebra before tackling simplicial complexes.</li>
+<li><strong>Downstream modules</strong> — the fine reading of data and shapes prepared here directly feeds <a href="../m2-geometric-deep-learning/">Analysis and Deep Learning on Geometric Data</a> (M2), where persistence and topological descriptors join learning on non-Euclidean data; it is also a strong marker for a research orientation, Steve Oudot's Inria Datashapes team supervising work along this line.</li>
+</ul>
+
+<h3>Course outline</h3>
+<ul>
+<li><strong>Refresher: topology, distances, algebra</strong> — the topological and algebraic veneer indispensable for the rest of the course.</li>
+<li><strong>Simplices and simplicial complexes</strong> — the bricks that approximate a continuous space from points.</li>
+<li><strong>From point cloud to complex: Rips and Čech</strong> — building a shape at several scales from raw data.</li>
+<li><strong>Simplicial homology</strong> — counting the components, loops and cavities of a complex.</li>
+<li><strong>Persistent homology: the algorithm</strong> — tracking the appearance and disappearance of holes as the scale grows.</li>
+<li><strong>Diagrams, barcodes and landscapes</strong> — the canonical representations of persistence, and their uses.</li>
+<li><strong>Stability and statistics</strong> — why persistence resists noise, and how to do statistics with it.</li>
+<li><strong>The Mapper algorithm</strong> — an exploratory map of a dataset from a function of interest.</li>
+<li><strong>TDA × machine learning</strong> — plugging persistence into standard ML pipelines.</li>
+<li><strong>Research of the teaching team</strong> — a tour of the research work of the Inria Datashapes team.</li>
+<li><strong>Hands-on: GUDHI, scikit-tda, ripser</strong> — going from theory to code on real data.</li>
+<li><strong>Exercises</strong> and <strong>References</strong> — systematic training and sources to go further.</li>
+</ul>
+
+<h3>How to study this module</h3>
+<ul>
+<li>Do the refresher section without skipping it: the topological vocabulary (open sets, connectedness, distances) is used as-is everywhere afterwards.</li>
+<li>Compute by hand the homology of small complexes (a few triangles) before running ripser: the algorithm becomes crystal clear once the trivial cases are mastered.</li>
+<li>Draw the barcodes: a long feature is a true signal, a collection of short features is noise — the eye gets trained.</li>
+<li>Simulate: add noise to a circle, a union of two circles, and observe the stability of the diagrams promised by theory.</li>
+<li>Redo the exercises of each section before moving on to the next; the final software implementation reuses all of them.</li>
+<li>For a project or an internship, confront TDA early with a dataset familiar to you: it is the best test of understanding.</li>
+</ul>
+
+<div class="note">
+<span class="tag">The LLGA positioning</span>
+TDA gives the master's program its "beyond averages" analysis tool: the word and document embeddings produced by the <a href="../m1p2-nlp-text-mining/">Introduction to Text Mining and NLP</a> and <a href="../m2-large-language-models/">Large Language Models</a> modules are so many point clouds whose persistence reveals the structure, and the graph analysis of the <a href="../m1p2-graph-ml/">Graph ML</a> module benefits from being crossed with topological descriptors. Finally, it is an excellent springboard toward academic research, at École Polytechnique as at Inria.
+</div>
+</section>
+<section class="chapter" id="ch0">
+<h2>0. Refresher: topology, distances, algebra</h2>
+
+<p>Classical machine learning treats a point cloud \(\mathcal{X} \subseteq
+\mathbb{R}^d\) as a <em>collection</em> of individuals; topological data analysis
+(TDA) treats it as a <em>space</em> whose shape we want to understand: how many
+pieces, loops, cavities? Three toolboxes are needed: <strong>distances</strong>
+(they build the complexes of ch. 2), a bit of <strong>topology</strong> (it
+defines shape equivalence), and <strong>linear algebra over
+\(\mathbb{F}_2\)</strong> (it makes homology computable).</p>
+
+<div class="recap">
+  <div class="recap-title">L3 prerequisites — what we reuse in this module</div>
+  <ul style="margin:.4rem 0; padding-left:1.2rem;">
+    <li><strong>Metric spaces</strong> (cf. Machine Learning module, ch. 6): distance
+    \(d(x, y) \geq 0\), symmetric, zero only at \(x = y\), triangle inequality;
+    \(\ell_2\) and \(\ell_\infty\) norms on \(\mathbb{R}^d\), open balls
+    \(B(x, r)\), closed balls \(\overline{B}(x, r)\); usual distances between
+    clouds (nearest neighbor, Hausdorff: reminder in ch. 6).</li>
+    <li><strong>Topology</strong>: open sets, closed sets, compact sets, continuity;
+    a compact subset of \(\mathbb{R}^d\) is closed and bounded
+    (Borel–Lebesgue theorem); the continuous image of a compact set is compact.
+    We will use these notions only as guardrails, not as a technical chapter.</li>
+    <li><strong>Linear algebra</strong> (cf. Refresher CS module, ch. 6): image and
+    kernel of a linear map, rank theorem; eigenvalues and spectral norm
+    \(\rho(M)\) (cf. Graph ML module, ch. 4); and above all the field
+    \(\mathbb{F}_2 = \{0, 1\}\) where \(1 + 1 = 0\): addition = exclusive OR.</li>
+    <li><strong>Complexity</strong> (cf. Refresher CS module, ch. 2): we will count
+    operations as a function of the number \(n\) of points and the number of
+    simplices.</li>
+  </ul>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 0.1 — Homotopy equivalence</span>
+  Two continuous maps \(f, g : X \to Y\) are <strong>homotopic</strong> if there
+  exists a continuous \(H : X \times [0, 1] \to Y\) with \(H(\cdot, 0) = f\) and
+  \(H(\cdot, 1) = g\): \(f\) deforms continuously into \(g\). Two spaces \(X, Y\)
+  have the same <strong>homotopy type</strong> (written \(X \simeq Y\)) if there
+  exist \(f : X \to Y\) and \(g : Y \to X\) with \(g \circ f\) and \(f \circ g\)
+  homotopic to the identities. This is the right notion of "same shape" for this
+  course: a disk retracts onto a point (\(D^2 \simeq \{\ast\}\)), an annulus
+  cannot — it keeps its hole.
+</div>
+
+<div class="note">
+  <span class="tag">Why homotopy rather than isometry?</span>
+  Real data is never known up to isometry: resampling, noise, anisotropic
+  dilations deform it. Algebraic topology extracts the invariants that survive
+  any continuous deformation: connected components, loops, cavities — qualitative
+  and robust information, complementary to the distances and angles exploited by
+  PCA or k-means (Machine Learning module, ch. 6), and to everything that message
+  passing sees (Graph ML module, ch. 5).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 0.2 — Arithmetic in \(\mathbb{F}_2\)</span>
+  In \(\mathbb{F}_2 = \{0, 1\}\): \(0 + 0 = 0\), \(1 + 0 = 1\), \(1 + 1 = 0\);
+  multiplication is logical AND. Additions and multiplications are their own
+  inverse: subtracting is adding. A finite-dimensional \(\mathbb{F}_2\)-vector
+  space is identified with its set of vectors; an \(m \times n\) matrix with
+  coefficients in \(\mathbb{F}_2\) is a linear map \(\mathbb{F}_2^n \to
+  \mathbb{F}_2^m\), and the rank is computed by Gaussian elimination exactly as
+  over \(\mathbb{R}\).
+</div>
+
+<table class="tbl">
+<thead><tr><th>Object</th><th>Over \(\mathbb{R}\)</th><th>Over \(\mathbb{F}_2\)</th></tr></thead>
+<tbody>
+<tr><td>coefficients</td><td>any real value</td><td>0 or 1 — presence/absence</td></tr>
+<tr><td>addition</td><td>sum</td><td>exclusive OR: \(x + x = 0\)</td></tr>
+<tr><td>opposite</td><td>\(-x\)</td><td>\(x\) itself</td></tr>
+<tr><td>boundary signs \((-1)^i\)</td><td>necessary</td><td>useless — every sign equals 1</td></tr>
+<tr><td>rank computation</td><td>Gaussian pivot</td><td>bit-by-bit Gaussian pivot (even faster)</td></tr>
+</tbody>
+</table>
+
+<p><strong>Module outline.</strong> Chapters 1 to 3 build the theory: simplices,
+complexes, homology — with each time the complete computation on human-sized
+examples. Chapter 4 is the algorithmic heart (persistence, boundary matrix,
+reduction demonstrated step by step). Chapters 5 and 6 give the statistical
+objects (barcodes, landscapes) and their guarantees (stability theorem). Chapters
+7 to 10 cover Mapper, the bridges toward learning, the research of the teaching
+team and the hands-on implementation.</p>
+
+<div class="note">
+  <span class="tag">The LLGA positioning</span>
+  This module completes the master's "structure" triptych: Graph ML (M1 P2) reads
+  graphs through linear algebra and random walks; Analysis and Deep Learning on
+  Geometric Data (M2) reads them through symmetries; TDA reads them through
+  commutative algebra. The three meet again in M2 around position and structure
+  encodings (Advanced GNN module, ch. 3): counting Rips-style loops is a
+  structure encoding that GNNs only imperfectly approximate. The topological
+  kernels of ch. 8 join the kernel SVMs of the Machine Learning module (ch. 3),
+  and the bottleneck distance of ch. 6 the Wasserstein family of the Optimal
+  Transport module.
+</div>
+
+</section>
+<section class="chapter" id="ch1">
+<h2>1. Simplices and simplicial complexes</h2>
+
+<p>A graph can only represent binary relations. To encode <em>ternary</em> relations
+(three points close to one another), <em>quaternary</em> ones… at the end of which
+live loops and cavities, we generalize edges and triangles: these are the
+<strong>simplices</strong>. The whole rest of the course rests on this single
+generalization.</p>
+
+<div class="def">
+  <span class="tag">Definition 1.1 — Geometric simplex</span>
+  Let \(k + 1\) points \(v_0, \dots, v_k\) of \(\mathbb{R}^d\) be <em>affinely
+  independent</em> (no plane of dimension \(k - 1\) contains them all). The
+  <strong>geometric \(k\)-simplex</strong> they span is their convex hull:
+  $$\sigma = [v_0, \dots, v_k] = \Big\{ \textstyle\sum_i \lambda_i v_i \;:\; \lambda_i \geq 0, \; \sum_i \lambda_i = 1 \Big\}.$$
+  The integer \(k\) is the <strong>dimension</strong> of \(\sigma\); the
+  \(\lambda_i\) are the barycentric coordinates; the point
+  \(\sum_i \frac{1}{k+1} v_i\) is the barycenter. Vocabulary: 0-simplex = point,
+  1-simplex = segment, 2-simplex = filled triangle, 3-simplex = filled
+  tetrahedron.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.2 — Faces and oriented boundary</span>
+  Any subfamily \(\{v_{i_0}, \dots, v_{i_{\ell}}\} \subseteq \{v_0, \dots, v_k\}\)
+  spans a <strong>face</strong> of \(\sigma\), of dimension \(\ell\) — a proper
+  face if \(\ell &lt; k\). The <strong>oriented boundary</strong> of the
+  \(k\)-simplex is the alternating formal sum of its codimension-1 faces:
+  $$\partial [v_0, \dots, v_k] \;=\; \sum_{i=0}^{k} (-1)^i\, [v_0, \dots, \widehat{v_i}, \dots, v_k],$$
+  where the hat marks omission. Example: \(\partial[a, b] = b - a\) and
+  \(\partial[a, b, c] = [b, c] - [a, c] + [a, b]\). Over \(\mathbb{F}_2\), all
+  signs equal \(+1\): the boundary is the unoriented sum of the faces.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.3 — The boundary of a boundary is zero: \(\partial \circ \partial = 0\)</span>
+  For every \(k\)-simplex, \(\partial(\partial \sigma) = 0\), over \(\mathbb{Z}\)
+  as well as over \(\mathbb{F}_2\).
+  <div class="proof">
+  <strong>Over \(\mathbb{F}_2\)</strong> (counting argument). Each \((k-2)\)-face
+  \(\tau = [v_0, \dots, \widehat{v_i}, \dots, \widehat{v_j}, \dots, v_k]\) of
+  \(\sigma\) (with \(i &lt; j\)) appears exactly twice in
+  \(\partial(\partial \sigma)\): once as a face of face \(i\) (with \(v_j\)
+  subsequently omitted) and once as a face of face \(j\) (with \(v_i\)
+  subsequently omitted). Since \(1 + 1 = 0\) in \(\mathbb{F}_2\), all
+  contributions cancel in pairs.
+  <br><br>
+  <strong>Over \(\mathbb{Z}\)</strong> (sign argument). Let us copy the two
+  occurrences: in \(\partial[v_0, \dots, \widehat{v_i}, \dots, v_k]\), the face
+  \(\tau\) receives the sign \((-1)^{j-1}\) (the index of \(v_j\) has been
+  shifted by one after the omission of \(v_i\), since \(i &lt; j\)), and in
+  \(\partial[v_0, \dots, \widehat{v_j}, \dots, v_k]\), it receives
+  \((-1)^{i}\). The total contribution is
+  \((-1)^i (-1)^{j-1} + (-1)^j (-1)^i = (-1)^i\big((-1)^{j-1} + (-1)^j\big) = 0\).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">The physical intuition of \(\partial^2 = 0\)</span>
+  The boundary of a segment is the difference of its endpoints; the boundary of
+  a triangle walks around its oriented contour — each edge of the contour, taken
+  in both directions, ends up canceled: <em>the boundary of a boundary bounds
+  nothing</em>. This seemingly innocuous identity manufactures all of homology:
+  it makes possible the question "which cycles are not boundaries?" — that is,
+  "which loops genuinely enclose a hole?".
+</div>
+
+<div class="def">
+  <span class="tag">Definition 1.4 — Simplicial complex (geometric and abstract)</span>
+  A <strong>geometric simplicial complex</strong> \(K\) is a finite set of
+  simplices of \(\mathbb{R}^d\) such that (i) every face of a simplex of \(K\)
+  is in \(K\), and (ii) the intersection of two simplices of \(K\) is a common
+  face (possibly empty). Its <strong>realization</strong> \(|K|\) is the union
+  of its simplices, endowed with the induced topology. An <strong>abstract
+  complex</strong> is a finite set \(K\) of finite subsets of a vertex set,
+  stable under taking subsets: \(\sigma \in K\) and \(\tau \subseteq \sigma\)
+  imply \(\tau \in K\). The <strong>\(k\)-skeleton</strong> of \(K\) gathers its
+  simplices of dimension at most \(k\): the 1-skeleton is a graph (cf. Graph ML
+  module, ch. 0).
+</div>
+
+<div class="ex">
+  <span class="tag">Example 1.5 — Three complexes to know by heart</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>The hollow triangle</strong> \(S\): 3 vertices \(a, b, c\),
+    3 edges, no face — it is a circle: \(|S| \simeq \mathbb{S}^1\).</li>
+    <li><strong>The filled triangle</strong> \(D\): we add the face
+    \([a, b, c]\): \(|D|\) is a disk, contractible (\(|D| \simeq \{\ast\}\)).
+    Same 1-skeleton, different shapes: the difference resides in dimension 2.</li>
+    <li><strong>The hollow sphere \(K_{\mathbb{S}^2}\)</strong>: the boundary of
+    the tetrahedron — 4 vertices, 6 edges, 4 triangular faces, nothing above.
+    It is the most economical complex representing the sphere
+    \(\mathbb{S}^2\); it possesses a cavity. We compute it entirely in ch. 3.</li>
+  </ol>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 1.6 — Every abstract complex admits a realization</span>
+  Every abstract complex \(K\) of dimension \(k\) admits a geometric realization
+  in \(\mathbb{R}^{2k+1}\), unique up to homeomorphism.
+  <div class="proof">
+  (Sketch.) Embed the vertices of \(K\) on the <em>moment curve</em>
+  \(t \mapsto (t, t^2, \dots, t^{2k+1}) \in \mathbb{R}^{2k+1}\). Any family of
+  at most \(2k + 2\) points of this curve is affinely independent (a polynomial
+  of degree \(2k\) having \(2k + 1\) roots is zero); two simplices of \(K\),
+  which together have at most \(2(k+1)\) distinct vertices, are thus
+  automatically in general position: their intersection is exactly the simplex
+  spanned by the common vertices — a face of both. Uniqueness up to
+  homeomorphism is more delicate (simplicial approximation theorem) and out of
+  scope. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Combinatorial control</span>
+  A complex with \(n\) vertices and dimension \(k\) has at most
+  \(\binom{n}{k+1}\) simplices of dimension \(k\). This is the first practical
+  difficulty of TDA: the number of simplices explodes with the dimension and
+  density of the cloud; ch. 10 (software) is a battle against this explosion,
+  which ripser and GUDHI win on the 1-skeleton (flag complexes, sparse boundary
+  matrix).
+</div>
+
+</section>
+<section class="chapter" id="ch2">
+<h2>2. From point cloud to complex: Rips and Čech</h2>
+
+<p>Given a cloud \(\mathcal{X} = \{x_1, \dots, x_n\} \subseteq \mathbb{R}^d\)
+sampled "on" an unknown shape \(M\), how do we build a complex whose realization
+has the same shape as \(M\)? The idea: grow balls around the points and connect
+the balls that intersect. Two families stand out, with an accuracy/cost trade-off
+that Proposition 2.4 quantifies.</p>
+
+<div class="def">
+  <span class="tag">Definition 2.1 — Čech complex</span>
+  For \(r \geq 0\), the <strong>Čech complex</strong> \(\check{C}_r(\mathcal{X})\)
+  contains the subsets \(\sigma \subseteq \mathcal{X}\) such that the
+  intersection of the open balls is non-empty:
+  $$\sigma = \{x_{i_0}, \dots, x_{i_k}\} \in \check{C}_r(\mathcal{X}) \iff \bigcap_{j=0}^{k} B(x_{i_j}, r) \neq \emptyset.$$
+  A simplex is in the complex as soon as its vertices share a common point; the
+  parameter \(r\) is the <strong>radius</strong>.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 2.2 — Vietoris–Rips complex</span>
+  For \(\varepsilon \geq 0\), the <strong>Vietoris–Rips complex</strong>
+  \(\mathrm{Rips}_\varepsilon(\mathcal{X})\) contains the subsets \(\sigma\) of
+  diameter at most \(\varepsilon\):
+  $$\sigma \in \mathrm{Rips}_\varepsilon(\mathcal{X}) \iff \max_{x, y \in \sigma} \|x - y\| \leq \varepsilon.$$
+  It is the <strong>flag complex</strong> (or <em>clique complex</em>) of the
+  scale-\(\varepsilon\) neighborhood graph: its simplices are exactly the
+  cliques of this graph (cf. Graph ML module, ch. 0). The parameter
+  \(\varepsilon\) is a <strong>distance threshold</strong>.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 2.3 (nerve theorem) — Čech ≃ union of balls</span>
+  Let \(\mathcal{U} = \{U_i\}_{i \in I}\) be a finite family of <em>convex</em>
+  open sets of \(\mathbb{R}^d\) (or more generally with contractible
+  intersections). Then the nerve of the family — the abstract complex
+  \(\mathrm{Nerf}(\mathcal{U}) = \{\sigma \subseteq I :
+  \bigcap_{i \in \sigma} U_i \neq \emptyset\}\) — has the same homotopy type as
+  the union:
+  $$\big| \mathrm{Nerf}(\mathcal{U}) \big| \;\simeq\; \bigcup_{i \in I} U_i.$$
+  In particular \(\check{C}_r(\mathcal{X}) \simeq \bigcup_i B(x_i, r)\): the
+  Čech complex <em>is</em> the inflated shape, in the homotopy sense.
+  <div class="proof">
+  (Idea, out of scope.) One constructs a partition-of-unity map
+  \(\phi : \bigcup_i U_i \to |\mathrm{Nerf}(\mathcal{U})|\) which, to each
+  point, associates the barycenter of the \(U_i\) containing it, weighted by
+  continuous functions \(\psi_i\) vanishing outside \(U_i\). When the \(U_i\)
+  and their intersections are contractible, Borsuk's theorem (or Weil's nerve
+  lemma) ensures that \(\phi\) is a homotopy equivalence. Exercise 5 proves the
+  one-dimensional case (intervals of \(\mathbb{R}\)). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 2.4 — Rips and Čech bracket each other (Jung inequalities)</span>
+  In \(\mathbb{R}^d\) with the Euclidean norm, for every \(\varepsilon \geq 0\)
+  and with the above conventions:
+  $$\check{C}_{\varepsilon/2}(\mathcal{X}) \;\subseteq\; \mathrm{Rips}_\varepsilon(\mathcal{X}) \;\subseteq\; \check{C}_{\varepsilon/\sqrt{2}}(\mathcal{X}).$$
+  <div class="proof">
+  <strong>First inclusion.</strong> If \(\sigma \in \check{C}_{\varepsilon/2}\),
+  the balls \(B(x, \varepsilon/2)\), \(x \in \sigma\), have a common point
+  \(p\); by the triangle inequality, \(\|x - y\| \leq \|x - p\| + \|p - y\|
+  &lt; \varepsilon\) for all \(x, y \in \sigma\), so
+  \(\mathrm{diam}(\sigma) &lt; \varepsilon\) and
+  \(\sigma \in \mathrm{Rips}_\varepsilon\).
+  <br><br>
+  <strong>Second inclusion.</strong> If \(\mathrm{diam}(\sigma) \leq
+  \varepsilon\), Jung's theorem (1901) — every set of diameter \(\delta\) of
+  \(\mathbb{R}^d\) is included in a ball of radius
+  \(\delta \sqrt{\frac{d}{2(d+1)}} \leq \frac{\delta}{\sqrt 2}\) — provides a
+  point \(p\) at distance at most \(\varepsilon/\sqrt{2}\) from all vertices:
+  \(\sigma \in \check{C}_{\varepsilon/\sqrt{2}}\). The constant
+  \(\sqrt{d/(2(d+1))}\) is attained by the regular simplex of dimension \(d\)
+  and tends toward \(1/\sqrt{2}\): the bracket therefore holds <em>in every
+  dimension</em> with \(\sqrt{2}\), and is asymptotically optimal.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Practical consequences</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Čech is exact, Rips is computable.</strong> Čech benefits from
+    the nerve theorem (2.3); but testing whether \(k+1\) balls intersect is an
+    optimization problem of dimension \(d\). Rips is content with the
+    <em>graph</em> of \(\varepsilon\)-neighborhoods and then enumerates its
+    cliques: the whole computation is combinatorial, independent of \(d\).
+    Bracket 2.4 says that the price to pay for going from one to the other is a
+    factor of at most \(\sqrt{2}\) on the parameter.</li>
+    <li><strong>\(\ell_\infty\) norm</strong>: de Silva and Ghrist (2007) show
+    that under \(\ell_\infty\),
+    \(\mathrm{Rips}_\varepsilon = \check{C}_{\varepsilon/2}\) <em>exactly</em>
+    — cubes lend themselves better than balls to the flag construction.</li>
+    <li><strong>Filtration, not complex</strong>: the right object is not a
+    complex at one fixed \(\varepsilon\) but the <em>increasing</em> family
+    \(\{\mathrm{Rips}_\varepsilon\}_{\varepsilon \geq 0}\) — the object of
+    chapter 4. The reader will verify that \(\varepsilon \leq \varepsilon'\)
+    implies the inclusion of the complexes: this is a filtration in the sense of
+    Definition 4.1.</li>
+  </ol>
+</div>
+
+<div class="ex">
+  <span class="tag">Example 2.5 — Three equidistant points</span>
+  Let \(\mathcal{X}\) consist of three points of an equilateral triangle of side
+  \(s\). For \(\varepsilon &lt; s\) and \(r &lt; s/2\): three isolated
+  vertices, three components. For \(s \leq \varepsilon &lt; \frac{2s}{\sqrt 3}\)
+  and \(\frac{s}{2} \leq r &lt; \frac{s}{\sqrt 3}\): the hollow triangle — a
+  loop \(\mathbb{S}^1\). For \(\varepsilon \geq \frac{2s}{\sqrt 3}\)
+  (circumradius: \(s/\sqrt{3}\), hence \(\varepsilon = 2r\)): the filled
+  triangle, contractible. The Rips threshold \(\varepsilon = 2s/\sqrt 3\)
+  indeed corresponds to the \(\check{C}\) of radius
+  \(s/\sqrt{3} = \varepsilon/\sqrt 2\)… and the example attains <em>exactly</em>
+  bracket 2.4: the loop is born in Rips before existing in Čech.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 2.6 — Euler–Poincaré characteristic</span>
+  The <strong>Euler characteristic</strong> of a finite complex \(K\) is the
+  alternating sum
+  $$\chi(K) \;=\; \sum_{k \geq 0} (-1)^k\, f_k(K),$$
+  where \(f_k\) counts the simplices of dimension \(k\) (the \(f\)-vector). It
+  is the most rustic topological invariant: \(\chi(\text{point}) = 1\),
+  \(\chi(\mathbb{S}^1) = 0\), \(\chi(\mathbb{S}^2) = 2\),
+  \(\chi(\text{torus}) = 0\). Theorem 3.7 will show that \(\chi\) depends only
+  on the homotopy type of \(|K|\), and will relate it to the Betti numbers.
+</div>
+
+</section>
+<section class="chapter" id="ch3">
+<h2>3. Simplicial homology</h2>
+
+<p>Program: turning geometry into algebra. At each dimension \(k\), we build a
+vector space of \(k\)-chains (formal combinations of \(k\)-simplices); the
+boundary operator \(\partial_k\) satisfies
+\(\partial_{k-1} \circ \partial_k = 0\) (Proposition 1.3). Homology measures the
+failure of exactness: cycles that are not boundaries.</p>
+
+<div class="def">
+  <span class="tag">Definition 3.1 — Chains, cycles, boundaries, homology</span>
+  Let \(K\) be a finite complex, \(\mathbb{F}\) a field (\(\mathbb{F}_2\) unless
+  otherwise stated). For \(k \geq 0\), the group of <strong>\(k\)-chains</strong>
+  is \(C_k(K) = \mathbb{F}^{f_k(K)}\), generated by the \(k\)-simplices. The
+  <strong>boundary</strong> map \(\partial_k : C_k \to C_{k-1}\) is the linear
+  map that sends a simplex to the sum of its faces (signed over \(\mathbb{Z}\),
+  raw over \(\mathbb{F}_2\)). We set:
+  $$Z_k = \ker \partial_k \;(\text{cycles}), \qquad B_k = \mathrm{im}\, \partial_{k+1} \;(\text{boundaries}), \qquad H_k(K) = Z_k / B_k.$$
+  The inclusion \(B_k \subseteq Z_k\) follows from
+  \(\partial_k \circ \partial_{k+1} = 0\). The <strong>dimension</strong>
+  \(\beta_k = \dim H_k\) is the <strong>\(k\)-th Betti number</strong>. Two
+  cycles are <strong>homologous</strong> if their difference is a boundary.
+</div>
+
+<div class="note">
+  <span class="tag">Reading the Betti numbers</span>
+  \(\beta_0\) = number of connected components (how many pieces);
+  \(\beta_1\) = number of independent loops (how many
+  "one-dimensional" holes: annulus, torus handle, hierarchy of cyclic
+  communities); \(\beta_2\) = number of cavities (the interior of a hollow
+  sphere, of a bubble); beyond that, \(\beta_k\) counts the \(k\)-holes. Over
+  \(\mathbb{F}_2\), "cycle" means: every vertex (resp. edge…) is covered an
+  <em>even</em> number of times — a union of closed polygons, without
+  orientation.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 3.2 — Complete computation no. 1: the hollow then filled triangle</span>
+  <strong>Hollow triangle</strong> \(S\) (vertices \(a, b, c\), edges \(ab, bc,
+  ca\), no face). \(C_0 = \mathbb{F}_2^3\), \(C_1 = \mathbb{F}_2^3\),
+  \(C_2 = 0\). In the vertex basis: \(\partial_1(ab) = a + b\),
+  \(\partial_1(bc) = b + c\), \(\partial_1(ca) = c + a\). The matrix of
+  \(\partial_1\) (columns = edges, rows = vertices) is
+  $$\partial_1 = \begin{pmatrix} 1 &amp; 0 &amp; 1 \\ 1 &amp; 1 &amp; 0 \\ 0 &amp; 1 &amp; 1 \end{pmatrix}, \qquad \mathrm{rg}(\partial_1) = 2.$$
+  Indeed \(\mathrm{col}_1 + \mathrm{col}_2 + \mathrm{col}_3 = (0, 0, 0)^\top\)
+  (each vertex appears twice) and any two columns are independent. Hence:
+  $$\dim Z_1 = 3 - 2 = 1, \quad B_1 = 0 \Rightarrow H_1 \cong \mathbb{F}_2, \qquad \dim H_0 = 3 - 2 = 1.$$
+  <em>Reading</em>: one component, one loop — the circle. The generator cycle
+  is \(\gamma = ab + bc + ca\).
+  <br><br>
+  <strong>Filled triangle</strong> \(D\) (we add the face \(abc\)).
+  \(C_2 = \mathbb{F}_2\) and \(\partial_2(abc) = ab + bc + ca = \gamma\): the
+  rank of \(\partial_2\) is 1, so \(B_1 = \langle \gamma \rangle\) and
+  $$H_1(D) = Z_1 / B_1 = \langle \gamma \rangle / \langle \gamma \rangle = 0, \qquad H_0(D) \cong \mathbb{F}_2.$$
+  <em>Reading</em>: the disk has no hole — the loop that bounds it has become
+  a… boundary. The whole topology of the "hollow → filled" passage lies in the
+  rank of a \(1 \times 3\) matrix.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 3.3 — Complete computation no. 2: the hollow sphere (boundary of the tetrahedron)</span>
+  \(K_{\mathbb{S}^2}\): 4 vertices, 6 edges, 4 faces, no 3-simplex. Step by step
+  over \(\mathbb{F}_2\):
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>\(\partial_1 : C_1 = \mathbb{F}_2^6 \to C_0 = \mathbb{F}_2^4\). The
+    complete graph \(K_4\) is connected: \(\mathrm{rg}\, \partial_1 = 3\), so
+    \(\dim Z_1 = 6 - 3 = 3\) and \(H_0 \cong \mathbb{F}_2\) (a single
+    component).</li>
+    <li>\(\partial_2 : C_2 = \mathbb{F}_2^4 \to C_1 = \mathbb{F}_2^6\).
+    <strong>Dimension-2 cycles.</strong> Let us look for families of faces in
+    which every edge is covered an even number of times. Each edge of the
+    tetrahedron belongs to exactly 2 faces. An isolated face leaves its 3 edges
+    odd: forbidden. Two faces share one edge (even) but their 4 other edges
+    remain odd: forbidden. Three faces: the edge carried by the two faces among
+    the three that contain it… remains odd: forbidden. All 4 faces together:
+    every edge covered twice — allowed. So \(Z_2 = \{\emptyset, \Sigma\}\)
+    where \(\Sigma\) is the sum of the 4 faces: \(\dim Z_2 = 1\).</li>
+    <li>\(B_2 = \mathrm{im}\, \partial_3 = 0\) (no 3-simplex), so
+    \(H_2 \cong \mathbb{F}_2\) — <strong>the cavity</strong>.</li>
+    <li>\(\mathrm{rg}\, \partial_2 = \dim C_2 - \dim Z_2 = 4 - 1 = 3\), so
+    \(B_1\) has dimension 3 and \(H_1 = Z_1/B_1\) has dimension \(3 - 3 = 0\):
+    <strong>no loop</strong> — on a sphere, every loop tightens to a point.</li>
+  </ol>
+  Balance sheet: \(\beta_0 = 1\), \(\beta_1 = 0\), \(\beta_2 = 1\); check by
+  the characteristic: \(\chi = 4 - 6 + 4 = 2 = \beta_0 - \beta_1 + \beta_2\).
+  The same computation on Császár's "minimal" torus (7 vertices, 21 edges, 14
+  faces) would give \((1, 2, 1)\).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 3.4 — Hole formula for graphs</span>
+  For a graph \(G\) with \(n\) vertices, \(m\) edges and \(c\) connected
+  components, viewed as a 1-complex: \(\beta_0 = c\), \(\beta_1 = m - n + c\)
+  (the <em>nullity</em> or cyclomatic rank — cf. Graph ML module, ch. 0).
+  <div class="proof">
+  \(\beta_0 = c\): two vertices are homologous (\(a + b = \partial(ab)\)) within
+  the same component, and never across components. For \(\beta_1\):
+  \(Z_1 = \ker \partial_1\) and \(\mathrm{rg}\, \partial_1 = n - c\) (one
+  relation per spanning tree of each component — each connected component
+  contributes exactly \(-1\) to the rank via its spanning tree), hence
+  \(\beta_1 = m - (n - c) - 0\), since \(B_1 = 0\) for a 1-complex.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 3.7 (Euler–Poincaré) — The characteristic is topological</span>
+  For every finite complex \(K\):
+  $$\chi(K) \;=\; \sum_{k} (-1)^k \beta_k.$$
+  In particular \(\chi\) depends only on the homotopy type of \(|K|\) — Euler
+  had \(\chi(\text{polyhedron}) = s - a + f\) for the sphere, Poincaré showed
+  that the alternating sum of the Betti numbers always suffices.
+  <div class="proof">
+  For each \(k\), the rank theorem applied to \(\partial_k : C_k \to C_{k-1}\)
+  gives \(f_k = \dim C_k = \mathrm{rg}\, \partial_k + \dim \ker \partial_k =
+  \mathrm{rg}\, \partial_k + \dim Z_k\). Now \(\dim Z_k = \dim B_k + \beta_k\)
+  and \(\mathrm{rg}\, \partial_k = \dim B_{k-1}\); hence
+  \(f_k = \dim B_{k-1} + \dim B_k + \beta_k\). Summing with the signs
+  \((-1)^k\), the terms \(\dim B_k\) appear twice, with opposite signs, and
+  cancel (telescoping); what remains is \(\sum_k (-1)^k \beta_k\).
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<table class="tbl">
+<thead><tr><th>Complex</th><th>\(f\)-vector</th><th>\((\beta_0, \beta_1, \beta_2)\)</th><th>\(\chi\)</th></tr></thead>
+<tbody>
+<tr><td>segment (2 vertices, 1 edge)</td><td>(2, 1, 0)</td><td>(1, 0, 0)</td><td>1</td></tr>
+<tr><td>hollow triangle \(\simeq \mathbb{S}^1\)</td><td>(3, 3, 0)</td><td>(1, 1, 0)</td><td>0</td></tr>
+<tr><td>filled triangle (disk)</td><td>(3, 3, 1)</td><td>(1, 0, 0)</td><td>1</td></tr>
+<tr><td>hollow square annulus (4 vertices, 5 edges)</td><td>(4, 5, 0)</td><td>(1, 2, 0)</td><td>−1</td></tr>
+<tr><td>hollow sphere (boundary of the tetrahedron)</td><td>(4, 6, 4)</td><td>(1, 0, 1)</td><td>2</td></tr>
+<tr><td>figure eight (two circles attached)</td><td>—</td><td>(1, 2, 0)</td><td>−1</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+  <span class="tag">Integer coefficients and torsion</span>
+  Computing over \(\mathbb{Z}\) (signs active) restores information that
+  \(\mathbb{F}_2\) hides: torsion, e.g. \(H_1(\mathbb{RP}^2) \cong
+  \mathbb{Z}/2\mathbb{Z}\) whereas \(\beta_1 = 0\) over \(\mathbb{F}_2\). The
+  price: replacing Gaussian elimination with the Smith normal form. In practice,
+  applied TDA almost always works over a field; we will remember that the Betti
+  numbers over \(\mathbb{F}_2\) <em>underestimate</em> the integral homological
+  information.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 3.8 — Singular homology: the general theory</span>
+  Simplicial homology assumes a finite complex. For an <em>arbitrary</em>
+  topological space \(X\), one defines <strong>singular homology</strong>: a
+  \(k\)-<strong>singular simplex</strong> is any continuous map
+  \(\sigma : \Delta^k \to X\) from the standard simplex to \(X\); singular
+  \(k\)-chains are the finite formal combinations of such simplexes, the boundary
+  operator is computed by restricting \(\sigma\) to the faces of \(\Delta^k\),
+  and \(H_k(X)\) follows as in 3.1. The price of generality is an <em>infinite</em>
+  chain space — no direct computation possible; the gain is twofold. On the one
+  hand \(H_k(X)\) depends only on the homotopy type of \(X\): it is singular
+  homology that makes the Betti numbers <em>true</em> topological invariants,
+  independent of the choice of triangulation. On the other hand, the simplicial
+  approximation theorem guarantees that for \(X = |K|\), singular homology and
+  simplicial homology coincide: TDA therefore always computes the finite
+  (simplicial) version, by virtue of the general theory — and the official
+  syllabus of the course cites both.
+</div>
+
+</section>
+<section class="chapter" id="ch4">
+<h2>4. Persistent homology: the algorithm</h2>
+
+<p>Let us come back to the data. At which scale \(\varepsilon\) should we build the
+Rips complex? Too small: dust of points. Too large: one contractible ball. The
+answer of persistence: <em>all scales at once</em>, with a ledger that records,
+for each topological feature, its birth and its death. Features that live long
+are the "true hole" candidates; ephemeral ones are noise.</p>
+
+<div class="def">
+  <span class="tag">Definition 4.1 — Filtration and persistence module</span>
+  A <strong>filtration</strong> of a complex \(K\) is an increasing family
+  $$\emptyset = K_{-1} \subseteq K_0 \subseteq K_1 \subseteq \dots \subseteq K_m = K$$
+  (each \(K_i\) is a subcomplex of \(K_{i+1}\)). In practice: we order the
+  simplices \(\sigma_1 &lt; \sigma_2 &lt; \dots &lt; \sigma_m\) by increasing
+  value of a function \(\varphi\) (appearance distance in the Rips complex, gray
+  level of an image, elevation of a terrain), faces before cofaces, and
+  \(K_i = K_{i-1} \cup \{\sigma_i\}\). The <strong>persistence module</strong>
+  is the family of spaces and linear maps
+  $$H_k(K_0) \to H_k(K_1) \to \dots \to H_k(K_m)$$
+  induced by the inclusions. It is <em>tame</em> if these spaces are
+  finite-dimensional — which the finiteness of \(K\) guarantees.
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.2 (interval decomposition)</span>
+  Every tame persistence module over a field decomposes in a unique way (up to
+  isomorphism and to the order of the factors) into a direct sum of
+  <strong>interval</strong> modules \(\mathbb{I}[b, d)\): copies of the field
+  placed at indices \(b \leq i &lt; d\), connected by identities, zero
+  elsewhere. The <strong>barcode</strong> is the multiset of these intervals
+  \([b, d)\); each bar is a homology class born at \(b\) and dying at \(d\)
+  (with \(d = \infty\) for essential classes).
+  <div class="proof">
+  (Structure, out of scope: this is Gabriel's theorem for quivers of type
+  \(\mathbb{A}\) — the module is a representation of the linear quiver
+  \(0 \to 1 \to \dots \to m\), all its indecomposable representations are the
+  \(\mathbb{I}[b, d)\), and the decomposition is unique because the quiver is
+  of finite type. Oudot's book, ch. 9, gives a self-contained proof — cf. ch. 9
+  of this module. <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="def">
+  <span class="tag">Definition 4.3 — Boundary matrix of a filtration and low index</span>
+  Number the simplices \(\sigma_1, \dots, \sigma_m\) in the order of the
+  filtration. The <strong>boundary matrix</strong> \(M \in
+  \mathbb{F}_2^{m \times m}\) is defined by \(M[i, j] = 1\) if \(\sigma_i\) is
+  a proper face of \(\sigma_j\), and 0 otherwise (strictly upper triangular
+  matrix: a face always precedes its coface). For a non-zero column, the
+  <strong>low index</strong> is
+  $$\mathrm{low}(j) = \max \{ i : M[i, j] = 1 \}.$$
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 4.4 (standard persistence algorithm)</span>
+  Let \(R\) be the matrix obtained by reducing \(M\) column by column, from
+  left to right: as long as \(\mathrm{low}(j)\) is defined and already occupied
+  by an earlier column \(j' &lt; j\) (i.e. \(\mathrm{low}(j') =
+  \mathrm{low}(j)\)), replace \(R_{:, j} \leftarrow R_{:, j} + R_{:, j'}\).
+  Then:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>each column \(j\) with \(\mathrm{low}(j) = i\) associates the
+    <strong>pair</strong> \((i, j)\): a class born at index \(i\) (the simplex
+    \(\sigma_i\)) dies at index \(j\) — bar \([i, j)\);</li>
+    <li>each zero (reduced) column \(j\) encodes an <strong>essential</strong>
+    class born at \(j\) — bar \([j, \infty)\);</li>
+    <li>the total complexity is \(O(m^3)\) in the worst case, \(O(m^2)\) in
+    practice on real data (columns already almost reduced).</li>
+  </ol>
+  <div class="proof">
+  <strong>Dimensional consistency.</strong> If \(\sigma_j\) is a \(k\)-simplex,
+  its column lives in the rows of the \((k-1)\)-simplices: a pair \((i, j)\)
+  always connects two consecutive dimensions (\(\sigma_i\) is a
+  \((k-1)\)-simplex).
+  <br><br>
+  <strong>A pair \((i, j)\) is a birth-then-death.</strong> At step \(i\), the
+  simplex \(\sigma_i\) either creates a class (if it completes an independent
+  cycle), or kills one (if it completes a chain whose boundary becomes a trivial
+  cycle). The algorithm reproduces this alternative: \(\sigma_i\) kills a class
+  exactly when the reduced column of \(\sigma_j\) has \(\mathrm{low}(j) = i\),
+  that is, when \(\partial \sigma_j\) contains \(\sigma_i\) as the <em>last</em>
+  unpaired face — the class carried by the cycle
+  \(\partial \sigma_j + (\text{already paired boundaries})\) was born with
+  \(\sigma_i\).
+  <br><br>
+  <strong>Zero columns = essential births.</strong> If the reduced column of
+  \(\sigma_j\) is zero, \(\sigma_j\) completes a cycle \(z = \sigma_j + \dots\)
+  of which no face is "available" to kill it later: no future coface will have
+  \(\sigma_j\) as low index in its reduction (reductions never eliminate
+  pivots already used). The class lives until the end: bar \([j, \infty)\).
+  <br><br>
+  <strong>Uniqueness.</strong> The choice of pivots is forced: at each step,
+  there is at most one earlier column with the same low index (invariant
+  maintained by the algorithm), so the matching depends on no arbitrary choice
+  — it coincides with the interval decomposition of Theorem 4.2.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<pre class="code"><code># Standard persistence algorithm (Edelsbrunner-Letscher-Zomorodian,
+# Zomorodian-Carlsson), over F2. low[j] = row of the last 1 of column j.
+def persistence(M):                        # M : m x m boundary matrix (bits)
+    m = M.shape[1]
+    R = M.copy()
+    pairs = []
+    for j in range(m):
+        while True:
+            nz = np.nonzero(R[:, j])[0]
+            if len(nz) == 0:
+                pairs.append(None)         # zero column: bar [j, inf)
+                break
+            low = nz[-1]
+            prev = [jj for jj in range(j)
+                    if pairs[jj] == low]   # pivot already used
+            if not prev:
+                pairs.append(low)          # pair (low, j): bar [low, j)
+                break
+            R[:, j] ^= R[:, prev[0]]       # column addition (XOR in F2)
+    return [(i, j) for j, i in enumerate(pairs) if i is not None]</code></pre>
+
+<div class="ex">
+  <span class="tag">Example 4.5 — The algorithm demonstrated step by step on a complete complex</span>
+  Consider the following filtration (a controlled variant of Example 3.2): four
+  vertices \(v_1, v_2, v_3, v_4\), five edges, one triangle. The indices are
+  those of appearance:
+  <table class="tbl">
+  <thead><tr><th>Index</th><th>Simplex</th><th>Dim.</th><th>Expected event</th></tr></thead>
+  <tbody>
+  <tr><td>1, 2, 3, 4</td><td>\(v_1, v_2, v_3, v_4\)</td><td>0</td><td>four H0 births</td></tr>
+  <tr><td>5</td><td>\([v_1, v_2]\)</td><td>1</td><td>merging of components (H0 death)</td></tr>
+  <tr><td>6</td><td>\([v_2, v_3]\)</td><td>1</td><td>merging of components (H0 death)</td></tr>
+  <tr><td>7</td><td>\([v_3, v_4]\)</td><td>1</td><td>merging of components (H0 death)</td></tr>
+  <tr><td>8</td><td>\([v_1, v_3]\)</td><td>1</td><td>creation of a loop (H1 birth)</td></tr>
+  <tr><td>9</td><td>\([v_1, v_2, v_3]\)</td><td>2</td><td>filling: H1 death</td></tr>
+  <tr><td>10</td><td>\([v_1, v_4]\)</td><td>1</td><td>creation of a loop (H1 birth)</td></tr>
+  </tbody>
+  </table>
+  Non-trivial columns of the boundary matrix \(M\) (rows = simplices 1 to 10,
+  columns = simplices 5 to 10; columns 1–4 are zero):
+  <table class="tbl">
+  <thead><tr><th>Row\Col.</th><th>5 \(=[v_1v_2]\)</th><th>6 \(=[v_2v_3]\)</th><th>7 \(=[v_3v_4]\)</th><th>8 \(=[v_1v_3]\)</th><th>9 \(=[v_1v_2v_3]\)</th><th>10 \(=[v_1v_4]\)</th></tr></thead>
+  <tbody>
+  <tr><td>1: \(v_1\)</td><td>1</td><td>0</td><td>0</td><td>1</td><td>0</td><td>1</td></tr>
+  <tr><td>2: \(v_2\)</td><td>1</td><td>1</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  <tr><td>3: \(v_3\)</td><td>0</td><td>1</td><td>1</td><td>1</td><td>0</td><td>0</td></tr>
+  <tr><td>4: \(v_4\)</td><td>0</td><td>0</td><td>1</td><td>0</td><td>0</td><td>1</td></tr>
+  <tr><td>5: \([v_1v_2]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+  <tr><td>6: \([v_2v_3]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+  <tr><td>7: \([v_3v_4]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  <tr><td>8: \([v_1v_3]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td><td>0</td></tr>
+  <tr><td>9: triangle</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  <tr><td>10: \([v_1v_4]\)</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+  </tbody>
+  </table>
+  <strong>Reduction, column by column.</strong>
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>Column 5</strong>: \(\{1, 2\}\), \(\mathrm{low} = 2\). No earlier
+    pivot: pair \((2, 5)\). The component born with \(v_2\) dies when edge
+    \([v_1v_2]\) merges it.</li>
+    <li><strong>Column 6</strong>: \(\{2, 3\}\), \(\mathrm{low} = 3\) — pair
+    \((3, 6)\). Likewise for \(v_3\).</li>
+    <li><strong>Column 7</strong>: \(\{3, 4\}\), \(\mathrm{low} = 4\) — pair
+    \((4, 7)\). Likewise for \(v_4\).</li>
+    <li><strong>Column 8</strong>: \(\{1, 3\}\), \(\mathrm{low} = 3\):
+    <em>conflict</em> with column 6. We add:
+    \(\{1,3\} \oplus \{2,3\} = \{1,2\}\), \(\mathrm{low} = 2\): <em>conflict</em>
+    with column 5. We add: \(\{1,2\} \oplus \{1,2\} = \emptyset\):
+    <strong>zero column</strong> — a class of \(H_1\) is born at index 8 (the
+    loop \(v_1 \to v_2 \to v_3 \to v_1\)). No pivot is destroyed: the existing
+    matching is unchanged.</li>
+    <li><strong>Column 9</strong>: \(\{5, 6, 8\}\), \(\mathrm{low} = 8\). Is
+    pivot 8 occupied? Column 8 is now <em>zero</em> — it occupies nothing: no
+    conflict, <strong>pair \((8, 9)\)</strong>. The loop born at 8 is killed by
+    the triangle \([v_1v_2v_3]\).</li>
+    <li><strong>Column 10</strong>: \(\{1, 4\}\), \(\mathrm{low} = 4\): conflict
+    with column 7 → \(\{1,4\} \oplus \{3,4\} = \{1,3\}\),
+    \(\mathrm{low} = 3\): conflict with column 6 →
+    \(\{1,3\} \oplus \{2,3\} = \{1,2\}\), \(\mathrm{low} = 2\): conflict with
+    column 5 → \(\{1,2\} \oplus \{1,2\} = \emptyset\) — <strong>zero
+    column</strong>: a class of \(H_1\) is born at 10 (the loop
+    \(v_1 \to v_3 \to v_4 \to v_1\)) and never dies.</li>
+  </ul>
+  <strong>Final barcode.</strong>
+  $$H_0 : [1, \infty),\; [2, 5),\; [3, 6),\; [4, 7) \qquad H_1 : [8, 9),\; [10, \infty).$$
+  <strong>Checks.</strong> (i) At the end, \(\beta_0 = 1\) and \(\beta_1 = 1\),
+  consistent with the final graph (connected, two independent cycles — formula
+  3.4: \(m - n + c = 5 - 4 + 1 = 2\), one of which is killed by the triangle).
+  (ii) Euler characteristic of the final complex: \(4 - 5 + 1 = 0 = \beta_0 -
+  \beta_1\) (Theorem 3.7). (iii) Bar count: 4 H0 births (4 vertices), 3 H0
+  deaths (3 merging edges — the 4th edge \([v_1v_3]\) creates a loop instead of
+  merging), 2 H1 births, 1 H1 death (the triangle). Everything connects.
+</div>
+
+<div class="note">
+  <span class="tag">From Euler to barcodes, and back</span>
+  The Euler–Poincaré characteristic can be reread through the algorithm: at
+  filtration level \(i\), \(\chi(K_i)\) is the number of active H0 bars minus
+  the number of active H1 bars, etc. The <strong>Betti curve</strong>
+  \(\beta_k(i)\) — number of active bars — is a discrete summary of the
+  barcode, strictly less fine but sometimes sufficient (and directly related to
+  the counting functions of ch. 5). Remember: the barcode is the <em>dynamic</em>
+  version of homology; the plain homology of ch. 3 is its slice frozen at
+  \(i = m\).
+</div>
+
+<div class="note">
+  <span class="tag">Variants and limits (general culture)</span>
+  The "faces before cofaces" constraint makes the filtration increasing; to
+  free oneself from it, one uses <strong>zigzag persistence</strong> (Carlsson,
+  de Silva, Morozov): the arrows alternate left-right, and the algorithm is
+  rewritten with "in-out" columns. For vector-valued functions, one enters
+  multi-dimensional persistence — where Theorem 4.2 <em>fails</em>: no complete
+  discrete barcode (Carlsson–Zomorodian negative structure theorem).
+</div>
+
+</section>
+<section class="chapter" id="ch5">
+<h2>5. Diagrams, barcodes and landscapes</h2>
+
+<p>The barcode is a combinatorial object; to confront it with statistics —
+comparing, testing, averaging — it must be given a geometric habitat. Two
+representations dominate: the <strong>persistence diagram</strong> (point cloud
+of the half-plane, carrier of Wasserstein-type distances) and the
+<strong>landscape</strong> (a function from \(\mathbb{R}\) to \(\mathbb{R}\),
+which transports diagrams into a Hilbert space).</p>
+
+<div class="def">
+  <span class="tag">Definition 5.1 — Persistence diagram</span>
+  The <strong>diagram</strong> of a barcode \(\mathcal{B}\) is the multiset of
+  points of the plane \(\{(b, d) : [b, d) \in \mathcal{B}\} \cup
+  \Delta_\infty\), where each bar becomes the point with coordinates (birth,
+  death); we add the <strong>diagonal</strong> \(\Delta = \{(x, x)\}\) with
+  infinite multiplicity — bars of zero length live on it. The
+  <strong>persistence</strong> of a class is \(d - b\); essential classes are
+  sent to the line \(d = \infty\). By Theorem 4.2, diagram and barcode contain
+  exactly the same information, and we will use them interchangeably.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.2 — The noisy circle, archetype of the module</span>
+  200 points sampled on a circle of radius 1 plus Gaussian noise of standard
+  deviation 0.05. At scale \(\varepsilon \approx 0\): dust (200 H0 bars). When
+  \(\varepsilon\) reaches the local spacing, the H0 bars die in a cascade;
+  around \(\varepsilon \approx 1\), a <em>long</em> H1 bar is born — the
+  central hole — which dies around \(\varepsilon \approx 2\), when the balls
+  close up. Signature: <strong>one circle = one very long H1 bar + short
+  dust</strong>. Two concentric circles: two long H1 bars; a sphere: no H1, one
+  long H2 bar. This is the sanity check of the lab (ch. 10).
+</div>
+
+<div class="def">
+  <span class="tag">Definition 5.3 — Bottleneck distance</span>
+  Let \(\mathcal{D}_1, \mathcal{D}_2\) be two diagrams. For \(\delta \geq 0\), a
+  <strong>\(\delta\)-matching</strong> is a partial bijection \(\pi\) between
+  \(\mathcal{D}_1\) and \(\mathcal{D}_2\) such that each matched point moves by
+  \(\|p - \pi(p)\|_\infty \leq \delta\), the unmatched points having to be at
+  distance at most \(\delta\) from the diagonal (we match them with it). The
+  <strong>bottleneck distance</strong> is
+  $$d_B(\mathcal{D}_1, \mathcal{D}_2) \;=\; \inf_{\pi}\; \sup_{p}\; \|p - \pi(p)\|_\infty.$$
+  The <strong>Wasserstein-\(p\) distance</strong> replaces the sup by the
+  \(\ell^p\) mean of the displacements — \(p = 2\) in practice. These are
+  exactly optimal transport distances between measures (cf. Optimal Transport
+  module): the diagonal plays the role of an infinite mass sink at the cost of
+  distance-to-the-boundary.
+</div>
+
+<div class="ex">
+  <span class="tag">Example 5.4 — Bottleneck by hand</span>
+  \(\mathcal{D}_1 = \{(0.3, 1.1)\}\) and \(\mathcal{D}_2 = \{(0.4, 1.0)\}\).
+  Two options: match the two points (displacement
+  \(\|(0.1, -0.1)\|_\infty = 0.1\)), or send everything onto the diagonal
+  (cost \(\frac{1.1 - 0.3}{2} = 0.4\)). So \(d_B = 0.1\). Let us add to
+  \(\mathcal{D}_1\) the ephemeral point \((2, 2.05)\): it matches the diagonal
+  at cost \(0.025\), and \(d_B = 0.1\) still. <em>Moral</em>: the bottleneck
+  ignores ephemeral features by construction — an \(L^\infty\) distance on the
+  persistent holes.
+</div>
+
+<div class="def">
+  <span class="tag">Definition 5.5 — Persistence landscapes (Bubenik, 2015)</span>
+  For a diagram point \((b, d)\), set the "tent" function
+  $$\Lambda_{(b, d)}(t) \;=\; \max\big( \min(t - b,\; d - t),\; 0 \big),$$
+  zero outside \((b, d)\), peaking at \(\frac{d-b}{2}\) at
+  \(t = \frac{b+d}{2}\). The <strong>\(k\)-th landscape</strong> is the
+  \(k\)-th largest of these tents at point \(t\) (and 0 if there are fewer than
+  \(k\)):
+  $$\lambda_D(k, t) \;=\; k\text{-th largest value of } \{\Lambda_{(b,d)}(t) : (b, d) \in D\}.$$
+  The sequence \((\lambda(k, \cdot))_k\) is a sequence of Lipschitz functions
+  of \(L^2(\mathbb{R})\): the diagram now lives in a Hilbert space — means,
+  covariances, PCA, tests become available.
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 5.6 — The landscape is 1-Lipschitz and stable</span>
+  Each \(\lambda(k, \cdot)\) is \(\frac{1}{2}\)-Lipschitz, and for two diagrams
+  $$\| \lambda_{\mathcal{D}_1}(k, \cdot) - \lambda_{\mathcal{D}_2}(k, \cdot) \|_\infty \;\leq\; d_B(\mathcal{D}_1, \mathcal{D}_2) \quad \text{for all } k.$$
+  <div class="proof">
+  (Sketch.) Each tent \(\Lambda_{(b,d)}\) is 1-Lipschitz: slopes \(\pm 1\) on
+  \((b, d)\), zero elsewhere, peak \(\frac{d-b}{2}\) reached at
+  \(\frac{b+d}{2}\); a \(k\)-th largest value of Lipschitz families is again
+  Lipschitz (the curves cross at most once per pair, the order of the tents
+  changes only at intersections). For stability: a bottleneck
+  \(\delta\)-matching moves each tent by at most \(\delta\) in sup norm (moving
+  a vertex from \((b, d)\) to \((b', d')\) with
+  \(\|(b,d)-(b',d')\|_\infty \leq \delta\) moves the tent by \(\leq \delta\)
+  everywhere), and the "\(k\)-th largest" operation is 1-Lipschitz in the sense
+  of Young diagrams (monotone exchange). <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="note">
+  <span class="tag">Other vectorizations</span>
+  <strong>Persistence images</strong> (Adams et al., 2017) sample the transform
+  \((b, d) \mapsto (b, d - b)\) on a Gaussian grid — differentiable, hence
+  pluggable into a network. <strong>Betti curves</strong> and <strong>persistence
+  entropies</strong> are cheap summaries. The choice of vectorization is a
+  choice of model: the landscape favors the median of persistences, the image
+  the complete field, the kernel of ch. 8 the geometry of transport.
+</div>
+
+</section>
+<section class="chapter" id="ch6">
+<h2>6. Stability and statistics</h2>
+
+<p>The whole practical value of persistence lies in one theorem: two close
+functions have close diagrams. Without it, the diagram of a noisy cloud would
+mean nothing — an infinitesimal perturbation could change it utterly. With it,
+TDA becomes a statistic: one can bound the sampling error, build confidence
+intervals by bootstrap, and test.</p>
+
+<div class="thm">
+  <span class="tag">Theorem 6.1 (bottleneck stability — Cohen-Steiner, Edelsbrunner, Harer, 2007)</span>
+  Let \(K\) be a finite complex and \(f, g : |K| \to \mathbb{R}\) two tame
+  functions (finitely many critical values). Then the persistence diagrams of
+  the sublevel filtrations \(K_t = \{\sigma : f(\sigma) \leq t\}\) satisfy:
+  $$d_B\big( \mathrm{Dgm}(f), \; \mathrm{Dgm}(g) \big) \;\leq\; \|f - g\|_\infty.$$
+  <div class="proof">
+  <strong>Idea of the proof (interpolation).</strong> Set \(f_t = (1 - t) f +
+  t g\) for \(t \in [0, 1]\): \(\|f_t - f_{t'}\|_\infty \leq |t - t'| \cdot
+  \|f - g\|_\infty\). One shows (scene lemma — any small \(L^\infty\)
+  perturbation moves the pairs of the diagram by as much) that for \(t' - t\)
+  small, \(d_B(\mathrm{Dgm}(f_t), \mathrm{Dgm}(f_{t'})) \leq (t' - t) \|f -
+  g\|_\infty\) <em>up to a coupling near the diagonal</em>. By subdividing
+  \([0, 1]\) and composing the successive matchings, one obtains a matching of
+  total cost \(\|f - g\|_\infty\). The pairs that are "born and die" during
+  the interpolation correspond to excursions touching the diagonal — they are
+  matched to it for free. The complete proof requires the decomposition
+  theorem 4.2 to give a continuous meaning to the pairs of \(f_t\) (the "space
+  of diagrams" endowed with the bottleneck is geodesic); the book by Chazal et
+  al. (2016) gives the modern algebraic version — cf. ch. 9.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="thm">
+  <span class="tag">Theorem 6.2 (algebraic stability — Chazal, de Silva, Glisse, Oudot, 2009/2016)</span>
+  The bound 6.1 remains valid for two tame persistence <em>modules</em>
+  \(\mathbb{V}, \mathbb{W}\) that are \(\delta\)-<strong>interleaved</strong>
+  (there exist \(u_t : V_t \to W_{t+\delta}\) and \(v_t : W_t \to
+  V_{t+\delta}\) commuting with the arrows, with \(v_{t + \delta} u_t\) equal
+  to the arrow \(V_t \to V_{t + 2\delta}\)):
+  $$d_B\big( \mathrm{Dgm}(\mathbb{V}), \mathrm{Dgm}(\mathbb{W}) \big) \;\leq\; 2\,\delta \;=\; 2\, d_I(\mathbb{V}, \mathbb{W}).$$
+  Interleaving is the right "distance" between modules; the factor 2 is
+  optimal. Consequence: stability is not a property of functions but of
+  algebra — two filtrations close in the sense of approximate inclusions have
+  close barcodes.
+</div>
+
+<div class="note">
+  <span class="tag">What 6.1–6.2 buy</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>Sampling noise.</strong> Two samples \(\mathcal{X},
+    \mathcal{X}'\) with \(\max_i \|x_i - x'_i\| \leq \eta\) give
+    \(\eta\)-interleaved filtrations (each simplex appears at a level shifted
+    by at most \(\eta\)): diagrams within \(2\eta\).</li>
+    <li><strong>Bootstrap.</strong> We resample the points, compute the
+    diagrams of the replicas, and the quantiles of \(d_B\) around the observed
+    diagram provide confidence bands (Fasy et al.; convergence of empirical
+    landscapes: Chazal et al., SoCG 2013). Cf. Refresher Statistics module,
+    ch. 5 (estimation) and ch. 6 (tests).</li>
+    <li><strong>Model comparison.</strong> Two experimental conditions
+    (healthy subjects vs patients, ch. 8): test statistic = landscape or
+    bottleneck distance, calibrated by permutation.</li>
+  </ol>
+</div>
+
+<div class="note">
+  <span class="tag">The Achilles heel: the sup norm</span>
+  The bound \(\|f - g\|_\infty\) is sensitive to a <em>single</em> outlier —
+  one outlier shifts the distance to the sample everywhere around it. The
+  standard fix: the <strong>distance-to-measure</strong> (DTM); for a measure
+  \(\mu\) and a fraction \(0 &lt; k \leq 1\) (or a radius \(h\)), one replaces
+  \(d(x, \mathcal{X})\) by \(\delta_{\mu, k}(x) = \big( \frac{1}{k}
+  \int_0^k \delta_t(x)^2 \,\mathrm{d}t \big)^{1/2}\), a local average of the
+  distances to the \(k\) nearest points; its diagrams are Lipschitz with
+  respect to \(\mu\) in Wasserstein-\(2\) distance (cf. Optimal Transport
+  module); an isolated outlier now costs only the weight it carries in the
+  measure, and no longer the sup distance. The DTM and its estimators are
+  developed in the book by Boissonnat, Chazal and Yvinec (references).
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.3 — Distances between clouds: Hausdorff and Gromov–Hausdorff</span>
+  The Hausdorff distance \(d_H(\mathcal{X}, \mathcal{Y}) = \max\big( \sup_x
+  d(x, \mathcal{Y}), \sup_y d(y, \mathcal{X}) \big)\) controls the interleaving
+  of the Rips complexes:
+  \(d_B(\mathrm{Dgm}\,\mathrm{Rips}(\mathcal{X}), \mathrm{Dgm}\,\mathrm{Rips}(\mathcal{Y}))
+  \leq 2\, d_H(\mathcal{X}, \mathcal{Y})\). For two <em>abstract</em> metric
+  spaces (not embedded in a common one), the <strong>Gromov–Hausdorff</strong>
+  distance plays this role — it is what makes persistence comparable across
+  graphs (ch. 8).
+  <div class="proof">
+  (Sketch.) If \(d_H(\mathcal{X}, \mathcal{Y}) \leq \eta\), every edge of
+  \(\mathrm{Rips}_t(\mathcal{X})\) corresponds to a pair of points of
+  \(\mathcal{Y}\) at distance \(\leq t + 2\eta\): the inclusion sending
+  \(x_i\) to a nearby \(y_i\) is a \(2\eta\)-interleaving of the filtrations —
+  we apply 6.2.
+  <span class="qed">∎</span>
+  </div>
+</div>
+
+<div class="prop">
+  <span class="tag">Proposition 6.4 — Topological inference: guaranteeing the homology of the hidden space</span>
+  Let \(X \subset \mathbb{R}^d\) be a compact <em>positively reached</em> space,
+  with <strong>reach</strong> \(\tau > 0\) (the maximal size of the medullary
+  balls: a quantity measuring curvature and proximity of sheets), and
+  \(\mathcal{X} \subset X\) an \(\varepsilon\)-dense sample. There exist explicit
+  bounds of the form \(\varepsilon, \alpha = O(\tau)\) — in the spirit of
+  Niyogi–Smale–Weinberg — such that, for a radius \(\alpha\) lying between the
+  sampling scale and a fraction of \(\tau\), the union of balls
+  \(\bigcup_{x \in \mathcal{X}} B(x, \alpha)\) has the homotopy type of \(X\),
+  hence its homology; and by the nerve theorem (th. 2.3), so does the Čech
+  complex \(\check{C}_\alpha(\mathcal{X})\).
+  <div class="proof">
+  (Sketch.) On a compact of reach \(\tau\), the nearest-point projection is
+  well defined on the tubular neighborhood of radius \(\tau\) around \(X\). For
+  \(\alpha &lt; \tau\), the union of balls stays inside this tubular
+  neighborhood; the density of the sample guarantees that no "branch" of \(X\)
+  is missed at scale \(\alpha\), and the nearest-point projection provides the
+  homotopy equivalence between the union and \(X\). The nerve inherits the
+  equivalence through the nerve theorem. <span class="qed">∎</span>
+  </div>
+  In practice, neither \(\tau\) nor \(\varepsilon\) is known: it is the
+  persistence diagram of the Čech complex — or of the Rips complex, bracketed by
+  prop. 2.4 — that reveals the interval of scales where the homology remains
+  stable. Read the longest bar in dimension \(k\): there lies the whole
+  <strong>topological inference</strong>, official topic of the course, put to
+  work.
+</div>
+
+</section>
+<section class="chapter" id="ch7">
+<h2>7. The Mapper algorithm</h2>
+
+<p>Persistence reads a cloud at all scales; <strong>Mapper</strong> (Singh,
+Mémoli, Carlsson, 2007) <em>summarizes</em> it into an interpretable graph — it
+is the TDA tool most used in industry, because it produces a visualization
+that the eye of a domain expert knows how to read: arms, flares, isolated
+groups.</p>
+
+<div class="def">
+  <span class="tag">Definition 7.1 — The Mapper pipeline</span>
+  Input: a cloud \(\mathcal{X}\) (or a measure), a <strong>filter function</strong>
+  \(f : \mathcal{X} \to \mathbb{R}^{\ell}\) (\(\ell = 1\) or 2), a
+  <strong>cover</strong> \(\mathcal{U} = \{U_1, \dots, U_r\}\) of the image of
+  \(f\) (overlapping intervals if \(\ell = 1\), rectangles if \(\ell = 2\)), a
+  <strong>clustering algorithm</strong> \(\mathcal{A}\) (single-linkage,
+  DBSCAN… cf. Machine Learning module, ch. 6). The Mapper graph is built as
+  follows:
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li>slice: \(\mathcal{X}_i = f^{-1}(U_i)\), the <em>fibers</em> of the
+    cover;</li>
+    <li>cluster: \(\mathcal{X}_i = C_{i, 1} \sqcup \dots \sqcup C_{i, k_i}\) by
+    \(\mathcal{A}\); each cluster becomes a <strong>node</strong> of the
+    graph;</li>
+    <li>connect: an <strong>edge</strong> connects \(C_{i, a}\) and
+    \(C_{j, b}\) as soon as \(C_{i, a} \cap C_{j, b} \neq \emptyset\) — the
+    nodes that share points.</li>
+  </ol>
+  Key parameters: the <strong>resolution</strong> (number of intervals), the
+  <strong>gain</strong> (relative overlap, typically 10 to 50%), the filter
+  (PCA projection, eccentricity, density, DTM…).
+</div>
+
+<div class="note">
+  <span class="tag">Why it works: Mapper ≈ dual Reeb</span>
+  Mapper is a discrete version of the <strong>Reeb graph</strong> of \(f\) —
+  the quotient of \(M\) by the relation "same level connected component". The
+  overlapping cover plays the role of continuity: the nerve theorem (2.3)
+  adapted to fibers guarantees that, under good hypotheses (contractible
+  intervals and intersections), the Mapper graph preserves the homotopy of the
+  original space. With \(\ell = 1\), an annulus of data gives a <em>cycle</em>
+  in the Mapper graph — the hole becomes visible to the naked eye, without
+  computing any homology: this is persistence "for humans".
+</div>
+
+<div class="ex">
+  <span class="tag">Example 7.2 — Breast cancer (Nicolau, Levine, Carlsson, 2011)</span>
+  Data: gene expression (24,479 dimensions) for 295 breast tumors. Filter:
+  principal components 3 and 4 of the PCA — the first two only showed what
+  standard analyses already saw; clustering: single-linkage. Result: the Mapper
+  graph shows a main population and a <strong>separate arm</strong> — ~7% of
+  the patients, labeled ER+ but with much better survival, with a distinct
+  mutational profile ("c-MYB+" group). No classical clustering method detached
+  this subgroup, which overlaps the main cloud in every 2D projection: Mapper
+  separates it thanks to the topology of the cover, not thanks to distance
+  alone. This is the paper that brought TDA into biology journals (PNAS 2011).
+</div>
+
+<div class="note">
+  <span class="tag">Mapper vs classical clustering — and the Graph ML link</span>
+  A k-means (Machine Learning module, ch. 6) partitions into <em>k</em> balls;
+  Mapper partitions <em>by fiber</em> then <em>glues back by intersection</em>:
+  a point can belong to several clusters, and the result is a <em>graph</em>
+  whose components, bridges and cycles are exploitable (Graph ML module, ch.
+  0). The choice of filter is as important as the architecture of a network:
+  eccentricity → extremes; density → modes; DTM → robustness to outliers
+  (ch. 6).
+</div>
+
+</section>
+<section class="chapter" id="ch8">
+<h2>8. TDA × machine learning</h2>
+
+<p>A diagram is neither a vector nor a probability: it is a variable-size
+multiset of the half-plane. To plug it into a classifier — SVM, forest,
+network — one must either <strong>vectorize</strong> it (landscapes, images),
+put it into a <strong>kernel</strong>, or turn it into a
+<strong>differentiable layer</strong>. This chapter is the bridge toward the
+heart of the master's program; it ends with the flagship applications: shapes,
+neuroimaging, sensor networks.</p>
+
+<div class="thm">
+  <span class="tag">8.1 — Kernels on diagrams: the sliced Wasserstein kernel (Carrière, Cuturi, Oudot, ICML 2017)</span>
+  The sliced Wasserstein distance between diagrams projects the points onto the
+  lines through the origin and averages the 1D transport distances:
+  $$\widehat{\mathrm{SW}}(\mathcal{D}_1, \mathcal{D}_2) = \frac{1}{N} \sum_{i=1}^{N} W_1\big( \theta_i^\top \mathcal{D}_1 \cup \Delta,\; \theta_i^\top \mathcal{D}_2 \cup \Delta \big),$$
+  where the \(\theta_i\) are sampled directions and \(\Delta\) the projected
+  diagonal (with multiplicities). The <strong>exponential kernel</strong>
+  \(k(\mathcal{D}_1, \mathcal{D}_2) = \exp\big( - \widehat{\mathrm{SW}}(\mathcal{D}_1,
+  \mathcal{D}_2) / \varepsilon \big)\) is then positive definite, and computes
+  in \(O((n + m) \log(n + m))\) per direction. One obtains diagram SVMs
+  (Machine Learning module, ch. 3; Optimal Transport module for the
+  Wasserstein family) that beat fixed vectorizations on graph and shape
+  classification benchmarks. This is one of the founding papers of
+  "topological machine learning" — work of the team, ch. 9.
+</div>
+
+<div class="thm">
+  <span class="tag">8.2 — PersLay: a network layer for diagrams (Datashapes, AISTATS 2020)</span>
+  PersLay transforms each point \((b, d)\) of the diagram by a learned function
+  \(\phi(b, d)\) (mixture of persistence weights, Gaussians, transform of the
+  point toward \((b, d - b)\)), weights the points by an attention function
+  \(w(b, d)\), then aggregates (sum, mean, max, permutation-invariant):
+  $$\mathrm{PersLay}(\mathcal{D}) = \mathrm{AGG}\big( \{ w(b, d) \cdot \phi(b, d) : (b, d) \in \mathcal{D} \}\big) \;\in\; \mathbb{R}^q.$$
+  Plugged in front of an MLP, the layer generalizes landscapes and persistence
+  images (particular choices of \(\phi\) and \(w\)) and trains end to end. The
+  paper applies it to graph classification via the <strong>extended
+  persistence</strong> of continuous signatures (heat kernel signatures) — SOTA
+  on several benchmarks of the time. Master's link: the permutation-invariance
+  of the aggregator is the same problem as that of graph functions (Graph ML
+  module, ch. 5 — Deep Sets vs message passing).
+</div>
+
+<div class="note">
+  <span class="tag">Topological losses for deep learning</span>
+  Another use: persistence as a <em>regularizer</em>. Hofer et al. (NeurIPS
+  2017) penalize the loss by a soft sum of the diagram points above a
+  threshold — forcing e.g. a generative auto-encoder to preserve the connected
+  components of its activations; the gradient exists thanks to Theorem 6.1
+  (when the activations move by \(\delta\) in sup norm, the diagram points
+  move by as much). Applications: regularization of segmentations
+  (connectedness of vessels, nerves), latent topology of VAEs — bridge with
+  the Deep Learning module (M1 P1).
+</div>
+
+<div class="thm">
+  <span class="tag">8.3 — Flagship applications, with verified references</span>
+  <ul style="margin:.4rem 0 0; padding-left:1.2rem;">
+    <li><strong>Neurosciences.</strong> Petri et al. (J. R. Soc. Interface,
+    2014): cerebral functional networks (connectivity of fMRI series) are
+    compared by their diagrams; under psilocybin, the homological structure
+    reorganizes — the "homological scaffolds" identify the functional cycles
+    that mean connectivity masks. It is the most cited TDA study in
+    neuroimaging (&gt; 900 citations).</li>
+    <li><strong>Sensor networks.</strong> de Silva and Ghrist (2007): the
+    coverage of a zone by short-range communication sensors is equivalent to
+    the vanishing of \(H_1\) of the Rips complex of communications (nerve
+    theorem 2.3 in sensor form): homology detects coverage holes <em>without
+    GPS coordinates</em> — only the topology of the communication network
+    matters.</li>
+    <li><strong>Shapes and Geometric DL.</strong> Topological descriptors
+    complement the equivariant architectures of the M2 module "Analysis and
+    Deep Learning on Geometric Data": a network can confuse two meshes close
+    in geometry but different in topology (one extra handle); an H1/H2
+    persistence feature separates them trivially. PersLay + extended
+    persistence signatures are the canonical representatives of this
+    hybridization.</li>
+    <li><strong>Materials, cosmology, sports…</strong> porosity of granular
+    media, galaxy filaments, player trajectories — see the survey by Otter et
+    al. (2017).</li>
+  </ul>
+</div>
+
+<div class="note">
+  <span class="tag">Critical positioning (for the exam)</span>
+  TDA is not a predictive model: it is an <em>extractor of structural
+  features</em> that are robust and interpretable, with guarantees (stability)
+  that few deep descriptors have. Its limits: combinatorial cost, loss of fine
+  geometry (a barcode retains only the holes), choice of scale — attenuated
+  but not resolved by persistence. In practice, one concatenates topological
+  features and learned features.
+</div>
+
+</section>
+<section class="chapter" id="ch9">
+<h2>9. Research of the teaching team</h2>
+
+<p>The module is taught by <strong>Steve Oudot</strong>, Inria senior researcher
+(team <strong>Datashapes</strong>, Inria center of Saclay — the former
+Geometrica team), member of the computer science laboratory (LIX) of École
+Polytechnique. The Datashapes team is, with those of Gunnar Carlsson (Stanford)
+and Herbert Edelsbrunner (IST Austria), one of the three worldwide cradles of
+TDA: it produced the modern stability theorems, the GUDHI software, and the
+bridge toward machine learning. Four axes in direct connection with the
+program; the papers are to be read and presented in project (exercise 10).</p>
+
+<div class="thm">
+  <span class="tag">9.1 — Persistence Theory: the theory of quivers (S. Oudot, AMS, 2015)</span>
+  The book <em>Persistence Theory: From Quiver Representations to Data
+  Analysis</em> (Mathematical Surveys and Monographs 209) rebuilds all of
+  persistence — from the decomposition theorem 4.2 to the algorithms — as the
+  representation theory of the quiver \(A_m\): a persistence module is exactly
+  a linear representation of \(0 \to 1 \to \dots \to m\), and Gabriel's
+  theorem (classification of the indecomposables by intervals) becomes its
+  key. Chapter 4 of this module follows this algebraic reading: pivots of the
+  boundary matrix = canonical matching of the indecomposables. Posterity: it
+  is the standard reference for moving on to zigzags, multi-dimensional
+  modules and categorical stability questions.
+</div>
+
+<div class="thm">
+  <span class="tag">9.2 — Stability: from modules to diagrams (Chazal, Cohen-Steiner, Glisse, Guibas, Oudot, 2009; Chazal, de Silva, Glisse, Oudot, 2016)</span>
+  The paper <em>Proximity of persistence modules and their diagrams</em> (SoCG
+  2009) defines interleaving between modules and proves the algebraic
+  stability 6.2 — ridding Theorem 6.1 of its tame-function hypotheses; the
+  book <em>The Structure and Stability of Persistence Modules</em> (Springer,
+  2016) gives the definitive version, with the constancy of barcodes under
+  continuous perturbations. This is the theoretical foundation that allows the
+  statistics of ch. 6: without stability, no bootstrap, no tests, no machine
+  learning on diagrams.
+</div>
+
+<div class="thm">
+  <span class="tag">9.3 — ToMATo: clustering by persistence (Chazal, Guibas, Oudot, Škraba, JACM 2013)</span>
+  <em>Persistence-Based Clustering in Riemannian Manifolds</em> combines
+  mode-seeking (gradient ascent on a density estimate, mean-shift style —
+  Machine Learning module, ch. 6) and a merging of modes guided by
+  persistence: two neighboring modes merge if the "pass" separating them has
+  low persistence. Guarantee: under sampling hypotheses (reach conditions,
+  cf. ch. 2 of the book by Boissonnat–Chazal–Yvinec), ToMATo recovers exactly
+  the connected components of the density excursions — the "ideal" clustering
+  — where k-means fails on non-convex shapes. It is the perfect example of an
+  algorithm <em>with topological guarantee</em>.
+</div>
+
+<div class="thm">
+  <span class="tag">9.4 — TDA × ML: kernels and layers (Carrière, Cuturi, Oudot, ICML 2017; Datashapes, AISTATS 2020)</span>
+  The sliced Wasserstein kernel (8.1) puts diagrams into the world of SVMs;
+  PersLay (8.2), developed in the same team (M. Carrière, F. Chazal, Y. Ike,
+  T. Lacombe, M. Royer, Y. Umeda — several of them PhDs supervised at LIX),
+  puts them into that of networks. Together, they founded "topological
+  machine learning": stable topological features + learning capacity. The
+  natural extension in the master's program: plugging PersLay on graphs — the
+  graph classification of the Graph ML module, ch. 2, with a descriptor that
+  1-WL cannot see (Advanced GNN module, ch. 1).
+</div>
+
+<div class="note">
+  <span class="tag">GUDHI: the software of the course</span>
+  The team develops and maintains <strong>GUDHI</strong> (Geometry
+  Understanding in Higher Dimensions, gudhi.inria.fr): simplex trees, witness
+  Rips, persistence, landscapes, bottleneck — the reference library
+  (C++/Python), written with the team of Mariette Yvinec (former co-author of
+  CGAL). The labs of ch. 10 use it, as well as scikit-tda/ripser for speed
+  comparisons. Let us also mention <em>Geometric and Topological
+  Inference</em> (Boissonnat, Chazal, Yvinec, Cambridge University Press,
+  2018 — free PDF on HAL): it is the reference textbook of chapters 2, 3 and
+  6. Classic attribution trap at the exam: that book is by Boissonnat, Chazal
+  and Yvinec; Oudot's book is <em>Persistence Theory</em> (9.1). The two share
+  the same editorial house of spirit — Geometrica/Datashapes — but not the
+  same authors.
+</div>
+
+</section>
+<section class="chapter" id="ch10">
+<h2>10. Hands-on: GUDHI, scikit-tda, ripser</h2>
+
+<p>Three tools cover the workflow: <strong>GUDHI</strong> (complexes),
+<strong>ripser</strong> (fast Rips) and <strong>scikit-tda</strong> (persim:
+distances, visualizations). The lab: making the canonical shapes speak —
+circle, two circles, sphere, torus, noise — then measuring stability.</p>
+
+<pre class="code"><code># Lab 1 -- Rips persistence with GUDHI: the noisy circle
+import numpy as np, gudhi
+from gudhi import RipsComplex
+
+t = np.linspace(0, 2*np.pi, 200, endpoint=False)
+X = np.stack([np.cos(t), np.sin(t)], 1) + 0.05*np.random.randn(200, 2)
+
+rips = RipsComplex(points=X, max_edge_length=2.0)
+st = rips.create_simplex_tree(max_dimension=2)
+st.compute_persistence(homology_coeff_field=2, min_persistence=0)
+
+dgm = {k: st.persistence_intervals_in_dimension(k) for k in (0, 1)}
+h1 = dgm[1][np.argsort(dgm[1][:, 1] - dgm[1][:, 0])[-1]]   # longest H1 bar
+print("main hole: birth %.3f, death %.3f" % tuple(h1))
+# expected: birth ~1.0 (radius), death ~2.0 (diameter) -- cf. example 5.2
+gudhi.plot_persistence_barcode(st.persistence()); gudhi.plot_persistence_diagram(st.persistence())</code></pre>
+
+<pre class="code"><code># Lab 2 -- ripser + persim: bottleneck and stability to resampling
+from ripser import ripser
+from persim import plot_diagrams, bottleneck
+
+def sample_circle(n, r, sigma):
+    t = np.random.rand(n) * 2*np.pi
+    return np.stack([r*np.cos(t), r*np.sin(t)], 1) + sigma*np.random.randn(n, 2)
+
+D0 = ripser(sample_circle(200, 1, .05))['dgms']
+D1 = ripser(sample_circle(200, 1, .05))['dgms']
+print("d_b(H1) =", round(bottleneck(D0[1], D1[1]), 3))   # ~ 0.05-0.1: order of the noise
+
+# vary sigma: d_b grows linearly -- numerical illustration of th. 6.1
+for sigma in (.01, .05, .1, .2):
+    D = ripser(sample_circle(200, 1, sigma))['dgms']
+    print(f"sigma={sigma:4.2f}  d_b={bottleneck(D0[1], D[1]):.3f}")</code></pre>
+
+<pre class="code"><code># Lab 3 -- landscapes and classification (sklearn): circle vs two circles
+from gudhi.representations import Landscape, DiagramSelector
+from sklearn.svm import SVC
+from sklearn.pipeline import make_pipeline
+from sklearn.model_selection import cross_val_score
+
+def diag(n):
+    """returns the H1 diagram of a cloud: 1 or 2 random circles"""
+    k = np.random.randint(2) + 1
+    pts = [sample_circle(n, r, .05) + np.random.randn(2)*2.5 for r in (.6, 1.3)][:k]
+    return ripser(np.concatenate(pts))['dgms'][1]
+
+X = [diag(100) for _ in range(60)]                 # 60 H1 diagrams
+y = [1 if sum(p[1] - p[0] > .3 for p in d) > 1 else 0 for d in X]
+                                                  # label = 2 circles iff 2 long bars
+vec = make_pipeline(DiagramSelector(), Landscape(num_landscapes=3, resolution=100))
+model = make_pipeline(vec, SVC(kernel='rbf'))
+print(cross_val_score(model, [[d] for d in X], y, cv=5).mean())  # expected ~ 1.0</code></pre>
+
+<div class="note">
+  <span class="tag">Points of attention</span>
+  <ol style="margin:.4rem 0 0; padding-left:1.4rem;">
+    <li><strong>max_edge_length</strong> truncates the filtration: classes not
+    dead at the end are essential (death = inf), not bugs.</li>
+    <li><strong>Memory</strong>: limit max_dimension to 2 (or 3 for H2); the
+    number of simplices grows like \(n^{k+1}\); ripser never materializes the
+    boundary matrix — that is its strength (Bauer, 2021).</li>
+    <li><strong>Choice of field</strong>: homology_coeff_field=2 by default;
+    try 3 to detect torsion on exotic examples.</li>
+    <li><strong>Consistency with the course</strong>: on Example 4.5, rebuild
+    the filtration by hand (gudhi.SimplexTree, ordered insertion) and verify
+    that persistence() returns exactly the pairs (2,5), (3,6), (4,7), (8,9)
+    and the essential ones 1, 10 — exercise 4 of the lab.</li>
+  </ol>
+</div>
+
+</section>
+<section class="exercises" id="ex">
+<h2>Exercises</h2>
+<ol>
+  <li><strong>Boundary of the boundary over \(\mathbb{Z}\).</strong> Detail the
+  proof of Proposition 1.3 in the case \(k = 3\) (tetrahedron): write
+  \(\partial[a,b,c,d]\), then \(\partial(\partial[a,b,c,d])\), and verify the
+  term-by-term cancellation with the signs \((-1)^i\).</li>
+
+  <li><strong>Homology of graphs.</strong> Prove the formula \(\beta_1 = m - n +
+  c\) (Proposition 3.4) by induction on the number of edges (adding an edge
+  between two components decreases \(c\) and leaves \(\beta_1\) unchanged;
+  within one component, it increases \(\beta_1\)). Application: what is
+  \(\beta_1\) of the Petersen graph? of a \(k \times k\) grid? (cf. Graph ML
+  module, ch. 0.)</li>
+
+  <li><strong>Sphere and torus.</strong> Take up the complete computation 3.3
+  on the torus as a "square with identified edges" triangulated (2 triangles,
+  3 edges, 1 vertex — verify that it is a legal abstract complex): show
+  \(\beta_0 = 1\), \(\beta_1 = 2\), \(\beta_2 = 1\), \(\chi = 0\). What is the
+  minimal abstract complex for the "real" torus (Császár, 7 vertices)?</li>
+
+  <li><strong>Persistence by hand.</strong> Take up Example 4.5 while
+  permuting indices 9 (triangle) and 10 (edge \([v_1v_4]\)) — the filtration
+  remains legal if edge \([v_1v_4]\) appears <em>before</em> the triangle (the
+  triangle does not contain it). Recompute the barcode; which bars change,
+  which are invariant? Verify with GUDHI (Lab 3, note 4).</li>
+
+  <li><strong>Nerve theorem in dimension 1.</strong> Let \(\mathcal{U}\) be a
+  family of open intervals of \(\mathbb{R}\). Show that the nerve of
+  \(\mathcal{U}\) has the same homotopy type as the union: (i) each component
+  of the union is an interval (connected, hence contractible); (ii) the
+  vertices of the nerve within one component are connected by a path of edges;
+  (iii) conclude with Proposition 3.4 (the nerve of intervals is a graph
+  without independent cycles: why are triangles impossible?).</li>
+
+  <li><strong>Jung bracket.</strong> Verify Example 2.5 numerically (balls and
+  intersections for an equilateral triangle of side 1), then prove the second
+  inclusion of Proposition 2.4 in the plane: every set of diameter \(\delta\)
+  of \(\mathbb{R}^2\) fits in a disk of radius \(\delta/\sqrt{3}\) (consider
+  the smallest enclosing disk; if its center is not on the boundary…).</li>
+
+  <li><strong>Bottleneck and Wasserstein.</strong> For
+  \(\mathcal{D}_1 = \{(1, 3), (2, 2.1)\}\) and
+  \(\mathcal{D}_2 = \{(1.2, 2.8)\}\): compute \(d_B\), then \(d_{W,1}\) (sum
+  of the displacements, optimal matching via the diagonal). Build two diagrams
+  with the same \(d_B\) but arbitrarily large \(d_{W,1}\) — and interpret in
+  terms of noise sensitivity (ch. 6).</li>
+
+  <li><strong>Landscapes.</strong> Compute \(\lambda(1, \cdot)\) and
+  \(\lambda(2, \cdot)\) for the diagram \(\{(1, 3), (2, 4)\}\) (draw the
+  tents; note that they cross at \(t = 3\)). Verify the bound of Proposition
+  5.6 against the diagram \(\{(1, 3), (2, 4.2)\}\).</li>
+
+  <li><strong>DTM stability.</strong> Let \(\mathcal{X}\) be a sample and
+  \(\mathcal{X}'\) obtained by adding an outlier at distance \(L\) from the
+  rest. Bound the variation of \(d_B\) for the Rips complex (via 6.3: the
+  bound degrades by \(L\)); explain why the DTM version of ch. 6 degrades only
+  by \(O(\text{weight of the outlier} \times L^2)\).</li>
+
+  <li><strong>Mapper.</strong> Implement Mapper (30 lines: overlapping
+  histogram + single-linkage from scipy + networkx) on MNIST reduced to 3
+  dimensions by UMAP; compare two filters (density vs eccentricity). Identify
+  the "arm" of misclassified 1s (the fateful cluster of the Nicolau et al.
+  2011 paper — ch. 7).</li>
+
+  <li><strong>Paper.</strong> Choose a paper from ch. 9 (Oudot 2015; Chazal et
+  al. 2009/2016; ToMATo 2013; sliced Wasserstein 2017; PersLay 2020), read it
+  and present it in 10 minutes: problem, key theorem, sketched proof,
+  experimental result, limitation. Grid: one figure re-explained, one figure
+  reproduced, one open question.</li>
+
+  <li><strong>Guiding project (optional).</strong> Compute the H1 diagrams of
+  the clique complexes of a collaboration graph (Graph ML module, ch. 7:
+  ogbn-arxiv) and train a sliced Wasserstein kernel SVM to predict the topic;
+  compare with a GNN (Advanced GNN module); what information does each family
+  capture?</li>
+</ol>
+</section>
+<section class="chapter refs" id="refs">
+<h2>References</h2>
+<ul>
+  <li>H. Edelsbrunner, J. Harer, <em>Computational Topology: An Introduction</em>, AMS, 2010 — the reference textbook of the module: complexes, homology, persistence algorithm (ch. 1, 3, 4).</li>
+  <li>J.-D. Boissonnat, F. Chazal, M. Yvinec, <em>Geometric and Topological Inference</em>, Cambridge Texts in Applied Mathematics 57, Cambridge University Press, 2018 — <a href="https://www.cambridge.org/core/books/geometric-and-topological-inference/132A01F09DDAA50625472BEB6E6F4338">publisher page</a> (free PDF on HAL): reconstruction, sampling, DTM (ch. 2, 3, 6 of the module).</li>
+  <li>S. Y. Oudot, <em>Persistence Theory: From Quiver Representations to Data Analysis</em>, Mathematical Surveys and Monographs 209, AMS, 2015 — <a href="https://www.ams.org/books/surv/209/">AMS page</a>: the algebraic reading of ch. 4 (work of the team, ch. 9.1).</li>
+  <li>F. Chazal, V. de Silva, M. Glisse, S. Y. Oudot, <em>The Structure and Stability of Persistence Modules</em>, Springer, 2016 — <a href="https://arxiv.org/abs/1207.3674">arXiv:1207.3674</a>: interleavings, algebraic stability (ch. 6; team, ch. 9.2).</li>
+  <li>H. Edelsbrunner, D. Letscher, A. Zomorodian, <a href="https://doi.org/10.1007/s00454-002-2885-2">Topological Persistence and Simplification</a>, Discrete &amp; Computational Geometry 28, 2002 — the founding paper of the algorithm of ch. 4.</li>
+  <li>A. Zomorodian, G. Carlsson, <a href="https://doi.org/10.1007/s00454-004-1146-y">Computing Persistent Homology</a>, Discrete &amp; Computational Geometry 33, 2005 — the modules-over-a-field version (Theorem 4.2).</li>
+  <li>D. Cohen-Steiner, H. Edelsbrunner, J. Harer, <a href="https://doi.org/10.1007/s00454-006-1276-5">Stability of Persistence Diagrams</a>, Discrete &amp; Computational Geometry 37, 2007 — Theorem 6.1.</li>
+  <li>F. Chazal, D. Cohen-Steiner, M. Glisse, L. J. Guibas, S. Y. Oudot, <a href="https://dl.acm.org/doi/10.1145/1542362.1542407">Proximity of Persistence Modules and Their Diagrams</a>, SoCG 2009 — algebraic stability (Theorem 6.2; team, ch. 9.2).</li>
+  <li>P. Bubenik, <a href="https://jmlr.org/papers/v16/bubenik15a.html">Statistical Topological Data Analysis Using Persistence Landscapes</a>, JMLR 16, 2015 — the landscapes of ch. 5.</li>
+  <li>F. Chazal, B. Fasy, F. Lecci, A. Rinaldo, A. Singh, L. Wasserman, <em>Stochastic Convergence of Persistence Landscapes and Silhouettes</em>, SoCG 2013 — the convergence of empirical landscapes (note of ch. 6).</li>
+  <li>G. Singh, F. Mémoli, G. Carlsson, <a href="https://doi.org/10.2312/SPBG/SPBG07/091-100">Topological Methods for the Analysis of High Dimensional Data Sets and 3D Object Recognition</a>, Eurographics Symposium on Point-Based Graphics, 2007 — the Mapper paper of ch. 7.</li>
+  <li>M. Nicolau, A. J. Levine, G. Carlsson, <a href="https://doi.org/10.1073/pnas.1102826108">Topology Based Data Analysis Identifies a Subgroup of Breast Cancers with a Unique Mutational Profile and Excellent Survival</a>, PNAS 108(17), 2011 — Example 7.2.</li>
+  <li>G. Petri, P. Expert, F. Turkheimer, R. Carhart-Harris, D. Nutt, P. J. Hellyer, F. Vaccarino, <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4223908/">Homological Scaffolds of Brain Functional Networks</a>, Journal of the Royal Society Interface 11, 2014 — the neurosciences application of ch. 8.</li>
+  <li>V. de Silva, R. Ghrist, <a href="https://www.ams.org/notices/200701/fea-ghrist.pdf">Homological Sensor Networks</a>, Notices of the AMS 54(1), 2007 — sensor coverage, Rips = Čech in \(\ell_\infty\) (ch. 2, 8).</li>
+  <li>G. Carlsson, <a href="https://doi.org/10.1090/S0273-0979-09-01249-X">Topology and Data</a>, Bulletin of the AMS 46(2), 2009 — the great survey of the field.</li>
+  <li>N. Otter, M. A. Porter, U. Tillmann, P. Grindrod, H. A. Harrington, <a href="https://doi.org/10.1140/epjds/s13688-017-0109-5">A Roadmap for the Computation of Persistent Homology</a>, EPJ Data Science 6:17, 2017 — the practical guide (software, pitfalls) of ch. 10.</li>
+  <li>M. Carrière, M. Cuturi, S. Oudot, <a href="https://arxiv.org/abs/1706.03358">Sliced Wasserstein Kernel for Persistence Diagrams</a>, ICML 2017 — the kernel of ch. 8.1 (team, ch. 9.4).</li>
+  <li>M. Carrière, F. Chazal, Y. Ike, T. Lacombe, M. Royer, Y. Umeda, <a href="https://arxiv.org/abs/1904.09378">PersLay: A Neural Network Layer for Persistence Diagrams and New Graph Topological Signatures</a>, AISTATS 2020 — the layer of ch. 8.2.</li>
+  <li>C. Hofer, R. Kwitt, M. Niethammer, A. Uhl, <a href="https://arxiv.org/abs/1707.04041">Deep Learning with Topological Signatures</a>, NeurIPS 2017 — topological losses (ch. 8).</li>
+  <li>F. Chazal, L. J. Guibas, S. Y. Oudot, P. Škraba, <a href="https://geometry.stanford.edu/paper.php?id=cgos-pbcrm-11">Persistence-Based Clustering in Riemannian Manifolds</a>, Journal of the ACM 60(6), 2013 — ToMATo (ch. 9.3).</li>
+  <li>U. Bauer, <a href="https://arxiv.org/abs/1908.02518">Ripser: Efficient Computation of Vietoris–Rips Persistence Barcodes</a>, Journal of Applied and Computational Topology 5, 2021 — the fast matrix-free algorithm (ch. 10).</li>
+  <li><strong>Software</strong>: <a href="https://gudhi.inria.fr">GUDHI</a> (Inria Datashapes — the library of the labs); <a href="https://scikit-tda.org">scikit-tda</a> (ripser, persim); <a href="https://github.com/MathieuCarriere/perslay">PersLay</a>.</li>
+</ul>
+</section>
+</main>
+<footer class="foot">
+<p><a href="../../index.html">← Master's program</a></p>
+</footer>
+</body>
+</html>
