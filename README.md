@@ -38,10 +38,10 @@ Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste de
 ## Structure
 
 ```
-index.html              Page d'accueil (brochure cliquable : tronc commun + moments de choix)
-assets/style.css        Feuille de style de l'index
-assets/paper.css        Feuille de style des cours (minimaliste, façon LaTeX/Wikipédia)
-tools/                  Scripts rejouables (découpe, fusion en page unique…)
+index.html              Page d'accueil (brochure : tronc commun + moments de choix)
+en/index.html           Miroir anglais
+assets/paper.css        Feuille de style unique (minimaliste, façon LaTeX/Wikipédia)
+tools/                  Scripts rejouables (découpe, fusion en page unique, restyle index…)
 courses/<module>/       Un dossier par module :
   index.html            Le cours entier sur une page unique : titre, sommaire cliquable,
                         introduction (fiche SynapseS, objectifs, positionnement), sections
