@@ -57,3 +57,17 @@ Chaque cours est **une longue page unique** (comme un article Wikipédia) : somm
 - Page programme : [LLGA | Polytechnique Program](https://programmes.polytechnique.edu/en/master/all-msct-specializations/large-language-models-graphs-and-applications-llga)
 
 > Ces supports sont des **reconstitutions pédagogiques** rédigées à partir du programme public et des références standard de chaque domaine ; ils ne remplacent pas les cours officiels de l'École Polytechnique.
+
+
+## Apparence (dark mode & mobile)
+
+- `assets/paper.css` (miroir `en/assets/paper.css`) : thème clair « papier / LaTeX », **dark** via `prefers-color-scheme` et `data-theme`, plus styles **responsive** (TOC, code, tableaux, KaTeX).
+- `assets/theme.js` : bouton de bascule clair/sombre avec persistance `localStorage` (`llga-theme`).
+
+## Gouvernance Spec-Driven / BMAD (légère)
+
+Ce n’est pas un monorepo app : on garde un flux **spec → implement → prove** adapté aux cours HTML.
+
+- **`AGENTS.md`** — gates obligatoires (contrat, FR+EN, index, dark/mobile, preuves PR).
+- **`specs/`** — contrats de module (modèle `_template-module.md`).
+- Installation **optionnelle** de Spec Kit / `bmad-speckit-sdd-flow` : instructions dans `AGENTS.md`. Sans CLI, les gates + `specs/` suffisent.
