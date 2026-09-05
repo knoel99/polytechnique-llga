@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+(function(){try{var t=localStorage.getItem("llga-theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refresher Neural Nets — LLGA</title>
+<link rel="stylesheet" href="../../assets/paper.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+</head>
+<body>
+<p class="crumb"><a href="../../index.html">MSc&amp;T LLGA · Course notes</a></p>
+<main class="paper">
+<h1>Refresher Neural Nets</h1>
+<p class="subtitle">Pedagogical support (not in brochure) · Year 1 · Period 1 · on-ramp to Deep Learning</p>
+<nav class="toc">
+<p class="toc-title">Contents</p>
+<ol>
+<li><a href="#intro">Introduction and overview</a></li>
+<li><a href="#ch1">1. Re-reading your MNIST MLP — what already works</a></li>
+<li><a href="#ch2">2. Forward, loss, training loop — what breaks</a></li>
+<li><a href="#ch3">3. Gradients and backpropagation, without magic</a></li>
+<li><a href="#ch4">4. Activations, initialization, depth</a></li>
+<li><a href="#ch5">5. Optimization in practice (SGD → Adam)</a></li>
+<li><a href="#ch6">6. From MLP to a toy transformer — LLM intuition</a></li>
+<li><a href="#ch7">7. Where this sits in the LLGA path</a></li>
+<li><a href="#ex">Exercises</a></li>
+<li><a href="#refs">References</a></li>
+</ol>
+</nav>
+<section class="chapter" id="intro">
+<h2>Introduction and overview</h2>
+<table class="tbl">
+<tr><th style="width:160px">Module</th><td>Refresher Neural Nets — <strong>pedagogical support outside the brochure</strong> (on-ramp to Deep Learning / Graph ML / LLMs)</td></tr>
+<tr><th>Code</th><td><em>No SynapseS course code</em> — this is <strong>not</strong> an official catalog UE. Do not invent a code.</td></tr>
+<tr><th>Audience</th><td>~10 years as an engineer, comfortable with Python/NumPy, already trained an MNIST MLP from scratch (e.g. <a href="https://github.com/knoel99/MNIST">MNIST_from_scratch.ipynb</a>), no nanoGPT / LLM training path yet.</td></tr>
+<tr><th>Indicative volume</th><td>~12–18&nbsp;h of self-study, placed <em>before</em> or lightly alongside <a href="../m1p1-deep-learning/index.html">Deep Learning</a>.</td></tr>
+<tr><th>Status</th><td><span class="badge pedagogical">Not in brochure</span><span class="badge refresher">Pedagogical on-ramp</span> M1 · S1 / period&nbsp;1</td></tr>
+</table>
+<p>You already know how to run a multilayer network on MNIST in NumPy&nbsp;: forward pass, a loss, a loop that goes down. This noteset does not start from zero. It starts from <em>your</em> MLP, names precisely what fails when the problem gets harder, then adds just enough theory so that <a href="../m1p1-deep-learning/index.html">Deep Learning</a> (CNNs, attention, transformers) and later Graph ML / LLMs stop being a black box. Empirical first, doctoral vocabulary second — written for an experienced engineer.</p>
+<h3>What you will be able to do</h3>
+<ul>
+<li>Re-read a NumPy MLP and diagnose training that stalls, explodes, or memorizes.</li>
+<li>Work backpropagation by hand on 1–2 layers and reimplement it without a framework.</li>
+<li>Choose activation and initialization knowing why ReLU+He (or tanh+Xavier) changes stability.</li>
+<li>Move from naïve SGD to momentum / Adam with a clear reading of each hyperparameter.</li>
+<li>Explain attention via a tiny toy — a bridge to transformers, without cloning nanoGPT.</li>
+<li>Place this foundation in the LLGA progression&nbsp;: refreshers → ML → DL → Graph ML / NLP → M2 LLMs.</li>
+</ul>
+<h3>Why “not in the brochure”?</h3>
+<p>The brochure and SynapseS already list the Statistics and CS refreshers, then Machine Learning and Deep Learning. There is no official “Refresher Neural Nets” UE. This support is a <strong>pedagogical choice of the repository</strong>&nbsp;: close the gap between “my MNIST MLP works” and “I can follow Deep Learning / attention / LLMs”. No UE code is invented.</p>
+<h3>Position in the program</h3>
+<p><strong>Upstream</strong>&nbsp;: CS &amp; Stats refreshers, ML basics. <strong>Here</strong>&nbsp;: a solid MLP up to attention intuition. <strong>Downstream</strong>&nbsp;: <a href="../m1p1-deep-learning/index.html">Deep Learning</a>, <a href="../m1p2-graph-ml/index.html">Graph ML</a>, <a href="../m1p2-nlp-text-mining/index.html">NLP</a>, <a href="../m2-large-language-models/index.html">Large Language Models</a>.</p>
+<div class="note"><span class="tag">From the teaching team</span>
+If you come from a NumPy MNIST MLP, you are not “behind” on LLMs&nbsp;: you already have the core of the problem (representation, loss, gradient). This refresher tightens the bolts for the rest of the master’s.
+</div>
+</section>
+<section class="chapter" id="ch1">
+<h2>1. Re-reading your MNIST MLP — what already works</h2>
+<p>Assumed starting point&nbsp;: a fully connected network trained on flattened 28×28 digits in NumPy, in the spirit of <code>MNIST_from_scratch.ipynb</code>. We do not rewrite the notebook&nbsp;; we <em>read it like an engineer</em>.</p>
+<h3>1.1. The model in one line</h3>
+<p>For an image \(x \in \mathbb{R}^{784}\) and classes \(y \in \{0,\dots,9\}\) :</p>
+$$z^{(1)} = W^{(1)} x + b^{(1)}, \quad h = \sigma\!\big(z^{(1)}\big), \quad z^{(2)} = W^{(2)} h + b^{(2)}, \quad \hat p = \mathrm{softmax}(z^{(2)}).$$
+<div class="def"><span class="tag">Definition 1.1 — Multilayer perceptron (MLP)</span>
+An <strong>MLP</strong> of depth \(L\) composes affine maps and elementwise activations&nbsp;:
+\(h^{(\ell)} = \sigma\!\big(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\big)\), with \(h^{(0)}=x\). The last layer is often linear + softmax (classification) or linear (regression).
+</div>
+<ul>
+<li><strong>Vectorized forward</strong>&nbsp;: batches \((B, 784)\).</li>
+<li><strong>A cost</strong>&nbsp;: cross-entropy (often via log-softmax for stability).</li>
+<li><strong>An update rule</strong>&nbsp;: SGD on mini-batches.</li>
+<li><strong>An empirical check</strong>&nbsp;: ~97%+ test accuracy on MNIST is enough to trust that gradients “work”.</li>
+</ul>
+<div class="note"><span class="tag">Quick diagnostic</span>
+If your MLP stalls around ~10% (chance on 10 classes)&nbsp;: absurd learning rate, softmax/numerics, or mis-encoded labels. If it reaches ~90% train and ~70% test&nbsp;: capacity is OK, revisit regularization / data. If it reaches 99% train and test on MNIST&nbsp;: the benchmark is too easy to judge generalization — hence Fashion-MNIST or CIFAR later in Deep Learning.
+</div>
+<pre class="code"><code>import numpy as np
+
+def softmax(z):
+    z = z - z.max(axis=1, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=1, keepdims=True)
+
+def forward(x, W1, b1, W2, b2, kind="relu"):
+    z1 = x @ W1 + b1
+    h = np.maximum(z1, 0.0) if kind == "relu" else 1.0 / (1.0 + np.exp(-z1))
+    logits = h @ W2 + b2
+    return softmax(logits), h, z1
+</code></pre>
+</section>
+<section class="chapter" id="ch2">
+<h2>2. Forward, loss, training loop — what breaks</h2>
+<div class="def"><span class="tag">Definition 2.1 — Empirical risk</span>
+$$\hat{\mathcal{R}}(\theta) = \frac1n \sum_{i=1}^n \ell\big(f_\theta(x_i), y_i\big).$$
+Training minimizes \(\hat{\mathcal{R}}\) (often on mini-batches). Generalization concerns the true risk — hence train/val/test.
+</div>
+<p>Softmax + cross-entropy yields the convenient logit gradient \(\hat p - y\).</p>
+<ol>
+<li><strong>Learning rate too large</strong>&nbsp;: NaNs. Too small&nbsp;: flat plateau.</li>
+<li><strong>Sigmoid saturation</strong>&nbsp;: vanishing gradients in early layers.</li>
+<li><strong>Extreme batch size</strong>&nbsp;: noise vs oversmoothing.</li>
+<li><strong>Test leakage</strong>&nbsp;: always keep a separate validation set.</li>
+</ol>
+<div class="ex"><span class="tag">Experiment 2.2</span>
+(a) \(\eta=3\) for 5 epochs. (b) \(\eta=10^{-3}\). (c) Swap ReLU for sigmoid without retuning. Write three sentences on what broke (link to ch.&nbsp;4).
+</div>
+</section>
+<section class="chapter" id="ch3">
+<h2>3. Gradients and backpropagation, without magic</h2>
+<div class="thm"><span class="tag">Proposition 3.1 — Chain rule on a graph</span>
+$$\frac{\partial\mathcal{L}}{\partial z} = \frac{\partial\mathcal{L}}{\partial h}\cdot \phi'(z), \qquad \nabla_W \mathcal{L} = (\nabla_z \mathcal{L})\, h^\top.$$
+</div>
+<p>With \(\delta^{(2)}=\hat p-y\), backprop pushes deltas toward the input via \(W^\top\) and activation derivatives — the same “backward” as your from-scratch notebook.</p>
+<pre class="code"><code>delta2 = (p - y_onehot) / B
+dW2 = h.T @ delta2
+delta1 = (delta2 @ W2.T) * (z1 > 0)
+dW1 = x.T @ delta1
+</code></pre>
+<div class="note"><span class="tag">Engineer’s doctoral reading</span>
+The computation graph is a DAG; backprop is reverse-topology VJP. When debugging a transformer you still ask which edge multiplies the gradient by ~0.
+</div>
+</section>
+<section class="chapter" id="ch4">
+<h2>4. Activations, initialization, depth</h2>
+<div class="def"><span class="tag">Definition 4.1 — Common activations</span>
+\(\mathrm{ReLU}(z)=\max(z,0)\), \(\sigma(z)=(1+e^{-z})^{-1}\), \(\tanh(z)\). ReLU avoids positive saturation&nbsp;; sigmoid/tanh saturate at \(\pm\infty\).
+</div>
+<h3>4.1. Initialization&nbsp;: why the draw matters</h3>
+<p>If \(W_{ij} \sim \mathcal{N}(0,1)\) at large width, pre-activations explode (variance \(\propto\) fan-in). <strong>Xavier/Glorot</strong> (tanh) and <strong>He</strong> (ReLU) schemes calibrate \(\mathrm{Var}(W)\) to keep stable variances on the forward (and roughly on the backward) pass.</p>
+<pre class="code"><code>rng = np.random.default_rng(0)
+# He for ReLU : Var = 2 / fan_in
+W1 = rng.normal(0, np.sqrt(2 / 784), size=(784, 128))
+W2 = rng.normal(0, np.sqrt(2 / 128), size=(128, 10))
+</code></pre>
+<h3>4.2. When depth hurts</h3>
+<p>Stacking sigmoids carelessly ⇒ <strong>vanishing gradients</strong>. ReLU helps but introduces “dead” units. Deep Learning will answer with BatchNorm, residual connections, and LayerNorm — here, remember the symptom&nbsp;: \(\|\delta^{(\ell)}\|\) collapsing toward the input.</p>
+</section>
+<section class="chapter" id="ch5">
+<h2>5. Optimization in practice (SGD → Adam)</h2>
+<div class="def"><span class="tag">Definition 5.1 — Mini-batch SGD</span>
+$$\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t),$$
+where \(B_t\) is a mini-batch. Sampling noise can help in non-convex landscapes.
+</div>
+<p><strong>Momentum</strong> accumulates a velocity&nbsp;: \(v \leftarrow \mu v + \nabla\), \(\theta \leftarrow \theta - \eta v\). <strong>Adam</strong> mixes first- and second-order moments with bias correction — a sensible DL default, not an excuse to ignore \(\eta\).</p>
+<pre class="code"><code>def adam(param, grad, m, v, t, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8):
+    m = beta1 * m + (1 - beta1) * grad
+    v = beta2 * v + (1 - beta2) * (grad * grad)
+    mhat = m / (1 - beta1 ** t)
+    vhat = v / (1 - beta2 ** t)
+    param = param - lr * mhat / (np.sqrt(vhat) + eps)
+    return param, m, v
+</code></pre>
+<div class="note"><span class="tag">Engineer reflexes</span>
+Log train/val loss and accuracy&nbsp;; start with \(\eta\) too large then divide by 3&nbsp;; decay \(\eta\) when val stalls&nbsp;; fix seeds to reproduce a bug. PyTorch is welcome once shapes get painful — a NumPy MLP backward remains the ground-truth exercise.
+</div>
+</section>
+<section class="chapter" id="ch6">
+<h2>6. From MLP to a toy transformer — LLM intuition</h2>
+<p>Goal&nbsp;: <em>not</em> to train an LLM. Only to see that attention is a bilinear combination of vectors, a few NumPy lines, and that a transformer block is attention + MLP — ingredients you already know.</p>
+<div class="def"><span class="tag">Definition 6.1 — Attention (single head, pedagogical)</span>
+For queries \(Q\), keys \(K\), values \(V\) (matrices \(T\times d\))&nbsp;:
+$$\mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\Big(\frac{QK^\top}{\sqrt{d}}\Big) V.$$
+Each position aggregates other positions’ values with content-dependent weights — message passing on a complete graph of tokens (Graph ML reading).
+</div>
+<pre class="code"><code>def attention(Q, K, V):
+    # Q,K,V: (T, d)
+    d = Q.shape[1]
+    scores = (Q @ K.T) / np.sqrt(d)
+    weights = softmax(scores[None, :, :])[0]
+    return weights @ V, weights
+
+rng = np.random.default_rng(1)
+X = rng.normal(size=(4, 8))
+Wq, Wk, Wv = (rng.normal(size=(8, 8)) * 0.1 for _ in range(3))
+out, w = attention(X @ Wq, X @ Wk, X @ Wv)
+print(out.shape, w.round(2))
+</code></pre>
+<p>A <strong>transformer block</strong> (sketch)&nbsp;: LayerNorm → attention → residual → LayerNorm → position-wise MLP → residual. LLMs stack these blocks and train next-token prediction (cross-entropy, like MNIST but over a vocabulary). Your digits MLP = same loss family&nbsp;; attention adds <em>routing</em> across positions.</p>
+<div class="ex"><span class="tag">Experiment 6.2 — no GPU</span>
+Build \(T=5\), \(d=16\). Compute attention weights. Force a key \(K_2\) strongly aligned with \(Q_0\) and check that row 0 of \(w\) concentrates on column 2.
+</div>
+</section>
+<section class="chapter" id="ch7">
+<h2>7. Where this sits in the LLGA path</h2>
+<table class="tbl">
+<tr><th>Stage</th><th>Module</th><th>What this refresher prepares</th></tr>
+<tr><td>P1 refreshers</td><td>Stats · CS</td><td>Already in place</td></tr>
+<tr><td>P1 core</td><td>Machine Learning</td><td>Empirical risk, regularization, SGD</td></tr>
+<tr><td><strong>Here</strong></td><td><strong>Refresher Neural Nets (not in brochure)</strong></td><td>Solid MLP + attention intuition</td></tr>
+<tr><td>P1 key elective</td><td>Deep Learning</td><td>CNNs, RNNs, real transformers</td></tr>
+<tr><td>P2</td><td>Graph ML · NLP</td><td>Message passing ↔ attention</td></tr>
+<tr><td>M2</td><td>Large Language Models</td><td>Pretrain, alignment, scaling</td></tr>
+</table>
+<div class="recap"><span class="tag">Recap</span>
+You could train an MNIST MLP. You now know why it breaks, how gradients flow, how to initialize/optimize, and how one attention line generalizes “combine representations” toward LLMs — without cloning nanoGPT.
+</div>
+</section>
+<section class="exercises" id="ex">
+<h3>Exercises</h3>
+<ol>
+<li><strong>MNIST shapes.</strong> For \(B=64\), \(H=256\), write shapes of \(x,W^{(1)},z^{(1)},h,W^{(2)},\hat p\) and FLOPs order of magnitude.
+<div class="sol">Dominant cost \(\approx 1.3\cdot10^7\) mul-adds per forward.</div></li>
+<li><strong>Softmax-CE gradient.</strong> Show \(\nabla_z \ell = p-y\) and check with finite differences.
+<div class="sol">Direct differentiation yields \(p-y\).</div></li>
+<li><strong>Saturation.</strong> Bad Gaussian init + sigmoid; then fix with He/ReLU.
+<div class="sol">Large variance saturates units; proper init restores learning.</div></li>
+<li><strong>Hand backprop.</strong> Scalar net \(y=\sigma(w_2\sigma(w_1 x))\), squared loss; compute \(\partial\mathcal{L}/\partial w_1\) at \(x=1,t=0,w_1=w_2=1\).
+<div class="sol">Chain \(\sigma'\) factors; numerical value ~0.03.</div></li>
+<li><strong>Adam vs SGD.</strong> Compare 2–3 epochs on your MLP at fixed seed.
+<div class="sol">Well-tuned SGD often suffices on small MNIST MLPs; protocol matters more than a winner.</div></li>
+<li><strong>Toy attention.</strong> Implement attention; add a causal mask; check lower-triangular weights.
+<div class="sol">Set scores[i,j]=-1e9 for j&gt;i before softmax.</div></li>
+<li><strong>Graph ML bridge.</strong> Half a page&nbsp;: attention as message passing on the complete token graph vs 1-hop GCN.
+<div class="sol">Attention uses content-dependent weights on all pairs; GCN restricts to structural neighbors.</div></li>
+<li><strong>(Optional PyTorch)</strong> Match NumPy backward grads to autograd within \(10^{-5}\).
+<div class="sol">Copy weights to tensors with requires_grad and compare.</div></li>
+</ol>
+</section>
+<section class="chapter refs" id="refs">
+<h2>References</h2>
+<ul>
+<li>Goodfellow, Bengio, Courville, <em>Deep Learning</em>, MIT Press, 2016.</li>
+<li>Nielsen, <em>Neural Networks and Deep Learning</em> (online).</li>
+<li>Zhang et al., <em>Dive into Deep Learning</em>.</li>
+<li>Vaswani et al., <em>Attention Is All You Need</em>, NeurIPS 2017.</li>
+<li>Sibling notes&nbsp;: <a href="../m1p1-deep-learning/index.html">Deep Learning</a> · <a href="../m1p1-refresher-cs/index.html">Refresher CS</a>.</li>
+<li>Empirical starting point&nbsp;: <a href="https://github.com/knoel99/MNIST">knoel99/MNIST</a>.</li>
+</ul>
+</section>
+</main>
+<footer class="foot">
+<p><a href="../../index.html">← Master's program</a></p>
+</footer>
+
+<script defer src="../../assets/theme.js"></script>
+</body>
+</html>
