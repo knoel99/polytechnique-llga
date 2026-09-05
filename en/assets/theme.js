@@ -21,14 +21,14 @@
     var btn = document.getElementById("theme-toggle");
     if (btn) {
       var dark = theme === "dark";
-      btn.setAttribute("aria-label", dark ? "Passer en mode clair" : "Passer en mode sombre");
-      btn.setAttribute("title", dark ? "Mode clair" : "Mode sombre");
+      btn.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+      btn.setAttribute("title", dark ? "Light mode" : "Dark mode");
       btn.textContent = dark ? "☀" : "☾";
     }
   }
 
-  // Appliquer tôt pour éviter un flash (si le script est en defer, data-theme
-  // peut aussi être posé par un snippet inline — on réapplique quand même).
+  // Apply early to avoid a flash (if the script is deferred, data-theme may
+  // also be set by an inline snippet — we re-apply anyway).
   apply(current(), false);
 
   function mount() {

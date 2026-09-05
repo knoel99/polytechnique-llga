@@ -69,7 +69,7 @@ If you come from a NumPy MNIST MLP, you are not “behind” on LLMs&nbsp;: you 
 $$z^{(1)} = W^{(1)} x + b^{(1)}, \quad h = \sigma\!\big(z^{(1)}\big), \quad z^{(2)} = W^{(2)} h + b^{(2)}, \quad \hat p = \mathrm{softmax}(z^{(2)}).$$
 <div class="def"><span class="tag">Definition 1.1 — Multilayer perceptron (MLP)</span>
 An <strong>MLP</strong> of depth \(L\) composes affine maps and elementwise activations&nbsp;:
-\(h^{(\ell)} = \sigma\!\big(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\big)\), with \(h^{(0)}=x\).
+\(h^{(\ell)} = \sigma\!\big(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\big)\), with \(h^{(0)}=x\). The last layer is often linear + softmax (classification) or linear (regression).
 </div>
 <ul>
 <li><strong>Vectorized forward</strong>&nbsp;: batches \((B, 784)\).</li>
@@ -77,6 +77,9 @@ An <strong>MLP</strong> of depth \(L\) composes affine maps and elementwise acti
 <li><strong>An update rule</strong>&nbsp;: SGD on mini-batches.</li>
 <li><strong>An empirical check</strong>&nbsp;: ~97%+ test accuracy on MNIST is enough to trust that gradients “work”.</li>
 </ul>
+<div class="note"><span class="tag">Quick diagnostic</span>
+If your MLP stalls around ~10% (chance on 10 classes)&nbsp;: absurd learning rate, softmax/numerics, or mis-encoded labels. If it reaches ~90% train and ~70% test&nbsp;: capacity is OK, revisit regularization / data. If it reaches 99% train and test on MNIST&nbsp;: the benchmark is too easy to judge generalization — hence Fashion-MNIST or CIFAR later in Deep Learning.
+</div>
 <pre class="code"><code>import numpy as np
 
 def softmax(z):
@@ -125,35 +128,63 @@ The computation graph is a DAG; backprop is reverse-topology VJP. When debugging
 </section>
 <section class="chapter" id="ch4">
 <h2>4. Activations, initialization, depth</h2>
-<p>ReLU vs sigmoid/tanh&nbsp;; <strong>He</strong> vs <strong>Xavier</strong> initialization&nbsp;; vanishing gradients when stacking saturating units. Deep Learning will answer with BatchNorm, residuals, LayerNorm — here, remember the symptom \(\|\delta^{(\ell)}\|\) collapsing toward the input.</p>
+<div class="def"><span class="tag">Definition 4.1 — Common activations</span>
+\(\mathrm{ReLU}(z)=\max(z,0)\), \(\sigma(z)=(1+e^{-z})^{-1}\), \(\tanh(z)\). ReLU avoids positive saturation&nbsp;; sigmoid/tanh saturate at \(\pm\infty\).
+</div>
+<h3>4.1. Initialization&nbsp;: why the draw matters</h3>
+<p>If \(W_{ij} \sim \mathcal{N}(0,1)\) at large width, pre-activations explode (variance \(\propto\) fan-in). <strong>Xavier/Glorot</strong> (tanh) and <strong>He</strong> (ReLU) schemes calibrate \(\mathrm{Var}(W)\) to keep stable variances on the forward (and roughly on the backward) pass.</p>
 <pre class="code"><code>rng = np.random.default_rng(0)
-W1 = rng.normal(0, np.sqrt(2 / 784), size=(784, 128))  # He for ReLU
+# He for ReLU : Var = 2 / fan_in
+W1 = rng.normal(0, np.sqrt(2 / 784), size=(784, 128))
 W2 = rng.normal(0, np.sqrt(2 / 128), size=(128, 10))
 </code></pre>
+<h3>4.2. When depth hurts</h3>
+<p>Stacking sigmoids carelessly ⇒ <strong>vanishing gradients</strong>. ReLU helps but introduces “dead” units. Deep Learning will answer with BatchNorm, residual connections, and LayerNorm — here, remember the symptom&nbsp;: \(\|\delta^{(\ell)}\|\) collapsing toward the input.</p>
 </section>
 <section class="chapter" id="ch5">
 <h2>5. Optimization in practice (SGD → Adam)</h2>
-$$\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t).$$
-<p>Momentum accumulates velocity; Adam mixes first/second moments with bias correction — a sensible DL default, not an excuse to ignore \(\eta\).</p>
+<div class="def"><span class="tag">Definition 5.1 — Mini-batch SGD</span>
+$$\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t),$$
+where \(B_t\) is a mini-batch. Sampling noise can help in non-convex landscapes.
+</div>
+<p><strong>Momentum</strong> accumulates a velocity&nbsp;: \(v \leftarrow \mu v + \nabla\), \(\theta \leftarrow \theta - \eta v\). <strong>Adam</strong> mixes first- and second-order moments with bias correction — a sensible DL default, not an excuse to ignore \(\eta\).</p>
 <pre class="code"><code>def adam(param, grad, m, v, t, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8):
     m = beta1 * m + (1 - beta1) * grad
     v = beta2 * v + (1 - beta2) * (grad * grad)
     mhat = m / (1 - beta1 ** t)
     vhat = v / (1 - beta2 ** t)
-    return param - lr * mhat / (np.sqrt(vhat) + eps), m, v
+    param = param - lr * mhat / (np.sqrt(vhat) + eps)
+    return param, m, v
 </code></pre>
+<div class="note"><span class="tag">Engineer reflexes</span>
+Log train/val loss and accuracy&nbsp;; start with \(\eta\) too large then divide by 3&nbsp;; decay \(\eta\) when val stalls&nbsp;; fix seeds to reproduce a bug. PyTorch is welcome once shapes get painful — a NumPy MLP backward remains the ground-truth exercise.
+</div>
 </section>
 <section class="chapter" id="ch6">
 <h2>6. From MLP to a toy transformer — LLM intuition</h2>
 <p>Goal&nbsp;: <em>not</em> to train an LLM. Only to see that attention is a bilinear combination of vectors, a few NumPy lines, and that a transformer block is attention + MLP — ingredients you already know.</p>
+<div class="def"><span class="tag">Definition 6.1 — Attention (single head, pedagogical)</span>
+For queries \(Q\), keys \(K\), values \(V\) (matrices \(T\times d\))&nbsp;:
 $$\mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\Big(\frac{QK^\top}{\sqrt{d}}\Big) V.$$
+Each position aggregates other positions’ values with content-dependent weights — message passing on a complete graph of tokens (Graph ML reading).
+</div>
 <pre class="code"><code>def attention(Q, K, V):
+    # Q,K,V: (T, d)
     d = Q.shape[1]
     scores = (Q @ K.T) / np.sqrt(d)
     weights = softmax(scores[None, :, :])[0]
     return weights @ V, weights
+
+rng = np.random.default_rng(1)
+X = rng.normal(size=(4, 8))
+Wq, Wk, Wv = (rng.normal(size=(8, 8)) * 0.1 for _ in range(3))
+out, w = attention(X @ Wq, X @ Wk, X @ Wv)
+print(out.shape, w.round(2))
 </code></pre>
-<p>LLMs stack such blocks and train next-token cross-entropy — same loss family as MNIST digits; attention adds <em>routing</em> across positions (complete-graph message passing — Graph ML reading).</p>
+<p>A <strong>transformer block</strong> (sketch)&nbsp;: LayerNorm → attention → residual → LayerNorm → position-wise MLP → residual. LLMs stack these blocks and train next-token prediction (cross-entropy, like MNIST but over a vocabulary). Your digits MLP = same loss family&nbsp;; attention adds <em>routing</em> across positions.</p>
+<div class="ex"><span class="tag">Experiment 6.2 — no GPU</span>
+Build \(T=5\), \(d=16\). Compute attention weights. Force a key \(K_2\) strongly aligned with \(Q_0\) and check that row 0 of \(w\) concentrates on column 2.
+</div>
 </section>
 <section class="chapter" id="ch7">
 <h2>7. Where this sits in the LLGA path</h2>
