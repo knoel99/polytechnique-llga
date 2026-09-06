@@ -17,3 +17,4 @@ See also `AGENTS.md` (BMAD / Spec Kit gates) and `specs/_template-module.md`.
 | `non-science-pages` | Non-science pages (management, transversal, internships, ethics) | implemented |
 | `homepage-redesign` | Homepage redesign + illustrations | implemented |
 | `coherence-2ans` | Two-year pedagogical coherence (lot E) | implemented |
+| `quarto-pilot` | Quarto Markdown pilot (refreshers stats + CS) | implemented |
