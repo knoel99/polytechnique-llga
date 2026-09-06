@@ -1,21 +1,19 @@
-# Contrat — capacités de sortie / exit capabilities
+# Contrat — capacités de sortie / exit capabilities (cœur LLGA)
 
 ## Intent
-Page dédiée FR + miroir EN : **questions d’industrie extrapolées** à partir de la brochure, du curriculum et des supports — notes de parcours / supports de travail.
+Questions de **synthèse Graph×LLM** inférées/extrapolées du parcours LLGA (pas examen officiel, pas voix diplôme / équipe pédagogique).
 
-## Voix éditoriale (règle permanente)
-- **OK** : « En sortie de ce parcours (notes inférées + extrapolation), une question industrie typique serait… »
-- **KO** : parler au nom de l’équipe pédagogique / du diplôme (« l’équipe exige », « pour valider le master vous devez… »).
+## Contenu attendu
+Chaque question doit être **reconnaissable LLGA** : graphe+LLM vs tabulaire/texte, GNN échelle, KG×LLM, geometric DL / shapes / TDA, OT fairness, multimodal/vision/speech du repo, RL/agents ancrés curriculum, robustesse/privacy/explainability *dans* un contexte graphe ou génération contrôlée.
 
-## Extrapolation
-Enrichir au-delà du littéral brochure (scénarios terrain, RAG, incidents PII, roadmap « GPT interne », KG+LLM, etc.) tout en renvoyant discrètement vers les modules existants.
+## KO
+Questions flottantes type « roadmap GPT interne », « budget inférence générique », « portefeuille de modèles » sans ancrage Graph×LLM.
 
 ## Slugs
-- FR : `capacites-sortie/index.html`
-- EN : `en/exit-capabilities/index.html`
+- FR `capacites-sortie/index.html`
+- EN `en/exit-capabilities/index.html`
 
-## Preuves « done »
-- [x] Pages FR + EN enrichies (scénarios + axes industrie)
-- [x] Liens depuis les deux index (formulation neutre)
-- [x] Soft CSS `.mods` wrap mobile
-- [x] Pas de voix institutionnelle / équipe pédagogique
+## Preuves
+- [x] h3 reconnaissables LLGA
+- [x] Liens modules réels du repo
+- [x] Voix neutre / extrapolée
