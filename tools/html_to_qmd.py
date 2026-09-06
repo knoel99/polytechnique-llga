@@ -305,6 +305,9 @@ def convert_file(html_path: Path, qmd_path: Path | None = None) -> Path:
     # Do NOT strip bare ::: closers — they close note/def/thm/sol/…
     md = fix_math_escapes(md)
     md = unescape_brackets_in_math(md)
+    # Pandoc turns <pre class="code"> into fences with language "code".
+    # Quarto only highlights real languages — map to python (pilot default).
+    md = re.sub(r"^``` code\s*$", "```python", md, flags=re.M)
     md = re.sub(r"\n{3,}", "\n\n", md).strip() + "\n"
     balance_check(md)
 
