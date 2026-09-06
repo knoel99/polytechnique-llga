@@ -40,6 +40,7 @@ python3 tools/html_to_qmd.py courses/m1p1-refresher-statistics courses/m1p1-refr
 - [x] `index.html` regenerated in place (root index links unchanged)
 - [x] `assets/paper.css` + `assets/theme.js` wired; no FR/lang switcher
 - [x] KaTeX inline + display math present in rendered HTML
+- **Display math spacing**: `assets/paper.css` gives `.math.display` / `.katex-display` ~1.85rem vertical margin (was 1rem) so $$ blocks breathe without a global font-size change.
 - [x] `specs/quarto-pilot.md` present
 - [x] Live Pages HTTP 200 after merge
 
