@@ -327,7 +327,7 @@ Fill-up: the first micro-batch crosses the $p$ stages in $p\,\tau$ (stage $j$ st
   ZeRO (ch. 5)   the *states* (optimizer, gradients, weights)   like DP (all-reduce) + on-the-fly gathers        same as DP                               replacing TP when memory, not compute, is the blocker
 
 ::: note
-[Choosing: the practitioner's decision tree]{.tag} (1) Does the model fit on one GPU with activations? → DP, end of story. (2) The Adam states do not fit → ZeRO-2/3 (ch. 5), not TP: less communication. (3) The weights alone do not fit ($2N$ bytes \> memory) → TP intra-node (8 NVLink GPUs) + PP inter-node + DP on top; tune $m$ ≥ 4$p$ to keep the bubble under 20% (theorem 3.3). (4) Always measure the MFU (ch. 1): below 35%, the hierarchy is poorly chosen.
+[Choosing: the practitioner's decision tree]{.tag} (1) Does the model fit on one GPU with activations? → DP, end of story. (2) The Adam states do not fit → ZeRO-2/3 (ch. 5), not TP: less communication. (3) The weights alone do not fit ($2N$ bytes > memory) → TP intra-node (8 NVLink GPUs) + PP inter-node + DP on top; tune $m$ ≥ 4$p$ to keep the bubble under 20% (theorem 3.3). (4) Always measure the MFU (ch. 1): below 35%, the hierarchy is poorly chosen.
 :::
 
 ## 4. Communication: all-reduce and friends {#ch4}
@@ -339,7 +339,7 @@ The real bottleneck of distributed training is almost never compute: it is the *
 :::
 
 :::: thm
-[Theorem 4.2 — Ring all-reduce: bandwidth-optimal (proved)]{.tag} Arranging the $P$ machines in a ring and cutting the vector into $P$ chunks of $S/P$ bytes, the all-reduce proceeds in two phases (reduce-scatter then all-gather) of $P-1$ steps each: $$T_\mathrm{ring} \;=\; 2\,(P-1)\,\alpha \;+\; \frac{2(P-1)}{P}\cdot\frac{S}{b} \;\xrightarrow[P \to \infty]{}\; 2\alpha P + \frac{2S}{b}.$$ The *bandwidth* term becomes independent of $P$ — each machine never sends more than $\approx 2S/P$ ... that is, at most $2S(P-1)/P \< 2S$ bytes in total: optimal up to constants.
+[Theorem 4.2 — Ring all-reduce: bandwidth-optimal (proved)]{.tag} Arranging the $P$ machines in a ring and cutting the vector into $P$ chunks of $S/P$ bytes, the all-reduce proceeds in two phases (reduce-scatter then all-gather) of $P-1$ steps each: $$T_\mathrm{ring} \;=\; 2\,(P-1)\,\alpha \;+\; \frac{2(P-1)}{P}\cdot\frac{S}{b} \;\xrightarrow[P \to \infty]{}\; 2\alpha P + \frac{2S}{b}.$$ The *bandwidth* term becomes independent of $P$ — each machine never sends more than $\approx 2S/P$ ... that is, at most $2S(P-1)/P < 2S$ bytes in total: optimal up to constants.
 
 ::: proof
 *Reduce-scatter.* At step $t$, machine $i$ sends a chunk (already partially summed) to $i+1$ and receives from $i-1$ a different chunk which it adds to its own: after $P-1$ steps, machine $i$ holds the *complete* sum of chunk $i$ — each machine has sent $(P-1)\cdot S/P$ bytes. *All-gather.* Same round in broadcast direction: the complete sums circulate, $(P-1)\cdot S/P$ bytes sent per machine. Total per machine: $2(P-1)S/P$ bytes at rate $b$, that is $2(P-1)S/(Pb)$ — and the critical path is indeed the sequence of $2(P-1)$ steps of latency $\alpha$. [∎]{.qed}
@@ -375,13 +375,13 @@ The real bottleneck of distributed training is almost never compute: it is the *
   -------- ------------------------------------ --------------------- -------------------------------------
   ZeRO-1   Adam states ($m, v$, masters): 12N   $4N + 12N/P$          = DP
   ZeRO-2   \+ gradients ($2N$)                  $4N + 14N/P$          = DP
-  ZeRO-3   \+ weights ($2N$)                    $16N/P$               slightly \> DP (on-the-fly gathers)
+  ZeRO-3   \+ weights ($2N$)                    $16N/P$               slightly > DP (on-the-fly gathers)
 
 Example 7B on 8 GPUs: ZeRO-3 brings the states down to $112/8 = 14$ GB per GPU — the model becomes trainable on a single node, without TP or pipeline bubble (ch. 3); DeepSpeed/FSDP implement exactly this continuum.
 :::
 
 ::: note
-[Mixed precision: the "free" compression]{.tag} Computing in bf16 (2 bytes) instead of fp32 (4): half the memory and (on tensor cores) 2–8× the throughput; fp32 is kept for accumulators and master weights (long sums and small updates; historical fp16 additionally required *loss scaling* — see the Deep Learning module, ch. 10). Theorem 1.3 remains valid: we count FLOPs, precision changes the price of a FLOP. *Integer* quantization (int8/int4) only serves *inference* — ch. 6; its error analysis is in the Optimization and Responsible AI for Sustainability module, ch. 3 (proved proposition: error $\leq \sum_\ell \frac{\Delta_\ell}{2}\prod_{m\>\ell}\mathrm{Lip}_m$).
+[Mixed precision: the "free" compression]{.tag} Computing in bf16 (2 bytes) instead of fp32 (4): half the memory and (on tensor cores) 2–8× the throughput; fp32 is kept for accumulators and master weights (long sums and small updates; historical fp16 additionally required *loss scaling* — see the Deep Learning module, ch. 10). Theorem 1.3 remains valid: we count FLOPs, precision changes the price of a FLOP. *Integer* quantization (int8/int4) only serves *inference* — ch. 6; its error analysis is in the Optimization and Responsible AI for Sustainability module, ch. 3 (proved proposition: error $\leq \sum_\ell \frac{\Delta_\ell}{2}\prod_{m>\ell}\mathrm{Lip}_m$).
 :::
 
 ## 6. Efficient inference {#ch6}
@@ -430,7 +430,7 @@ Sequential time $T_1 = T_s + T_p$ with $s = T_s/T_1$. On $P$ processors, the par
   -------------------------------------------------- ----------------------------------------------------------------- --------------------------------------------------------------------------------
   Total FLOPs                                        $6ND = 6 \times 6{,}7\times10^9 \times 10^{12}$              $4{,}0\times10^{22}$ FLOPs
   GPU-hours (45% MFU)                                $4\times10^{22} / (312\times10^{12}\times0{,}45) / 3600$     ≈ 79,000 GPU·h — the paper announces 82,432: the $6ND$ rule is accurate to ±5%
-  States memory                                      $16\,N = 16 \times 6{,}7\times10^9$                           107 GB \> 80 GB: ZeRO-2/3 or TP required (ch. 3, 5)
+  States memory                                      $16\,N = 16 \times 6{,}7\times10^9$                           107 GB > 80 GB: ZeRO-2/3 or TP required (ch. 3, 5)
   Activations (checkpointing, batch 4×2048 tokens)   $\approx 2\sqrt{32}\times(\text{layer act.})$                 a few GB/GPU: checkpointing (th. 5.1) makes the batch viable
   Time on 256 GPUs (32 nodes)                        79,000/256 h                                                      ≈ 13 days — hence the vital importance of MFU (half the time = 6 days saved)
   GPU-only energy                                    79,000 h × 0.4 kW (+ PUE, see the Responsible AI module, ch. 6)   ≈ 32 MWh before PUE; emissions by region: 1.6 t (FR) to \~15 t (world average)

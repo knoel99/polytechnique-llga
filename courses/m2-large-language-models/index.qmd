@@ -251,7 +251,7 @@ print("ids :", b, "| decode round-trip ok :", enc.decode(b))
 :::
 
 ::: prop
-[Proposition 2.2 — Pre-norm vs post-norm: the gradient flow]{.tag} **Post-LN** (original transformer): $x\_{l+1}=\\mathrm{LN}(x_l+F(x_l))$ — each block renormalizes *the residual itself*; the gradient of $x_L$ to $x_0$ crosses $L$ LN Jacobians whose product decays/explodes exponentially with $L$: warmup mandatory, fragile depth. **Pre-LN** (GPT-2+, all modern LLMs): $x\_{l+1}=x_l+F(\\mathrm{LN}(x_l))$ — the residual path is *the identity*: $$\frac{\partial x_L}{\partial x_l} = I + \sum_{l'\,\>\,l}\frac{\partial F_{l'}}{\partial x_l}$$ → a gradient that reaches every layer without multiplicative attenuation: stable training without fine warmup. Price: the norm $\\\|x_l\\\|$ grows with depth (additive contributions), hence the **final LN**. (Xiong et al., ICML 2020.)
+[Proposition 2.2 — Pre-norm vs post-norm: the gradient flow]{.tag} **Post-LN** (original transformer): $x\_{l+1}=\\mathrm{LN}(x_l+F(x_l))$ — each block renormalizes *the residual itself*; the gradient of $x_L$ to $x_0$ crosses $L$ LN Jacobians whose product decays/explodes exponentially with $L$: warmup mandatory, fragile depth. **Pre-LN** (GPT-2+, all modern LLMs): $x\_{l+1}=x_l+F(\\mathrm{LN}(x_l))$ — the residual path is *the identity*: $$\frac{\partial x_L}{\partial x_l} = I + \sum_{l'\,>\,l}\frac{\partial F_{l'}}{\partial x_l}$$ → a gradient that reaches every layer without multiplicative attenuation: stable training without fine warmup. Price: the norm $\|x_l\|$ grows with depth (additive contributions), hence the **final LN**. (Xiong et al., ICML 2020.)
 :::
 
 :::: thm
@@ -263,7 +263,7 @@ print("ids :", b, "| decode round-trip ok :", enc.decode(b))
 ::::
 
 ::: prop
-[Proposition 2.4 — MQA/GQA: the memory arithmetic of the KV-cache]{.tag} The cache stores keys and values of all past tokens: $$\text{bytes/token} = 2\ (\text{K and V}) \times N_{\text{layers}} \times n_{\text{KV heads}} \times d_{\text{head}} \times \text{bytes/element}.$$ **Multi-Query Attention** (Shazeer, 2019): a single shared KV head; **Grouped-Query** (Ainslie et al., 2023): $n\_{\\text{KV}} \< n\_{\\text{heads}}$ — e.g. Llama-3-8B: 32 heads, 8 KV heads, 32 layers, $d\_{\\text{head}}=128$, fp16 → $2\\times32\\times8\\times128\\times2 = 128\\,\\text{KiB/token}$; a 100k-token context ≈ **12.8 GB** of cache (versus \~51 GB with full attention — a 4× reduction, nearly identical quality). This is THE lever of long context (ch. 6).
+[Proposition 2.4 — MQA/GQA: the memory arithmetic of the KV-cache]{.tag} The cache stores keys and values of all past tokens: $$\text{bytes/token} = 2\ (\text{K and V}) \times N_{\text{layers}} \times n_{\text{KV heads}} \times d_{\text{head}} \times \text{bytes/element}.$$ **Multi-Query Attention** (Shazeer, 2019): a single shared KV head; **Grouped-Query** (Ainslie et al., 2023): $n\_{\\text{KV}} < n\_{\\text{heads}}$ — e.g. Llama-3-8B: 32 heads, 8 KV heads, 32 layers, $d\_{\\text{head}}=128$, fp16 → $2\\times32\\times8\\times128\\times2 = 128\\,\\text{KiB/token}$; a 100k-token context ≈ **12.8 GB** of cache (versus \~51 GB with full attention — a 4× reduction, nearly identical quality). This is THE lever of long context (ch. 6).
 :::
 
 ::: thm
@@ -275,7 +275,7 @@ print("ids :", b, "| decode round-trip ok :", enc.decode(b))
 :::
 
 ::: def
-[Beyond: SSM/Mamba (state equation sketch)]{.tag} A state-space model discretizes a linear system $x'(t)=Ax(t)+Bu(t),\\ y=Cx$: $$x_k = \bar A x_{k-1} + \bar B u_k,\qquad y_k = C x_k,\qquad \bar A = e^{\Delta A},\ \bar B \approx \Delta B,$$ computable in $\\mathcal{O}(n)$ by a scan (no $n\^2$ matrix). The *selectivity* of Mamba (Gu & Dao, 2023): $\\bar B, C, \\Delta$ depend on the input → content-dependent (selective forgetting), which yields attention quality at linear cost. SSD duality (Mamba-2, 2024): the same computation rewrites as $y_k=\\sum\_{s\\le k} C_k\^\\top\\big(\\prod\_{s\<k'}\\bar A\\big)\\bar B_s\\,u_s$ — a "attention" with a causal kernel; hence the attention+SSM hybrid architectures. Continued in ch. 8.
+[Beyond: SSM/Mamba (state equation sketch)]{.tag} A state-space model discretizes a linear system $x'(t)=Ax(t)+Bu(t),\\ y=Cx$: $$x_k = \bar A x_{k-1} + \bar B u_k,\qquad y_k = C x_k,\qquad \bar A = e^{\Delta A},\ \bar B \approx \Delta B,$$ computable in $\\mathcal{O}(n)$ by a scan (no $n\^2$ matrix). The *selectivity* of Mamba (Gu & Dao, 2023): $\\bar B, C, \\Delta$ depend on the input → content-dependent (selective forgetting), which yields attention quality at linear cost. SSD duality (Mamba-2, 2024): the same computation rewrites as $y_k=\\sum\_{s\\le k} C_k\^\\top\\big(\\prod\_{s<k'}\\bar A\\big)\\bar B_s\\,u_s$ — a "attention" with a causal kernel; hence the attention+SSM hybrid architectures. Continued in ch. 8.
 :::
 
 -   **Parameters: where are they?** embedding ($\|V\| \\times d$), attention ($4d\^2$/block), MLP ($8d\^2$/block, \~$12d\^2$/block with SwiGLU) — the rule $\\#\\text{params} \\approx 12 N d\^2$ and the training memory cost (parameters + Adam + activations + gradients: \~20 bytes/parameter in mixed precision; cf. ch. 3 for actual compute);
@@ -286,7 +286,7 @@ print("ids :", b, "| decode round-trip ok :", enc.decode(b))
 ::: thm
 [Pre-training objectives]{.tag}
 
--   **Causal modeling (CLM)** — GPT: $$\mathcal{L} = -\sum_t \log p_\theta(x_t \mid x_{\<t})$$ — predict the next token; generative by construction;
+-   **Causal modeling (CLM)** — GPT: $$\mathcal{L} = -\sum_t \log p_\theta(x_t \mid x_{<t})$$ — predict the next token; generative by construction;
 -   **Masked modeling / denoising (MLM)** — BERT (NLP ch. 7): mask \~15% and predict (bidirectional); excellent for encoding (classification, retrieval), does not generate;
 -   **Span corruption / text-to-text** — T5: mask spans and regenerate them; everything is formulated as sequence→sequence.
 :::
@@ -327,7 +327,7 @@ Lagrangian $\\mathcal{J}=E+AN\^{-\\alpha}+BD\^{-\\beta}-\\lambda(6ND-C)$: $$\fra
 :::
 
 ::: def
-[Templates and loss mask — the detail that matters]{.tag} The template serializes the turns: `<|system|>…<|user|>…<|assistant|>`. The loss masks the *prompt* tokens (system/user roles) and keeps only the *completion* — otherwise the model learns to *imitate the user* and prompt logging becomes noise: $$\mathcal{L}_{\text{SFT}} = -\sum_{t\,\in\,\text{completion}} \log p_\theta(y_t\mid y_{\<t}, x).$$
+[Templates and loss mask — the detail that matters]{.tag} The template serializes the turns: `<|system|>…<|user|>…<|assistant|>`. The loss masks the *prompt* tokens (system/user roles) and keeps only the *completion* — otherwise the model learns to *imitate the user* and prompt logging becomes noise: $$\mathcal{L}_{\text{SFT}} = -\sum_{t\,\in\,\text{completion}} \log p_\theta(y_t\mid y_{<t}, x).$$
 :::
 
 ```python
@@ -375,22 +375,22 @@ Derivative in $r\^+$: $-\\big(1-\\sigma(r\^+-r\^-)\\big)$ — the penalty is max
 ::::
 
 ::: note
-[PPO for LLMs — the concrete protocol]{.tag} Four models in memory: policy $\\pi\_\\theta$, reference $\\pi\_{\\mathrm{SFT}}$ (frozen, for the KL), reward $r\_\\phi$ (frozen), critic (value head). Sensitive hyperparameters: $\\beta\\in\[0.01,\\,0.2\]$; *low* learning rate (≈ 10× smaller than in SFT); PPO clip $\\epsilon\\sim0.2$; prompt batch \> completion batch. Classic symptoms: KL explodes (β too small); degenerate responses (hacked reward); drifting length (RM verbosity bias). This is chapter 4 of the RL module applied word for word — the prerequisite reading.
+[PPO for LLMs — the concrete protocol]{.tag} Four models in memory: policy $\\pi\_\\theta$, reference $\\pi\_{\\mathrm{SFT}}$ (frozen, for the KL), reward $r\_\\phi$ (frozen), critic (value head). Sensitive hyperparameters: $\\beta\\in[0.01,\\,0.2]$; *low* learning rate (≈ 10× smaller than in SFT); PPO clip $\\epsilon\\sim0.2$; prompt batch > completion batch. Classic symptoms: KL explodes (β too small); degenerate responses (hacked reward); drifting length (RM verbosity bias). This is chapter 4 of the RL module applied word for word — the prerequisite reading.
 :::
 
 :::: thm
 [Theorem 5.2 — DPO (Rafailov et al., 2023): complete derivation]{.tag} The loss $$\mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Big(\beta \log\tfrac{\pi_\theta(y^+ \mid x)}{\pi_{\mathrm{SFT}}(y^+\mid x)} - \beta \log\tfrac{\pi_\theta(y^- \mid x)}{\pi_{\mathrm{SFT}}(y^-\mid x)}\Big)$$ optimizes *the policy directly* on preferences — without a reward model or rollouts.
 
 ::: proof
-**Step 1 (closed-form solution of the KL-penalized problem).** For fixed $x$, maximizing $\\mathbb{E}\_{y\\sim\\pi}\[r(y)\] - \\beta\\,\\mathrm{KL}(\\pi\\\|\\pi\_{\\mathrm{SFT}})$ rewrites as $$\max_\pi \int \pi(y)\Big[r(y) - \beta\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)}\Big]dy = -\beta\int \pi\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)e^{r(y)/\beta}}\,dy,$$ which is $-\\beta\\,\\mathrm{KL}\\big(\\pi\\,\\big\\\|\\,\\tfrac{1}{Z}\\pi\_{\\mathrm{SFT}}e\^{r/\\beta}\\big)+\\beta\\log Z$; the KL is minimal at zero, so $\\;\\pi\^\\star(y\\mid x) = \\frac{1}{Z(x)}\\,\\pi\_{\\mathrm{SFT}}(y\\mid x)\\,e\^{r(x,y)/\\beta}$. **Step 2 (implicit reward).** Inverting: $r(x,y) = \\beta\\log\\frac{\\pi\^\\star(y\|x)}{\\pi\_{\\mathrm{SFT}}(y\|x)} + \\beta\\log Z(x)$. **Step 3 (injection into Bradley-Terry).** In $\\sigma(r\^+-r\^-)$, the term $Z(x)$ — the same for $y\^+$ and $y\^-$ — *cancels*: only the difference of log-ratios matters; maximizing the likelihood of the preferences gives $\\mathcal{L}\_{\\mathrm{DPO}}$ above (with $\\theta$ in place of $\\pi\^\\star$). **Gradient**: $-\\beta\\,\\sigma(-\\hat r)\\,\\nabla\_\\theta\\big\[\\log\\pi(y\^+\|x)-\\log\\pi(y\^-\|x)\\big\]$ with implicit reward $\\hat r = \\beta\\log\\frac{\\pi\_\\theta(y\^+)}{\\pi\_{\\mathrm{SFT}}(y\^+)} -\\beta\\log\\frac{\\pi\_\\theta(y\^-)}{\\pi\_{\\mathrm{SFT}}(y\^-)}$: the log-ratio margin of the preferred responses is increased, all the more strongly as the pair is misclassified. [∎]{.qed}
+**Step 1 (closed-form solution of the KL-penalized problem).** For fixed $x$, maximizing $\\mathbb{E}\_{y\\sim\\pi}[r(y)] - \\beta\\,\\mathrm{KL}(\\pi\|\\pi\_{\\mathrm{SFT}})$ rewrites as $$\max_\pi \int \pi(y)\Big[r(y) - \beta\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)}\Big]dy = -\beta\int \pi\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)e^{r(y)/\beta}}\,dy,$$ which is $-\\beta\\,\\mathrm{KL}\\big(\\pi\\,\\big\|\\,\\tfrac{1}{Z}\\pi\_{\\mathrm{SFT}}e\^{r/\\beta}\\big)+\\beta\\log Z$; the KL is minimal at zero, so $\\;\\pi\^\\star(y\\mid x) = \\frac{1}{Z(x)}\\,\\pi\_{\\mathrm{SFT}}(y\\mid x)\\,e\^{r(x,y)/\\beta}$. **Step 2 (implicit reward).** Inverting: $r(x,y) = \\beta\\log\\frac{\\pi\^\\star(y\|x)}{\\pi\_{\\mathrm{SFT}}(y\|x)} + \\beta\\log Z(x)$. **Step 3 (injection into Bradley-Terry).** In $\\sigma(r\^+-r\^-)$, the term $Z(x)$ — the same for $y\^+$ and $y\^-$ — *cancels*: only the difference of log-ratios matters; maximizing the likelihood of the preferences gives $\\mathcal{L}\_{\\mathrm{DPO}}$ above (with $\\theta$ in place of $\\pi\^\\star$). **Gradient**: $-\\beta\\,\\sigma(-\\hat r)\\,\\nabla\_\\theta\\big[\\log\\pi(y\^+\|x)-\\log\\pi(y\^-\|x)\\big]$ with implicit reward $\\hat r = \\beta\\log\\frac{\\pi\_\\theta(y\^+)}{\\pi\_{\\mathrm{SFT}}(y\^+)} -\\beta\\log\\frac{\\pi\_\\theta(y\^-)}{\\pi\_{\\mathrm{SFT}}(y\^-)}$: the log-ratio margin of the preferred responses is increased, all the more strongly as the pair is misclassified. [∎]{.qed}
 :::
 ::::
 
 :::: thm
-[Theorem 5.3 — GRPO (Shao et al., DeepSeekMath 2024): derivation]{.tag} Generate a *group* of $G$ responses $\\{y_i\\}$ per prompt; rewards $\\{r_i\\}$; advantages *within the group*: $$A_i = \frac{r_i - \mathrm{mean}(r_{1..G})}{\mathrm{std}(r_{1..G})},\qquad \nabla_\theta J = \mathbb{E}\Big[\frac{1}{G}\sum_i \frac{1}{\|y_i\|}\sum_t \nabla_\theta\log\pi_\theta(y_{i,t}\mid x)\,A_i\Big] - \beta\,\nabla_\theta \widehat{\mathrm{KL}},$$ with $\\widehat{\\mathrm{KL}}$ an unbiased, low-variance estimator $\\;\\mathbb{E}\\big\[\\frac{\\pi\_{\\mathrm{ref}}}{\\pi\_\\theta}-\\log\\frac{\\pi\_{\\mathrm{ref}}}{\\pi\_\\theta}-1\\big\]$.
+[Theorem 5.3 — GRPO (Shao et al., DeepSeekMath 2024): derivation]{.tag} Generate a *group* of $G$ responses $\\{y_i\\}$ per prompt; rewards $\\{r_i\\}$; advantages *within the group*: $$A_i = \frac{r_i - \mathrm{mean}(r_{1..G})}{\mathrm{std}(r_{1..G})},\qquad \nabla_\theta J = \mathbb{E}\Big[\frac{1}{G}\sum_i \frac{1}{\|y_i\|}\sum_t \nabla_\theta\log\pi_\theta(y_{i,t}\mid x)\,A_i\Big] - \beta\,\nabla_\theta \widehat{\mathrm{KL}},$$ with $\\widehat{\\mathrm{KL}}$ an unbiased, low-variance estimator $\\;\\mathbb{E}\\big[\\frac{\\pi\_{\\mathrm{ref}}}{\\pi\_\\theta}-\\log\\frac{\\pi\_{\\mathrm{ref}}}{\\pi\_\\theta}-1\\big]$.
 
 ::: proof
-**Variance.** REINFORCE: $\\nabla\\mathbb{E}\[r\]=\\mathbb{E}\[r\\,\\nabla\\log\\pi\]$ is unbiased for any *baseline* independent of the action: $\\mathbb{E}\[b\\,\\nabla\\log\\pi\]=b\\,\\nabla\\!\\int\\pi=0$; subtracting $b=\\mathrm{mean}(r)$ divides the variance (better than $b=0$ or a learned baseline); normalizing by the standard deviation makes the gradient scale invariant across prompts (easy ones: small spreads → amplified; hard ones: damped). **No more critic.** Unlike PPO, the baseline comes from *the group itself* — the value network (and its memory/training) disappears; it is the Monte-Carlo estimation of $A(s,a)=Q(s,a)-V(s)$ by multiple sampling. [∎]{.qed}
+**Variance.** REINFORCE: $\\nabla\\mathbb{E}[r]=\\mathbb{E}[r\\,\\nabla\\log\\pi]$ is unbiased for any *baseline* independent of the action: $\\mathbb{E}[b\\,\\nabla\\log\\pi]=b\\,\\nabla\\!\\int\\pi=0$; subtracting $b=\\mathrm{mean}(r)$ divides the variance (better than $b=0$ or a learned baseline); normalizing by the standard deviation makes the gradient scale invariant across prompts (easy ones: small spreads → amplified; hard ones: damped). **No more critic.** Unlike PPO, the baseline comes from *the group itself* — the value network (and its memory/training) disappears; it is the Monte-Carlo estimation of $A(s,a)=Q(s,a)-V(s)$ by multiple sampling. [∎]{.qed}
 :::
 ::::
 
@@ -440,7 +440,7 @@ For one token: acceptance contribution $q(y)\\min(1,p(y)/q(y)) = \\min(q(y),p(y)
 ### 6.4. Quantization: principles and errors
 
 -   **Post-training int8**: nearly lossless (batch calibration, per-channel scales); **int4**: the standard compromise;
--   **GPTQ** (Frantar et al., 2022): layer by layer, minimize $\\\|Wx-\\hat W x\\\|\_2\^2$ on a calibration set — column-by-column quantization *with error compensation* on the remaining columns (via the inverse of the Hessian $\\mathbf{H}=2\\mathbf{X}\\mathbf{X}\^\\top$);
+-   **GPTQ** (Frantar et al., 2022): layer by layer, minimize $\|Wx-\\hat W x\|\_2\^2$ on a calibration set — column-by-column quantization *with error compensation* on the remaining columns (via the inverse of the Hessian $\\mathbf{H}=2\\mathbf{X}\\mathbf{X}\^\\top$);
 -   **AWQ** (Lin et al., 2023): protect the "salient" channels (high activations) with per-channel scaling *before* quantization — the error is shifted toward weakly active channels;
 -   **Typical errors**: int8 ≈ +0.0-0.1 PPL; well-calibrated int4 ≈ +0.1-0.5 PPL (often imperceptible); below 4 bits, degradation accelerates (2-3-bit quantization = research); in production, always re-validate on *your* benchmarks, not PPL alone.
 
@@ -470,7 +470,7 @@ from transformers import SpeculativeDecodingSpec  # (illustrative; cf. vLLM lab)
 
 ### 7.1. Chunking
 
--   **Fixed with overlap**: 256-1024 tokens, stride 10-20%; *structural* splitting (sections, paragraphs) \> blind splitting (cut sentences destroy retrieval);
+-   **Fixed with overlap**: 256-1024 tokens, stride 10-20%; *structural* splitting (sections, paragraphs) > blind splitting (cut sentences destroy retrieval);
 -   **Semantic chunking**: cut where the embedding similarity between successive windows drops (topic change);
 -   **Multi-granularity**: index by passages, but return the parent section to the LLM (small-to-big); for structured documents, keep titles/metadata in the chunk (pre-retrieval filters).
 
@@ -669,7 +669,7 @@ Guokan Shang (lead research scientist, MBZUAI; PhD at the LIX laboratory, École
 7.  **DPO on paper.** Derive the closed form $\pi^\star$ of the KL-penalized problem (classical calculus of variations), then the DPO loss by re-injecting into Bradley-Terry; check the gradient: it increases the log-ratio margin of the preferred responses.
 
     ::: proof
-    Guidance: follow the proof of thm 5.2 step by step — the key argument is that $\mathcal{J}=-\beta\,\mathrm{KL}(\pi\\|\pi_{\mathrm{ref}}e^{r/\beta}/Z)+\beta\log Z$; then $Z(x)$ disappears in the difference $r^+-r^-$. The gradient pushes $\log\pi(y^+)-\log\pi_{\mathrm{ref}}(y^+)$ up and the $y^-$ down, modulated by $\sigma(-\hat r)$ (hard pairs first). [∎]{.qed}
+    Guidance: follow the proof of thm 5.2 step by step — the key argument is that $\mathcal{J}=-\beta\,\mathrm{KL}(\pi\|\pi_{\mathrm{ref}}e^{r/\beta}/Z)+\beta\log Z$; then $Z(x)$ disappears in the difference $r^+-r^-$. The gradient pushes $\log\pi(y^+)-\log\pi_{\mathrm{ref}}(y^+)$ up and the $y^-$ down, modulated by $\sigma(-\hat r)$ (hard pairs first). [∎]{.qed}
     :::
 8.  **Toy GRPO.** On a verifiable task (binary arithmetic), train a mini-model with GRPO (group of 8 responses); plot accuracy and response length — observe the emergence of longer "reasoning"; compare gradient variance with/without normalization by the group standard deviation.
 9.  **Speculative, on paper.** Write out completely the proof of thm 6.3 in the case $\gamma=2$, then estimate the expected latency gain if $q=p$ on 80% of the mass but diverges on the rest.

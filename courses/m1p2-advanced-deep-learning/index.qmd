@@ -356,7 +356,7 @@ class MoE(nn.Module):
 
 -   **two views**: compositional stochastic augmentations (crop + flip + color + blur); batch of $N$ images → $2N$ views; two views of the same image = positive pair; all other pairs = negatives;
 -   **encoder** $f(\cdot)$ (ResNet) + **projection head** $g(\cdot)$ (2-layer MLP): the **loss is applied on the output of $g$**, but one transfers *before* the projection — the projection leaves the instance information in a dedicated subspace and protects the encoder's features;
--   **NT-Xent loss** (normalized temperature-scaled cross-entropy): $$\ell_{i,j} = -\log \frac{\exp(\mathrm{sim}(z_i, z_j)/\tau)} {\sum_{k \neq i} \exp(\mathrm{sim}(z_i, z_k)/\tau)}, \qquad \mathrm{sim}(u, v) = \frac{u^\top v}{\\|u\\| \\|v\\|},$$ averaged over both directions $(i,j)$ and $(j,i)$; $\tau$ (0.1–0.5) controls the hardness of the negatives.
+-   **NT-Xent loss** (normalized temperature-scaled cross-entropy): $$\ell_{i,j} = -\log \frac{\exp(\mathrm{sim}(z_i, z_j)/\tau)} {\sum_{k \neq i} \exp(\mathrm{sim}(z_i, z_k)/\tau)}, \qquad \mathrm{sim}(u, v) = \frac{u^\top v}{\|u\| \|v\|},$$ averaged over both directions $(i,j)$ and $(j,i)$; $\tau$ (0.1–0.5) controls the hardness of the negatives.
 
 ::: ex
 [Example 4.2 — Why the temperature]{.tag} The term $\mathrm{sim}/\tau$ rescales the similarities (into $[-1/\tau, 1/\tau]$): a small $\tau$ sharpens the softmax — the *closest* negatives dominate the gradient ("hard" learning); a large $\tau$ flattens it — a uniform gradient over all negatives. With cosine similarities that are bounded, without $\tau$ the softmax would be too flat to discriminate: $\tau$ is the single parameter that tunes this concentration/uniformity trade-off (see the alignment/uniformity analysis of Wang & Isola, 2020: NT-Xent pushes positives to align and negatives to spread uniformly over the sphere).
@@ -401,7 +401,7 @@ He et al. (CVPR 2022): mask 75% of the patches and *reconstruct the missing pixe
 -   **lightweight decoder**: the masked tokens (learned embeddings + positions) are re-inserted after the encoder; a small decoder (often narrow and shallow) reconstructs each missing patch; the decoder is *discarded* at transfer time.
 
 ::: def
-[Definition 5.1 — MAE loss]{.tag} With $\Omega$ the set of masked patches and $x_i$ the targets (normalized pixels: per-patch normalization by mean/variance; variant: targets from a VQ-VAE — BEiT): $$\mathcal{L}_{\mathrm{MAE}} = \frac{1}{\|\Omega\|} \sum_{i \in \Omega} \\| \hat x_i - x_i \\|^2,$$ averaged over the masked patches *only*. Per-patch normalization recenters the task on structure (relative to the patch) rather than on absolute luminance.
+[Definition 5.1 — MAE loss]{.tag} With $\Omega$ the set of masked patches and $x_i$ the targets (normalized pixels: per-patch normalization by mean/variance; variant: targets from a VQ-VAE — BEiT): $$\mathcal{L}_{\mathrm{MAE}} = \frac{1}{\|\Omega\|} \sum_{i \in \Omega} \| \hat x_i - x_i \|^2,$$ averaged over the masked patches *only*. Per-patch normalization recenters the task on structure (relative to the patch) rather than on absolute luminance.
 :::
 
 ::: ex
@@ -438,7 +438,7 @@ Accounting for the decomposition: depthwise — for each of the $d_{\mathrm{in}}
 ### 6.2. Knowledge distillation
 
 ::: def
-[Definition 6.2 — Temperature KD (Hinton et al., 2015)]{.tag} With $z_p, z_e$ the logits of the teacher and the student and $T$ the temperature: $$\mathcal{L}_{\mathrm{KD}} = (1-\lambda)\,\mathrm{CE}(y, z_e) \;+\; \lambda\, T^2\, \mathrm{KL}\big(\mathrm{softmax}(z_p / T)\,\big\\|\,\mathrm{softmax}(z_e / T)\big),$$ $\lambda \in [0{,}1]$, $T$ typically 3–20. At high temperature, the teacher's "soft" distribution reveals the **structure of the errors** ("this cat looks like a lynx, not like a truck"): bit-rich per-class information that the hard (1-of-K) label does not contain; the $T^2$ factor compensates for the shrinking gradients.
+[Definition 6.2 — Temperature KD (Hinton et al., 2015)]{.tag} With $z_p, z_e$ the logits of the teacher and the student and $T$ the temperature: $$\mathcal{L}_{\mathrm{KD}} = (1-\lambda)\,\mathrm{CE}(y, z_e) \;+\; \lambda\, T^2\, \mathrm{KL}\big(\mathrm{softmax}(z_p / T)\,\big\|\,\mathrm{softmax}(z_e / T)\big),$$ $\lambda \in [0{,}1]$, $T$ typically 3–20. At high temperature, the teacher's "soft" distribution reveals the **structure of the errors** ("this cat looks like a lynx, not like a truck"): bit-rich per-class information that the hard (1-of-K) label does not contain; the $T^2$ factor compensates for the shrinking gradients.
 :::
 
 Applications: compression (student = MobileNet, ch. 6.1 — the standard production chain); **self-distillation** (DeiT, ch. 1; Born-Again Networks); and *label-free* distillation on massive unlabeled data (Noisy Student, DINOv2). Bridges: quantization/pruning on the deployment side is covered in the Computer Vision (P2) module, chapter 8; distilled LLMs in the M2 Large Language Models module.
@@ -466,7 +466,7 @@ Applications: compression (student = MobileNet, ch. 6.1 — the standard product
 ### 7.2. Scaling laws — Kaplan then Chinchilla
 
 ::: def
-[Definition 7.1 — Power law for the loss]{.tag} Kaplan et al. (2020): for transformers trained with $N$ parameters and $D$ tokens, the test loss empirically follows $$L(N, D) \approx E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}},$$ with irreducible $E \> 0$ and $\alpha, \beta \> 0$ (around 0.3–0.5); valid over several orders of magnitude — the most cited graph of modern deep learning.
+[Definition 7.1 — Power law for the loss]{.tag} Kaplan et al. (2020): for transformers trained with $N$ parameters and $D$ tokens, the test loss empirically follows $$L(N, D) \approx E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}},$$ with irreducible $E > 0$ and $\alpha, \beta > 0$ (around 0.3–0.5); valid over several orders of magnitude — the most cited graph of modern deep learning.
 :::
 
 :::: thm
