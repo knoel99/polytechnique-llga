@@ -68,3 +68,5 @@ Ajout seulement : **Public** ingénieur ~10 ans · **Empirique d'abord** · **Ce
 - [x] Fix doublon Jesse Read EN
 - [x] Voix toujours 0 hits
 - [x] Branche `feature/clarity-d4b` → PR → merge
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.

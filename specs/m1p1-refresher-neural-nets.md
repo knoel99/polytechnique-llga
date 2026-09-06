@@ -28,3 +28,5 @@
 - [x] ≥ 6 exercices (8)
 - [x] Dark/mobile via `assets/paper.css` + `theme.js` (miroirs `en/assets/`)
 - [x] Light mode papier préservé (`:root` inchangé en light)
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.

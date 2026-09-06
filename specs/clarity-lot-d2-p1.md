@@ -29,3 +29,5 @@ Deuxième lot **atomique** de clarification des supports **scientifiques** P1 (c
 - [x] Spec `specs/clarity-lot-d2-p1.md`
 - [x] Modules D2 × FR+EN édités (+ soft ML)
 - [x] Branche `feature/clarity-d2-p1` → PR → merge
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.
