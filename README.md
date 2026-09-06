@@ -17,7 +17,7 @@ Reconstituer, module par module, un **cours complet et auto-contenu** correspond
 - des **exercices corrigés ou guidés** (≥ 8 par module) ;
 - les **références** (livres et articles) réellement utilisées par les enseignants du master.
 
-**L'index recense par ailleurs l'intégralité des cours de la brochure et du curriculum officiel** (options P1/P2, cours M2, management, transversal) ; les modules non rédigés dans ce dépôt y apparaissent en cartes grises « non couverts ». Les cours de gestion, de langues, de sport et d'humanités ne sont pas rédigés (seuls les cours scientifiques — mathématiques et informatique — le sont).
+**L'index recense par ailleurs l'intégralité des cours de la brochure et du curriculum officiel** (options P1/P2, cours M2, management, transversal) ; les modules non rédigés dans ce dépôt y apparaissent en cartes grises « non couverts ». Les cours scientifiques (mathématiques et informatique) sont rédigés en profondeur ; les pages management / transversal / stages / séminaire éthique sont des **cadrages Extrapolons** (pas des polycopiés complets).
 
 ## Le track recommandé
 
