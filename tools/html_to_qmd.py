@@ -220,6 +220,30 @@ def fix_math_escapes(md: str) -> str:
 
 
 
+
+def unescape_lt_gt_in_math(text: str) -> str:
+    """Pandoc/markdown often emit \\< and \\> for comparisons; KaTeX needs < and >."""
+    def fix_seg(m: re.Match) -> str:
+        s = m.group(0)
+        s = re.sub(r"(?<!\\)\\<", "<", s)
+        s = re.sub(r"(?<!\\)\\>", ">", s)
+        return s
+    text = re.sub(r"\$\$[\s\S]*?\$\$", fix_seg, text)
+    text = re.sub(r"(?<!\$)\$(?!\$)(?:\\.|[^$\\])+\$(?!\$)", fix_seg, text)
+    return text
+
+
+def unescape_double_norm(text: str) -> str:
+    """Collapse Pandoc-doubled norms (\\\\|) to single \\| inside math."""
+    def fix_seg(m: re.Match) -> str:
+        s = m.group(0)
+        while r'\\|' in s:
+            s = s.replace(r'\\|', r'\|')
+        return s
+    text = re.sub(r"\$\$[\s\S]*?\$\$", fix_seg, text)
+    text = re.sub(r"(?<!\$)\$(?!\$)(?:\\.|[^$\\])+\$(?!\$)", fix_seg, text)
+    return text
+
 def unescape_brackets_in_math(md: str) -> str:
     """Inside $...$ / $$...$$, replace \\[ → [ and \\] → ].
 
@@ -229,7 +253,20 @@ def unescape_brackets_in_math(md: str) -> str:
     """
 
     def fix_span(tex: str) -> str:
-        return tex.replace("\\[", "[").replace("\\]", "]")
+        # Protect LaTeX linebreaks \\[dim] before unescaping Pandoc \[ \]
+        protected: list[str] = []
+        def protect(m: re.Match) -> str:
+            protected.append(m.group(0))
+            return f"\0LB{len(protected)-1}\0"
+        tex = re.sub(
+            r"\\\\\[(\d+(?:\.\d+)?(?:pt|em|ex|mu|bp|dd|cm|mm|in|sp))\]",
+            protect,
+            tex,
+        )
+        tex = tex.replace("\\[", "[").replace("\\]", "]")
+        for i, frag in enumerate(protected):
+            tex = tex.replace(f"\0LB{i}\0", frag)
+        return tex
 
     def sub_display(m: re.Match) -> str:
         return "$$" + fix_span(m.group(1)) + "$$"
@@ -305,6 +342,8 @@ def convert_file(html_path: Path, qmd_path: Path | None = None) -> Path:
     # Do NOT strip bare ::: closers — they close note/def/thm/sol/…
     md = fix_math_escapes(md)
     md = unescape_brackets_in_math(md)
+    md = unescape_lt_gt_in_math(md)
+    md = unescape_double_norm(md)
     # Pandoc turns <pre class="code"> into fences with language "code".
     # Quarto only highlights real languages — map to python (pilot default).
     md = re.sub(r"^``` code\s*$", "```python", md, flags=re.M)

@@ -220,7 +220,7 @@ Why a "games" module in an AI master's program? Because video games are the AI e
 [Proposition 1.3 — Fixed-step loop: determinism and stability]{.tag} The "accumulator" loop below slices real time into constant simulation steps $\Delta t$; two runs with the same inputs produce **exactly the same sequence of states** (determinism, required for replays and lockstep networking), and the physics remains stable (integration at a constant step).
 
 ::: proof
-The elapsed time $r$ is accumulated: each frame one executes $k = \lfloor r_{\text{acc}} / \Delta t \rfloor$ complete ticks, subtracting $k\,\Delta t$. The number of ticks executed at frame $n$ is $k_n = \lfloor (R_n - k_{\<n}\Delta t)/\Delta t \rfloor$ where $R_n$ is the cumulative real time: it depends only on the actual frame durations and on $\Delta t$, never on the order of execution; each tick receives the same $\Delta t$, so the updates (positions, velocities, decisions) form a deterministic functional sequence of the inputs. With a variable step, on the contrary, $x \mathrel{+}= v \cdot \delta t$ with a floating-point $\delta t$ that varies changes the roundings at every run and can diverge for large $\delta t$ (unstable explicit integration). [∎]{.qed}
+The elapsed time $r$ is accumulated: each frame one executes $k = \lfloor r_{\text{acc}} / \Delta t \rfloor$ complete ticks, subtracting $k\,\Delta t$. The number of ticks executed at frame $n$ is $k_n = \lfloor (R_n - k_{<n}\Delta t)/\Delta t \rfloor$ where $R_n$ is the cumulative real time: it depends only on the actual frame durations and on $\Delta t$, never on the order of execution; each tick receives the same $\Delta t$, so the updates (positions, velocities, decisions) form a deterministic functional sequence of the inputs. With a variable step, on the contrary, $x \mathrel{+}= v \cdot \delta t$ with a floating-point $\delta t$ that varies changes the roundings at every run and can diverge for large $\delta t$ (unstable explicit integration). [∎]{.qed}
 :::
 ::::
 
@@ -277,7 +277,7 @@ A\* expands nodes by increasing cost $f(n) = g(n) + h(n)$, where $g(n)$ is the c
 [Proposition 2.1 — Admissibility ⇒ optimality]{.tag} If for every node $n$, $h(n) \leq h^\*(n)$ (the true optimal cost from $n$ to the goal), then A\* returns a minimum-cost path.
 
 ::: proof
-By contradiction: suppose A\* terminates by expanding a goal $b$ of cost $g(b) \> C^\*$ (the optimal cost). On the optimal path, there exists a frontier node $n$ (not yet expanded); upon extraction of $b$: $f(b) = g(b) \> C^\*$, whereas $f(n) = g(n) + h(n) \leq g^\*(n) + h^\*(n) = C^\*$ (since $g(n)$ is at most the optimal cost up to $n$, and $h$ underestimates the remainder); hence $f(n) \< f(b)$: the priority queue would have extracted $n$ before $b$ — a contradiction. [∎]{.qed}
+By contradiction: suppose A\* terminates by expanding a goal $b$ of cost $g(b) > C^\*$ (the optimal cost). On the optimal path, there exists a frontier node $n$ (not yet expanded); upon extraction of $b$: $f(b) = g(b) > C^\*$, whereas $f(n) = g(n) + h(n) \leq g^\*(n) + h^\*(n) = C^\*$ (since $g(n)$ is at most the optimal cost up to $n$, and $h$ underestimates the remainder); hence $f(n) < f(b)$: the priority queue would have extracted $n$ before $b$ — a contradiction. [∎]{.qed}
 :::
 ::::
 
@@ -409,18 +409,18 @@ bt = Selector(
 ### 4.1. Steering behaviors
 
 ::: def
-[Definition 4.1 — Steering (steering behavior)]{.tag} A steering behavior computes a **steering force** $s = \mathrm{seek}(p, v, p_{\mathrm{target}}, v_{\mathrm{target}})$ — a desired acceleration — added to the velocity, typically bounded $\\|s\\| \leq a_{\max}$ and smoothed (weighted blend of behaviors). Classic components (Reynolds, 1999): seek, flee, arrive (soft deceleration), wander, pursue (anticipate the target), avoid (obstacles).
+[Definition 4.1 — Steering (steering behavior)]{.tag} A steering behavior computes a **steering force** $s = \mathrm{seek}(p, v, p_{\mathrm{target}}, v_{\mathrm{target}})$ — a desired acceleration — added to the velocity, typically bounded $\|s\| \leq a_{\max}$ and smoothed (weighted blend of behaviors). Classic components (Reynolds, 1999): seek, flee, arrive (soft deceleration), wander, pursue (anticipate the target), avoid (obstacles).
 :::
 
 ::: ex
-[Example 4.2 — Arrive: the right deceleration]{.tag} Pure seek toward a point gives a jittery orbit around the target (the velocity always points at it); *arrive* defines a desired velocity decreasing with distance: $$v_{\mathrm{des}} = \hat d \cdot v_{\max} \cdot \min\!\Big(1, \frac{\\|d\\|}{r_{\mathrm{arr}}}\Big), \qquad s = \frac{v_{\mathrm{des}} - v}{\tau},$$ with $d = p_{\mathrm{target}} - p$, arrival radius $r_{\mathrm{arr}}$ and response time $\tau$ (e.g. 0.2 s): braking is anticipated instead of oscillating — the famous "overshooting" of amateur NPCs comes from the absence of this term.
+[Example 4.2 — Arrive: the right deceleration]{.tag} Pure seek toward a point gives a jittery orbit around the target (the velocity always points at it); *arrive* defines a desired velocity decreasing with distance: $$v_{\mathrm{des}} = \hat d \cdot v_{\max} \cdot \min\!\Big(1, \frac{\|d\|}{r_{\mathrm{arr}}}\Big), \qquad s = \frac{v_{\mathrm{des}} - v}{\tau},$$ with $d = p_{\mathrm{target}} - p$, arrival radius $r_{\mathrm{arr}}$ and response time $\tau$ (e.g. 0.2 s): braking is anticipated instead of oscillating — the famous "overshooting" of amateur NPCs comes from the absence of this term.
 :::
 
 ### 4.2. Boids: three local rules, one global behavior
 
 Reynolds' **boids** model (1987) simulates bird flocks with, per individual, three forces computed on its neighbors (perception radius $r$, possibly anisotropic):
 
-1.  **Separation**: $s_{\mathrm{sep}} = -\sum_{j \in \mathcal{N}(i)} \frac{p_i - p_j}{\\|p_i - p_j\\|}$ — move away from neighbors that are too close (weighted by proximity);
+1.  **Separation**: $s_{\mathrm{sep}} = -\sum_{j \in \mathcal{N}(i)} \frac{p_i - p_j}{\|p_i - p_j\|}$ — move away from neighbors that are too close (weighted by proximity);
 2.  **Alignment**: $s_{\mathrm{ali}} = \bar v_{\mathcal{N}(i)} - v_i$ — adopt the average velocity of the neighbors;
 3.  **Cohesion**: $s_{\mathrm{coh}} = \bar p_{\mathcal{N}(i)} - p_i$ — move toward the local center of mass.
 
@@ -429,7 +429,7 @@ The acceleration is a weighted blend of the three (plus seek toward a possible l
 ### 4.3. Formations: slots and the virtual leader
 
 ::: def
-[Definition 4.3 — Slot-based formation]{.tag} A formation is a set of relative positions $\{o_1, \dots, o_k\}$ in the formation's frame; the world position of slot $j$ is $$p_j^{\mathrm{slot}} = p_{\mathrm{anchor}} + R(\theta)\, o_j,$$ where the anchor (a real leader or a **virtual leader** — an invisible point following the global path) provides position $p_{\mathrm{anchor}}$ and orientation $\theta$. With each member steering toward its slot, the formation moves credibly; **slot assignment** is a minimum-cost matching $\sum_{i} \\|p_i - p_{\sigma(i)}^{\mathrm{slot}}\\|$ — the Hungarian algorithm, again (the same assignment problem as in the Computational Optimal Transport module, chapters 1–2, and in the Computer Vision (P2) module, chapter 4, for tracking).
+[Definition 4.3 — Slot-based formation]{.tag} A formation is a set of relative positions $\{o_1, \dots, o_k\}$ in the formation's frame; the world position of slot $j$ is $$p_j^{\mathrm{slot}} = p_{\mathrm{anchor}} + R(\theta)\, o_j,$$ where the anchor (a real leader or a **virtual leader** — an invisible point following the global path) provides position $p_{\mathrm{anchor}}$ and orientation $\theta$. With each member steering toward its slot, the formation moves credibly; **slot assignment** is a minimum-cost matching $\sum_{i} \|p_i - p_{\sigma(i)}^{\mathrm{slot}}\|$ — the Hungarian algorithm, again (the same assignment problem as in the Computational Optimal Transport module, chapters 1–2, and in the Computer Vision (P2) module, chapter 4, for tracking).
 :::
 
 ::: note
@@ -477,7 +477,7 @@ The edge, little explored, is chosen (dominant exploration term); random rollout
 [Proposition 5.3 — The exploration bonus decreases as $\sqrt{\ln N / n}$]{.tag} For a child node visited $n$ times when the parent totals $N$ visits, the exploration bonus decreases as $n^{-1/2}$: a consistently disappointing child sees its candidacy melt away, but it remains re-examined logarithmically (the $\ln N$ in the numerator keeps growing — never a definitive elimination, hence no irreversible regret if the initial estimate was misleading).
 
 ::: proof
-The bonus equals $c\sqrt{\ln N / n}$. At fixed $N$, it is proportional to $n^{-1/2}$, strictly decreasing in $n$ (derivative $-\tfrac12 c \sqrt{\ln N}\, n^{-3/2} \< 0$). Between two children of means $\mu_1 \> \mu_2$, child 2 stops being chosen when $\mu_2 + c\sqrt{\ln N/n_2} \leq \mu_1$ — but since $\ln N \to \infty$, any frozen $n_2$ eventually violates the inequality: the child is tried again. This is exactly the mechanism of UCB1's logarithmic regret (see RL module, chapter 6). [∎]{.qed}
+The bonus equals $c\sqrt{\ln N / n}$. At fixed $N$, it is proportional to $n^{-1/2}$, strictly decreasing in $n$ (derivative $-\tfrac12 c \sqrt{\ln N}\, n^{-3/2} < 0$). Between two children of means $\mu_1 > \mu_2$, child 2 stops being chosen when $\mu_2 + c\sqrt{\ln N/n_2} \leq \mu_1$ — but since $\ln N \to \infty$, any frozen $n_2$ eventually violates the inequality: the child is tried again. This is exactly the mechanism of UCB1's logarithmic regret (see RL module, chapter 6). [∎]{.qed}
 :::
 ::::
 
@@ -579,7 +579,7 @@ Result: credible social behaviors (a birthday party organizes itself "on its own
 
   Constraint            Order of magnitude                             Lever
   --------------------- ---------------------------------------------- ---------------------------------------------------------------------------------------------------
-  response latency      \< 1 s desirable; \> 3 s breaks the illusion   small quantized local models (3–8B parameters); pre-generation of likely replies; streaming
+  response latency      < 1 s desirable; > 3 s breaks the illusion   small quantized local models (3–8B parameters); pre-generation of likely replies; streaming
   cost per player       API: \~cents per conversation                  per-context caching, distillation to a small model (Advanced DL (P2) module, ch. 6), local models
   lore consistency      the NPC must respect the world                 RAG over the game bible (see M2 LLMs module, ch. 7); persona constraints; end-of-turn guardrail
   safety / moderation   the player can type anything                   input/output filtering; blocklists; human supervision of logs
@@ -594,7 +594,7 @@ Three families, in increasing order of difficulty for the studio:
 3.  **statistical cheating** (organized boosting, bot farming): detection *by learning* on game traces — reaction-time distributions, inhuman regularities, social graphs of collusion (see the Graph ML module for player graph analysis).
 
 ::: ex
-[Example 8.1 — An aimbot test]{.tag} Human reaction times follow a log-normal law (median \~250 ms, and rarely \< 150 ms); an aimbot produces near-zero or constant "reaction times". Over 1000 eliminations by one player: median 90 ms, standard deviation 8 ms, zero values above 150 ms — two orders of magnitude too "perfect". A simple test: compare the observed median to the human reference (rank test, see the Refresher in Statistics module); in production, combine several indicators and weight by social behavior to avoid false positives (a very good player is rare, not impossible — see the statistical lessons of the Machine Learning module on multiple testing).
+[Example 8.1 — An aimbot test]{.tag} Human reaction times follow a log-normal law (median \~250 ms, and rarely < 150 ms); an aimbot produces near-zero or constant "reaction times". Over 1000 eliminations by one player: median 90 ms, standard deviation 8 ms, zero values above 150 ms — two orders of magnitude too "perfect". A simple test: compare the observed median to the human reference (rank test, see the Refresher in Statistics module); in production, combine several indicators and weight by social behavior to avoid false positives (a very good player is rare, not impossible — see the statistical lessons of the Machine Learning module on multiple testing).
 :::
 
 ::: note
