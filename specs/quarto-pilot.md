@@ -47,4 +47,5 @@ python3 tools/html_to_qmd.py courses/m1p1-refresher-statistics courses/m1p1-refr
 - Quarto GitHub Action **not** wired yet (pilot commits built HTML). A later PR can add `quarto-dev/quarto-actions` and stop committing HTML if desired.
 - Custom boxes stay as Pandoc fenced divs (`::: note`) rather than Quarto callouts — preserves `paper.css` class names.
 - Code fences default to `python` after conversion; some blocks may be pseudocode.
-- Quarto injects a small amount of syntax-highlight CSS; visual source of truth remains `paper.css`.
+- **Pandoc bracket escape in math**: HTML→Markdown via pandoc escapes literal `[` `]` inside `$...$` as `\[` `\]`. KaTeX then treats them as display-math delimiters (breaks intervals like `$\Omega = [0,1]$` and `$\mathbb{E}[X]$`). Fix: `unescape_brackets_in_math()` in `tools/html_to_qmd.py` (post-step after pandoc); docs use `$$` for display, not `\[...\]`.
+- **Syntax highlighting with `theme: none` + `minimal: true`**: Quarto emits `code span.*` classes but **does not link/embed** highlight color CSS in this mode (even with `highlight-style: github`). Pilot keeps `highlight-style: github` for intent, and injects compact github-light + dark-mode `code span.*` color rules in the header `<style>` / `YAML_TEMPLATE` (and `pre.sourceCode code span { color: unset; }` so `paper.css` inherit cannot kill tokens).
