@@ -12,3 +12,4 @@ Voir aussi `AGENTS.md` (gates BMAD / Spec Kit) et `specs/_template-module.md`.
 | `toc-double-numbering-fix` | Fix double numérotation TOC cours FR+EN | implemented |
 | `exit-capabilities` | Capacités de sortie / questions industrie FR+EN | implemented |
 | `non-science-pages` | Pages non scientifiques (management, transversal, stages, éthique) | implemented |
+| `homepage-redesign` | Refonte accueil FR+EN + illustrations | implemented |
