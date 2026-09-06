@@ -48,6 +48,9 @@ Ajout seulement : **Public** ingénieur ~10 ans · **Empirique d'abord** · **Ce
 ### Micro-fix inclus
 - EN RL : TOC/h2 « Course research notes (Jesse Read): Jesse Read » → « Course research notes (Jesse Read) » (doublon nom).
 
+### Micro-fix post-D4b
+- `m1p2-realtime-ai-videogames` FR+EN : Public/Audience · Empirique/Empirical first · Ce qui casse/What breaks · Note Extrapolons (`feature/clarity-realtime-videogames`).
+
 ## Hors scope D4b
 - paper.css / theme.js / TOC `ul` / dark-mobile (inchangés)
 - Lot E (déjà mergé)
