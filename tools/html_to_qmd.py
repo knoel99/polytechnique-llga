@@ -23,6 +23,7 @@ format:
     toc: false
     anchor-sections: false
     html-math-method: katex
+    highlight-style: github
     embed-resources: false
     css: ../../assets/paper.css
     include-in-header:
@@ -35,6 +36,69 @@ format:
             #title-block-header .subtitle {{ color: var(--soft, #555); margin: 0 0 1rem; font-size: 1.05rem; }}
             div.sourceCode {{ background: var(--code-bg, #f7f7f7); border: 1px solid var(--hair, #e4e4e4); }}
             code {{ background: var(--code-inline-bg, #f4f4f4); }}
+
+            /* Let Quarto highlight span colors win over inherit / paper.css */
+            pre.sourceCode code span {{ color: unset; }}
+            /* Light (github) token colors — minimal+theme:none skips Quarto's linked HL CSS */
+            code span.kw, code span.cf, code span.dt, code span.at, code span.bu, code span.pp {{ color: #d73a49; }}
+            code span.im, code span.st, code span.ch, code span.ss, code span.vs {{ color: #032f62; }}
+            code span.co, code span.an, code span.cv, code span.do, code span.in {{ color: #6a737d; }}
+            code span.fu {{ color: #6f42c1; }}
+            code span.va {{ color: #e36209; }}
+            code span.cn, code span.bn, code span.dv, code span.fl, code span.sc {{ color: #005cc5; }}
+            code span.op {{ color: #24292e; }}
+            /* Dark mode token colors (github highlight is light-oriented) */
+            [data-theme="dark"] code span.kw,
+            [data-theme="dark"] code span.cf,
+            [data-theme="dark"] code span.dt,
+            [data-theme="dark"] code span.at,
+            [data-theme="dark"] code span.bu,
+            [data-theme="dark"] code span.pp,
+            [data-theme="dark"] code span.op {{ color: #ff7b72; }}
+            [data-theme="dark"] code span.im {{ color: #ff7b72; }}
+            [data-theme="dark"] code span.st,
+            [data-theme="dark"] code span.ch,
+            [data-theme="dark"] code span.ss,
+            [data-theme="dark"] code span.vs {{ color: #a5d6ff; }}
+            [data-theme="dark"] code span.cn,
+            [data-theme="dark"] code span.bn,
+            [data-theme="dark"] code span.dv,
+            [data-theme="dark"] code span.fl,
+            [data-theme="dark"] code span.sc {{ color: #79c0ff; }}
+            [data-theme="dark"] code span.co,
+            [data-theme="dark"] code span.an,
+            [data-theme="dark"] code span.cv,
+            [data-theme="dark"] code span.do,
+            [data-theme="dark"] code span.in {{ color: #8b949e; }}
+            [data-theme="dark"] code span.va {{ color: #ffa657; }}
+            [data-theme="dark"] code span.fu {{ color: #d2a8ff; }}
+            @media (prefers-color-scheme: dark) {{
+              :root:not([data-theme="light"]) code span.kw,
+              :root:not([data-theme="light"]) code span.cf,
+              :root:not([data-theme="light"]) code span.dt,
+              :root:not([data-theme="light"]) code span.at,
+              :root:not([data-theme="light"]) code span.bu,
+              :root:not([data-theme="light"]) code span.pp,
+              :root:not([data-theme="light"]) code span.op {{ color: #ff7b72; }}
+              :root:not([data-theme="light"]) code span.im {{ color: #ff7b72; }}
+              :root:not([data-theme="light"]) code span.st,
+              :root:not([data-theme="light"]) code span.ch,
+              :root:not([data-theme="light"]) code span.ss,
+              :root:not([data-theme="light"]) code span.vs {{ color: #a5d6ff; }}
+              :root:not([data-theme="light"]) code span.cn,
+              :root:not([data-theme="light"]) code span.bn,
+              :root:not([data-theme="light"]) code span.dv,
+              :root:not([data-theme="light"]) code span.fl,
+              :root:not([data-theme="light"]) code span.sc {{ color: #79c0ff; }}
+              :root:not([data-theme="light"]) code span.co,
+              :root:not([data-theme="light"]) code span.an,
+              :root:not([data-theme="light"]) code span.cv,
+              :root:not([data-theme="light"]) code span.do,
+              :root:not([data-theme="light"]) code span.in {{ color: #8b949e; }}
+              :root:not([data-theme="light"]) code span.va {{ color: #ffa657; }}
+              :root:not([data-theme="light"]) code span.fu {{ color: #d2a8ff; }}
+            }}
+          
           </style>
     include-before-body:
       - text: |
@@ -157,6 +221,29 @@ def fix_math_escapes(md: str) -> str:
     return md
 
 
+
+def unescape_brackets_in_math(md: str) -> str:
+    """Inside $...$ / $$...$$, replace \\[ → [ and \\] → ].
+
+    Pandoc escapes literal brackets in math as \\[ \\], which KaTeX
+    then misreads as display-math delimiters. These docs use $$ for display.
+    Does not touch \\[...\\] outside dollar math.
+    """
+
+    def fix_span(tex: str) -> str:
+        return tex.replace("\\[", "[").replace("\\]", "]")
+
+    def sub_display(m: re.Match) -> str:
+        return "$$" + fix_span(m.group(1)) + "$$"
+
+    def sub_inline(m: re.Match) -> str:
+        return "$" + fix_span(m.group(1)) + "$"
+
+    md = re.sub(r"\$\$(.*?)\$\$", sub_display, md, flags=re.S)
+    md = re.sub(r"(?<!\$)\$(?!\$)(.*?)(?<!\$)\$(?!\$)", sub_inline, md, flags=re.S)
+    return md
+
+
 def balance_check(md: str) -> None:
     depth = 0
     for i, line in enumerate(md.splitlines(), 1):
@@ -219,6 +306,7 @@ def convert_file(html_path: Path, qmd_path: Path | None = None) -> Path:
     )
     # Do NOT strip bare ::: closers — they close note/def/thm/sol/…
     md = fix_math_escapes(md)
+    md = unescape_brackets_in_math(md)
     md = re.sub(r"\n{3,}", "\n\n", md).strip() + "\n"
     balance_check(md)
 
