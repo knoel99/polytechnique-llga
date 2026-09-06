@@ -13,3 +13,4 @@ Voir aussi `AGENTS.md` (gates BMAD / Spec Kit) et `specs/_template-module.md`.
 | `exit-capabilities` | Capacités de sortie / questions industrie FR+EN | implemented |
 | `non-science-pages` | Pages non scientifiques (management, transversal, stages, éthique) | implemented |
 | `homepage-redesign` | Refonte accueil FR+EN + illustrations | implemented |
+| `coherence-2ans` | Cohérence pédagogique 2 ans (lot E) FR+EN | implemented |
