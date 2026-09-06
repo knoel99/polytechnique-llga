@@ -191,12 +191,12 @@ window.Quarto = {
 <h2 id="contents">Contents</h2>
 <ul>
 <li><a href="#intro">Introduction and overview</a></li>
-<li><a href="#ch1">1. Re-reading your MNIST MLP — what already works</a></li>
+<li><a href="#ch1">1. Empirical MNIST path (from the notebook)</a></li>
 <li><a href="#ch2">2. Forward, loss, training loop — what breaks</a></li>
-<li><a href="#ch3">3. Gradients and backpropagation, without magic</a></li>
-<li><a href="#ch4">4. Activations, initialization, depth</a></li>
+<li><a href="#ch3">3. Gradients and backpropagation with numbers</a></li>
+<li><a href="#ch4">4. Activations: identity vs sigmoid vs ReLU</a></li>
 <li><a href="#ch5">5. Optimization in practice (SGD → Adam)</a></li>
-<li><a href="#ch6">6. From MLP to a toy transformer — LLM intuition</a></li>
+<li><a href="#ch6">6. Short bridge: attention intuition</a></li>
 <li><a href="#ch7">7. Where this sits in the LLGA path</a></li>
 <li><a href="#ex">Exercises</a></li>
 <li><a href="#refs">References</a></li>
@@ -226,126 +226,340 @@ window.Quarto = {
 </tr>
 </tbody>
 </table>
-<p>You already know how to run a multilayer network on MNIST in NumPy&nbsp;: forward pass, a loss, a loop that goes down. This noteset does not start from zero. It starts from <em>your</em> MLP, names precisely what fails when the problem gets harder, then adds just enough theory so that <a href="../m1p1-deep-learning/index.html">Deep Learning</a> (CNNs, attention, transformers) and later Graph ML / LLMs stop being a black box. Empirical first, doctoral vocabulary second — written for an experienced engineer.</p>
+<p>The core of these notes is the empirical path in <a href="https://github.com/knoel99/MNIST">knoel99/MNIST</a>: load digits, flatten, train a NumPy network with identity / sigmoid / ReLU, plot loss and accuracy. Theory is added only where it diagnoses stalls, explosions, or saturation. Empirical first; doctoral vocabulary second.</p>
 <h3 id="what-you-will-be-able-to-do">What you will be able to do</h3>
 <ul>
-<li>Re-read a NumPy MLP and diagnose training that stalls, explodes, or memorizes.</li>
-<li>Work backpropagation by hand on 1–2 layers and reimplement it without a framework.</li>
-<li>Choose activation and initialization knowing why ReLU+He (or tanh+Xavier) changes stability.</li>
+<li>Walk the notebook end-to-end in prose + math + code without opening Colab first.</li>
+<li>Write shapes <span class="math inline">(B,784)\to(B,H)\to(B,10)</span> and compute a tiny forward/backward by hand.</li>
+<li>Compare identity / sigmoid / ReLU the way the notebook does (saturation, sparsity, loss curves).</li>
 <li>Move from naïve SGD to momentum / Adam with a clear reading of each hyperparameter.</li>
-<li>Explain attention via a tiny toy — a bridge to transformers, without cloning nanoGPT.</li>
-<li>Place this foundation in the LLGA progression&nbsp;: refreshers → ML → DL → Graph ML / NLP → M2 LLMs.</li>
+<li>Explain one attention line as a <span class="math inline">T\times T</span> weight matrix — a short bridge to Deep Learning.</li>
 </ul>
-<h3 id="why-not-in-the-brochure">Why “not in the brochure”?</h3>
-<p>The brochure and SynapseS already list the Statistics and CS refreshers, then Machine Learning and Deep Learning. There is no official “Refresher Neural Nets” UE. This support is a <strong>pedagogical choice of the repository</strong>&nbsp;: close the gap between “my MNIST MLP works” and “I can follow Deep Learning / attention / LLMs”. No UE code is invented.</p>
-<h3 id="position-in-the-program">Position in the program</h3>
-<p><strong>Upstream</strong>&nbsp;: CS &amp; Stats refreshers, ML basics. <strong>Here</strong>&nbsp;: a solid MLP up to attention intuition. <strong>Downstream</strong>&nbsp;: <a href="../m1p1-deep-learning/index.html">Deep Learning</a>, <a href="../m1p2-graph-ml/index.html">Graph ML</a>, <a href="../m1p2-nlp-text-mining/index.html">NLP</a>, <a href="../m2-large-language-models/index.html">Large Language Models</a>.</p>
 <div class="note">
-<p><span class="tag">Extrapolons note</span> If you come from a NumPy MNIST MLP, you are not “behind” on LLMs&nbsp;: you already have the core of the problem (representation, loss, gradient). This refresher tightens the bolts for the rest of the master’s — doctoral jargon only when it unlocks a diagnosis.</p>
+<p><span class="tag">Extrapolons note</span> If a NumPy MNIST MLP already runs, the gap to Deep Learning is mostly naming failure modes (saturation, bad <span class="math inline">\eta</span>, dead ReLUs) and reading shapes under batching — not starting from zero.</p>
 </div>
-<h2 id="ch1">1. Re-reading your MNIST MLP — what already works</h2>
-<p>Assumed starting point&nbsp;: a fully connected network trained on flattened 28×28 digits in NumPy, in the spirit of <code>MNIST_from_scratch.ipynb</code>. We do not rewrite the notebook&nbsp;; we <em>read it like an engineer</em>.</p>
-<h3 id="the-model-in-one-line">1.1. The model in one line</h3>
-<p>For an image <span class="math inline">x \in \mathbb{R}^{784}</span> and classes <span class="math inline">y \in \{0,\dots,9\}</span> :</p>
-<p><span class="math display">z^{(1)} = W^{(1)} x + b^{(1)}, \quad h = \sigma\!\big(z^{(1)}\big), \quad z^{(2)} = W^{(2)} h + b^{(2)}, \quad \hat p = \mathrm{softmax}(z^{(2)}).</span></p>
+<h2 id="ch1">1. Empirical MNIST path (from the notebook)</h2>
+<p>Starting point: <code>MNIST_from_scratch.ipynb</code> (<a href="https://github.com/knoel99/MNIST">repo</a>). The notebook trains a <strong>single linear map</strong> <span class="math inline">784\to 10</span> with a choice of output activation and <strong>MSE</strong> against one-hot labels (not cross-entropy). Below: the same path in notes form, then a multilayer extension with fully expanded numbers.</p>
+<h3 id="digits-flatten-scores">1.1. Digits → flatten → scores</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img src="schema-mnist-mlp.svg" style="width:100.0%" alt="Schema of MNIST MLP dimensions"></p>
+<figcaption>MNIST pipeline: 28×28 → flatten 784 → hidden (optional) → 10 logits → softmax/argmax</figcaption>
+</figure>
+</div>
+<ol type="1">
+<li>Load CSV rows: label in column&nbsp;0, pixels in the rest; reshape a row to <span class="math inline">28\times 28</span> for visualization (<code>imshow</code>, grayscale).</li>
+<li>Features: <span class="math inline">X\in\mathbb{R}^{n\times 784}</span>, scaled to <span class="math inline">[0,1]</span> by <code>/255.0</code>.</li>
+<li>Targets: one-hot <span class="math inline">Y\in\{0,1\}^{n\times 10}</span>.</li>
+<li>Notebook model: <span class="math inline">z = XW + b</span> with <span class="math inline">W\in\mathbb{R}^{784\times 10}</span>, <span class="math inline">b\in\mathbb{R}^{1\times 10}</span>, then <span class="math inline">\hat y = \phi(z)</span> for <span class="math inline">\phi\in\{\mathrm{id},\sigma,\mathrm{ReLU}\}</span>.</li>
+<li>Loss: <span class="math inline">\mathrm{MSE} = \mathrm{mean}\big((\hat y - Y)^2\big)</span>; train ~1000 epochs, <span class="math inline">\eta=0.01</span>.</li>
+</ol>
+<p>Shapes for a mini-batch of size <span class="math inline">B</span> (multilayer reading used later in Deep Learning):</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Tensor</th>
+<th style="text-align: left;">Shape</th>
+<th style="text-align: left;">Role</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><span class="math inline">X</span></td>
+<td style="text-align: left;"><span class="math inline">(B, 784)</span></td>
+<td style="text-align: left;">flattened pixels</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><span class="math inline">W^{(1)}</span></td>
+<td style="text-align: left;"><span class="math inline">(784, H)</span></td>
+<td style="text-align: left;">first affine map</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><span class="math inline">z^{(1)}</span></td>
+<td style="text-align: left;"><span class="math inline">(B, H)</span></td>
+<td style="text-align: left;">pre-activations</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><span class="math inline">h</span></td>
+<td style="text-align: left;"><span class="math inline">(B, H)</span></td>
+<td style="text-align: left;">after <span class="math inline">\phi</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><span class="math inline">W^{(2)}</span></td>
+<td style="text-align: left;"><span class="math inline">(H, 10)</span></td>
+<td style="text-align: left;">classifier</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><span class="math inline">z^{(2)}</span></td>
+<td style="text-align: left;"><span class="math inline">(B, 10)</span></td>
+<td style="text-align: left;">logits</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><span class="math inline">\hat p</span></td>
+<td style="text-align: left;"><span class="math inline">(B, 10)</span></td>
+<td style="text-align: left;">softmax probabilities</td>
+</tr>
+</tbody>
+</table>
+<p>The notebook itself is the shallow case <span class="math inline">H</span> absent: <span class="math inline">W\in\mathbb{R}^{784\times 10}</span> only. That is enough to feel activation choice; depth comes in §2–3 with a tiny <span class="math inline">2\to 2\to 2</span> net.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Notebook spirit: shapes after load / normalize / one-hot</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># X_train: (n, 784), y_train: (n, 10)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(X_train.shape, y_train.shape)  <span class="co"># e.g. (60000, 784), (60000, 10)</span></span></code></pre></div>
+<h3 id="mse-helper-and-the-training-skeleton">1.2. MSE helper and the training skeleton</h3>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> mean_squared_error(y_true, y_pred):</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.mean(np.square(y_true <span class="op">-</span> y_pred))</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> sigmoid(z):</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="fl">1.0</span> <span class="op">/</span> (<span class="fl">1.0</span> <span class="op">+</span> np.exp(<span class="op">-</span>z))</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> relu(z):</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.maximum(z, <span class="fl">0.0</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="co"># One forward step (notebook: single layer)</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> forward_linear(X, W, b, activation<span class="op">=</span><span class="st">"identity"</span>):</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> X <span class="op">@</span> W <span class="op">+</span> b                       <span class="co"># (B, 10)</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> activation <span class="op">==</span> <span class="st">"sigmoid"</span>:</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> sigmoid(z), z</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> activation <span class="op">==</span> <span class="st">"relu"</span>:</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> relu(z), z</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> z, z                         <span class="co"># identity</span></span></code></pre></div>
+<p>Optional: after training, the notebook can <code>np.save</code> weights. Reading them back is a good “what train produced” check:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>W <span class="op">=</span> np.load(<span class="st">"identity_weights.npy"</span>)   <span class="co"># expected (784, 10)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> np.load(<span class="st">"identity_biases.npy"</span>)    <span class="co"># expected (1, 10)</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(W.shape, b.shape, W.mean(), b.ravel()[:<span class="dv">3</span>])</span></code></pre></div>
+<h3 id="what-the-notebook-compares-empirically">1.3. What the notebook compares empirically</h3>
+<p>Three clones, same data, 1000 epochs, <span class="math inline">\eta=0.01</span>:</p>
+<ul>
+<li><code>activation='identity'</code> — unbounded linear scores; MSE pushes toward <span class="math inline">\{0,1\}</span> one-hot but nothing clamps outputs.</li>
+<li><code>activation='sigmoid'</code> — outputs in <span class="math inline">(0,1)</span>; gradients die when <span class="math inline">|z|</span> is large (<span class="math inline">\sigma'(z)=\sigma(z)(1-\sigma(z))\to 0</span>).</li>
+<li><code>activation='relu'</code> — sparse nonnegativity; dead units if pre-activations stay negative.</li>
+</ul>
+<p>Plots in the notebook (<code>plot_training_insights</code>, <code>plot_compare_loss</code>, accuracy-over-test-prefix) typically show <strong>different loss trajectories and different test behavior</strong> across the three — use those curves as the ground truth for <em>this</em> setup rather than memorizing a single accuracy number. A brief GPU/CuPy appendix exists in the notebook; it is optional acceleration, not the conceptual core.</p>
+<div class="note">
+<p><span class="tag">Extrapolons note</span> Cross-entropy + softmax is the usual classifier loss in Deep Learning. The notebook’s MSE + per-output activation is pedagogically useful: every derivative stays elementary. §2 adds CE when bridging to standard practice.</p>
+</div>
+<h2 id="ch2">2. Forward, loss, training loop — what breaks</h2>
+<h3 id="tiny-numerical-forward-2-2-2">2.1. Tiny numerical forward (2 → 2 → 2)</h3>
+<p>Take one sample <span class="math inline">x = (1.0,\ 0.5)</span>, ReLU hidden, linear logits (no softmax yet):</p>
+<p><span class="math display">
+W^{(1)} = \begin{pmatrix} 0.3 &amp; -0.2 \\ 0.1 &amp; 0.4 \end{pmatrix},\quad
+b^{(1)} = (0.1,\ -0.1),\quad
+W^{(2)} = \begin{pmatrix} 0.5 &amp; 0.2 \\ -0.3 &amp; 0.6 \end{pmatrix},\quad
+b^{(2)} = (0.0,\ 0.1).
+</span></p>
+<p>Term-by-term:</p>
+<p><span class="math display">
+\begin{aligned}
+z^{(1)}_1 &amp;= 1.0\cdot 0.3 + 0.5\cdot 0.1 + 0.1 = 0.45,\\
+z^{(1)}_2 &amp;= 1.0\cdot(-0.2) + 0.5\cdot 0.4 + (-0.1) = -0.1,\\
+h &amp;= \mathrm{ReLU}(z^{(1)}) = (0.45,\ 0.0),\\
+z^{(2)}_1 &amp;= 0.45\cdot 0.5 + 0\cdot(-0.3) + 0 = 0.225,\\
+z^{(2)}_2 &amp;= 0.45\cdot 0.2 + 0\cdot 0.6 + 0.1 = 0.19.
+\end{aligned}
+</span></p>
+<p>Softmax:</p>
+<p><span class="math display">
+e^{0.225}\approx 1.2523,\quad e^{0.19}\approx 1.2092,\quad
+\hat p \approx \Big(\frac{1.2523}{2.4615},\ \frac{1.2092}{2.4615}\Big) \approx (0.5087,\ 0.4913).
+</span></p>
+<h3 id="losses-mse-notebook-and-ce-practice">2.2. Losses: MSE (notebook) and CE (practice)</h3>
 <div class="def">
-<p><span class="tag">Definition 1.1 — Multilayer perceptron (MLP)</span> An <strong>MLP</strong> of depth <span class="math inline">L</span> composes affine maps and elementwise activations&nbsp;: <span class="math inline">h^{(\ell)} = \sigma\!\big(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\big)</span>, with <span class="math inline">h^{(0)}=x</span>. The last layer is often linear + softmax (classification) or linear (regression).</p>
+<p><span class="tag">Definition 2.1 — Empirical risk</span> <span class="math display">\hat{\mathcal{R}}(\theta) = \frac1n \sum_{i=1}^n \ell\big(f_\theta(x_i), y_i\big).</span></p>
 </div>
 <ul>
-<li><strong>Vectorized forward</strong>&nbsp;: batches <span class="math inline">(B, 784)</span>.</li>
-<li><strong>A cost</strong>&nbsp;: cross-entropy (often via log-softmax for stability).</li>
-<li><strong>An update rule</strong>&nbsp;: SGD on mini-batches.</li>
-<li><strong>An empirical check</strong>&nbsp;: ~97%+ test accuracy on MNIST is enough to trust that gradients “work”.</li>
+<li>Notebook: <span class="math inline">\ell = (\hat y - y)^2</span> averaged over all entries.</li>
+<li>Classifier practice: <span class="math inline">\ell = -\sum_k y_k \log \hat p_k</span> with <span class="math inline">\hat p=\mathrm{softmax}(z)</span>. Then <span class="math inline">\nabla_z \ell = \hat p - y</span> (one-hot <span class="math inline">y</span>).</li>
 </ul>
-<div class="note">
-<p><span class="tag">Quick diagnostic</span> If your MLP stalls around ~10% (chance on 10 classes)&nbsp;: absurd learning rate, softmax/numerics, or mis-encoded labels. If it reaches ~90% train and ~70% test&nbsp;: capacity is OK, revisit regularization / data. If it reaches 99% train and test on MNIST&nbsp;: the benchmark is too easy to judge generalization — hence Fashion-MNIST or CIFAR later in Deep Learning.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img src="schema-grad-regimes.svg" style="width:100.0%" alt="Three gradient regimes"></p>
+<figcaption>Healthy descent vs explosion vs vanishing</figcaption>
+</figure>
 </div>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> softmax(z):</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> z <span class="op">-</span> z.<span class="bu">max</span>(axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    e <span class="op">=</span> np.exp(z)</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> e <span class="op">/</span> e.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">1</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> forward(x, W1, b1, W2, b2, kind<span class="op">=</span><span class="st">"relu"</span>):</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    z1 <span class="op">=</span> x <span class="op">@</span> W1 <span class="op">+</span> b1</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    h <span class="op">=</span> np.maximum(z1, <span class="fl">0.0</span>) <span class="cf">if</span> kind <span class="op">==</span> <span class="st">"relu"</span> <span class="cf">else</span> <span class="fl">1.0</span> <span class="op">/</span> (<span class="fl">1.0</span> <span class="op">+</span> np.exp(<span class="op">-</span>z1))</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    logits <span class="op">=</span> h <span class="op">@</span> W2 <span class="op">+</span> b2</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> softmax(logits), h, z1</span></code></pre></div>
-<h2 id="ch2">2. Forward, loss, training loop — what breaks</h2>
-<div class="def">
-<p><span class="tag">Definition 2.1 — Empirical risk</span> <span class="math display">\hat{\mathcal{R}}(\theta) = \frac1n \sum_{i=1}^n \ell\big(f_\theta(x_i), y_i\big).</span> Training minimizes <span class="math inline">\hat{\mathcal{R}}</span> (often on mini-batches). Generalization concerns the true risk — hence train/val/test.</p>
-</div>
-<p>Softmax + cross-entropy yields the convenient logit gradient <span class="math inline">\hat p - y</span>.</p>
-<ol type="1">
-<li><strong>Learning rate too large</strong>&nbsp;: NaNs. Too small&nbsp;: flat plateau.</li>
-<li><strong>Sigmoid saturation</strong>&nbsp;: vanishing gradients in early layers.</li>
-<li><strong>Extreme batch size</strong>&nbsp;: noise vs oversmoothing.</li>
-<li><strong>Test leakage</strong>&nbsp;: always keep a separate validation set.</li>
-</ol>
 <div class="ex">
-<p><span class="tag">Experiment 2.2</span> (a) <span class="math inline">\eta=3</span> for 5 epochs. (b) <span class="math inline">\eta=10^{-3}</span>. (c) Swap ReLU for sigmoid without retuning. Write three sentences on what broke (link to ch.&nbsp;4).</p>
+<p><span class="tag">Experiment 2.2 — executable <span class="math inline">\eta</span> stress test</span> On the same NumPy MLP (or the notebook’s single layer), run <strong>5 epochs</strong> at fixed seed for each:</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 32%">
+<col style="width: 67%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Setting</th>
+<th>Expected behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">\eta=3</span></td>
+<td>loss jumps / NaNs — <strong>explosion</strong></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\eta=10^{-3}</span></td>
+<td>slow but stable decrease — may look flat early</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\eta=0.01</span> (notebook default)</td>
+<td>visible descent on MNIST MSE</td>
+</tr>
+<tr class="even">
+<td>Adam, <span class="math inline">\mathrm{lr}=10^{-3}</span></td>
+<td>often smoother than raw SGD at the same lr</td>
+</tr>
+</tbody>
+</table>
+<p>Write three sentences: which curve matches which panel of the schema above; what changed when swapping ReLU↔︎sigmoid at fixed <span class="math inline">\eta=0.01</span> (link to §4).</p>
 </div>
-<h2 id="ch3">3. Gradients and backpropagation, without magic</h2>
-<div class="thm">
-<p><span class="tag">Proposition 3.1 — Chain rule on a graph</span> <span class="math display">\frac{\partial\mathcal{L}}{\partial z} = \frac{\partial\mathcal{L}}{\partial h}\cdot \phi'(z), \qquad \nabla_W \mathcal{L} = (\nabla_z \mathcal{L})\, h^\top.</span></p>
-</div>
-<p>With <span class="math inline">\delta^{(2)}=\hat p-y</span>, backprop pushes deltas toward the input via <span class="math inline">W^\top</span> and activation derivatives — the same “backward” as your from-scratch notebook.</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>delta2 <span class="op">=</span> (p <span class="op">-</span> y_onehot) <span class="op">/</span> B</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>dW2 <span class="op">=</span> h.T <span class="op">@</span> delta2</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>delta1 <span class="op">=</span> (delta2 <span class="op">@</span> W2.T) <span class="op">*</span> (z1 <span class="op">&gt;</span> <span class="dv">0</span>)</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>dW1 <span class="op">=</span> x.T <span class="op">@</span> delta1</span></code></pre></div>
+<h2 id="ch3">3. Gradients and backpropagation with numbers</h2>
+<h3 id="one-layer-backprop-table-notebook-algebra">3.1. One-layer backprop table (notebook algebra)</h3>
+<p>For <span class="math inline">\hat y=\phi(XW+b)</span> and <span class="math inline">\mathcal{L}=\mathrm{mean}((\hat y-Y)^2)</span>:</p>
+<p><span class="math display">
+\frac{\partial\mathcal{L}}{\partial z} = \underbrace{\frac{2}{|Y|}(\hat y-Y)}_{\text{d_loss}} \odot \phi'(z),\qquad
+\frac{\partial\mathcal{L}}{\partial W} = X^\top \frac{\partial\mathcal{L}}{\partial z},\qquad
+\frac{\partial\mathcal{L}}{\partial b} = \sum_{\text{batch}} \frac{\partial\mathcal{L}}{\partial z}.
+</span></p>
+<p>Concrete <strong>scalar</strong> numbers (batch size 1, two outputs). Let <span class="math inline">x=(1,\ 0)</span>, <span class="math inline">W=\begin{pmatrix}0.5&amp;0.1\\0.2&amp;-0.4\end{pmatrix}</span>, <span class="math inline">b=(0,0)</span>, <span class="math inline">\phi=\mathrm{id}</span>, target <span class="math inline">y=(1,0)</span>:</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 46%">
+<col style="width: 53%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Step</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">z = xW+b</span></td>
+<td><span class="math inline">(0.5,\ 0.1)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">\hat y=\phi(z)</span></td>
+<td><span class="math inline">(0.5,\ 0.1)</span></td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\hat y-y</span></td>
+<td><span class="math inline">(-0.5,\ 0.1)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">d_z = 2/2\,(\hat y-y)</span></td>
+<td><span class="math inline">(-0.5,\ 0.1)</span></td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">dW = x^\top d_z</span></td>
+<td><span class="math inline">\begin{pmatrix}-0.5&amp;0.1\\0&amp;0\end{pmatrix}</span></td>
+</tr>
+<tr class="even">
+<td>update <span class="math inline">W\leftarrow W-\eta\,dW</span> (<span class="math inline">\eta=0.01</span>)</td>
+<td><span class="math inline">\begin{pmatrix}0.505&amp;0.099\\0.2&amp;-0.4\end{pmatrix}</span></td>
+</tr>
+</tbody>
+</table>
+<p>With <strong>sigmoid</strong>, multiply <span class="math inline">d_z</span> by <span class="math inline">\sigma'(z)=\sigma(z)(1-\sigma(z))</span> entrywise before the <span class="math inline">X^\top</span> product — that is exactly where saturation kills learning.</p>
+<h3 id="two-layer-chain-relu-with-the-2.1-numbers">3.2. Two-layer chain (ReLU) with the §2.1 numbers</h3>
+<p>Target one-hot <span class="math inline">y=(1,0)</span>, CE for illustration: <span class="math inline">\delta^{(2)}=\hat p-y\approx(-0.4913,\ 0.4913)</span>.</p>
+<p><span class="math display">
+\begin{aligned}
+\nabla_{W^{(2)}}\mathcal{L} &amp;= h^\top \delta^{(2)}
+  = \begin{pmatrix}0.45\\0\end{pmatrix}\begin{pmatrix}-0.4913&amp;0.4913\end{pmatrix}
+  = \begin{pmatrix}-0.2211&amp;0.2211\\0&amp;0\end{pmatrix},\\
+\delta^{(1)} &amp;= \big(\delta^{(2)} (W^{(2)})^\top\big)\odot \mathbf{1}_{z^{(1)}&gt;0}
+  = \big((-0.4913,\ 0.4913)\,W^{(2)\top}\big)\odot(1,0).
+\end{aligned}
+</span></p>
+<p>Compute <span class="math inline">\delta^{(2)} W^{(2)\top}</span>: <span class="math display">
+(-0.4913,\ 0.4913)
+\begin{pmatrix}0.5 &amp; -0.3 \\ 0.2 &amp; 0.6\end{pmatrix}
+=
+(-0.1474,\ 0.4422).
+</span> Apply the ReLU mask <span class="math inline">(1,0)</span> ⇒ <span class="math inline">\delta^{(1)}\approx(-0.1474,\ 0)</span>. Then <span class="math inline">\nabla_{W^{(1)}}=x^\top\delta^{(1)}</span>.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>delta2 <span class="op">=</span> (p <span class="op">-</span> y_onehot) <span class="op">/</span> B</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>dW2 <span class="op">=</span> h.T <span class="op">@</span> delta2</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>delta1 <span class="op">=</span> (delta2 <span class="op">@</span> W2.T) <span class="op">*</span> (z1 <span class="op">&gt;</span> <span class="dv">0</span>)   <span class="co"># ReLU'</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>dW1 <span class="op">=</span> x.T <span class="op">@</span> delta1</span></code></pre></div>
 <div class="note">
-<p><span class="tag">Engineer’s doctoral reading</span> The computation graph is a DAG; backprop is reverse-topology VJP. When debugging a transformer you still ask which edge multiplies the gradient by ~0.</p>
+<p><span class="tag">Engineer reading</span> The computation graph is a DAG; backprop is reverse-topology VJP. Debugging still asks: which edge multiplies the gradient by ~0?</p>
 </div>
-<h2 id="ch4">4. Activations, initialization, depth</h2>
+<h2 id="ch4">4. Activations: identity vs sigmoid vs ReLU</h2>
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img src="schema-activations.svg" style="width:100.0%" alt="Activation curves"></p>
+<figcaption>Identity vs sigmoid vs ReLU</figcaption>
+</figure>
+</div>
 <div class="def">
-<p><span class="tag">Definition 4.1 — Common activations</span> <span class="math inline">\mathrm{ReLU}(z)=\max(z,0)</span>, <span class="math inline">\sigma(z)=(1+e^{-z})^{-1}</span>, <span class="math inline">\tanh(z)</span>. ReLU avoids positive saturation&nbsp;; sigmoid/tanh saturate at <span class="math inline">\pm\infty</span>.</p>
+<p><span class="tag">Definition 4.1 — Common activations</span> <span class="math inline">\mathrm{ReLU}(z)=\max(z,0)</span>, <span class="math inline">\sigma(z)=(1+e^{-z})^{-1}</span>, identity <span class="math inline">\mathrm{id}(z)=z</span>. Derivatives: <span class="math inline">\mathrm{ReLU}'=\mathbf{1}_{z&gt;0}</span>, <span class="math inline">\sigma'=\sigma(1-\sigma)</span>, <span class="math inline">\mathrm{id}'=1</span>.</p>
 </div>
-<h3 id="initialization-why-the-draw-matters">4.1. Initialization&nbsp;: why the draw matters</h3>
-<p>If <span class="math inline">W_{ij} \sim \mathcal{N}(0,1)</span> at large width, pre-activations explode (variance <span class="math inline">\propto</span> fan-in). <strong>Xavier/Glorot</strong> (tanh) and <strong>He</strong> (ReLU) schemes calibrate <span class="math inline">\mathrm{Var}(W)</span> to keep stable variances on the forward (and roughly on the backward) pass.</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">0</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co"># He for ReLU : Var = 2 / fan_in</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>W1 <span class="op">=</span> rng.normal(<span class="dv">0</span>, np.sqrt(<span class="dv">2</span> <span class="op">/</span> <span class="dv">784</span>), size<span class="op">=</span>(<span class="dv">784</span>, <span class="dv">128</span>))</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>W2 <span class="op">=</span> rng.normal(<span class="dv">0</span>, np.sqrt(<span class="dv">2</span> <span class="op">/</span> <span class="dv">128</span>), size<span class="op">=</span>(<span class="dv">128</span>, <span class="dv">10</span>))</span></code></pre></div>
-<h3 id="when-depth-hurts">4.2. When depth hurts</h3>
-<p>Stacking sigmoids carelessly ⇒ <strong>vanishing gradients</strong>. ReLU helps but introduces “dead” units. Deep Learning will answer with BatchNorm, residual connections, and LayerNorm — here, remember the symptom&nbsp;: <span class="math inline">\\|\delta^{(\ell)}\\|</span> collapsing toward the input.</p>
+<p>Qualitative map to the notebook (<a href="https://github.com/knoel99/MNIST">MNIST_from_scratch</a>):</p>
+<table class="caption-top">
+<colgroup>
+<col style="width: 21%">
+<col style="width: 29%">
+<col style="width: 49%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Activation</th>
+<th>Curve behavior</th>
+<th>Training symptom to watch</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>identity</td>
+<td>linear</td>
+<td>outputs not bounded; MSE still defined</td>
+</tr>
+<tr class="even">
+<td>sigmoid</td>
+<td>flat for <span class="math inline">\|z\|\gg 0</span></td>
+<td>slow updates when saturated; loss may stall</td>
+</tr>
+<tr class="odd">
+<td>ReLU</td>
+<td>zero on negatives</td>
+<td>sparse hidden/output activity; “dead” channels if always ≤0</td>
+</tr>
+</tbody>
+</table>
+<p><code>plot_training_insights</code> also tracks selected pixel→class weights over epochs — useful to see whether learning concentrates on stroke pixels (center) vs background (corners). Prefer the notebook’s own loss/accuracy figures over memorized percentages; re-run locally if a number is needed for a report.</p>
+<h3 id="initialization">4.1. Initialization</h3>
+<p>If <span class="math inline">W_{ij}\sim\mathcal{N}(0,1)</span> at large width, pre-activations explode (variance ∝ fan-in). <strong>He</strong> (ReLU): <span class="math inline">\mathrm{Var}=2/\mathrm{fan\_in}</span>. <strong>Xavier</strong> (tanh/sigmoid): <span class="math inline">1/\mathrm{fan\_in}</span> (or <span class="math inline">2/(\mathrm{fan\_in}+\mathrm{fan\_out})</span>).</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">0</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>W1 <span class="op">=</span> rng.normal(<span class="dv">0</span>, np.sqrt(<span class="dv">2</span> <span class="op">/</span> <span class="dv">784</span>), size<span class="op">=</span>(<span class="dv">784</span>, <span class="dv">128</span>))  <span class="co"># He</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>W2 <span class="op">=</span> rng.normal(<span class="dv">0</span>, np.sqrt(<span class="dv">2</span> <span class="op">/</span> <span class="dv">128</span>), size<span class="op">=</span>(<span class="dv">128</span>, <span class="dv">10</span>))</span></code></pre></div>
 <h2 id="ch5">5. Optimization in practice (SGD → Adam)</h2>
 <div class="def">
-<p><span class="tag">Definition 5.1 — Mini-batch SGD</span> <span class="math display">\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t),</span> where <span class="math inline">B_t</span> is a mini-batch. Sampling noise can help in non-convex landscapes.</p>
+<p><span class="tag">Definition 5.1 — Mini-batch SGD</span> <span class="math display">\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t).</span></p>
 </div>
-<p><strong>Momentum</strong> accumulates a velocity&nbsp;: <span class="math inline">v \leftarrow \mu v + \nabla</span>, <span class="math inline">\theta \leftarrow \theta - \eta v</span>. <strong>Adam</strong> mixes first- and second-order moments with bias correction — a sensible DL default, not an excuse to ignore <span class="math inline">\eta</span>.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> adam(param, grad, m, v, t, lr<span class="op">=</span><span class="fl">1e-3</span>, beta1<span class="op">=</span><span class="fl">0.9</span>, beta2<span class="op">=</span><span class="fl">0.999</span>, eps<span class="op">=</span><span class="fl">1e-8</span>):</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    m <span class="op">=</span> beta1 <span class="op">*</span> m <span class="op">+</span> (<span class="dv">1</span> <span class="op">-</span> beta1) <span class="op">*</span> grad</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> beta2 <span class="op">*</span> v <span class="op">+</span> (<span class="dv">1</span> <span class="op">-</span> beta2) <span class="op">*</span> (grad <span class="op">*</span> grad)</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    mhat <span class="op">=</span> m <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> beta1 <span class="op">**</span> t)</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    vhat <span class="op">=</span> v <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> beta2 <span class="op">**</span> t)</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    param <span class="op">=</span> param <span class="op">-</span> lr <span class="op">*</span> mhat <span class="op">/</span> (np.sqrt(vhat) <span class="op">+</span> eps)</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> param, m, v</span></code></pre></div>
-<div class="note">
-<p><span class="tag">Engineer reflexes</span> Log train/val loss and accuracy&nbsp;; start with <span class="math inline">\eta</span> too large then divide by 3&nbsp;; decay <span class="math inline">\eta</span> when val stalls&nbsp;; fix seeds to reproduce a bug. PyTorch is welcome once shapes get painful — a NumPy MLP backward remains the ground-truth exercise.</p>
-</div>
-<h2 id="ch6">6. From MLP to a toy transformer — LLM intuition</h2>
-<p>Goal&nbsp;: <em>not</em> to train an LLM. Only to see that attention is a bilinear combination of vectors, a few NumPy lines, and that a transformer block is attention + MLP — ingredients you already know.</p>
+<p><strong>Momentum</strong>: <span class="math inline">v\leftarrow\mu v+\nabla</span>, <span class="math inline">\theta\leftarrow\theta-\eta v</span>. <strong>Adam</strong>: first/second moments + bias correction — a sensible default once shapes are trusted; still not an excuse to ignore <span class="math inline">\eta</span> (Experiment 2.2).</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> adam(param, grad, m, v, t, lr<span class="op">=</span><span class="fl">1e-3</span>, beta1<span class="op">=</span><span class="fl">0.9</span>, beta2<span class="op">=</span><span class="fl">0.999</span>, eps<span class="op">=</span><span class="fl">1e-8</span>):</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    m <span class="op">=</span> beta1 <span class="op">*</span> m <span class="op">+</span> (<span class="dv">1</span> <span class="op">-</span> beta1) <span class="op">*</span> grad</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> beta2 <span class="op">*</span> v <span class="op">+</span> (<span class="dv">1</span> <span class="op">-</span> beta2) <span class="op">*</span> (grad <span class="op">*</span> grad)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    mhat <span class="op">=</span> m <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> beta1 <span class="op">**</span> t)</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    vhat <span class="op">=</span> v <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> beta2 <span class="op">**</span> t)</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> param <span class="op">-</span> lr <span class="op">*</span> mhat <span class="op">/</span> (np.sqrt(vhat) <span class="op">+</span> eps), m, v</span></code></pre></div>
+<h2 id="ch6">6. Short bridge: attention intuition</h2>
+<p>Goal: <em>not</em> to train an LLM. Only see that attention is a <span class="math inline">T\times T</span> pattern of weights.</p>
 <div class="def">
-<p><span class="tag">Definition 6.1 — Attention (single head, pedagogical)</span> For queries <span class="math inline">Q</span>, keys <span class="math inline">K</span>, values <span class="math inline">V</span> (matrices <span class="math inline">T\times d</span>)&nbsp;: <span class="math display">\mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\Big(\frac{QK^\top}{\sqrt{d}}\Big) V.</span> Each position aggregates other positions’ values with content-dependent weights — message passing on a complete graph of tokens (Graph ML reading).</p>
+<p><span class="tag">Definition 6.1 — Attention (single head)</span> <span class="math display">\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\Big(\frac{QK^\top}{\sqrt{d}}\Big)V.</span></p>
 </div>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> attention(Q, K, V):</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Q,K,V: (T, d)</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> Q.shape[<span class="dv">1</span>]</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> (Q <span class="op">@</span> K.T) <span class="op">/</span> np.sqrt(d)</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> softmax(scores[<span class="va">None</span>, :, :])[<span class="dv">0</span>]</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> weights <span class="op">@</span> V, weights</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">1</span>)</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> rng.normal(size<span class="op">=</span>(<span class="dv">4</span>, <span class="dv">8</span>))</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>Wq, Wk, Wv <span class="op">=</span> (rng.normal(size<span class="op">=</span>(<span class="dv">8</span>, <span class="dv">8</span>)) <span class="op">*</span> <span class="fl">0.1</span> <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>))</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>out, w <span class="op">=</span> attention(X <span class="op">@</span> Wq, X <span class="op">@</span> Wk, X <span class="op">@</span> Wv)</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(out.shape, w.<span class="bu">round</span>(<span class="dv">2</span>))</span></code></pre></div>
-<p>A <strong>transformer block</strong> (sketch)&nbsp;: LayerNorm → attention → residual → LayerNorm → position-wise MLP → residual. LLMs stack these blocks and train next-token prediction (cross-entropy, like MNIST but over a vocabulary). Your digits MLP = same loss family&nbsp;; attention adds <em>routing</em> across positions.</p>
-<div class="ex">
-<p><span class="tag">Experiment 6.2 — no GPU</span> Build <span class="math inline">T=5</span>, <span class="math inline">d=16</span>. Compute attention weights. Force a key <span class="math inline">K_2</span> strongly aligned with <span class="math inline">Q_0</span> and check that row 0 of <span class="math inline">w</span> concentrates on column 2.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img src="schema-attention-heatmap.svg" style="width:60.0%" alt="4x4 attention weights"></p>
+<figcaption>Toy <span class="math inline">T\times T</span> attention heatmap</figcaption>
+</figure>
 </div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> attention(Q, K, V):</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> Q.shape[<span class="dv">1</span>]</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> (Q <span class="op">@</span> K.T) <span class="op">/</span> np.sqrt(d)</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> softmax(scores[<span class="va">None</span>, :, :])[<span class="dv">0</span>]</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> weights <span class="op">@</span> V, weights</span></code></pre></div>
+<p>A transformer block ≈ LayerNorm → attention → residual → LayerNorm → MLP → residual. Same CE family as classification; attention adds routing across positions.</p>
 <h2 id="ch7">7. Where this sits in the LLGA path</h2>
 <table class="caption-top">
 <thead>
@@ -389,44 +603,44 @@ window.Quarto = {
 </tbody>
 </table>
 <div class="recap">
-<p><span class="tag">Recap</span> You could train an MNIST MLP. You now know why it breaks, how gradients flow, how to initialize/optimize, and how one attention line generalizes “combine representations” toward LLMs — without cloning nanoGPT.</p>
+<p><span class="tag">Recap</span> The notebook path (digits → flatten → activation choice → MSE train → plots) is the empirical spine. Expanded forwards/backprops and one attention heatmap are enough to open Deep Learning without cloning nanoGPT.</p>
 </div>
 <div id="ex">
 
 </div>
 <h3 id="exercises">Exercises</h3>
 <ol type="1">
-<li><p><strong>MNIST shapes.</strong> For <span class="math inline">B=64</span>, <span class="math inline">H=256</span>, write shapes of <span class="math inline">x,W^{(1)},z^{(1)},h,W^{(2)},\hat p</span> and FLOPs order of magnitude.</p>
+<li><p><strong>MNIST shapes.</strong> For <span class="math inline">B=64</span>, <span class="math inline">H=256</span>, write shapes of <span class="math inline">x,W^{(1)},z^{(1)},h,W^{(2)},\hat p</span> and FLOPs order of magnitude for one forward.</p>
 <div class="sol">
-<p>Dominant cost <span class="math inline">\approx 1.3\cdot10^7</span> mul-adds per forward.</p>
+<p><span class="math inline">x:(64,784)</span>, <span class="math inline">W^{(1)}:(784,256)</span>, <span class="math inline">z^{(1)},h:(64,256)</span>, <span class="math inline">W^{(2)}:(256,10)</span>, <span class="math inline">\hat p:(64,10)</span>. Dominant cost <span class="math inline">\approx 64\cdot(784\cdot 256+256\cdot 10)\approx 1.3\cdot 10^7</span> mul-adds.</p>
 </div></li>
-<li><p><strong>Softmax-CE gradient.</strong> Show <span class="math inline">\nabla_z \ell = p-y</span> and check with finite differences.</p>
+<li><p><strong>Numerical one-layer step.</strong> With <span class="math inline">x=(1,0)</span>, <span class="math inline">W=\begin{pmatrix}0.5&amp;0.1\\0.2&amp;-0.4\end{pmatrix}</span>, identity, <span class="math inline">y=(1,0)</span>, <span class="math inline">\eta=0.01</span>, recompute the updated <span class="math inline">W</span> from the table in §3.1.</p>
 <div class="sol">
-<p>Direct differentiation yields <span class="math inline">p-y</span>.</p>
+<p><span class="math inline">W\leftarrow\begin{pmatrix}0.505&amp;0.099\\0.2&amp;-0.4\end{pmatrix}</span>.</p>
 </div></li>
-<li><p><strong>Saturation.</strong> Bad Gaussian init + sigmoid; then fix with He/ReLU.</p>
+<li><p><strong>Softmax-CE gradient.</strong> Show <span class="math inline">\nabla_z \ell = p-y</span> for one-hot <span class="math inline">y</span>; check with finite differences on a 3-vector.</p>
 <div class="sol">
-<p>Large variance saturates units; proper init restores learning.</p>
+<p>Direct differentiation of <span class="math inline">-\sum_k y_k\log p_k</span> with <span class="math inline">p=\mathrm{softmax}(z)</span> yields <span class="math inline">p-y</span>.</p>
 </div></li>
-<li><p><strong>Hand backprop.</strong> Scalar net <span class="math inline">y=\sigma(w_2\sigma(w_1 x))</span>, squared loss; compute <span class="math inline">\partial\mathcal{L}/\partial w_1</span> at <span class="math inline">x=1,t=0,w_1=w_2=1</span>.</p>
+<li><p><strong>Hand backprop (scalar).</strong> <span class="math inline">y=\sigma(w_2\sigma(w_1 x))</span>, <span class="math inline">\mathcal{L}=\tfrac12(y-t)^2</span>, at <span class="math inline">x=1,t=0,w_1=w_2=1</span>. Compute <span class="math inline">\partial\mathcal{L}/\partial w_1</span> and <span class="math inline">\partial\mathcal{L}/\partial w_2</span>.</p>
 <div class="sol">
-<p>Chain <span class="math inline">\sigma'</span> factors; numerical value ~0.03.</p>
+<p><span class="math inline">y\approx 0.675</span>, <span class="math inline">\partial\mathcal{L}/\partial w_2\approx 0.108</span>, <span class="math inline">\partial\mathcal{L}/\partial w_1\approx 0.029</span>.</p>
 </div></li>
-<li><p><strong>Adam vs SGD.</strong> Compare 2–3 epochs on your MLP at fixed seed.</p>
+<li><p><strong>Saturation.</strong> Bad <span class="math inline">\mathcal{N}(0,1)</span> init + sigmoid on a deep stack; then fix with He/ReLU. Report whether <span class="math inline">\|\delta^{(\ell)}\|</span> recovers.</p>
 <div class="sol">
-<p>Well-tuned SGD often suffices on small MNIST MLPs; protocol matters more than a winner.</p>
+<p>Large variance saturates <span class="math inline">\sigma</span>; He+ReLU restores nonzero ReLU’ on a positive fraction of units.</p>
 </div></li>
-<li><p><strong>Toy attention.</strong> Implement attention; add a causal mask; check lower-triangular weights.</p>
+<li><p><strong>Experiment 2.2 write-up.</strong> Attach the three loss curves (<span class="math inline">\eta=3</span>, <span class="math inline">10^{-3}</span>, Adam <span class="math inline">10^{-3}</span>) and label explosion / slow / smooth.</p>
 <div class="sol">
-<p>Set scores[i,j]=-1e9 for j&gt;i before softmax.</p>
+<p>Match panels of <code>schema-grad-regimes.svg</code>; Adam often reduces early noise vs SGD at the same lr.</p>
 </div></li>
-<li><p><strong>Graph ML bridge.</strong> Half a page&nbsp;: attention as message passing on the complete token graph vs 1-hop GCN.</p>
+<li><p><strong>Toy attention.</strong> <span class="math inline">T=5</span>, <span class="math inline">d=16</span>; force <span class="math inline">K_2</span> aligned with <span class="math inline">Q_0</span>; check row&nbsp;0 of weights concentrates on column&nbsp;2.</p>
 <div class="sol">
-<p>Attention uses content-dependent weights on all pairs; GCN restricts to structural neighbors.</p>
+<p>Large score <span class="math inline">(Q_0\cdot K_2)/\sqrt{d}</span> dominates the softmax row.</p>
 </div></li>
-<li><p><strong>(Optional PyTorch)</strong> Match NumPy backward grads to autograd within <span class="math inline">10^{-5}</span>.</p>
+<li><p><strong>(Optional)</strong> Load saved <code>*_weights.npy</code> from a notebook run; print norms per output column — which digit class has largest <span class="math inline">\|W_{:,k}\|</span>?</p>
 <div class="sol">
-<p>Copy weights to tensors with requires_grad and compare.</p>
+<p>Depends on the run; the exercise is the measurement protocol, not a fixed ranking.</p>
 </div></li>
 </ol>
 <h2 id="refs">References</h2>
@@ -435,8 +649,8 @@ window.Quarto = {
 <li>Nielsen, <em>Neural Networks and Deep Learning</em> (online).</li>
 <li>Zhang et al., <em>Dive into Deep Learning</em>.</li>
 <li>Vaswani et al., <em>Attention Is All You Need</em>, NeurIPS 2017.</li>
-<li>Sibling notes&nbsp;: <a href="../m1p1-deep-learning/index.html">Deep Learning</a> · <a href="../m1p1-refresher-cs/index.html">Refresher CS</a>.</li>
-<li>Empirical starting point&nbsp;: <a href="https://github.com/knoel99/MNIST">knoel99/MNIST</a>.</li>
+<li>Sibling notes: <a href="../m1p1-deep-learning/index.html">Deep Learning</a> · <a href="../m1p1-refresher-cs/index.html">Refresher CS</a> · <a href="../m1p1-refresher-statistics/index.html">Refresher Statistics</a>.</li>
+<li>Empirical starting point: <a href="https://github.com/knoel99/MNIST">knoel99/MNIST</a> (<code>MNIST_from_scratch.ipynb</code>).</li>
 </ul>
 
 </main>
