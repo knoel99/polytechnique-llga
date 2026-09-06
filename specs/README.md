@@ -16,5 +16,6 @@ See also `AGENTS.md` (BMAD / Spec Kit gates) and `specs/_template-module.md`.
 | `exit-capabilities` | Exit capabilities / industry synthesis questions | implemented |
 | `non-science-pages` | Non-science pages (management, transversal, internships, ethics) | implemented |
 | `homepage-redesign` | Homepage redesign + illustrations | implemented |
+| `homepage-source-decision` | Extrapolons-only home; catalogue off home; official links in footer | implemented |
 | `coherence-2ans` | Two-year pedagogical coherence (lot E) | implemented |
 | `quarto-pilot` | Quarto Markdown pilot (refreshers stats + CS) | implemented |
