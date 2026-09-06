@@ -29,3 +29,5 @@ Créer des pages de **cadrage** (voix Extrapolons) pour les lignes brochure **no
 - [x] Liens `index.html` + `en/index.html` ; retrait `nc` sur cibles
 - [x] FOUC + `theme.js` + `paper.css` ; TOC
 - [x] 2 `.nc` restants (options ML brochure)
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.

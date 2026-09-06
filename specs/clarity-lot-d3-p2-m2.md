@@ -37,3 +37,5 @@ Troisième lot **atomique** de clarification des supports **scientifiques** P2 +
 - [x] Spec `specs/clarity-lot-d3-p2-m2.md`
 - [x] Modules D3 × FR+EN édités (+ soft lab)
 - [x] Branche `feature/clarity-d3-p2-m2` → PR → merge
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.

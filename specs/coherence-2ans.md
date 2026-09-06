@@ -6,9 +6,9 @@ Livrable transversal : une page (FR + miroir EN) qui analyse la **cohérence pé
 ## Périmètre
 | Artefact | Chemin |
 |---|---|
-| Page FR | `coherence-2ans/index.html` |
-| Miroir EN | `en/coherence-2years/index.html` |
-| Liens index | `index.html` + `en/index.html` (hero + éventuellement carte) |
+| Page (EN canonical) | `coherence-2years/index.html` |
+| Legacy FR path | `coherence-2ans/index.html` (redirect stub) |
+| Index link | root `index.html` |
 | Spec | ce fichier + entrée `specs/README.md` |
 
 ## Contenu attendu
@@ -30,3 +30,5 @@ Livrable transversal : une page (FR + miroir EN) qui analyse la **cohérence pé
 - [x] Pages FR + EN
 - [x] Liens depuis index FR/EN
 - [x] Branche `feature/coherence-2ans` → PR → **merge immédiat**
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.

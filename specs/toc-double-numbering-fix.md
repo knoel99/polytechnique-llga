@@ -19,3 +19,5 @@ Les TOC d’index (`index.html` / `en/index.html`) gardent `<ol>` (liens sans nu
 - [ ] Extrait avant/après sur un cours FR + EN
 - [ ] Dark/mobile : styles `.toc ul` présents
 - [ ] Pas de régression sur les TOC index (`<ol>` conservé)
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.

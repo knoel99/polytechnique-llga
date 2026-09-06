@@ -1,57 +1,59 @@
-# AGENTS.md — gates Spec-Driven / BMAD (léger) pour polytechnique-llga
+# AGENTS.md — Spec-Driven / BMAD (light) gates for polytechnique-llga
 
-Ce dépôt est un **site de supports HTML** (GitHub Pages), pas un monorepo applicatif.
-On encode ici une base **Spec Kit–compatible** et **BMAD-inspired** (spec → plan → implement → prove), sans installer obligatoirement la CLI Spec Kit / bmad-speckit-sdd-flow.
+This repository is an **HTML course-notes site** (GitHub Pages), not an application monorepo.
+We encode a **Spec Kit–compatible** and **BMAD-inspired** base (spec → plan → implement → prove), without requiring the Spec Kit / bmad-speckit-sdd-flow CLI.
 
-## Principes
+## Principles
 
-1. **Contrat avant gros rewrite** — tout nouveau module ou refonte majeure commence par un contrat dans `specs/` (voir modèle).
-2. **Preuves avant « done »** — une PR n’est « done » que si les gates ci-dessous sont cochées dans la description de PR.
-3. **Pas d’invention de codes UE** — hors brochure = badge explicite, pas de faux code SynapseS.
-4. **Parité FR/EN** — chaque page de cours ajoutée ou profondément modifiée a son miroir `en/…`.
-5. **Look papier** — `assets/paper.css` (et `en/assets/paper.css`) restent la source de vérité visuelle ; le light mode « LaTeX » ne doit pas régresser.
+1. **Contract before large rewrite** — any new module or major refactor starts with a contract in `specs/` (see template).
+2. **Proofs before “done”** — a PR is “done” only if the gates below are checked in the PR description.
+3. **No invented UE codes** — outside the brochure = explicit badge, no fake SynapseS codes.
+4. **EN only (until further notice)** — published site source of truth is **English at the repository root**. No FR mirror, no FR/EN language switcher. See `specs/en-only.md`.
+5. **Paper look** — `assets/paper.css` is the visual source of truth; light “LaTeX” mode must not regress.
 
-## Gates obligatoires (Definition of Done)
+## Mandatory gates (Definition of Done)
 
-Avant de merger un module / une refonte CSS :
+Before merging a module / CSS refactor:
 
-- [ ] **Contrat** : `specs/<module-id>.md` présent (ou mise à jour) pour un nouveau cours / rewrite > ~screen.
-- [ ] **Pages** : `courses/<id>/index.html` **et** `en/courses/<id>/index.html`.
-- [ ] **Index** : liens dans `index.html` et `en/index.html` (zone P1/P2/M2 correcte ; statut honnête).
-- [ ] **CSS** : dark (`prefers-color-scheme` / `data-theme`) + mobile (pas d’overflow horizontal bloquant ; tableaux / code / KaTeX scrollables) vérifiés sur une page cours + l’index.
-- [ ] **Thème** : `assets/theme.js` (+ miroir `en/assets/`) chargé ; toggle localStorage OK.
-- [ ] **Pédagogie** : ≥ 6 exercices ; NumPy primaire si module NN/ML ; ton phrases complètes FR/EN.
-- [ ] **Smoke** : ouvrir FR + EN en local (ou Pages preview) ; KaTeX et encadrés `.def`/`.thm`/`.note` lisibles en dark.
+- [ ] **Contract**: `specs/<module-id>.md` present (or updated) for a new course / rewrite > ~one screen.
+- [ ] **Pages**: `courses/<id>/index.html` (English, at site root).
+- [ ] **Index**: links in root `index.html` (correct P1/P2/M2 zone; honest status).
+- [ ] **CSS**: dark (`prefers-color-scheme` / `data-theme`) + mobile (no blocking horizontal overflow; tables / code / KaTeX scrollable) checked on one course page + the index.
+- [ ] **Theme**: `assets/theme.js` loaded; toggle localStorage OK; UI strings in English.
+- [ ] **Pedagogy**: ≥ 6 exercises; NumPy primary if NN/ML module; full sentences in English.
+- [ ] **Smoke**: open EN pages locally (or Pages preview); KaTeX and `.def`/`.thm`/`.note` boxes readable in dark.
+- [ ] **No FR switcher**: no “Français” / lang-toggle links in published HTML.
 
-## Activer Spec Kit / BMAD (optionnel)
+## Optional Spec Kit / BMAD tooling
 
-Ce dépôt **n’installe pas** automatiquement Spec Kit. Pour un flux SDD outillé sur une machine de dev :
+This repo does **not** auto-install Spec Kit. For a tooled SDD flow on a dev machine:
 
 ```bash
-# Spec Kit (GitHub / specify CLI) — si vous l’utilisez déjà ailleurs
-# https://github.com/github/spec-kit  (ou distribution Spec Kit de votre org)
-# Exemple indicatif :
+# Spec Kit (GitHub / specify CLI) — if you already use it elsewhere
+# https://github.com/github/spec-kit
+# Example:
 #   uvx --from git+https://github.com/github/spec-kit.git specify init
-# Puis pointer les artefacts vers specs/ de ce repo.
+# Then point artefacts at this repo’s specs/.
 
-# Variante BMAD + Spec Kit SDD flow (si package dispo dans votre environnement) :
-#   npx bmad-speckit-sdd-flow   # ou l’installateur documenté par votre équipe
+# BMAD + Spec Kit SDD flow (if available in your environment):
+#   npx bmad-speckit-sdd-flow
 ```
 
-Si la CLI n’est pas installée, **les gates de ce fichier + le contrat `specs/` suffisent** : c’est le mode par défaut pour les agents Cursor travaillant sur ce repo.
+If the CLI is not installed, **this file’s gates + `specs/` contracts are enough** — default mode for Cursor agents on this repo.
 
-## Workflow agent recommandé (BMAD light)
+## Recommended agent workflow (BMAD light)
 
-| Phase | Sortie |
+| Phase | Output |
 |---|---|
-| **Spec** | Remplir / amender `specs/<id>.md` (objectifs, hors-brochure?, outline, preuves). |
-| **Plan** | Lister fichiers touchés (FR, EN, index×2, CSS/JS si besoin). |
-| **Implement** | Écrire HTML + liens ; pas de CloudAgent sauf demande explicite. |
-| **Prove** | Cocher les gates ; coller le résumé de preuves dans la PR. |
+| **Spec** | Fill / amend `specs/<id>.md` (goals, outside-brochure?, outline, proofs). |
+| **Plan** | List files touched (course HTML, root index, CSS/JS if needed). |
+| **Implement** | Write HTML + links; no CloudAgent unless explicitly requested. |
+| **Prove** | Check the gates; paste the proof summary in the PR. |
 
-## Fichiers clés
+## Key files
 
-- `assets/paper.css` / `en/assets/paper.css` — style papier, dark, mobile
-- `assets/theme.js` / `en/assets/theme.js` — toggle thème persistant
-- `specs/README.md` — index des contrats
-- `specs/_template-module.md` — modèle de contrat
+- `assets/paper.css` — paper style, dark, mobile
+- `assets/theme.js` — persistent theme toggle (English aria-labels)
+- `specs/README.md` — contract index
+- `specs/_template-module.md` — contract template
+- `specs/en-only.md` — EN-only site policy

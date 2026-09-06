@@ -24,3 +24,5 @@ Premier lot **atomique** de clarification des supports **scientifiques** P1 : ma
 - [x] Spec `specs/clarity-lot-d1-refreshers.md`
 - [x] 4 modules × FR+EN édités
 - [x] Branche `feature/clarity-d1-refreshers` → PR → merge
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.

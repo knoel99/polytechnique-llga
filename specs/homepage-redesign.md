@@ -35,3 +35,5 @@ Refonte sobre de `index.html` (FR) et `en/index.html` (EN) : hero court, structu
 - [x] Dark / mobile / theme.js smoke
 - [x] Licences images documentées
 - [x] PR mergée sur `main`
+
+> **EN-only (2026-09):** published FR mirror removed; canonical paths are root EN (`index.html`, `courses/`, `coherence-2years/`, `exit-capabilities/`). See `specs/en-only.md`.

@@ -2,7 +2,8 @@
 
 Supports de cours (tutoriels HTML) pour le master **MSc&T « Large Language Models, Graphs and Applications » (LLGA)** de l'École Polytechnique.
 
-**Sites** : 🇫🇷 <https://knoel99.github.io/polytechnique-llga/> · 🇬🇧 <https://knoel99.github.io/polytechnique-llga/en/>
+**Site (EN only)** : <https://knoel99.github.io/polytechnique-llga/>  
+Former `/en/` URLs redirect to the root (homepage stub); deeper `/en/courses/…` paths are retired (404). Former FR paths `capacites-sortie/` and `coherence-2ans/` redirect to `exit-capabilities/` and `coherence-2years/`.
 
 Chaque module est aligné sur la **fiche officielle SynapseS 2026-2027** (code UE, volume horaire, équipe pédagogique, objectifs et programme officiel avec tableau de correspondance vers nos sections, évaluation, prérequis).
 
@@ -38,14 +39,14 @@ Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste de
 ## Structure
 
 ```
-index.html              Page d'accueil (brochure : tronc commun + moments de choix)
-en/index.html           Miroir anglais
-assets/paper.css        Feuille de style unique (minimaliste, façon LaTeX/Wikipédia)
-tools/                  Scripts rejouables (découpe, fusion en page unique, restyle index…)
-courses/<module>/       Un dossier par module :
-  index.html            Le cours entier sur une page unique : titre, sommaire cliquable,
-                        introduction (fiche SynapseS, objectifs, positionnement), sections
-                        numérotées, exercices, références
+index.html                 English homepage (canonical GitHub Pages root)
+assets/paper.css           Single stylesheet (minimal, LaTeX/Wikipedia-like)
+assets/theme.js            Theme toggle (English UI)
+exit-capabilities/         Exit capabilities synthesis
+coherence-2years/          Two-year pedagogical coherence
+courses/<module>/index.html  One long page per module
+specs/                     Spec contracts (EN-only policy: specs/en-only.md)
+tools/                     Replayable scripts
 ```
 
 Chaque cours est **une longue page unique** (comme un article Wikipédia) : sommaire en tête, sections numérotées N.k., encadrés définitions/théorimes style LaTeX, formules rendues par KaTeX. Le clic sur un cours dans l'index mène directement à cette page.
@@ -61,13 +62,13 @@ Chaque cours est **une longue page unique** (comme un article Wikipédia) : somm
 
 ## Apparence (dark mode & mobile)
 
-- `assets/paper.css` (miroir `en/assets/paper.css`) : thème clair « papier / LaTeX », **dark** via `prefers-color-scheme` et `data-theme`, plus styles **responsive** (TOC, code, tableaux, KaTeX).
+- `assets/paper.css` : thème clair « papier / LaTeX », **dark** via `prefers-color-scheme` et `data-theme`, plus styles **responsive** (TOC, code, tableaux, KaTeX).
 - `assets/theme.js` : bouton de bascule clair/sombre avec persistance `localStorage` (`llga-theme`).
 
 ## Gouvernance Spec-Driven / BMAD (légère)
 
 Ce n’est pas un monorepo app : on garde un flux **spec → implement → prove** adapté aux cours HTML.
 
-- **`AGENTS.md`** — gates obligatoires (contrat, FR+EN, index, dark/mobile, preuves PR).
+- **`AGENTS.md`** — gates obligatoires (contrat, EN-only root, index, dark/mobile, preuves PR).
 - **`specs/`** — contrats de module (modèle `_template-module.md`).
 - Installation **optionnelle** de Spec Kit / `bmad-speckit-sdd-flow` : instructions dans `AGENTS.md`. Sans CLI, les gates + `specs/` suffisent.

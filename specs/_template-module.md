@@ -1,21 +1,21 @@
-# Contrat module — `<module-id>`
+# Module contract — `<module-id>`
 
 ## Intent
-- Public :
-- Période LLGA :
-- Hors brochure ? (oui/non) — si oui, **pas de code UE inventé**
+- Audience:
+- LLGA period:
+- Outside brochure? (yes/no) — if yes, **no invented UE code**
 
-## Outcomes (ce que l’apprenant saura faire)
+## Outcomes (what the learner will be able to do)
 -
 
-## Outline (chapitres)
+## Outline (chapters)
 1.
 2.
 
-## Preuves « done » (cocher)
-- [ ] `courses/<id>/index.html`
-- [ ] `en/courses/<id>/index.html`
-- [ ] Liens `index.html` + `en/index.html`
-- [ ] ≥ 6 exercices
-- [ ] Dark/mobile OK (paper.css + theme.js)
-- [ ] Pas de régression light « papier »
+## “Done” proofs (check)
+- [ ] `courses/<id>/index.html` (English, site root)
+- [ ] Link from root `index.html`
+- [ ] ≥ 6 exercises
+- [ ] Dark/mobile OK (`assets/paper.css` + `assets/theme.js`)
+- [ ] No regression of light “paper” look
+- [ ] No FR/EN language switcher
