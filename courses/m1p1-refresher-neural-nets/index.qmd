@@ -98,12 +98,12 @@ format:
 ## Contents
 
 -   [Introduction and overview](#intro)
--   [1. Re-reading your MNIST MLP — what already works](#ch1)
+-   [1. Empirical MNIST path (from the notebook)](#ch1)
 -   [2. Forward, loss, training loop — what breaks](#ch2)
--   [3. Gradients and backpropagation, without magic](#ch3)
--   [4. Activations, initialization, depth](#ch4)
+-   [3. Gradients and backpropagation with numbers](#ch3)
+-   [4. Activations: identity vs sigmoid vs ReLU](#ch4)
 -   [5. Optimization in practice (SGD → Adam)](#ch5)
--   [6. From MLP to a toy transformer — LLM intuition](#ch6)
+-   [6. Short bridge: attention intuition](#ch6)
 -   [7. Where this sits in the LLGA path](#ch7)
 -   [Exercises](#ex)
 -   [References](#refs)
@@ -113,136 +113,255 @@ format:
   ------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   Module              Refresher Neural Nets — **pedagogical support outside the brochure** (on-ramp to Deep Learning / Graph ML / LLMs)
   Code                *No SynapseS course code* — this is **not** an official catalog UE. Do not invent a code.
-  Audience            \~10 years as an engineer, comfortable with Python/NumPy, already trained an MNIST MLP from scratch (e.g. [MNIST_from_scratch.ipynb](https://github.com/knoel99/MNIST)), no nanoGPT / LLM training path yet.
-  Indicative volume   \~12–18 h of self-study, placed *before* or lightly alongside [Deep Learning](../m1p1-deep-learning/index.html).
+  Audience            ~10 years as an engineer, comfortable with Python/NumPy, already trained an MNIST MLP from scratch (e.g. [MNIST_from_scratch.ipynb](https://github.com/knoel99/MNIST)), no nanoGPT / LLM training path yet.
+  Indicative volume   ~12–18 h of self-study, placed *before* or lightly alongside [Deep Learning](../m1p1-deep-learning/index.html).
   Status              [Not in brochure]{.badge .pedagogical}[Pedagogical on-ramp]{.badge .refresher} M1 · S1 / period 1
   ------------------- --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-You already know how to run a multilayer network on MNIST in NumPy : forward pass, a loss, a loop that goes down. This noteset does not start from zero. It starts from *your* MLP, names precisely what fails when the problem gets harder, then adds just enough theory so that [Deep Learning](../m1p1-deep-learning/index.html) (CNNs, attention, transformers) and later Graph ML / LLMs stop being a black box. Empirical first, doctoral vocabulary second — written for an experienced engineer.
+The core of these notes is the empirical path in [knoel99/MNIST](https://github.com/knoel99/MNIST): load digits, flatten, train a NumPy network with identity / sigmoid / ReLU, plot loss and accuracy. Theory is added only where it diagnoses stalls, explosions, or saturation. Empirical first; doctoral vocabulary second.
 
 ### What you will be able to do
 
--   Re-read a NumPy MLP and diagnose training that stalls, explodes, or memorizes.
--   Work backpropagation by hand on 1–2 layers and reimplement it without a framework.
--   Choose activation and initialization knowing why ReLU+He (or tanh+Xavier) changes stability.
+-   Walk the notebook end-to-end in prose + math + code without opening Colab first.
+-   Write shapes $(B,784)\to(B,H)\to(B,10)$ and compute a tiny forward/backward by hand.
+-   Compare identity / sigmoid / ReLU the way the notebook does (saturation, sparsity, loss curves).
 -   Move from naïve SGD to momentum / Adam with a clear reading of each hyperparameter.
--   Explain attention via a tiny toy — a bridge to transformers, without cloning nanoGPT.
--   Place this foundation in the LLGA progression : refreshers → ML → DL → Graph ML / NLP → M2 LLMs.
-
-### Why “not in the brochure”?
-
-The brochure and SynapseS already list the Statistics and CS refreshers, then Machine Learning and Deep Learning. There is no official “Refresher Neural Nets” UE. This support is a **pedagogical choice of the repository** : close the gap between “my MNIST MLP works” and “I can follow Deep Learning / attention / LLMs”. No UE code is invented.
-
-### Position in the program
-
-**Upstream** : CS & Stats refreshers, ML basics. **Here** : a solid MLP up to attention intuition. **Downstream** : [Deep Learning](../m1p1-deep-learning/index.html), [Graph ML](../m1p2-graph-ml/index.html), [NLP](../m1p2-nlp-text-mining/index.html), [Large Language Models](../m2-large-language-models/index.html).
+-   Explain one attention line as a $T\times T$ weight matrix — a short bridge to Deep Learning.
 
 ::: note
-[Extrapolons note]{.tag} If you come from a NumPy MNIST MLP, you are not “behind” on LLMs : you already have the core of the problem (representation, loss, gradient). This refresher tightens the bolts for the rest of the master’s — doctoral jargon only when it unlocks a diagnosis.
+[Extrapolons note]{.tag} If a NumPy MNIST MLP already runs, the gap to Deep Learning is mostly naming failure modes (saturation, bad $\eta$, dead ReLUs) and reading shapes under batching — not starting from zero.
 :::
 
-## 1. Re-reading your MNIST MLP — what already works {#ch1}
+## 1. Empirical MNIST path (from the notebook) {#ch1}
 
-Assumed starting point : a fully connected network trained on flattened 28×28 digits in NumPy, in the spirit of `MNIST_from_scratch.ipynb`. We do not rewrite the notebook ; we *read it like an engineer*.
+Starting point: `MNIST_from_scratch.ipynb` ([repo](https://github.com/knoel99/MNIST)). The notebook trains a **single linear map** $784\to 10$ with a choice of output activation and **MSE** against one-hot labels (not cross-entropy). Below: the same path in notes form, then a multilayer extension with fully expanded numbers.
 
-### 1.1. The model in one line
+### 1.1. Digits → flatten → scores
 
-For an image $x \in \mathbb{R}^{784}$ and classes $y \in \{0,\dots,9\}$ :
+![MNIST pipeline: 28×28 → flatten 784 → hidden (optional) → 10 logits → softmax/argmax](schema-mnist-mlp.svg){fig-alt="Schema of MNIST MLP dimensions" width="100%"}
 
-$$z^{(1)} = W^{(1)} x + b^{(1)}, \quad h = \sigma\!\big(z^{(1)}\big), \quad z^{(2)} = W^{(2)} h + b^{(2)}, \quad \hat p = \mathrm{softmax}(z^{(2)}).$$
+1.  Load CSV rows: label in column 0, pixels in the rest; reshape a row to $28\times 28$ for visualization (`imshow`, grayscale).
+2.  Features: $X\in\mathbb{R}^{n\times 784}$, scaled to $[0,1]$ by `/255.0`.
+3.  Targets: one-hot $Y\in\{0,1\}^{n\times 10}$.
+4.  Notebook model: $z = XW + b$ with $W\in\mathbb{R}^{784\times 10}$, $b\in\mathbb{R}^{1\times 10}$, then $\hat y = \phi(z)$ for $\phi\in\{\mathrm{id},\sigma,\mathrm{ReLU}\}$.
+5.  Loss: $\mathrm{MSE} = \mathrm{mean}\big((\hat y - Y)^2\big)$; train ~1000 epochs, $\eta=0.01$.
 
-::: def
-[Definition 1.1 — Multilayer perceptron (MLP)]{.tag} An **MLP** of depth $L$ composes affine maps and elementwise activations : $h^{(\ell)} = \sigma\!\big(W^{(\ell)} h^{(\ell-1)} + b^{(\ell)}\big)$, with $h^{(0)}=x$. The last layer is often linear + softmax (classification) or linear (regression).
-:::
+Shapes for a mini-batch of size $B$ (multilayer reading used later in Deep Learning):
 
--   **Vectorized forward** : batches $(B, 784)$.
--   **A cost** : cross-entropy (often via log-softmax for stability).
--   **An update rule** : SGD on mini-batches.
--   **An empirical check** : \~97%+ test accuracy on MNIST is enough to trust that gradients “work”.
+  Tensor     Shape         Role
+  ---------- ------------- ----------------------------
+  $X$        $(B, 784)$    flattened pixels
+  $W^{(1)}$  $(784, H)$    first affine map
+  $z^{(1)}$  $(B, H)$      pre-activations
+  $h$        $(B, H)$      after $\phi$
+  $W^{(2)}$  $(H, 10)$     classifier
+  $z^{(2)}$  $(B, 10)$     logits
+  $\hat p$   $(B, 10)$     softmax probabilities
 
-::: note
-[Quick diagnostic]{.tag} If your MLP stalls around \~10% (chance on 10 classes) : absurd learning rate, softmax/numerics, or mis-encoded labels. If it reaches \~90% train and \~70% test : capacity is OK, revisit regularization / data. If it reaches 99% train and test on MNIST : the benchmark is too easy to judge generalization — hence Fashion-MNIST or CIFAR later in Deep Learning.
-:::
+The notebook itself is the shallow case $H$ absent: $W\in\mathbb{R}^{784\times 10}$ only. That is enough to feel activation choice; depth comes in §2–3 with a tiny $2\to 2\to 2$ net.
+
+```python
+# Notebook spirit: shapes after load / normalize / one-hot
+# X_train: (n, 784), y_train: (n, 10)
+print(X_train.shape, y_train.shape)  # e.g. (60000, 784), (60000, 10)
+```
+
+### 1.2. MSE helper and the training skeleton
 
 ```python
 import numpy as np
 
-def softmax(z):
-    z = z - z.max(axis=1, keepdims=True)
-    e = np.exp(z)
-    return e / e.sum(axis=1, keepdims=True)
+def mean_squared_error(y_true, y_pred):
+    return np.mean(np.square(y_true - y_pred))
 
-def forward(x, W1, b1, W2, b2, kind="relu"):
-    z1 = x @ W1 + b1
-    h = np.maximum(z1, 0.0) if kind == "relu" else 1.0 / (1.0 + np.exp(-z1))
-    logits = h @ W2 + b2
-    return softmax(logits), h, z1
+def sigmoid(z):
+    return 1.0 / (1.0 + np.exp(-z))
+
+def relu(z):
+    return np.maximum(z, 0.0)
+
+# One forward step (notebook: single layer)
+def forward_linear(X, W, b, activation="identity"):
+    z = X @ W + b                       # (B, 10)
+    if activation == "sigmoid":
+        return sigmoid(z), z
+    if activation == "relu":
+        return relu(z), z
+    return z, z                         # identity
 ```
+
+Optional: after training, the notebook can `np.save` weights. Reading them back is a good “what train produced” check:
+
+```python
+W = np.load("identity_weights.npy")   # expected (784, 10)
+b = np.load("identity_biases.npy")    # expected (1, 10)
+print(W.shape, b.shape, W.mean(), b.ravel()[:3])
+```
+
+### 1.3. What the notebook compares empirically
+
+Three clones, same data, 1000 epochs, $\eta=0.01$:
+
+-   `activation='identity'` — unbounded linear scores; MSE pushes toward $\{0,1\}$ one-hot but nothing clamps outputs.
+-   `activation='sigmoid'` — outputs in $(0,1)$; gradients die when $|z|$ is large ($\sigma'(z)=\sigma(z)(1-\sigma(z))\to 0$).
+-   `activation='relu'` — sparse nonnegativity; dead units if pre-activations stay negative.
+
+Plots in the notebook (`plot_training_insights`, `plot_compare_loss`, accuracy-over-test-prefix) typically show **different loss trajectories and different test behavior** across the three — use those curves as the ground truth for *this* setup rather than memorizing a single accuracy number. A brief GPU/CuPy appendix exists in the notebook; it is optional acceleration, not the conceptual core.
+
+::: note
+[Extrapolons note]{.tag} Cross-entropy + softmax is the usual classifier loss in Deep Learning. The notebook’s MSE + per-output activation is pedagogically useful: every derivative stays elementary. §2 adds CE when bridging to standard practice.
+:::
 
 ## 2. Forward, loss, training loop — what breaks {#ch2}
 
+### 2.1. Tiny numerical forward (2 → 2 → 2)
+
+Take one sample $x = (1.0,\ 0.5)$, ReLU hidden, linear logits (no softmax yet):
+
+$$
+W^{(1)} = \begin{pmatrix} 0.3 & -0.2 \\ 0.1 & 0.4 \end{pmatrix},\quad
+b^{(1)} = (0.1,\ -0.1),\quad
+W^{(2)} = \begin{pmatrix} 0.5 & 0.2 \\ -0.3 & 0.6 \end{pmatrix},\quad
+b^{(2)} = (0.0,\ 0.1).
+$$
+
+Term-by-term:
+
+$$
+\begin{aligned}
+z^{(1)}_1 &= 1.0\cdot 0.3 + 0.5\cdot 0.1 + 0.1 = 0.45,\\
+z^{(1)}_2 &= 1.0\cdot(-0.2) + 0.5\cdot 0.4 + (-0.1) = -0.1,\\
+h &= \mathrm{ReLU}(z^{(1)}) = (0.45,\ 0.0),\\
+z^{(2)}_1 &= 0.45\cdot 0.5 + 0\cdot(-0.3) + 0 = 0.225,\\
+z^{(2)}_2 &= 0.45\cdot 0.2 + 0\cdot 0.6 + 0.1 = 0.19.
+\end{aligned}
+$$
+
+Softmax:
+
+$$
+e^{0.225}\approx 1.2523,\quad e^{0.19}\approx 1.2092,\quad
+\hat p \approx \Big(\frac{1.2523}{2.4615},\ \frac{1.2092}{2.4615}\Big) \approx (0.5087,\ 0.4913).
+$$
+
+### 2.2. Losses: MSE (notebook) and CE (practice)
+
 ::: def
-[Definition 2.1 — Empirical risk]{.tag} $$\hat{\mathcal{R}}(\theta) = \frac1n \sum_{i=1}^n \ell\big(f_\theta(x_i), y_i\big).$$ Training minimizes $\hat{\mathcal{R}}$ (often on mini-batches). Generalization concerns the true risk — hence train/val/test.
+[Definition 2.1 — Empirical risk]{.tag} $$\hat{\mathcal{R}}(\theta) = \frac1n \sum_{i=1}^n \ell\big(f_\theta(x_i), y_i\big).$$
 :::
 
-Softmax + cross-entropy yields the convenient logit gradient $\hat p - y$.
+-   Notebook: $\ell = (\hat y - y)^2$ averaged over all entries.
+-   Classifier practice: $\ell = -\sum_k y_k \log \hat p_k$ with $\hat p=\mathrm{softmax}(z)$. Then $\nabla_z \ell = \hat p - y$ (one-hot $y$).
 
-1.  **Learning rate too large** : NaNs. Too small : flat plateau.
-2.  **Sigmoid saturation** : vanishing gradients in early layers.
-3.  **Extreme batch size** : noise vs oversmoothing.
-4.  **Test leakage** : always keep a separate validation set.
+![Healthy descent vs explosion vs vanishing](schema-grad-regimes.svg){fig-alt="Three gradient regimes" width="100%"}
 
 ::: ex
-[Experiment 2.2]{.tag} (a) $\eta=3$ for 5 epochs. (b) $\eta=10^{-3}$. (c) Swap ReLU for sigmoid without retuning. Write three sentences on what broke (link to ch. 4).
+[Experiment 2.2 — executable $\eta$ stress test]{.tag} On the same NumPy MLP (or the notebook’s single layer), run **5 epochs** at fixed seed for each:
+
+| Setting | Expected behavior |
+|---------|-------------------|
+| $\eta=3$ | loss jumps / NaNs — **explosion** |
+| $\eta=10^{-3}$ | slow but stable decrease — may look flat early |
+| $\eta=0.01$ (notebook default) | visible descent on MNIST MSE |
+| Adam, $\mathrm{lr}=10^{-3}$ | often smoother than raw SGD at the same lr |
+
+Write three sentences: which curve matches which panel of the schema above; what changed when swapping ReLU↔sigmoid at fixed $\eta=0.01$ (link to §4).
 :::
 
-## 3. Gradients and backpropagation, without magic {#ch3}
+## 3. Gradients and backpropagation with numbers {#ch3}
 
-::: thm
-[Proposition 3.1 — Chain rule on a graph]{.tag} $$\frac{\partial\mathcal{L}}{\partial z} = \frac{\partial\mathcal{L}}{\partial h}\cdot \phi'(z), \qquad \nabla_W \mathcal{L} = (\nabla_z \mathcal{L})\, h^\top.$$
-:::
+### 3.1. One-layer backprop table (notebook algebra)
 
-With $\delta^{(2)}=\hat p-y$, backprop pushes deltas toward the input via $W^\top$ and activation derivatives — the same “backward” as your from-scratch notebook.
+For $\hat y=\phi(XW+b)$ and $\mathcal{L}=\mathrm{mean}((\hat y-Y)^2)$:
+
+$$
+\frac{\partial\mathcal{L}}{\partial z} = \underbrace{\frac{2}{|Y|}(\hat y-Y)}_{\text{d_loss}} \odot \phi'(z),\qquad
+\frac{\partial\mathcal{L}}{\partial W} = X^\top \frac{\partial\mathcal{L}}{\partial z},\qquad
+\frac{\partial\mathcal{L}}{\partial b} = \sum_{\text{batch}} \frac{\partial\mathcal{L}}{\partial z}.
+$$
+
+Concrete **scalar** numbers (batch size 1, two outputs). Let $x=(1,\ 0)$, $W=\begin{pmatrix}0.5&0.1\\0.2&-0.4\end{pmatrix}$, $b=(0,0)$, $\phi=\mathrm{id}$, target $y=(1,0)$:
+
+| Step | Value |
+|------|-------|
+| $z = xW+b$ | $(0.5,\ 0.1)$ |
+| $\hat y=\phi(z)$ | $(0.5,\ 0.1)$ |
+| $\hat y-y$ | $(-0.5,\ 0.1)$ |
+| $d_z = 2/2\,(\hat y-y)$ | $(-0.5,\ 0.1)$ |
+| $dW = x^\top d_z$ | $\begin{pmatrix}-0.5&0.1\\0&0\end{pmatrix}$ |
+| update $W\leftarrow W-\eta\,dW$ ($\eta=0.01$) | $\begin{pmatrix}0.505&0.099\\0.2&-0.4\end{pmatrix}$ |
+
+With **sigmoid**, multiply $d_z$ by $\sigma'(z)=\sigma(z)(1-\sigma(z))$ entrywise before the $X^\top$ product — that is exactly where saturation kills learning.
+
+### 3.2. Two-layer chain (ReLU) with the §2.1 numbers
+
+Target one-hot $y=(1,0)$, CE for illustration: $\delta^{(2)}=\hat p-y\approx(-0.4913,\ 0.4913)$.
+
+$$
+\begin{aligned}
+\nabla_{W^{(2)}}\mathcal{L} &= h^\top \delta^{(2)}
+  = \begin{pmatrix}0.45\\0\end{pmatrix}\begin{pmatrix}-0.4913&0.4913\end{pmatrix}
+  = \begin{pmatrix}-0.2211&0.2211\\0&0\end{pmatrix},\\
+\delta^{(1)} &= \big(\delta^{(2)} (W^{(2)})^\top\big)\odot \mathbf{1}_{z^{(1)}>0}
+  = \big((-0.4913,\ 0.4913)\,W^{(2)\top}\big)\odot(1,0).
+\end{aligned}
+$$
+
+Compute $\delta^{(2)} W^{(2)\top}$:
+$$
+(-0.4913,\ 0.4913)
+\begin{pmatrix}0.5 & -0.3 \\ 0.2 & 0.6\end{pmatrix}
+=
+(-0.1474,\ 0.4422).
+$$
+Apply the ReLU mask $(1,0)$ ⇒ $\delta^{(1)}\approx(-0.1474,\ 0)$. Then $\nabla_{W^{(1)}}=x^\top\delta^{(1)}$.
 
 ```python
 delta2 = (p - y_onehot) / B
 dW2 = h.T @ delta2
-delta1 = (delta2 @ W2.T) * (z1 > 0)
+delta1 = (delta2 @ W2.T) * (z1 > 0)   # ReLU'
 dW1 = x.T @ delta1
 ```
 
 ::: note
-[Engineer’s doctoral reading]{.tag} The computation graph is a DAG; backprop is reverse-topology VJP. When debugging a transformer you still ask which edge multiplies the gradient by \~0.
+[Engineer reading]{.tag} The computation graph is a DAG; backprop is reverse-topology VJP. Debugging still asks: which edge multiplies the gradient by ~0?
 :::
 
-## 4. Activations, initialization, depth {#ch4}
+## 4. Activations: identity vs sigmoid vs ReLU {#ch4}
+
+![Identity vs sigmoid vs ReLU](schema-activations.svg){fig-alt="Activation curves" width="100%"}
 
 ::: def
-[Definition 4.1 — Common activations]{.tag} $\mathrm{ReLU}(z)=\max(z,0)$, $\sigma(z)=(1+e^{-z})^{-1}$, $\tanh(z)$. ReLU avoids positive saturation ; sigmoid/tanh saturate at $\pm\infty$.
+[Definition 4.1 — Common activations]{.tag} $\mathrm{ReLU}(z)=\max(z,0)$, $\sigma(z)=(1+e^{-z})^{-1}$, identity $\mathrm{id}(z)=z$. Derivatives: $\mathrm{ReLU}'=\mathbf{1}_{z>0}$, $\sigma'=\sigma(1-\sigma)$, $\mathrm{id}'=1$.
 :::
 
-### 4.1. Initialization : why the draw matters
+Qualitative map to the notebook ([MNIST_from_scratch](https://github.com/knoel99/MNIST)):
 
-If $W_{ij} \sim \mathcal{N}(0,1)$ at large width, pre-activations explode (variance $\propto$ fan-in). **Xavier/Glorot** (tanh) and **He** (ReLU) schemes calibrate $\mathrm{Var}(W)$ to keep stable variances on the forward (and roughly on the backward) pass.
+| Activation | Curve behavior | Training symptom to watch |
+|------------|----------------|---------------------------|
+| identity | linear | outputs not bounded; MSE still defined |
+| sigmoid | flat for $\|z\|\gg 0$ | slow updates when saturated; loss may stall |
+| ReLU | zero on negatives | sparse hidden/output activity; “dead” channels if always ≤0 |
+
+`plot_training_insights` also tracks selected pixel→class weights over epochs — useful to see whether learning concentrates on stroke pixels (center) vs background (corners). Prefer the notebook’s own loss/accuracy figures over memorized percentages; re-run locally if a number is needed for a report.
+
+### 4.1. Initialization
+
+If $W_{ij}\sim\mathcal{N}(0,1)$ at large width, pre-activations explode (variance ∝ fan-in). **He** (ReLU): $\mathrm{Var}=2/\mathrm{fan\_in}$. **Xavier** (tanh/sigmoid): $1/\mathrm{fan\_in}$ (or $2/(\mathrm{fan\_in}+\mathrm{fan\_out})$).
 
 ```python
 rng = np.random.default_rng(0)
-# He for ReLU : Var = 2 / fan_in
-W1 = rng.normal(0, np.sqrt(2 / 784), size=(784, 128))
+W1 = rng.normal(0, np.sqrt(2 / 784), size=(784, 128))  # He
 W2 = rng.normal(0, np.sqrt(2 / 128), size=(128, 10))
 ```
-
-### 4.2. When depth hurts
-
-Stacking sigmoids carelessly ⇒ **vanishing gradients**. ReLU helps but introduces “dead” units. Deep Learning will answer with BatchNorm, residual connections, and LayerNorm — here, remember the symptom : $\\|\delta^{(\ell)}\\|$ collapsing toward the input.
 
 ## 5. Optimization in practice (SGD → Adam) {#ch5}
 
 ::: def
-[Definition 5.1 — Mini-batch SGD]{.tag} $$\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t),$$ where $B_t$ is a mini-batch. Sampling noise can help in non-convex landscapes.
+[Definition 5.1 — Mini-batch SGD]{.tag} $$\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t).$$
 :::
 
-**Momentum** accumulates a velocity : $v \leftarrow \mu v + \nabla$, $\theta \leftarrow \theta - \eta v$. **Adam** mixes first- and second-order moments with bias correction — a sensible DL default, not an excuse to ignore $\eta$.
+**Momentum**: $v\leftarrow\mu v+\nabla$, $\theta\leftarrow\theta-\eta v$. **Adam**: first/second moments + bias correction — a sensible default once shapes are trusted; still not an excuse to ignore $\eta$ (Experiment 2.2).
 
 ```python
 def adam(param, grad, m, v, t, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8):
@@ -250,42 +369,28 @@ def adam(param, grad, m, v, t, lr=1e-3, beta1=0.9, beta2=0.999, eps=1e-8):
     v = beta2 * v + (1 - beta2) * (grad * grad)
     mhat = m / (1 - beta1 ** t)
     vhat = v / (1 - beta2 ** t)
-    param = param - lr * mhat / (np.sqrt(vhat) + eps)
-    return param, m, v
+    return param - lr * mhat / (np.sqrt(vhat) + eps), m, v
 ```
 
-::: note
-[Engineer reflexes]{.tag} Log train/val loss and accuracy ; start with $\eta$ too large then divide by 3 ; decay $\eta$ when val stalls ; fix seeds to reproduce a bug. PyTorch is welcome once shapes get painful — a NumPy MLP backward remains the ground-truth exercise.
-:::
+## 6. Short bridge: attention intuition {#ch6}
 
-## 6. From MLP to a toy transformer — LLM intuition {#ch6}
-
-Goal : *not* to train an LLM. Only to see that attention is a bilinear combination of vectors, a few NumPy lines, and that a transformer block is attention + MLP — ingredients you already know.
+Goal: *not* to train an LLM. Only see that attention is a $T\times T$ pattern of weights.
 
 ::: def
-[Definition 6.1 — Attention (single head, pedagogical)]{.tag} For queries $Q$, keys $K$, values $V$ (matrices $T\times d$) : $$\mathrm{Attention}(Q,K,V) = \mathrm{softmax}\!\Big(\frac{QK^\top}{\sqrt{d}}\Big) V.$$ Each position aggregates other positions’ values with content-dependent weights — message passing on a complete graph of tokens (Graph ML reading).
+[Definition 6.1 — Attention (single head)]{.tag} $$\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\Big(\frac{QK^\top}{\sqrt{d}}\Big)V.$$
 :::
+
+![Toy $T\times T$ attention heatmap](schema-attention-heatmap.svg){fig-alt="4x4 attention weights" width="60%"}
 
 ```python
 def attention(Q, K, V):
-    # Q,K,V: (T, d)
     d = Q.shape[1]
     scores = (Q @ K.T) / np.sqrt(d)
     weights = softmax(scores[None, :, :])[0]
     return weights @ V, weights
-
-rng = np.random.default_rng(1)
-X = rng.normal(size=(4, 8))
-Wq, Wk, Wv = (rng.normal(size=(8, 8)) * 0.1 for _ in range(3))
-out, w = attention(X @ Wq, X @ Wk, X @ Wv)
-print(out.shape, w.round(2))
 ```
 
-A **transformer block** (sketch) : LayerNorm → attention → residual → LayerNorm → position-wise MLP → residual. LLMs stack these blocks and train next-token prediction (cross-entropy, like MNIST but over a vocabulary). Your digits MLP = same loss family ; attention adds *routing* across positions.
-
-::: ex
-[Experiment 6.2 — no GPU]{.tag} Build $T=5$, $d=16$. Compute attention weights. Force a key $K_2$ strongly aligned with $Q_0$ and check that row 0 of $w$ concentrates on column 2.
-:::
+A transformer block ≈ LayerNorm → attention → residual → LayerNorm → MLP → residual. Same CE family as classification; attention adds routing across positions.
 
 ## 7. Where this sits in the LLGA path {#ch7}
 
@@ -299,7 +404,7 @@ A **transformer block** (sketch) : LayerNorm → attention → residual → Lay
   M2                Large Language Models                         Pretrain, alignment, scaling
 
 ::: recap
-[Recap]{.tag} You could train an MNIST MLP. You now know why it breaks, how gradients flow, how to initialize/optimize, and how one attention line generalizes “combine representations” toward LLMs — without cloning nanoGPT.
+[Recap]{.tag} The notebook path (digits → flatten → activation choice → MSE train → plots) is the empirical spine. Expanded forwards/backprops and one attention heatmap are enough to open Deep Learning without cloning nanoGPT.
 :::
 
 ::: {#ex}
@@ -307,45 +412,52 @@ A **transformer block** (sketch) : LayerNorm → attention → residual → Lay
 
 ### Exercises
 
-1.  **MNIST shapes.** For $B=64$, $H=256$, write shapes of $x,W^{(1)},z^{(1)},h,W^{(2)},\hat p$ and FLOPs order of magnitude.
+1.  **MNIST shapes.** For $B=64$, $H=256$, write shapes of $x,W^{(1)},z^{(1)},h,W^{(2)},\hat p$ and FLOPs order of magnitude for one forward.
 
     ::: sol
-    Dominant cost $\approx 1.3\cdot10^7$ mul-adds per forward.
+    $x:(64,784)$, $W^{(1)}:(784,256)$, $z^{(1)},h:(64,256)$, $W^{(2)}:(256,10)$, $\hat p:(64,10)$. Dominant cost $\approx 64\cdot(784\cdot 256+256\cdot 10)\approx 1.3\cdot 10^7$ mul-adds.
     :::
-2.  **Softmax-CE gradient.** Show $\nabla_z \ell = p-y$ and check with finite differences.
+
+2.  **Numerical one-layer step.** With $x=(1,0)$, $W=\begin{pmatrix}0.5&0.1\\0.2&-0.4\end{pmatrix}$, identity, $y=(1,0)$, $\eta=0.01$, recompute the updated $W$ from the table in §3.1.
 
     ::: sol
-    Direct differentiation yields $p-y$.
+    $W\leftarrow\begin{pmatrix}0.505&0.099\\0.2&-0.4\end{pmatrix}$.
     :::
-3.  **Saturation.** Bad Gaussian init + sigmoid; then fix with He/ReLU.
+
+3.  **Softmax-CE gradient.** Show $\nabla_z \ell = p-y$ for one-hot $y$; check with finite differences on a 3-vector.
 
     ::: sol
-    Large variance saturates units; proper init restores learning.
+    Direct differentiation of $-\sum_k y_k\log p_k$ with $p=\mathrm{softmax}(z)$ yields $p-y$.
     :::
-4.  **Hand backprop.** Scalar net $y=\sigma(w_2\sigma(w_1 x))$, squared loss; compute $\partial\mathcal{L}/\partial w_1$ at $x=1,t=0,w_1=w_2=1$.
+
+4.  **Hand backprop (scalar).** $y=\sigma(w_2\sigma(w_1 x))$, $\mathcal{L}=\tfrac12(y-t)^2$, at $x=1,t=0,w_1=w_2=1$. Compute $\partial\mathcal{L}/\partial w_1$ and $\partial\mathcal{L}/\partial w_2$.
 
     ::: sol
-    Chain $\sigma'$ factors; numerical value \~0.03.
+    $y\approx 0.675$, $\partial\mathcal{L}/\partial w_2\approx 0.108$, $\partial\mathcal{L}/\partial w_1\approx 0.029$.
     :::
-5.  **Adam vs SGD.** Compare 2–3 epochs on your MLP at fixed seed.
+
+5.  **Saturation.** Bad $\mathcal{N}(0,1)$ init + sigmoid on a deep stack; then fix with He/ReLU. Report whether $\|\delta^{(\ell)}\|$ recovers.
 
     ::: sol
-    Well-tuned SGD often suffices on small MNIST MLPs; protocol matters more than a winner.
+    Large variance saturates $\sigma$; He+ReLU restores nonzero ReLU' on a positive fraction of units.
     :::
-6.  **Toy attention.** Implement attention; add a causal mask; check lower-triangular weights.
+
+6.  **Experiment 2.2 write-up.** Attach the three loss curves ($\eta=3$, $10^{-3}$, Adam $10^{-3}$) and label explosion / slow / smooth.
 
     ::: sol
-    Set scores\[i,j\]=-1e9 for j\>i before softmax.
+    Match panels of `schema-grad-regimes.svg`; Adam often reduces early noise vs SGD at the same lr.
     :::
-7.  **Graph ML bridge.** Half a page : attention as message passing on the complete token graph vs 1-hop GCN.
+
+7.  **Toy attention.** $T=5$, $d=16$; force $K_2$ aligned with $Q_0$; check row 0 of weights concentrates on column 2.
 
     ::: sol
-    Attention uses content-dependent weights on all pairs; GCN restricts to structural neighbors.
+    Large score $(Q_0\cdot K_2)/\sqrt{d}$ dominates the softmax row.
     :::
-8.  **(Optional PyTorch)** Match NumPy backward grads to autograd within $10^{-5}$.
+
+8.  **(Optional)** Load saved `*_weights.npy` from a notebook run; print norms per output column — which digit class has largest $\|W_{:,k}\|$?
 
     ::: sol
-    Copy weights to tensors with requires_grad and compare.
+    Depends on the run; the exercise is the measurement protocol, not a fixed ranking.
     :::
 
 ## References {#refs}
@@ -354,5 +466,5 @@ A **transformer block** (sketch) : LayerNorm → attention → residual → Lay
 -   Nielsen, *Neural Networks and Deep Learning* (online).
 -   Zhang et al., *Dive into Deep Learning*.
 -   Vaswani et al., *Attention Is All You Need*, NeurIPS 2017.
--   Sibling notes : [Deep Learning](../m1p1-deep-learning/index.html) · [Refresher CS](../m1p1-refresher-cs/index.html).
--   Empirical starting point : [knoel99/MNIST](https://github.com/knoel99/MNIST).
+-   Sibling notes: [Deep Learning](../m1p1-deep-learning/index.html) · [Refresher CS](../m1p1-refresher-cs/index.html) · [Refresher Statistics](../m1p1-refresher-statistics/index.html).
+-   Empirical starting point: [knoel99/MNIST](https://github.com/knoel99/MNIST) (`MNIST_from_scratch.ipynb`).

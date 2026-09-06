@@ -377,6 +377,12 @@ window.Quarto = {
 <span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a><span class="co"># exponential -&gt; linear fibonacci: memoization turns the recurrence</span></span>
 <span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a><span class="co"># into dynamic programming (cf. chapter 4)</span></span></code></pre></div>
 <h3 id="generators-the-protocol-and-pipelines">1.3. Generators: the protocol and pipelines</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img src="schema-generator-pipeline.svg" style="width:100.0%" alt="Generator pipeline"></p>
+<figcaption>Lazy generator pipeline: source → filter → map → sink</figcaption>
+</figure>
+</div>
 <p>A generator produces its values <em>lazily</em>: nothing is computed before iteration, and memory stays <span class="math inline">\mathcal{O}(1)</span> per element processed. This is the only way to traverse corpora that do not fit in RAM (Wikipedia, Common Crawl, large logs).</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> stream_tokens(path):</span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Generator: yield suspends the function and preserves its state."""</span></span>
@@ -483,6 +489,12 @@ window.Quarto = {
 <span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> lr, wd <span class="kw">in</span> product([<span class="fl">1e-3</span>, <span class="fl">3e-4</span>], [<span class="fl">0.0</span>, <span class="fl">1e-2</span>]):</span>
 <span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>    run_experiment(HP(lr<span class="op">=</span>lr, weight_decay<span class="op">=</span>wd))</span></code></pre></div>
 <h3 id="memory-and-cost-of-objects">1.8. Memory and cost of objects</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img src="schema-memory-stack.svg" style="width:90.0%" alt="Stack and heap"></p>
+<figcaption>Stack frames vs heap object referenced by a pointer</figcaption>
+</figure>
+</div>
 <div class="sourceCode" id="cb8"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
 <span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>sys.getsizeof([])                     <span class="co"># ~56 bytes: the empty list is not free</span></span>
 <span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>sys.getsizeof([<span class="dv">0</span>])                    <span class="co"># ~88: over-allocation for future appends</span></span>
@@ -610,6 +622,40 @@ window.Quarto = {
 </tr>
 </tbody>
 </table>
+<div class="ex">
+<p><span class="tag">Example 2.0b — Concrete timings (order of magnitude, CPython)</span> On one laptop-class CPU, <span class="math inline">n=10^5</span> random integers:</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Structure / op</th>
+<th style="text-align: left;">Typical time (order)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;"><code>x in list</code> (miss, scan)</td>
+<td style="text-align: left;">tens of ms — <span class="math inline">\Theta(n)</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>x in set</code> (miss)</td>
+<td style="text-align: left;"><span class="math inline">\sim</span> microseconds — avg <span class="math inline">\Theta(1)</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;"><code>deque.append</code> / <code>popleft</code></td>
+<td style="text-align: left;"><span class="math inline">\sim</span> sub-micro — <span class="math inline">\Theta(1)</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;"><code>list.insert(0, x)</code></td>
+<td style="text-align: left;">tens of ms — <span class="math inline">\Theta(n)</span> shifts</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">sort <span class="math inline">n=10^5</span> (<code>list.sort</code>)</td>
+<td style="text-align: left;"><span class="math inline">\sim</span> 10–30 ms — <span class="math inline">\Theta(n\log n)</span></td>
+</tr>
+</tbody>
+</table>
+<p>Numbers move with hardware; the <em>ratios</em> (list membership vs set; <code>insert(0)</code> vs <code>deque</code>) are the lesson. Measure with <code>timeit</code> before rewriting hot loops.</p>
+</div>
 <h3 id="master-theorem">2.1. Master theorem</h3>
 <div class="thm">
 <p><span class="tag">Theorem 2.2 — Master theorem (standard form)</span> For a divide-and-conquer recurrence <span class="math display">T(n) = a\,T(n/b) + \mathcal{O}(n^d), \qquad a \geq 1,\; b \&gt; 1,\; d \geq 0,</span> writing <span class="math inline">c^\star = \log_b a</span> for the “critical threshold” (growth of the number of subproblems):</p>
@@ -1094,6 +1140,12 @@ window.Quarto = {
 <p><span class="tag">Why three representations?</span> Adjacency lists → efficient traversals in <span class="math inline">\mathcal{O}(\|V\|+\|E\|)</span>; dense matrix → spectral properties (<span class="math inline">A^k</span> counts paths, the basis of the Graph ML module); CSR/sparse → scaling and the <em>native format of PyTorch Geometric</em> (a GNN’s messages propagate exactly like a sparse matrix product). Knowing how to move from one to another is a program reflex.</p>
 </div>
 <h3 id="breadth-first-and-depth-first-traversal">5.2. Breadth-first and depth-first traversal</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img src="schema-bfs-dfs.svg" style="width:100.0%" alt="BFS vs DFS"></p>
+<figcaption>BFS layers vs one DFS discovery order on a 7-node tree</figcaption>
+</figure>
+</div>
 <div class="sourceCode" id="cb23"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> collections <span class="im">import</span> deque</span>
 <span id="cb23-2"><a href="#cb23-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb23-3"><a href="#cb23-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> bfs(adj, s):</span>
@@ -1146,6 +1198,69 @@ window.Quarto = {
 <p><span class="proof-title"><em>Proof</em>. </span><strong>Correctness.</strong> Invariant: a vertex enters the queue only when all its predecessors have been emitted; thus each emission respects the already processed edges, and by induction on the emission order, the final order is topological. <strong>Completeness.</strong> A DAG always has a vertex of zero in-degree (otherwise, by following incoming edges back indefinitely, a vertex would be revisited: cycle). If the algorithm stalls with <span class="math inline">\mathrm{len}(\mathrm{order}) \lt; n</span>, the remaining vertices form a subgraph whose in-degrees are all <span class="math inline">\&gt; 0</span> within that subgraph: it contains a cycle. The algorithm is therefore <em>also</em> a cycle detector. <span class="qed">∎</span></p>
 </div>
 <h3 id="shortest-paths">5.4. Shortest paths</h3>
+<div class="ex">
+<p><span class="tag">Example 5.4b — Dijkstra on 6 nodes, distances written out</span> Directed graph, nonnegative weights:</p>
+<ul>
+<li>Nodes: <span class="math inline">S,A,B,C,D,T</span>.</li>
+<li>Edges: <span class="math inline">S\to A(4)</span>, <span class="math inline">S\to B(2)</span>, <span class="math inline">A\to C(3)</span>, <span class="math inline">B\to A(1)</span>, <span class="math inline">B\to C(8)</span>, <span class="math inline">B\to D(7)</span>, <span class="math inline">C\to D(1)</span>, <span class="math inline">C\to T(5)</span>, <span class="math inline">D\to T(2)</span>.</li>
+</ul>
+<p>Run Dijkstra from <span class="math inline">S</span> (settle the node with smallest tentative distance):</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Step</th>
+<th style="text-align: left;">Settled</th>
+<th style="text-align: left;">Tentative distances <span class="math inline">(S,A,B,C,D,T)</span></th>
+<th style="text-align: center;">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">0</td>
+<td style="text-align: left;">—</td>
+<td style="text-align: left;"><span class="math inline">(0,\infty,\infty,\infty,\infty,\infty)</span></td>
+<td style="text-align: center;">init</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">1</td>
+<td style="text-align: left;"><span class="math inline">S</span></td>
+<td style="text-align: left;"><span class="math inline">(0,4,2,\infty,\infty,\infty)</span></td>
+<td style="text-align: center;">relax <span class="math inline">A,B</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">2</td>
+<td style="text-align: left;"><span class="math inline">B</span></td>
+<td style="text-align: left;"><span class="math inline">(0,3,2,10,9,\infty)</span></td>
+<td style="text-align: center;">via <span class="math inline">B</span>: <span class="math inline">A\leftarrow 2+1=3</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">3</td>
+<td style="text-align: left;"><span class="math inline">A</span></td>
+<td style="text-align: left;"><span class="math inline">(0,3,2,6,9,\infty)</span></td>
+<td style="text-align: center;">via <span class="math inline">A</span>: <span class="math inline">C\leftarrow 3+3=6</span></td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">4</td>
+<td style="text-align: left;"><span class="math inline">C</span></td>
+<td style="text-align: left;"><span class="math inline">(0,3,2,6,7,11)</span></td>
+<td style="text-align: center;"><span class="math inline">D\leftarrow 6+1=7</span>; <span class="math inline">T\leftarrow 11</span></td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">5</td>
+<td style="text-align: left;"><span class="math inline">D</span></td>
+<td style="text-align: left;"><span class="math inline">(0,3,2,6,7,9)</span></td>
+<td style="text-align: center;"><span class="math inline">T\leftarrow 7+2=9</span> (better)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">6</td>
+<td style="text-align: left;"><span class="math inline">T</span></td>
+<td style="text-align: left;"><span class="math inline">(0,3,2,6,7,9)</span></td>
+<td style="text-align: center;">done</td>
+</tr>
+</tbody>
+</table>
+<p>Shortest <span class="math inline">S\leadsto T</span> length <strong>9</strong>, e.g.&nbsp;path <span class="math inline">S\to B\to A\to C\to D\to T</span> (costs <span class="math inline">2+1+3+1+2</span>). Binary-heap Dijkstra is <span class="math inline">\mathcal{O}((n+m)\log n)</span> on sparse graphs — beating a dense <span class="math inline">\mathcal{O}(n^2)</span> scan when <span class="math inline">m\ll n^2</span>.</p>
+</div>
 <div class="thm">
 <p><span class="tag">Theorem 5.2 — Dijkstra (weights <span class="math inline">\geq 0</span>), with a heap</span> The “lazy” version below computes all distances from <span class="math inline">s</span> in <span class="math inline">\mathcal{O}((\|V\|+\|E\|)\log \|V\|)</span>.</p>
 </div>
@@ -1252,6 +1367,12 @@ window.Quarto = {
 <span id="cb28-10"><a href="#cb28-10" aria-hidden="true" tabindex="-1"></a>np.linalg.solve(A.T <span class="op">@</span> A, A.T <span class="op">@</span> x)       <span class="co"># solve (better than inv() @ b!)</span></span>
 <span id="cb28-11"><a href="#cb28-11" aria-hidden="true" tabindex="-1"></a>w, V <span class="op">=</span> np.linalg.eigh(np.array([[<span class="dv">2</span>,<span class="dv">1</span>],[<span class="dv">1</span>,<span class="dv">2</span>]]))   <span class="co"># eigenvalues/eigenvectors (symmetric)</span></span></code></pre></div>
 <h3 id="broadcasting-the-rules-demonstrated-on-examples">6.1. Broadcasting: the rules, demonstrated on examples</h3>
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img src="schema-broadcasting.svg" style="width:100.0%" alt="NumPy broadcasting"></p>
+<figcaption>Broadcast <span class="math inline">(3,1)+(1,4)\to(3,4)</span></figcaption>
+</figure>
+</div>
 <div class="prop">
 <p><span class="tag">Rules (to know by heart)</span> Two arrays of shapes <span class="math inline">s</span> and <span class="math inline">s'</span> are made compatible by (1) aligning the dimensions <em>on the right</em>; (2) for each axis, equal sizes, or one of them is 1 (the size-1 array is then <em>virtually replicated</em>). Any other combination: error.</p>
 <table class="caption-top">
