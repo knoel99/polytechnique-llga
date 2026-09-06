@@ -1,19 +1,14 @@
-# Contrat — capacités de sortie / exit capabilities (cœur LLGA)
+# Contrat — capacités de sortie / exit capabilities (cœur LLGA + recherche)
 
 ## Intent
-Questions de **synthèse Graph×LLM** inférées/extrapolées du parcours LLGA (pas examen officiel, pas voix diplôme / équipe pédagogique).
+1. Questions de **synthèse Graph×LLM** inférées/extrapolées du parcours LLGA.
+2. Section **problématiques de recherche** illustratives (thèses/manuscrits à liens vérifiés) reliant le parcours à la recherche — pas catalogue exhaustif, pas voix officielle.
 
-## Contenu attendu
-Chaque question doit être **reconnaissable LLGA** : graphe+LLM vs tabulaire/texte, GNN échelle, KG×LLM, geometric DL / shapes / TDA, OT fairness, multimodal/vision/speech du repo, RL/agents ancrés curriculum, robustesse/privacy/explainability *dans* un contexte graphe ou génération contrôlée.
-
-## KO
-Questions flottantes type « roadmap GPT interne », « budget inférence générique », « portefeuille de modèles » sans ancrage Graph×LLM.
-
-## Slugs
-- FR `capacites-sortie/index.html`
-- EN `en/exit-capabilities/index.html`
+## Voix
+- OK : notes extrapolées / Extrapolons
+- KO : voix équipe pédagogique / exigences diplôme
 
 ## Preuves
 - [x] h3 reconnaissables LLGA
-- [x] Liens modules réels du repo
-- [x] Voix neutre / extrapolée
+- [x] Section recherche 8 entrées, liens ouverts vérifiés (Abdallah, Sadeddine, Hubert, Bouadi, Zhang arXiv, Mavromatis PDF, Liu, Hatté projet)
+- [x] Modules = liens repo réels
