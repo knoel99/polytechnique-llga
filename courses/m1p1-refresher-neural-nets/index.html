@@ -188,123 +188,253 @@ window.Quarto = {
 </header>
 
 
+<h2 id="intro">Introduction and overview</h2>
+<p><span class="badge pedagogical">Not in brochure</span> <span class="badge refresher">Extrapolons refresher</span></p>
+<p>Independent Extrapolons study support, not an official brochure module or a Deep Learning equivalence. The Year 1 / Period 1 placement is a suggested reading slot. The <a href="#reading-route">reading route</a> below is an Extrapolons recommendation, not an enrolment rule.</p>
+<h3 id="the-question-this-page-answers">The question this page answers</h3>
+<p><strong>What changes between a working affine MNIST classifier and a trainable layered model — and how do shapes, losses and gradients reveal what is happening?</strong></p>
+<p>Start with an observable distinction: scores <span class="math inline">(0.5,0.1)</span> already predict class 0 by <code>argmax</code>, but against the one-hot target <span class="math inline">(1,0)</span> their MSE is</p>
+<p><span class="math display">
+\frac{(0.5-1)^2+(0.1-0)^2}{2}=0.13.
+</span></p>
+<p>A gradient step can reduce that loss without changing the predicted class. Loss curves and accuracy answer different questions.</p>
+<p>The empirical spine is the public <a href="https://github.com/knoel99/MNIST">knoel99/MNIST</a> repository: load digits, normalize pixels, flatten, train an affine NumPy classifier with alternative output activations, and inspect loss and accuracy. The calculations below make that path explicit before extending it.</p>
+<div class="note">
+<p><span class="tag">Starting point</span> The reference notebook trains an <strong>affine MNIST classifier with no hidden layer</strong>, using <strong>MSE and alternative output activations</strong>. The multilayer examples below extend that starting point. They prepare the transition to Deep Learning; they do not replace practice with layered models, automatic differentiation or sequence prediction.</p>
+</div>
+<h3 id="what-you-will-be-able-to-do">What you will be able to do</h3>
+<ul>
+<li>Follow the notebook’s data preparation, parameter shapes, scores, MSE, updates and <code>argmax</code> evaluation.</li>
+<li>Distinguish its <span class="math inline">(B,784)\to(B,10)</span> map from a multilayer extension <span class="math inline">(B,784)\to(B,H)\to(B,10)</span>.</li>
+<li>Compute a tiny forward/backward by hand, including the loss-reduction factor.</li>
+<li>Compare identity / sigmoid / ReLU through saturation, sparsity and measured loss curves.</li>
+<li>Read SGD, momentum and Adam updates, then interpret one attention line as a <span class="math inline">T\times T</span> weight matrix.</li>
+</ul>
+<p>Recognizing names such as saturation or exploding gradients helps with diagnosis. <strong>Composing, training and evaluating new layered architectures is additional learning</strong>, not merely a vocabulary change.</p>
+<h2 id="before-start">Before you start</h2>
+<p>This page assumes working Python/NumPy and basic matrix multiplication, not prior practice with an MLP or a language model. Use these three tasks to decide where to enter.</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>Positioning task</th>
+<th>If it is uncertain</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>For <span class="math inline">B=64</span>, give the shapes of <span class="math inline">X</span>, <span class="math inline">W</span>, <span class="math inline">b</span> and <span class="math inline">XW+b</span> in an affine <span class="math inline">784\to10</span> classifier. Explain bias broadcasting.</td>
+<td>Read <a href="#mnist-scores">§1.1: notebook shapes</a>; use <a href="../m1p1-refresher-cs/index.html">Refresher CS</a> for implementation foundations.</td>
+</tr>
+<tr class="even">
+<td>Recover the MSE <span class="math inline">0.13</span> above and take one parameter update. Which entries does <code>mean</code> average?</td>
+<td>Work through <a href="#affine-backprop">§3.1: affine backpropagation and reduction</a>.</td>
+</tr>
+<tr class="odd">
+<td>Explain why lower training MSE need not improve held-out accuracy, and why ten sigmoid scores need not sum to one.</td>
+<td>Read <a href="#notebook-comparison">§1.3: empirical comparisons</a> and <a href="#losses">§2.2: losses</a>; revisit <a href="../m1p1-refresher-statistics/index.html">Refresher Statistics</a> if evaluation concepts are unclear.</td>
+</tr>
+</tbody>
+</table>
+<p>The affine notebook provides practice with normalization, parameter matrices, NumPy updates, loss curves, <code>argmax</code> and train/test comparison. It does <strong>not</strong> establish practice with learned hidden representations, autodiff, training/evaluation states, logits-based cross-entropy, or sequences. Tokenization, shifted targets, causal masking and language-model training remain later learning tasks.</p>
+<h2 id="reading-route">Reading route</h2>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>Your immediate goal</th>
+<th>Selective route</th>
+<th>Evidence before moving on</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Check an existing affine MNIST implementation</td>
+<td><a href="#ch1">§1</a> → <a href="#affine-backprop">§3.1</a> → <a href="#ch4">§4</a></td>
+<td>Explain the scores, reproduce Exercise 2, and match the MSE derivative to its reduction.</td>
+</tr>
+<tr class="even">
+<td>Prepare to enter Deep Learning</td>
+<td><a href="#ch2">§2</a> → <a href="#two-layer-backprop">§3.2</a> → <a href="#initialization">§4.1</a> → <a href="#ch5">§5</a></td>
+<td>Work Exercises 1–4 and report a controlled learning-rate comparison.</td>
+</tr>
+<tr class="odd">
+<td>Get a first attention intuition</td>
+<td><a href="#ch6">§6</a>, after the softmax calculation in §2</td>
+<td>Explain row normalization and solve Exercise 7; no sequence-training claim follows from this alone.</td>
+</tr>
+<tr class="even">
+<td>Choose the next module</td>
+<td><a href="#ch7">§7: exit routes</a></td>
+<td>Use the ML, DL or Graph ML route according to the missing skill, rather than reading every refresher in order.</td>
+</tr>
+</tbody>
+</table>
+<p>The full route is an Extrapolons estimate of <strong>about 12–18 hours of self-study</strong>, including exercises and reruns. It is not an official workload or a required duration.</p>
 <h2 id="contents">Contents</h2>
 <ul>
 <li><a href="#intro">Introduction and overview</a></li>
+<li><a href="#before-start">Before you start</a></li>
+<li><a href="#reading-route">Reading route</a></li>
 <li><a href="#ch1">1. Empirical MNIST path (from the notebook)</a></li>
 <li><a href="#ch2">2. Forward, loss, training loop — what breaks</a></li>
 <li><a href="#ch3">3. Gradients and backpropagation with numbers</a></li>
 <li><a href="#ch4">4. Activations: identity vs sigmoid vs ReLU</a></li>
 <li><a href="#ch5">5. Optimization in practice (SGD → Adam)</a></li>
 <li><a href="#ch6">6. Short bridge: attention intuition</a></li>
-<li><a href="#ch7">7. Where this sits in the LLGA path</a></li>
+<li><a href="#ch7">7. Connections, limits and exit routes</a></li>
 <li><a href="#ex">Exercises</a></li>
-<li><a href="#refs">References</a></li>
+<li><a href="#refs">Sources, scope and references</a></li>
 </ul>
-<h2 id="intro">Introduction and overview</h2>
-<table class="caption-top">
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">Module</td>
-<td style="text-align: left;">Refresher Neural Nets — <strong>pedagogical support outside the brochure</strong> (on-ramp to Deep Learning / Graph ML / LLMs)</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Code</td>
-<td style="text-align: left;"><em>No SynapseS course code</em> — this is <strong>not</strong> an official catalog UE. Do not invent a code.</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Audience</td>
-<td style="text-align: left;">~10 years as an engineer, comfortable with Python/NumPy, already trained an MNIST MLP from scratch (e.g.&nbsp;<a href="https://github.com/knoel99/MNIST">MNIST_from_scratch.ipynb</a>), no nanoGPT / LLM training path yet.</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Indicative volume</td>
-<td style="text-align: left;">~12–18&nbsp;h of self-study, placed <em>before</em> or lightly alongside <a href="../m1p1-deep-learning/index.html">Deep Learning</a>.</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Status</td>
-<td style="text-align: left;"><span class="badge pedagogical">Not in brochure</span><span class="badge refresher">Pedagogical on-ramp</span> M1 · S1 / period&nbsp;1</td>
-</tr>
-</tbody>
-</table>
-<p>The core of these notes is the empirical path in <a href="https://github.com/knoel99/MNIST">knoel99/MNIST</a>: load digits, flatten, train a NumPy network with identity / sigmoid / ReLU, plot loss and accuracy. Theory is added only where it diagnoses stalls, explosions, or saturation. Empirical first; doctoral vocabulary second.</p>
-<h3 id="what-you-will-be-able-to-do">What you will be able to do</h3>
-<ul>
-<li>Walk the notebook end-to-end in prose + math + code without opening Colab first.</li>
-<li>Write shapes <span class="math inline">(B,784)\to(B,H)\to(B,10)</span> and compute a tiny forward/backward by hand.</li>
-<li>Compare identity / sigmoid / ReLU the way the notebook does (saturation, sparsity, loss curves).</li>
-<li>Move from naïve SGD to momentum / Adam with a clear reading of each hyperparameter.</li>
-<li>Explain one attention line as a <span class="math inline">T\times T</span> weight matrix — a short bridge to Deep Learning.</li>
-</ul>
-<div class="note">
-<p><span class="tag">Extrapolons note</span> If a NumPy MNIST MLP already runs, the gap to Deep Learning is mostly naming failure modes (saturation, bad <span class="math inline">\eta</span>, dead ReLUs) and reading shapes under batching — not starting from zero.</p>
-</div>
 <h2 id="ch1">1. Empirical MNIST path (from the notebook)</h2>
-<p>Starting point: <code>MNIST_from_scratch.ipynb</code> (<a href="https://github.com/knoel99/MNIST">repo</a>). The notebook trains a <strong>single linear map</strong> <span class="math inline">784\to 10</span> with a choice of output activation and <strong>MSE</strong> against one-hot labels (not cross-entropy). Below: the same path in notes form, then a multilayer extension with fully expanded numbers.</p>
-<h3 id="digits-flatten-scores">1.1. Digits → flatten → scores</h3>
+<p>Starting point: <code>MNIST_from_scratch.ipynb</code> (<a href="https://github.com/knoel99/MNIST">public repository</a>). The notebook trains a <strong>single affine map</strong> <span class="math inline">784\to10</span> with a choice of output activation and <strong>MSE</strong> against one-hot labels, not cross-entropy. Below: that path in notes form, then a separate multilayer extension with fully expanded numbers.</p>
+<h3 id="mnist-scores">1.1. Digits → flatten → scores</h3>
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img src="schema-mnist-mlp.svg" style="width:100.0%" alt="Schema of MNIST MLP dimensions"></p>
-<figcaption>MNIST pipeline: 28×28 → flatten 784 → hidden (optional) → 10 logits → softmax/argmax</figcaption>
+<p><img src="schema-mnist-mlp.svg" style="width:100.0%" alt="MNIST dimensions: the reference notebook has an affine map with no hidden layer; hidden layers and the logit/softmax head belong to the extension."></p>
+<figcaption>Extrapolons dimension schematic. Notebook path: 28×28 → flatten 784 → affine 784→10 → optional output activation → scores → MSE for training / argmax for prediction. The hidden-layer, logit and softmax elements illustrate the separate extension, not steps in the reference notebook.</figcaption>
 </figure>
 </div>
-<ol type="1">
-<li>Load CSV rows: label in column&nbsp;0, pixels in the rest; reshape a row to <span class="math inline">28\times 28</span> for visualization (<code>imshow</code>, grayscale).</li>
-<li>Features: <span class="math inline">X\in\mathbb{R}^{n\times 784}</span>, scaled to <span class="math inline">[0,1]</span> by <code>/255.0</code>.</li>
-<li>Targets: one-hot <span class="math inline">Y\in\{0,1\}^{n\times 10}</span>.</li>
-<li>Notebook model: <span class="math inline">z = XW + b</span> with <span class="math inline">W\in\mathbb{R}^{784\times 10}</span>, <span class="math inline">b\in\mathbb{R}^{1\times 10}</span>, then <span class="math inline">\hat y = \phi(z)</span> for <span class="math inline">\phi\in\{\mathrm{id},\sigma,\mathrm{ReLU}\}</span>.</li>
-<li>Loss: <span class="math inline">\mathrm{MSE} = \mathrm{mean}\big((\hat y - Y)^2\big)</span>; train ~1000 epochs, <span class="math inline">\eta=0.01</span>.</li>
-</ol>
-<p>Shapes for a mini-batch of size <span class="math inline">B</span> (multilayer reading used later in Deep Learning):</p>
+<p>Keep the two readings separate:</p>
 <table class="caption-top">
+<colgroup>
+<col style="width: 14%">
+<col style="width: 30%">
+<col style="width: 54%">
+</colgroup>
 <thead>
 <tr class="header">
-<th style="text-align: left;">Tensor</th>
-<th style="text-align: left;">Shape</th>
-<th style="text-align: left;">Role</th>
+<th>Path</th>
+<th>Computation</th>
+<th>Training / prediction</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td style="text-align: left;"><span class="math inline">X</span></td>
-<td style="text-align: left;"><span class="math inline">(B, 784)</span></td>
-<td style="text-align: left;">flattened pixels</td>
+<td><strong>Reference notebook: no hidden layer</strong></td>
+<td>pixels → flatten → affine map → optional identity / sigmoid / ReLU output activation → <strong>scores</strong></td>
+<td>MSE against one-hot labels / <code>argmax</code> of scores</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;"><span class="math inline">W^{(1)}</span></td>
-<td style="text-align: left;"><span class="math inline">(784, H)</span></td>
-<td style="text-align: left;">first affine map</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;"><span class="math inline">z^{(1)}</span></td>
-<td style="text-align: left;"><span class="math inline">(B, H)</span></td>
-<td style="text-align: left;">pre-activations</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;"><span class="math inline">h</span></td>
-<td style="text-align: left;"><span class="math inline">(B, H)</span></td>
-<td style="text-align: left;">after <span class="math inline">\phi</span></td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;"><span class="math inline">W^{(2)}</span></td>
-<td style="text-align: left;"><span class="math inline">(H, 10)</span></td>
-<td style="text-align: left;">classifier</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;"><span class="math inline">z^{(2)}</span></td>
-<td style="text-align: left;"><span class="math inline">(B, 10)</span></td>
-<td style="text-align: left;">logits</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;"><span class="math inline">\hat p</span></td>
-<td style="text-align: left;"><span class="math inline">(B, 10)</span></td>
-<td style="text-align: left;">softmax probabilities</td>
+<td><strong>Multilayer classification extension</strong></td>
+<td>pixels → flatten → affine + hidden nonlinearity → affine classifier → <strong>logits</strong></td>
+<td>softmax cross-entropy / <code>argmax</code> of logits or softmax probabilities</td>
 </tr>
 </tbody>
 </table>
-<p>The notebook itself is the shallow case <span class="math inline">H</span> absent: <span class="math inline">W\in\mathbb{R}^{784\times 10}</span> only. That is enough to feel activation choice; depth comes in §2–3 with a tiny <span class="math inline">2\to 2\to 2</span> net.</p>
-<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Notebook spirit: shapes after load / normalize / one-hot</span></span>
+<ol type="1">
+<li>Load CSV rows: label in column 0, pixels in the rest; reshape a row to <span class="math inline">28\times28</span> for visualization (<code>imshow</code>, grayscale).</li>
+<li>Features: <span class="math inline">X\in\mathbb{R}^{n\times784}</span>, scaled to <span class="math inline">[0,1]</span> by <code>/255.0</code>.</li>
+<li>Targets: one-hot <span class="math inline">Y\in\{0,1\}^{n\times10}</span>.</li>
+<li>Notebook model: <span class="math inline">z=XW+b</span> with <span class="math inline">W\in\mathbb{R}^{784\times10}</span>, <span class="math inline">b\in\mathbb{R}^{1\times10}</span>, then <span class="math inline">\hat y=\phi(z)</span> for <span class="math inline">\phi\in\{\mathrm{id},\sigma,\mathrm{ReLU}\}</span>. Identity means no additional output nonlinearity.</li>
+<li>Loss: <span class="math inline">\mathrm{MSE}=\mathrm{mean}\big((\hat y-Y)^2\big)</span>; the notebook comparison uses about 1000 epochs and <span class="math inline">\eta=0.01</span>.</li>
+<li>Prediction: <span class="math inline">\hat c_i=\arg\max_k\hat y_{ik}</span>; compare with the integer labels to compute accuracy.</li>
+</ol>
+<p>The outputs <span class="math inline">\hat y</span> are <strong>scores</strong>, not necessarily logits or a probability distribution. Sigmoid bounds each score in <span class="math inline">(0,1)</span> but does not make a row sum to one. <code>argmax</code> does not require normalized probabilities.</p>
+<p>Here <span class="math inline">n</span> is the number of examples in a dataset, <span class="math inline">B</span> the mini-batch size, and <span class="math inline">C=10</span> the number of classes. Notebook shapes for one mini-batch:</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>Tensor</th>
+<th>Shape</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">X</span></td>
+<td><span class="math inline">(B,784)</span></td>
+<td>flattened, normalized pixels</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">W</span></td>
+<td><span class="math inline">(784,10)</span></td>
+<td>affine classifier weights</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">b</span></td>
+<td><span class="math inline">(1,10)</span></td>
+<td>bias broadcast across the batch</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">z=XW+b</span></td>
+<td><span class="math inline">(B,10)</span></td>
+<td>pre-activation outputs</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\hat y=\phi(z)</span></td>
+<td><span class="math inline">(B,10)</span></td>
+<td>scores used by MSE and <code>argmax</code></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">Y</span></td>
+<td><span class="math inline">(B,10)</span></td>
+<td>one-hot targets</td>
+</tr>
+</tbody>
+</table>
+<p>For comparison, the <strong>multilayer extension</strong> used later has hidden width <span class="math inline">H</span>:</p>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>Tensor</th>
+<th>Shape</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><span class="math inline">X</span></td>
+<td><span class="math inline">(B,784)</span></td>
+<td>flattened pixels</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">W^{(1)}</span></td>
+<td><span class="math inline">(784,H)</span></td>
+<td>first affine map</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">b^{(1)}</span></td>
+<td><span class="math inline">(1,H)</span></td>
+<td>hidden bias</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">z^{(1)}</span></td>
+<td><span class="math inline">(B,H)</span></td>
+<td>hidden pre-activations</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">h</span></td>
+<td><span class="math inline">(B,H)</span></td>
+<td>hidden representation after <span class="math inline">\phi</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">W^{(2)}</span></td>
+<td><span class="math inline">(H,10)</span></td>
+<td>classifier weights</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">b^{(2)}</span></td>
+<td><span class="math inline">(1,10)</span></td>
+<td>classifier bias</td>
+</tr>
+<tr class="even">
+<td><span class="math inline">z^{(2)}</span></td>
+<td><span class="math inline">(B,10)</span></td>
+<td>logits for the CE head</td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">\hat p</span></td>
+<td><span class="math inline">(B,10)</span></td>
+<td>softmax probabilities</td>
+</tr>
+</tbody>
+</table>
+<p>The notebook itself has <strong>no <span class="math inline">H</span> and no hidden layer</strong>. Depth comes in §2–3 with a tiny <span class="math inline">2\to2\to2</span> network.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Notebook data shapes after load / normalize / one-hot:</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># X_train: (n, 784), y_train: (n, 10)</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(X_train.shape, y_train.shape)  <span class="co"># e.g. (60000, 784), (60000, 10)</span></span></code></pre></div>
+<div class="note">
+<p><span class="tag">Two independent changes</span> Adding hidden layers and switching from MSE to cross-entropy are separate modelling choices. An affine classifier can use cross-entropy; a multilayer network can use MSE. The worked extension below changes both so that their roles can be examined explicitly.</p>
+</div>
 <h3 id="mse-helper-and-the-training-skeleton">1.2. MSE helper and the training skeleton</h3>
 <div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
@@ -317,7 +447,7 @@ window.Quarto = {
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> relu(z):</span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.maximum(z, <span class="fl">0.0</span>)</span>
 <span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="co"># One forward step (notebook: single layer)</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="co"># One forward step: affine map, no hidden layer.</span></span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> forward_linear(X, W, b, activation<span class="op">=</span><span class="st">"identity"</span>):</span>
 <span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    z <span class="op">=</span> X <span class="op">@</span> W <span class="op">+</span> b                       <span class="co"># (B, 10)</span></span>
 <span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> activation <span class="op">==</span> <span class="st">"sigmoid"</span>:</span>
@@ -325,24 +455,27 @@ window.Quarto = {
 <span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> activation <span class="op">==</span> <span class="st">"relu"</span>:</span>
 <span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span> relu(z), z</span>
 <span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> z, z                         <span class="co"># identity</span></span></code></pre></div>
-<p>Optional: after training, the notebook can <code>np.save</code> weights. Reading them back is a good “what train produced” check:</p>
+<p>The training loop repeatedly computes scores, evaluates MSE, differentiates through the selected output activation, and updates <span class="math inline">W</span> and <span class="math inline">b</span>. <a href="#affine-backprop">§3.1</a> writes those derivatives with an explicit reduction convention.</p>
+<p>Optional: after training, the notebook can <code>np.save</code> weights. Reading them back is a useful “what did training produce?” check:</p>
 <div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>W <span class="op">=</span> np.load(<span class="st">"identity_weights.npy"</span>)   <span class="co"># expected (784, 10)</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>b <span class="op">=</span> np.load(<span class="st">"identity_biases.npy"</span>)    <span class="co"># expected (1, 10)</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(W.shape, b.shape, W.mean(), b.ravel()[:<span class="dv">3</span>])</span></code></pre></div>
-<h3 id="what-the-notebook-compares-empirically">1.3. What the notebook compares empirically</h3>
-<p>Three clones, same data, 1000 epochs, <span class="math inline">\eta=0.01</span>:</p>
+<h3 id="notebook-comparison">1.3. What the notebook compares empirically</h3>
+<p>Three configurations, same data, 1000 epochs, <span class="math inline">\eta=0.01</span>:</p>
 <ul>
-<li><code>activation='identity'</code> — unbounded linear scores; MSE pushes toward <span class="math inline">\{0,1\}</span> one-hot but nothing clamps outputs.</li>
-<li><code>activation='sigmoid'</code> — outputs in <span class="math inline">(0,1)</span>; gradients die when <span class="math inline">|z|</span> is large (<span class="math inline">\sigma'(z)=\sigma(z)(1-\sigma(z))\to 0</span>).</li>
-<li><code>activation='relu'</code> — sparse nonnegativity; dead units if pre-activations stay negative.</li>
+<li><code>activation='identity'</code> — unbounded affine scores; MSE pushes toward <span class="math inline">\{0,1\}</span> one-hot targets, but nothing clamps the outputs.</li>
+<li><code>activation='sigmoid'</code> — outputs in <span class="math inline">(0,1)</span>; gradients shrink when <span class="math inline">|z|</span> is large because <span class="math inline">\sigma'(z)=\sigma(z)(1-\sigma(z))\to0</span>.</li>
+<li><code>activation='relu'</code> — nonnegative scores, with zero output and zero local derivative for negative pre-activations; an output channel can become inactive across many examples.</li>
 </ul>
-<p>Plots in the notebook (<code>plot_training_insights</code>, <code>plot_compare_loss</code>, accuracy-over-test-prefix) typically show <strong>different loss trajectories and different test behavior</strong> across the three — use those curves as the ground truth for <em>this</em> setup rather than memorizing a single accuracy number. A brief GPU/CuPy appendix exists in the notebook; it is optional acceleration, not the conceptual core.</p>
+<p>The notebook’s plots (<code>plot_training_insights</code>, <code>plot_compare_loss</code>, accuracy-over-test-prefix) make <strong>loss trajectories and test behavior</strong> visible. Read them as evidence for that particular setup, not as a universal ranking of activations or a fixed MNIST accuracy claim. A brief GPU/CuPy appendix is optional acceleration, not the conceptual core.</p>
+<p>For a controlled rerun, record the seed, initialization, batch size, loss reduction and split. Use a validation set to select hyperparameters; keep the test set for final reporting rather than repeatedly selecting settings from test-prefix plots.</p>
 <div class="note">
-<p><span class="tag">Extrapolons note</span> Cross-entropy + softmax is the usual classifier loss in Deep Learning. The notebook’s MSE + per-output activation is pedagogically useful: every derivative stays elementary. §2 adds CE when bridging to standard practice.</p>
+<p><span class="tag">Extrapolons note</span> Softmax cross-entropy is common for single-label classification in Deep Learning. The notebook’s MSE with per-output activations remains useful for inspecting elementary derivatives. §2 introduces the CE head separately; it does not reinterpret the notebook as a softmax classifier.</p>
 </div>
 <h2 id="ch2">2. Forward, loss, training loop — what breaks</h2>
-<h3 id="tiny-numerical-forward-2-2-2">2.1. Tiny numerical forward (2 → 2 → 2)</h3>
-<p>Take one sample <span class="math inline">x = (1.0,\ 0.5)</span>, ReLU hidden, linear logits (no softmax yet):</p>
+<h3 id="tiny-forward">2.1. Tiny numerical forward (2 → 2 → 2)</h3>
+<p>This is the <strong>multilayer extension</strong>, not the reference notebook architecture.</p>
+<p>Take one sample <span class="math inline">x=(1.0,\ 0.5)</span>, a ReLU hidden layer, and affine output logits for a two-class CE head:</p>
 <p><span class="math display">
 W^{(1)} = \begin{pmatrix} 0.3 &amp; -0.2 \\ 0.1 &amp; 0.4 \end{pmatrix},\quad
 b^{(1)} = (0.1,\ -0.1),\quad
@@ -364,63 +497,95 @@ z^{(2)}_2 &amp;= 0.45\cdot 0.2 + 0\cdot 0.6 + 0.1 = 0.19.
 e^{0.225}\approx 1.2523,\quad e^{0.19}\approx 1.2092,\quad
 \hat p \approx \Big(\frac{1.2523}{2.4615},\ \frac{1.2092}{2.4615}\Big) \approx (0.5087,\ 0.4913).
 </span></p>
-<h3 id="losses-mse-notebook-and-ce-practice">2.2. Losses: MSE (notebook) and CE (practice)</h3>
+<p>For target <span class="math inline">y=(1,0)</span>, the cross-entropy is <span class="math inline">-\log\hat p_1\approx0.676</span>. The model predicts the correct class, but only narrowly.</p>
+<p>A stable implementation subtracts the largest logit before exponentiation. This leaves softmax unchanged:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> softmax(z, axis<span class="op">=-</span><span class="dv">1</span>):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    shifted <span class="op">=</span> z <span class="op">-</span> np.<span class="bu">max</span>(z, axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    exp_z <span class="op">=</span> np.exp(shifted)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> exp_z <span class="op">/</span> np.<span class="bu">sum</span>(exp_z, axis<span class="op">=</span>axis, keepdims<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+<h3 id="losses">2.2. Losses: MSE (notebook) and CE (classification extension)</h3>
 <div class="def">
-<p><span class="tag">Definition 2.1 — Empirical risk</span> <span class="math display">\hat{\mathcal{R}}(\theta) = \frac1n \sum_{i=1}^n \ell\big(f_\theta(x_i), y_i\big).</span></p>
+<p><span class="tag">Definition 2.1 — Empirical risk</span> For <span class="math inline">n</span> labelled examples and model parameters <span class="math inline">\theta</span>, <span class="math display">
+\hat{\mathcal{R}}(\theta) = \frac1n \sum_{i=1}^n \ell\big(f_\theta(x_i), y_i\big).
+</span> The per-example loss <span class="math inline">\ell</span> must specify how output coordinates are reduced.</p>
 </div>
 <ul>
-<li>Notebook: <span class="math inline">\ell = (\hat y - y)^2</span> averaged over all entries.</li>
-<li>Classifier practice: <span class="math inline">\ell = -\sum_k y_k \log \hat p_k</span> with <span class="math inline">\hat p=\mathrm{softmax}(z)</span>. Then <span class="math inline">\nabla_z \ell = \hat p - y</span> (one-hot <span class="math inline">y</span>).</li>
+<li><strong>Notebook MSE:</strong> squared score errors, averaged over all <span class="math inline">B\times C</span> entries in a batch: <span class="math display">
+\mathcal{L}_{\mathrm{MSE}}=\frac{1}{BC}\sum_{i=1}^{B}\sum_{k=1}^{C}(\hat y_{ik}-Y_{ik})^2.
+</span></li>
+<li><strong>Single-label classifier CE:</strong> for one example, <span class="math display">
+\ell_{\mathrm{CE}}=-\sum_k y_k\log\hat p_k,\qquad
+\hat p=\mathrm{softmax}(z),\qquad
+\nabla_z\ell_{\mathrm{CE}}=\hat p-y.
+</span> Here <span class="math inline">z</span> denotes logits and <span class="math inline">y</span> is one-hot. A batch-mean CE introduces a factor <span class="math inline">1/B</span>, not <span class="math inline">1/(BC)</span>.</li>
 </ul>
+<p>The score arrays, objectives and gradient scales differ. Compare accuracy under the same evaluation protocol; do not compare the numerical magnitudes of MSE and CE as though they were the same quantity.</p>
+<p>In a framework, a fused cross-entropy function commonly accepts <strong>logits</strong> and computes log-softmax internally. Check the API rather than applying softmax twice.</p>
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img src="schema-grad-regimes.svg" style="width:100.0%" alt="Three gradient regimes"></p>
-<figcaption>Healthy descent vs explosion vs vanishing</figcaption>
+<p><img src="schema-grad-regimes.svg" style="width:100.0%" alt="Three schematic training regimes: healthy descent, explosion, and vanishing gradients."></p>
+<figcaption>Schematic healthy descent, explosion and vanishing-gradient regimes. These are diagnostic illustrations, not measured curves from a specific notebook run.</figcaption>
 </figure>
 </div>
 <div class="ex">
-<p><span class="tag">Experiment 2.2 — executable <span class="math inline">\eta</span> stress test</span> On the same NumPy MLP (or the notebook’s single layer), run <strong>5 epochs</strong> at fixed seed for each:</p>
+<p><span class="tag">Experiment 2.2 — controlled learning-rate stress test</span> Choose either the affine notebook model or the two-layer extension. Keep that architecture and its loss reduction fixed. Run <strong>5 epochs</strong> for each setting, resetting to the same initialization and mini-batch order:</p>
 <table class="caption-top">
 <colgroup>
-<col style="width: 32%">
-<col style="width: 67%">
+<col style="width: 22%">
+<col style="width: 77%">
 </colgroup>
 <thead>
 <tr class="header">
 <th>Setting</th>
-<th>Expected behavior</th>
+<th>Diagnostic hypothesis to test</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
 <td><span class="math inline">\eta=3</span></td>
-<td>loss jumps / NaNs — <strong>explosion</strong></td>
+<td>Large-step stress test: loss may jump, diverge or become non-finite.</td>
 </tr>
 <tr class="even">
 <td><span class="math inline">\eta=10^{-3}</span></td>
-<td>slow but stable decrease — may look flat early</td>
+<td>Smaller updates may give slow but stable decrease and look flat early.</td>
 </tr>
 <tr class="odd">
 <td><span class="math inline">\eta=0.01</span> (notebook default)</td>
-<td>visible descent on MNIST MSE</td>
+<td>Reference setting for the notebook’s MNIST MSE comparison.</td>
 </tr>
 <tr class="even">
 <td>Adam, <span class="math inline">\mathrm{lr}=10^{-3}</span></td>
-<td>often smoother than raw SGD at the same lr</td>
+<td>Adaptive updates may give a smoother or faster trajectory than SGD at the same nominal learning rate.</td>
 </tr>
 </tbody>
 </table>
-<p>Write three sentences: which curve matches which panel of the schema above; what changed when swapping ReLU↔︎sigmoid at fixed <span class="math inline">\eta=0.01</span> (link to §4).</p>
+<p>Record loss, accuracy and gradient norms; keep the data split, batch size and reduction visible. These outcomes are <strong>hypotheses, not guaranteed labels</strong>: changing the loss scale can change which learning rate is large.</p>
+<p>Write three sentences identifying which observed curve resembles each relevant panel above. Then report what changes when swapping ReLU↔︎sigmoid at fixed <span class="math inline">\eta=0.01</span>; connect the result to §4. A flat loss alone does not distinguish a tiny step size from saturation.</p>
 </div>
 <h2 id="ch3">3. Gradients and backpropagation with numbers</h2>
-<h3 id="one-layer-backprop-table-notebook-algebra">3.1. One-layer backprop table (notebook algebra)</h3>
-<p>For <span class="math inline">\hat y=\phi(XW+b)</span> and <span class="math inline">\mathcal{L}=\mathrm{mean}((\hat y-Y)^2)</span>:</p>
+<h3 id="affine-backprop">3.1. One-layer backprop table (notebook algebra)</h3>
+<p>For <span class="math inline">\hat y=\phi(XW+b)</span> and <span class="math inline">\mathcal{L}=\mathrm{mean}((\hat y-Y)^2)</span>, let <span class="math inline">Y</span> contain <span class="math inline">B\times C</span> entries. Then <span class="math inline">|Y|=BC</span> and</p>
+<p><span class="math display">
+\frac{\partial\mathcal{L}}{\partial \hat y}
+=\frac{2}{BC}(\hat y-Y).
+</span></p>
+<p>The output activation adds its local derivative:</p>
 <p><span class="math display">
 \frac{\partial\mathcal{L}}{\partial z} = \underbrace{\frac{2}{|Y|}(\hat y-Y)}_{\text{d\_loss}} \odot \phi'(z),\qquad
 \frac{\partial\mathcal{L}}{\partial W} = X^\top \frac{\partial\mathcal{L}}{\partial z},\qquad
 \frac{\partial\mathcal{L}}{\partial b} = \sum_{\text{batch}} \frac{\partial\mathcal{L}}{\partial z}.
 </span></p>
-<p>Concrete <strong>scalar</strong> numbers (batch size 1, two outputs). Let <span class="math inline">x=(1,\ 0)</span>, <span class="math inline">W=\begin{pmatrix}0.5&amp;0.1\\0.2&amp;-0.4\end{pmatrix}</span>, <span class="math inline">b=(0,0)</span>, <span class="math inline">\phi=\mathrm{id}</span>, target <span class="math inline">y=(1,0)</span>:</p>
+<p>Here <span class="math inline">\odot</span> is entrywise multiplication. The bias gradient sums over examples because the same bias was broadcast to every row. The averaging is already included in <code>d_loss</code>; do not divide by <span class="math inline">B</span> again when computing <span class="math inline">dW</span> or <span class="math inline">db</span>.</p>
+<div class="note">
+<p><span class="tag">Reduction check, not a bug report</span> For <span class="math inline">B=64</span> and <span class="math inline">C=10</span>, the prediction-gradient factor is <span class="math inline">2/640=0.003125</span>. A sample mean of <strong>class-summed</strong> squared errors would instead use <span class="math inline">2/B</span>, ten times larger here. Check the full training method against the loss it reports before comparing learning rates. A truncated training-method excerpt does not establish an implementation mismatch: this is a verification to perform, not a confirmed bug in the repository.</p>
+</div>
+<p>Concrete componentwise numbers: batch size 1, two outputs. Let <span class="math inline">x=(1,\ 0)</span>,</p>
+<p><span class="math display">
+W=\begin{pmatrix}0.5&amp;0.1\\0.2&amp;-0.4\end{pmatrix},\qquad
+b=(0,0),\qquad
+\phi=\mathrm{id},\qquad
+y=(1,0).
+</span></p>
 <table class="caption-top">
 <colgroup>
 <col style="width: 46%">
@@ -434,7 +599,7 @@ e^{0.225}\approx 1.2523,\quad e^{0.19}\approx 1.2092,\quad
 </thead>
 <tbody>
 <tr class="odd">
-<td><span class="math inline">z = xW+b</span></td>
+<td><span class="math inline">z=xW+b</span></td>
 <td><span class="math inline">(0.5,\ 0.1)</span></td>
 </tr>
 <tr class="even">
@@ -446,53 +611,105 @@ e^{0.225}\approx 1.2523,\quad e^{0.19}\approx 1.2092,\quad
 <td><span class="math inline">(-0.5,\ 0.1)</span></td>
 </tr>
 <tr class="even">
-<td><span class="math inline">d_z = 2/2\,(\hat y-y)</span></td>
-<td><span class="math inline">(-0.5,\ 0.1)</span></td>
+<td><span class="math inline">\mathcal{L}=\mathrm{mean}((\hat y-y)^2)</span></td>
+<td><span class="math inline">0.13</span></td>
 </tr>
 <tr class="odd">
-<td><span class="math inline">dW = x^\top d_z</span></td>
+<td><span class="math inline">d_z=2/2\,(\hat y-y)</span></td>
+<td><span class="math inline">(-0.5,\ 0.1)</span></td>
+</tr>
+<tr class="even">
+<td><span class="math inline">dW=x^\top d_z</span></td>
 <td><span class="math inline">\begin{pmatrix}-0.5&amp;0.1\\0&amp;0\end{pmatrix}</span></td>
+</tr>
+<tr class="odd">
+<td><span class="math inline">db=d_z</span></td>
+<td><span class="math inline">(-0.5,\ 0.1)</span></td>
 </tr>
 <tr class="even">
 <td>update <span class="math inline">W\leftarrow W-\eta\,dW</span> (<span class="math inline">\eta=0.01</span>)</td>
 <td><span class="math inline">\begin{pmatrix}0.505&amp;0.099\\0.2&amp;-0.4\end{pmatrix}</span></td>
 </tr>
+<tr class="odd">
+<td>update <span class="math inline">b\leftarrow b-\eta\,db</span></td>
+<td><span class="math inline">(0.005,\ -0.001)</span></td>
+</tr>
 </tbody>
 </table>
-<p>With <strong>sigmoid</strong>, multiply <span class="math inline">d_z</span> by <span class="math inline">\sigma'(z)=\sigma(z)(1-\sigma(z))</span> entrywise before the <span class="math inline">X^\top</span> product — that is exactly where saturation kills learning.</p>
-<h3 id="two-layer-chain-relu-with-the-2.1-numbers">3.2. Two-layer chain (ReLU) with the §2.1 numbers</h3>
-<p>Target one-hot <span class="math inline">y=(1,0)</span>, CE for illustration: <span class="math inline">\delta^{(2)}=\hat p-y\approx(-0.4913,\ 0.4913)</span>.</p>
+<p>After updating <strong>both</strong> <span class="math inline">W</span> and <span class="math inline">b</span>, the scores become <span class="math inline">(0.510,\ 0.098)</span> and the MSE becomes</p>
+<p><span class="math display">
+\frac{(-0.490)^2+(0.098)^2}{2}=0.124852.
+</span></p>
+<p>The loss decreased, while <code>argmax</code> stayed on class 0.</p>
+<p>With <strong>sigmoid</strong>, first recompute <span class="math inline">\hat y=\sigma(z)</span>: the residual changes too. Then multiply the prediction gradient by <span class="math inline">\sigma'(z)=\sigma(z)(1-\sigma(z))</span> entrywise before the <span class="math inline">X^\top</span> product. This is where saturation attenuates the update.</p>
+<p>A NumPy backward helper matching the stated all-entry mean:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> backward_affine_mse(X, Y, scores, z, activation<span class="op">=</span><span class="st">"identity"</span>):</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    d_scores <span class="op">=</span> <span class="fl">2.0</span> <span class="op">*</span> (scores <span class="op">-</span> Y) <span class="op">/</span> Y.size</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> activation <span class="op">==</span> <span class="st">"sigmoid"</span>:</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>        dz <span class="op">=</span> d_scores <span class="op">*</span> scores <span class="op">*</span> (<span class="fl">1.0</span> <span class="op">-</span> scores)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">elif</span> activation <span class="op">==</span> <span class="st">"relu"</span>:</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>        dz <span class="op">=</span> d_scores <span class="op">*</span> (z <span class="op">&gt;</span> <span class="dv">0</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>        dz <span class="op">=</span> d_scores</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    dW <span class="op">=</span> X.T <span class="op">@</span> dz</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>    db <span class="op">=</span> np.<span class="bu">sum</span>(dz, axis<span class="op">=</span><span class="dv">0</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> dW, db</span></code></pre></div>
+<p>This helper specifies the convention used in these notes; it is not a transcription of the repository’s complete trainer.</p>
+<h3 id="two-layer-backprop">3.2. Two-layer chain (ReLU) with the §2.1 numbers</h3>
+<p>Return to the <strong>multilayer CE extension</strong>. For one-hot target <span class="math inline">y=(1,0)</span>,</p>
+<p><span class="math display">
+\delta^{(2)}=\hat p-y\approx(-0.4913,\ 0.4913).
+</span></p>
+<p>The output-layer derivative and the chain back to the hidden layer are</p>
 <p><span class="math display">
 \begin{aligned}
 \nabla_{W^{(2)}}\mathcal{L} &amp;= h^\top \delta^{(2)}
   = \begin{pmatrix}0.45\\0\end{pmatrix}\begin{pmatrix}-0.4913&amp;0.4913\end{pmatrix}
   = \begin{pmatrix}-0.2211&amp;0.2211\\0&amp;0\end{pmatrix},\\
 \delta^{(1)} &amp;= \big(\delta^{(2)} (W^{(2)})^\top\big)\odot \mathbf{1}_{z^{(1)}&gt;0}
-  = \big((-0.4913,\ 0.4913)\,W^{(2)\top}\big)\odot(1,0).
+  = \big((-0.4913,\ 0.4913)\,(W^{(2)})^\top\big)\odot(1,0).
 \end{aligned}
 </span></p>
-<p>Compute <span class="math inline">\delta^{(2)} W^{(2)\top}</span>: <span class="math display">
+<p>Using the rounded values, compute <span class="math inline">\delta^{(2)}(W^{(2)})^\top</span>:</p>
+<p><span class="math display">
 (-0.4913,\ 0.4913)
 \begin{pmatrix}0.5 &amp; -0.3 \\ 0.2 &amp; 0.6\end{pmatrix}
-=
+\approx
 (-0.1474,\ 0.4422).
-</span> Apply the ReLU mask <span class="math inline">(1,0)</span> ⇒ <span class="math inline">\delta^{(1)}\approx(-0.1474,\ 0)</span>. Then <span class="math inline">\nabla_{W^{(1)}}=x^\top\delta^{(1)}</span>.</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>delta2 <span class="op">=</span> (p <span class="op">-</span> y_onehot) <span class="op">/</span> B</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>dW2 <span class="op">=</span> h.T <span class="op">@</span> delta2</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>delta1 <span class="op">=</span> (delta2 <span class="op">@</span> W2.T) <span class="op">*</span> (z1 <span class="op">&gt;</span> <span class="dv">0</span>)   <span class="co"># ReLU'</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>dW1 <span class="op">=</span> x.T <span class="op">@</span> delta1</span></code></pre></div>
+</span></p>
+<p>Apply the ReLU mask <span class="math inline">(1,0)</span> to obtain <span class="math inline">\delta^{(1)}\approx(-0.1474,\ 0)</span>. Then</p>
+<p><span class="math display">
+\nabla_{W^{(1)}}\mathcal{L}
+=x^\top\delta^{(1)}
+\approx
+\begin{pmatrix}
+-0.1474&amp;0\\
+-0.0737&amp;0
+\end{pmatrix}.
+</span></p>
+<p>For this one-example calculation, <span class="math inline">\nabla_{b^{(2)}}\mathcal{L}=\delta^{(2)}</span> and <span class="math inline">\nabla_{b^{(1)}}\mathcal{L}=\delta^{(1)}</span>. The second hidden unit contributes no weight gradient for this sample because its ReLU is inactive.</p>
+<p>Batch-mean CE version:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># x: (B, 2), h and z1: (B, 2), p and y_onehot: (B, 2)</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>B <span class="op">=</span> x.shape[<span class="dv">0</span>]</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>delta2 <span class="op">=</span> (p <span class="op">-</span> y_onehot) <span class="op">/</span> B</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>dW2 <span class="op">=</span> h.T <span class="op">@</span> delta2</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>db2 <span class="op">=</span> delta2.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">0</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>delta1 <span class="op">=</span> (delta2 <span class="op">@</span> W2.T) <span class="op">*</span> (z1 <span class="op">&gt;</span> <span class="dv">0</span>)   <span class="co"># ReLU'</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>dW1 <span class="op">=</span> x.T <span class="op">@</span> delta1</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>db1 <span class="op">=</span> delta1.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">0</span>, keepdims<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+<p>Compute the whole backward pass with the weights used in the forward pass, then update the parameters. Updating <span class="math inline">W^{(2)}</span> before computing <span class="math inline">\delta^{(1)}</span> would mix two parameter states.</p>
 <div class="note">
-<p><span class="tag">Engineer reading</span> The computation graph is a DAG; backprop is reverse-topology VJP. Debugging still asks: which edge multiplies the gradient by ~0?</p>
+<p><span class="tag">Computation graph</span> The computation graph is a DAG; backpropagation applies vector–Jacobian products in reverse topological order. A useful debugging question is: which operation multiplies this gradient by nearly zero? This graph of computational dependencies is not the relational data graph studied in Graph ML.</p>
 </div>
 <h2 id="ch4">4. Activations: identity vs sigmoid vs ReLU</h2>
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img src="schema-activations.svg" style="width:100.0%" alt="Activation curves"></p>
-<figcaption>Identity vs sigmoid vs ReLU</figcaption>
+<p><img src="schema-activations.svg" style="width:100.0%" alt="Identity, sigmoid and ReLU activation curves, with output use in the notebook distinguished from hidden-layer use in the extension."></p>
+<figcaption>Identity, sigmoid and ReLU curves. In the reference notebook these choices act at the output; in the multilayer example ReLU acts in the hidden layer, followed by an affine CE head.</figcaption>
 </figure>
 </div>
 <div class="def">
-<p><span class="tag">Definition 4.1 — Common activations</span> <span class="math inline">\mathrm{ReLU}(z)=\max(z,0)</span>, <span class="math inline">\sigma(z)=(1+e^{-z})^{-1}</span>, identity <span class="math inline">\mathrm{id}(z)=z</span>. Derivatives: <span class="math inline">\mathrm{ReLU}'=\mathbf{1}_{z&gt;0}</span>, <span class="math inline">\sigma'=\sigma(1-\sigma)</span>, <span class="math inline">\mathrm{id}'=1</span>.</p>
+<p><span class="tag">Definition 4.1 — Common activations</span> <span class="math inline">\mathrm{ReLU}(z)=\max(z,0)</span>, <span class="math inline">\sigma(z)=(1+e^{-z})^{-1}</span>, identity <span class="math inline">\mathrm{id}(z)=z</span>. Derivatives: <span class="math inline">\mathrm{ReLU}'=\mathbf{1}_{z&gt;0}</span>, <span class="math inline">\sigma'=\sigma(1-\sigma)</span>, <span class="math inline">\mathrm{id}'=1</span>. At the ReLU kink <span class="math inline">z=0</span>, the code uses derivative 0.</p>
 </div>
 <p>Qualitative map to the notebook (<a href="https://github.com/knoel99/MNIST">MNIST_from_scratch</a>):</p>
 <table class="caption-top">
@@ -511,139 +728,284 @@ e^{0.225}\approx 1.2523,\quad e^{0.19}\approx 1.2092,\quad
 <tbody>
 <tr class="odd">
 <td>identity</td>
-<td>linear</td>
-<td>outputs not bounded; MSE still defined</td>
+<td>linear activation</td>
+<td>affine output scores are not bounded; MSE is still defined</td>
 </tr>
 <tr class="even">
 <td>sigmoid</td>
-<td>flat for <span class="math inline">\|z\|\gg 0</span></td>
+<td>nearly flat for <span class="math inline">\lvert z\rvert\gg1</span></td>
 <td>slow updates when saturated; loss may stall</td>
 </tr>
 <tr class="odd">
 <td>ReLU</td>
-<td>zero on negatives</td>
-<td>sparse hidden/output activity; “dead” channels if always ≤0</td>
+<td>zero on negative inputs</td>
+<td>sparse output activity in the notebook, or hidden activity in an extension; inactive channels if pre-activations stay nonpositive</td>
 </tr>
 </tbody>
 </table>
-<p><code>plot_training_insights</code> also tracks selected pixel→class weights over epochs — useful to see whether learning concentrates on stroke pixels (center) vs background (corners). Prefer the notebook’s own loss/accuracy figures over memorized percentages; re-run locally if a number is needed for a report.</p>
+<p><code>plot_training_insights</code> also tracks selected pixel→class weights over epochs — useful for checking whether learning concentrates on stroke pixels near the center rather than background corners. Prefer the notebook’s own loss/accuracy figures over memorized percentages; rerun locally if a number is needed for a report.</p>
+<p>Output activation and hidden nonlinearity have different roles. Stacking affine maps with <strong>identity hidden activations</strong> still gives a single affine map:</p>
+<p><span class="math display">
+(XW^{(1)}+b^{(1)})W^{(2)}+b^{(2)}
+=
+X(W^{(1)}W^{(2)})+(b^{(1)}W^{(2)}+b^{(2)}).
+</span></p>
+<p>A hidden nonlinearity prevents this collapse and allows a richer representation. Learning to train that representation is an extension beyond choosing an activation on the notebook’s ten outputs.</p>
 <h3 id="initialization">4.1. Initialization</h3>
-<p>If <span class="math inline">W_{ij}\sim\mathcal{N}(0,1)</span> at large width, pre-activations explode (variance ∝ fan-in). <strong>He</strong> (ReLU): <span class="math inline">\mathrm{Var}=2/\mathrm{fan\_in}</span>. <strong>Xavier</strong> (tanh/sigmoid): <span class="math inline">1/\mathrm{fan\_in}</span> (or <span class="math inline">2/(\mathrm{fan\_in}+\mathrm{fan\_out})</span>).</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">0</span>)</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>W1 <span class="op">=</span> rng.normal(<span class="dv">0</span>, np.sqrt(<span class="dv">2</span> <span class="op">/</span> <span class="dv">784</span>), size<span class="op">=</span>(<span class="dv">784</span>, <span class="dv">128</span>))  <span class="co"># He</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>W2 <span class="op">=</span> rng.normal(<span class="dv">0</span>, np.sqrt(<span class="dv">2</span> <span class="op">/</span> <span class="dv">128</span>), size<span class="op">=</span>(<span class="dv">128</span>, <span class="dv">10</span>))</span></code></pre></div>
+<p>If <span class="math inline">W_{ij}\sim\mathcal{N}(0,1)</span>, pre-activation variance can grow with fan-in. Under an independent, unit-variance input approximation,</p>
+<p><span class="math display">
+\mathrm{Var}(z_j)\approx \mathrm{fan\_in}\,\mathrm{Var}(W_{ij}).
+</span></p>
+<p>At fan-in 784, unit-variance weights give a scale near variance 784, or standard deviation 28 — enough to push many sigmoid outputs into saturation.</p>
+<p>Common scale choices:</p>
+<ul>
+<li><strong>He</strong> for ReLU: <span class="math inline">\mathrm{Var}(W_{ij})=2/\mathrm{fan\_in}</span>.</li>
+<li><strong>Xavier</strong> for tanh/sigmoid: <span class="math inline">\mathrm{Var}(W_{ij})=1/\mathrm{fan\_in}</span>, or <span class="math inline">2/(\mathrm{fan\_in}+\mathrm{fan\_out})</span>.</li>
+</ul>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>rng <span class="op">=</span> np.random.default_rng(<span class="dv">0</span>)</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>W1 <span class="op">=</span> rng.normal(<span class="dv">0</span>, np.sqrt(<span class="dv">2</span> <span class="op">/</span> <span class="dv">784</span>), size<span class="op">=</span>(<span class="dv">784</span>, <span class="dv">128</span>))  <span class="co"># He for ReLU</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>W2 <span class="op">=</span> rng.normal(<span class="dv">0</span>, np.sqrt(<span class="dv">2</span> <span class="op">/</span> <span class="dv">128</span>), size<span class="op">=</span>(<span class="dv">128</span>, <span class="dv">10</span>))   <span class="co"># illustrative head scale</span></span></code></pre></div>
+<p>The second line is an illustrative classifier initialization, not a rule that every affine output head requires He scaling. These variance arguments control initial scale under assumptions; they do not guarantee healthy gradients throughout a deep model.</p>
 <h2 id="ch5">5. Optimization in practice (SGD → Adam)</h2>
 <div class="def">
-<p><span class="tag">Definition 5.1 — Mini-batch SGD</span> <span class="math display">\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t).</span></p>
+<p><span class="tag">Definition 5.1 — Mini-batch SGD</span> <span class="math display">
+\theta_{t+1} = \theta_t - \eta \nabla_\theta \hat{\mathcal{R}}_{B_t}(\theta_t).
+</span> Here <span class="math inline">B_t</span> is the set of examples in the current mini-batch, <span class="math inline">\theta</span> contains all weights and biases, and the batch loss uses the declared reduction.</p>
 </div>
-<p><strong>Momentum</strong>: <span class="math inline">v\leftarrow\mu v+\nabla</span>, <span class="math inline">\theta\leftarrow\theta-\eta v</span>. <strong>Adam</strong>: first/second moments + bias correction — a sensible default once shapes are trusted; still not an excuse to ignore <span class="math inline">\eta</span> (Experiment 2.2).</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> adam(param, grad, m, v, t, lr<span class="op">=</span><span class="fl">1e-3</span>, beta1<span class="op">=</span><span class="fl">0.9</span>, beta2<span class="op">=</span><span class="fl">0.999</span>, eps<span class="op">=</span><span class="fl">1e-8</span>):</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    m <span class="op">=</span> beta1 <span class="op">*</span> m <span class="op">+</span> (<span class="dv">1</span> <span class="op">-</span> beta1) <span class="op">*</span> grad</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> beta2 <span class="op">*</span> v <span class="op">+</span> (<span class="dv">1</span> <span class="op">-</span> beta2) <span class="op">*</span> (grad <span class="op">*</span> grad)</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    mhat <span class="op">=</span> m <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> beta1 <span class="op">**</span> t)</span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    vhat <span class="op">=</span> v <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> beta2 <span class="op">**</span> t)</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> param <span class="op">-</span> lr <span class="op">*</span> mhat <span class="op">/</span> (np.sqrt(vhat) <span class="op">+</span> eps), m, v</span></code></pre></div>
+<p><strong>Momentum</strong> accumulates a velocity. Writing <span class="math inline">g_t</span> for the current gradient,</p>
+<p><span class="math display">
+v_{\mathrm{mom}}\leftarrow\mu v_{\mathrm{mom}}+g_t,\qquad
+\theta\leftarrow\theta-\eta v_{\mathrm{mom}}.
+</span></p>
+<p><strong>Adam</strong> maintains first and second moments with bias correction. It is a useful default once shapes and derivatives are trusted, but it does not remove the need to choose a learning rate or inspect loss scaling.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> adam(param, grad, m, v, t, lr<span class="op">=</span><span class="fl">1e-3</span>, beta1<span class="op">=</span><span class="fl">0.9</span>, beta2<span class="op">=</span><span class="fl">0.999</span>, eps<span class="op">=</span><span class="fl">1e-8</span>):</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    m <span class="op">=</span> beta1 <span class="op">*</span> m <span class="op">+</span> (<span class="dv">1</span> <span class="op">-</span> beta1) <span class="op">*</span> grad</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    v <span class="op">=</span> beta2 <span class="op">*</span> v <span class="op">+</span> (<span class="dv">1</span> <span class="op">-</span> beta2) <span class="op">*</span> (grad <span class="op">*</span> grad)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>    mhat <span class="op">=</span> m <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> beta1 <span class="op">**</span> t)</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>    vhat <span class="op">=</span> v <span class="op">/</span> (<span class="dv">1</span> <span class="op">-</span> beta2 <span class="op">**</span> t)</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> param <span class="op">-</span> lr <span class="op">*</span> mhat <span class="op">/</span> (np.sqrt(vhat) <span class="op">+</span> eps), m, v</span></code></pre></div>
+<p>Read the state and hyperparameters literally:</p>
+<ul>
+<li><code>lr</code> is the step-size multiplier.</li>
+<li><code>beta1</code> controls smoothing of the gradient; <code>beta2</code> controls smoothing of its elementwise square.</li>
+<li><code>m</code> and <code>v</code> are persistent, parameter-shaped states. Adam’s <code>v</code> is a second-moment estimate, not the momentum velocity above.</li>
+<li><code>t</code> starts at 1 and counts optimizer steps; use the same step number for all parameters updated together.</li>
+<li><code>eps</code> protects the denominator; it is not a general cure for unstable training.</li>
+</ul>
+<p>Initialize <code>m</code> and <code>v</code> to zero for each parameter, retain the returned states between steps, and reset them between independent experimental runs. Return to Experiment 2.2 to compare observed behavior rather than assuming Adam must win.</p>
 <h2 id="ch6">6. Short bridge: attention intuition</h2>
-<p>Goal: <em>not</em> to train an LLM. Only see that attention is a <span class="math inline">T\times T</span> pattern of weights.</p>
+<p>Goal: <strong>not</strong> to train an LLM. Only see how attention creates a <span class="math inline">T\times T</span> pattern of weights and uses it to mix values.</p>
+<p>For example, a row of weights <span class="math inline">(0.1,0.2,0.6,0.1)</span> produces the weighted combination <span class="math inline">0.1V_0+0.2V_1+0.6V_2+0.1V_3</span>. The third position contributes most; the weights in that row sum to one.</p>
+<p>Let <span class="math inline">T</span> be the number of positions, <span class="math inline">d</span> the query/key dimension, and <span class="math inline">d_v</span> the value dimension:</p>
+<p><span class="math display">
+Q,K\in\mathbb{R}^{T\times d},\qquad
+V\in\mathbb{R}^{T\times d_v}.
+</span></p>
 <div class="def">
-<p><span class="tag">Definition 6.1 — Attention (single head)</span> <span class="math display">\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\Big(\frac{QK^\top}{\sqrt{d}}\Big)V.</span></p>
+<p><span class="tag">Definition 6.1 — Attention (single head)</span> <span class="math display">
+\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\Big(\frac{QK^\top}{\sqrt{d}}\Big)V.
+</span> Softmax acts across key positions in each row. The weight matrix has shape <span class="math inline">(T,T)</span> and the output has shape <span class="math inline">(T,d_v)</span>.</p>
 </div>
 <div class="quarto-figure quarto-figure-center">
 <figure>
-<p><img src="schema-attention-heatmap.svg" style="width:60.0%" alt="4x4 attention weights"></p>
-<figcaption>Toy <span class="math inline">T\times T</span> attention heatmap</figcaption>
+<p><img src="schema-attention-heatmap.svg" style="width:60.0%" alt="A schematic 4 by 4 attention heatmap showing weights across positions."></p>
+<figcaption>Illustrative attention weights for T=4. Rows weight key positions for each query; this is not a trained MNIST component or a complete causal language model.</figcaption>
 </figure>
 </div>
-<div class="sourceCode" id="cb7"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> attention(Q, K, V):</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> Q.shape[<span class="dv">1</span>]</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> (Q <span class="op">@</span> K.T) <span class="op">/</span> np.sqrt(d)</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> softmax(scores[<span class="va">None</span>, :, :])[<span class="dv">0</span>]</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> weights <span class="op">@</span> V, weights</span></code></pre></div>
-<p>A transformer block ≈ LayerNorm → attention → residual → LayerNorm → MLP → residual. Same CE family as classification; attention adds routing across positions.</p>
-<h2 id="ch7">7. Where this sits in the LLGA path</h2>
+<p>Using the stable row-wise softmax helper from §2:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> attention(Q, K, V):</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>    d <span class="op">=</span> Q.shape[<span class="dv">1</span>]</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    scores <span class="op">=</span> (Q <span class="op">@</span> K.T) <span class="op">/</span> np.sqrt(d)   <span class="co"># (T, T)</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>    weights <span class="op">=</span> softmax(scores, axis<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> weights <span class="op">@</span> V, weights</span></code></pre></div>
+<p>A common <strong>pre-normalized</strong> transformer block is approximately LayerNorm → attention → residual → LayerNorm → MLP → residual. Learned projections, multiple heads, batching and these surrounding operations require further practice in Deep Learning.</p>
+<p>Token prediction uses the same CE family as classification, but adds a sequence task: tokenization, per-position targets, target shifting, causal masking and sequence evaluation. None of those is supplied by the affine MNIST notebook or by this attention function.</p>
+<p>Attention provides an intuition for weighted aggregation. Whether an explicit relational graph improves a text model is a separate empirical question — central to the Extrapolons Graph × LLM route, not answered by an attention heatmap.</p>
+<h2 id="ch7">7. Connections, limits and exit routes</h2>
+<p>The following is an <strong>Extrapolons reading recommendation</strong>, not a statement of official prerequisites, elective status or curriculum equivalence.</p>
+<h3 id="exit-checkpoint">Exit checkpoint</h3>
+<p>Before leaving for layered-model work, check that you can:</p>
+<ol type="1">
+<li>Separate <strong>notebook scores → MSE / <code>argmax</code></strong> from <strong>extension logits → softmax CE</strong>, and explain the <span class="math inline">2/(BC)</span> MSE factor: <a href="#mnist-scores">§1.1</a>, <a href="#losses">§2.2</a>, <a href="#affine-backprop">§3.1</a>, Exercise 2.</li>
+<li>Reproduce the tiny forward and hidden ReLU mask, with correctly shaped gradients: <a href="#tiny-forward">§2.1</a>, <a href="#two-layer-backprop">§3.2</a>, Exercises 1–4.</li>
+<li>Report a controlled learning-rate comparison without inferring generalization from training loss alone: <a href="#notebook-comparison">§1.3</a>, <a href="#losses">Experiment 2.2</a>, Exercise 6.</li>
+</ol>
+<p>These are <strong>entry checks for further study</strong>, not evidence of completing Deep Learning.</p>
 <table class="caption-top">
 <thead>
 <tr class="header">
-<th style="text-align: left;">Stage</th>
-<th style="text-align: left;">Module</th>
-<th style="text-align: left;">What this refresher prepares</th>
+<th>Reading stage</th>
+<th>Exit destination and purpose</th>
+<th>What this refresher supplies — and what remains</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td style="text-align: left;">P1 refreshers</td>
-<td style="text-align: left;">Stats · CS</td>
-<td style="text-align: left;">Already in place</td>
+<td>Refreshers on demand</td>
+<td><a href="../m1p1-refresher-statistics/index.html">Refresher Statistics</a> · <a href="../m1p1-refresher-cs/index.html">Refresher CS</a></td>
+<td>Revisit uncertainty, evaluation or implementation only where the positioning tasks expose a gap. Neither refresher is assumed complete.</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">P1 core</td>
-<td style="text-align: left;">Machine Learning</td>
-<td style="text-align: left;">Empirical risk, regularization, SGD</td>
+<td>Evaluation first</td>
+<td><a href="../../index.html">Machine Learning entry on the course map</a></td>
+<td>Carry empirical risk and a reproducible affine baseline. Develop validation, regularization, model comparison and leakage controls.</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;"><strong>Here</strong></td>
-<td style="text-align: left;"><strong>Refresher Neural Nets (not in brochure)</strong></td>
-<td style="text-align: left;">Solid MLP + attention intuition</td>
+<td>Layered models next</td>
+<td><a href="../m1p1-deep-learning/index.html">Deep Learning — continue from manual gradients to trained representations</a></td>
+<td>Carry the two-layer calculation and optimizer diagnostics. Implement and evaluate layered models with autodiff, training/evaluation states and appropriate architectures.</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">P1 key elective</td>
-<td style="text-align: left;">Deep Learning</td>
-<td style="text-align: left;">CNNs, RNNs, real transformers</td>
+<td>Relational branch</td>
+<td><a href="../../index.html">Graph ML entry on the course map</a></td>
+<td>Carry batched affine maps, nonlinear composition and gradient checks. Learn data-graph representations, message passing, relational splits and feature-only baselines.</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">P2</td>
-<td style="text-align: left;">Graph ML · NLP</td>
-<td style="text-align: left;">Message passing ↔︎ attention</td>
+<td>Text branch, coordinated with Graph ML</td>
+<td><a href="../../index.html">NLP entry on the course map</a></td>
+<td>Carry softmax/CE and the optional attention intuition. Learn text representations, tokenization, sequence targets and sequence evaluation.</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">M2</td>
-<td style="text-align: left;">Large Language Models</td>
-<td style="text-align: left;">Pretrain, alignment, scaling</td>
+<td>Graph × LLM continuation</td>
+<td><a href="../../index.html">Large Language Models and Advanced GNN entries on the course map</a></td>
+<td>Build on the two branches before evaluating coupling choices, graph expressivity, scaling and language-model objectives. This refresher is not a direct substitute for those steps.</td>
 </tr>
 </tbody>
 </table>
+<p>For a concrete <strong>next Deep Learning experiment</strong>, implement the <span class="math inline">2\to2\to2</span> example with automatic differentiation and compare its gradients to §3.2 before scaling up. Then train a hidden-layer MNIST model under a fixed split and compare it with the affine baseline. Reproduce the computation first; ask whether the added representation improves held-out results second.</p>
+<p>For <strong>Graph ML</strong>, keep the same discipline: compare a feature-only baseline with relational aggregation under an appropriate fixed split. A graph can introduce leakage or complexity without adding predictive signal. Later Graph × LLM work should test whether relational information improves over a text-only baseline, including cases where it does not.</p>
+<p>Optimal Transport and Geometric DL can provide complementary tools when the problem calls for them. OT, TDA and RL are not universal prerequisites for LLMs, privacy or tool-using agents. Further graph-generation, engineering and security reading should be selected around the system being evaluated. Internship, transverse and exit pages serve as places to synthesize independent work proposals, not as obligations created by this refresher.</p>
 <div class="recap">
-<p><span class="tag">Recap</span> The notebook path (digits → flatten → activation choice → MSE train → plots) is the empirical spine. Expanded forwards/backprops and one attention heatmap are enough to open Deep Learning without cloning nanoGPT.</p>
+<p><span class="tag">Recap</span> The empirical spine is <strong>digits → flatten → affine map → optional output activation → scores → MSE training / <code>argmax</code> evaluation</strong>. The expanded multilayer forward/backward and attention heatmap extend that starting point. Use the checkpoints to enter ML, DL or Graph ML selectively; continue practising layered models, autodiff and sequences rather than treating this on-ramp as their replacement.</p>
 </div>
-<div id="ex">
-
-</div>
-<h3 id="exercises">Exercises</h3>
+<h2 id="ex">Exercises</h2>
 <ol type="1">
-<li><p><strong>MNIST shapes.</strong> For <span class="math inline">B=64</span>, <span class="math inline">H=256</span>, write shapes of <span class="math inline">x,W^{(1)},z^{(1)},h,W^{(2)},\hat p</span> and FLOPs order of magnitude for one forward.</p>
+<li><p><strong>MNIST shapes.</strong> For <span class="math inline">B=64</span>, <span class="math inline">H=256</span>, write shapes of <span class="math inline">x,W^{(1)},z^{(1)},h,W^{(2)},\hat p</span> and the FLOPs order of magnitude for one forward in the <strong>multilayer extension</strong>. Contrast this with the affine notebook model.</p>
 <div class="sol">
-<p><span class="math inline">x:(64,784)</span>, <span class="math inline">W^{(1)}:(784,256)</span>, <span class="math inline">z^{(1)},h:(64,256)</span>, <span class="math inline">W^{(2)}:(256,10)</span>, <span class="math inline">\hat p:(64,10)</span>. Dominant cost <span class="math inline">\approx 64\cdot(784\cdot 256+256\cdot 10)\approx 1.3\cdot 10^7</span> mul-adds.</p>
+<p><span class="math inline">x:(64,784)</span>, <span class="math inline">W^{(1)}:(784,256)</span>, <span class="math inline">z^{(1)},h:(64,256)</span>, <span class="math inline">W^{(2)}:(256,10)</span>, <span class="math inline">\hat p:(64,10)</span>.</p>
+<p>The dominant cost is <span class="math display">
+64\cdot(784\cdot256+256\cdot10)
+\approx1.3\cdot10^7
+</span> multiply-adds, or about <span class="math inline">2.6\cdot10^7</span> FLOPs if a multiplication and an addition count separately.</p>
+<p>The notebook instead uses <span class="math inline">W:(784,10)</span>, <span class="math inline">b:(1,10)</span> and scores <span class="math inline">(64,10)</span>, with no hidden tensor. Its dominant affine cost is <span class="math inline">64\cdot784\cdot10=501{,}760</span> multiply-adds. Bias additions and activation costs are smaller here.</p>
 </div></li>
-<li><p><strong>Numerical one-layer step.</strong> With <span class="math inline">x=(1,0)</span>, <span class="math inline">W=\begin{pmatrix}0.5&amp;0.1\\0.2&amp;-0.4\end{pmatrix}</span>, identity, <span class="math inline">y=(1,0)</span>, <span class="math inline">\eta=0.01</span>, recompute the updated <span class="math inline">W</span> from the table in §3.1.</p>
+<li><p><strong>Numerical one-layer step.</strong> With <span class="math inline">x=(1,0)</span>, <span class="math inline">W=\begin{pmatrix}0.5&amp;0.1\\0.2&amp;-0.4\end{pmatrix}</span>, <span class="math inline">b=(0,0)</span>, identity, <span class="math inline">y=(1,0)</span> and <span class="math inline">\eta=0.01</span>, recompute the updated <span class="math inline">W</span> from §3.1. State the MSE reduction. What prediction-gradient factor would an all-entry mean use for <span class="math inline">B=64</span>, <span class="math inline">C=10</span>?</p>
 <div class="sol">
-<p><span class="math inline">W\leftarrow\begin{pmatrix}0.505&amp;0.099\\0.2&amp;-0.4\end{pmatrix}</span>.</p>
+<p>Here <span class="math inline">B=1</span>, <span class="math inline">C=2</span>, so <span class="math display">
+d_z=\frac{2}{2}(-0.5,0.1)=(-0.5,0.1),\qquad
+dW=\begin{pmatrix}-0.5&amp;0.1\\0&amp;0\end{pmatrix}.
+</span> Thus <span class="math display">
+W\leftarrow\begin{pmatrix}0.505&amp;0.099\\0.2&amp;-0.4\end{pmatrix}.
+</span> The loss averages over both output entries. If the bias is updated too, <span class="math inline">b\leftarrow(0.005,-0.001)</span>.</p>
+<p>For <span class="math inline">B=64</span>, <span class="math inline">C=10</span>, the factor is <span class="math inline">2/(BC)=2/640=0.003125</span>. It is already included before multiplying by <span class="math inline">X^\top</span>.</p>
 </div></li>
-<li><p><strong>Softmax-CE gradient.</strong> Show <span class="math inline">\nabla_z \ell = p-y</span> for one-hot <span class="math inline">y</span>; check with finite differences on a 3-vector.</p>
+<li><p><strong>Softmax-CE gradient.</strong> Show <span class="math inline">\nabla_z\ell=p-y</span> for one-hot <span class="math inline">y</span>; check with finite differences on a 3-vector.</p>
 <div class="sol">
-<p>Direct differentiation of <span class="math inline">-\sum_k y_k\log p_k</span> with <span class="math inline">p=\mathrm{softmax}(z)</span> yields <span class="math inline">p-y</span>.</p>
+<p>With <span class="math inline">p=\mathrm{softmax}(z)</span>, <span class="math display">
+\frac{\partial p_k}{\partial z_j}=p_k(\mathbf{1}_{k=j}-p_j).
+</span> Direct differentiation gives <span class="math display">
+\frac{\partial\ell}{\partial z_j}
+=-\sum_k y_k(\mathbf{1}_{k=j}-p_j)
+=-y_j+p_j\sum_k y_k
+=p_j-y_j.
+</span></p>
+<p>For <span class="math inline">z=(0.2,-0.1,0.4)</span> and <span class="math inline">y=(0,0,1)</span>, <span class="math display">
+p\approx(0.337585,\ 0.250089,\ 0.412327),\qquad
+\nabla_z\ell\approx(0.337585,\ 0.250089,\ -0.587673).
+</span></p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>z <span class="op">=</span> np.array([<span class="fl">0.2</span>, <span class="op">-</span><span class="fl">0.1</span>, <span class="fl">0.4</span>], dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> np.array([<span class="fl">0.0</span>, <span class="fl">0.0</span>, <span class="fl">1.0</span>])</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> ce_from_logits(z, y):</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    shifted <span class="op">=</span> z <span class="op">-</span> np.<span class="bu">max</span>(z)</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>    log_p <span class="op">=</span> shifted <span class="op">-</span> np.log(np.exp(shifted).<span class="bu">sum</span>())</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">-</span>np.<span class="bu">sum</span>(y <span class="op">*</span> log_p)</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>eps <span class="op">=</span> <span class="fl">1e-5</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>finite_difference <span class="op">=</span> np.zeros_like(z)</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(z.size):</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>    step <span class="op">=</span> np.zeros_like(z)</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    step[j] <span class="op">=</span> eps</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    finite_difference[j] <span class="op">=</span> (</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>        ce_from_logits(z <span class="op">+</span> step, y) <span class="op">-</span> ce_from_logits(z <span class="op">-</span> step, y)</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    ) <span class="op">/</span> (<span class="dv">2</span> <span class="op">*</span> eps)</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>analytic <span class="op">=</span> softmax(z) <span class="op">-</span> y</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(analytic, finite_difference)</span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(np.allclose(analytic, finite_difference, atol<span class="op">=</span><span class="fl">1e-7</span>))</span></code></pre></div>
+<p>This is one example. For a batch-mean CE, divide each example’s logit gradient by <span class="math inline">B</span>.</p>
 </div></li>
-<li><p><strong>Hand backprop (scalar).</strong> <span class="math inline">y=\sigma(w_2\sigma(w_1 x))</span>, <span class="math inline">\mathcal{L}=\tfrac12(y-t)^2</span>, at <span class="math inline">x=1,t=0,w_1=w_2=1</span>. Compute <span class="math inline">\partial\mathcal{L}/\partial w_1</span> and <span class="math inline">\partial\mathcal{L}/\partial w_2</span>.</p>
+<li><p><strong>Hand backprop (scalar).</strong> <span class="math inline">y=\sigma(w_2\sigma(w_1x))</span>, <span class="math inline">\mathcal{L}=\tfrac12(y-t)^2</span>, at <span class="math inline">x=1,t=0,w_1=w_2=1</span>. Compute <span class="math inline">\partial\mathcal{L}/\partial w_1</span> and <span class="math inline">\partial\mathcal{L}/\partial w_2</span>.</p>
 <div class="sol">
-<p><span class="math inline">y\approx 0.675</span>, <span class="math inline">\partial\mathcal{L}/\partial w_2\approx 0.108</span>, <span class="math inline">\partial\mathcal{L}/\partial w_1\approx 0.029</span>.</p>
+<p>Let <span class="math inline">h=\sigma(w_1x)\approx0.7311</span>, so <span class="math inline">y=\sigma(w_2h)\approx0.675</span>.</p>
+<p><span class="math display">
+\frac{\partial\mathcal{L}}{\partial w_2}
+=(y-t)y(1-y)h\approx0.108,
+</span> <span class="math display">
+\frac{\partial\mathcal{L}}{\partial w_1}
+=(y-t)y(1-y)w_2h(1-h)x\approx0.029.
+</span></p>
+<p>The extra local derivative <span class="math inline">h(1-h)</span> explains why the first weight receives a smaller gradient in this example.</p>
 </div></li>
-<li><p><strong>Saturation.</strong> Bad <span class="math inline">\mathcal{N}(0,1)</span> init + sigmoid on a deep stack; then fix with He/ReLU. Report whether <span class="math inline">\|\delta^{(\ell)}\|</span> recovers.</p>
+<li><p><strong>Saturation.</strong> Use a bad <span class="math inline">\mathcal{N}(0,1)</span> initialization with sigmoid on a deep stack; then try He initialization with ReLU. Report whether <span class="math inline">\|\delta^{(\ell)}\|</span> recovers across layers. Keep the data and widths fixed.</p>
 <div class="sol">
-<p>Large variance saturates <span class="math inline">\sigma</span>; He+ReLU restores nonzero ReLU’ on a positive fraction of units.</p>
+<p>Large pre-activation variance can saturate <span class="math inline">\sigma</span>, making its derivative nearly zero. He scaling with ReLU aims to control activation variance and retain nonzero local derivatives on a positive fraction of units.</p>
+<p>Gradient norms may improve, but recovery is not guaranteed at every depth or learning rate. Plot norms by layer rather than declaring the issue fixed. This comparison changes both initialization and activation; separate controls are needed to attribute the improvement to either one alone.</p>
 </div></li>
-<li><p><strong>Experiment 2.2 write-up.</strong> Attach the three loss curves (<span class="math inline">\eta=3</span>, <span class="math inline">10^{-3}</span>, Adam <span class="math inline">10^{-3}</span>) and label explosion / slow / smooth.</p>
+<li><p><strong>Experiment 2.2 write-up.</strong> Attach the three stress-test loss curves (<span class="math inline">\eta=3</span>, <span class="math inline">10^{-3}</span>, Adam <span class="math inline">10^{-3}</span>), and keep the <span class="math inline">\eta=0.01</span> notebook baseline for context. Label observed explosion / slow descent / smooth descent only where the measurements support those descriptions.</p>
 <div class="sol">
-<p>Match panels of <code>schema-grad-regimes.svg</code>; Adam often reduces early noise vs SGD at the same lr.</p>
+<p>Compare the curves with <code>schema-grad-regimes.svg</code>. Report the architecture, seed, batch size, reduction and split alongside them.</p>
+<p>Adam may produce smoother early progress than SGD at the same nominal learning rate, but this is not guaranteed. If <span class="math inline">\eta=3</span> remains stable, report that result rather than forcing an “explosion” label. If a curve is flat, use gradient norms and activation statistics to distinguish small steps from saturation. Five epochs are a diagnostic window, not a generalization study.</p>
 </div></li>
-<li><p><strong>Toy attention.</strong> <span class="math inline">T=5</span>, <span class="math inline">d=16</span>; force <span class="math inline">K_2</span> aligned with <span class="math inline">Q_0</span>; check row&nbsp;0 of weights concentrates on column&nbsp;2.</p>
+<li><p><strong>Toy attention.</strong> <span class="math inline">T=5</span>, <span class="math inline">d=16</span>; force <span class="math inline">K_2</span> to align positively with <span class="math inline">Q_0</span> and make its score larger than the other scores. Check that row 0 of the weights concentrates on column 2. Would that connection be allowed under a causal mask?</p>
 <div class="sol">
-<p>Large score <span class="math inline">(Q_0\cdot K_2)/\sqrt{d}</span> dominates the softmax row.</p>
+<p>A large score <span class="math inline">(Q_0\cdot K_2)/\sqrt{d}</span> dominates its softmax row. Alignment alone is insufficient if other keys have still larger dot products.</p>
+<p>For example, if the five row scores are <span class="math inline">(0,0,5,0,0)</span>, then <span class="math display">
+A_{0,2}=\frac{e^5}{e^5+4}\approx0.9738.
+</span> Under a causal mask, query position 0 cannot attend to future position 2, so that weight would be zero. The helper in §6 is unmasked attention, not a complete autoregressive model.</p>
 </div></li>
-<li><p><strong>(Optional)</strong> Load saved <code>*_weights.npy</code> from a notebook run; print norms per output column — which digit class has largest <span class="math inline">\|W_{:,k}\|</span>?</p>
+<li><p><strong>(Optional)</strong> Load saved <code>*_weights.npy</code> from a notebook run; print norms per output column. Which digit class has the largest <span class="math inline">\|W_{:,k}\|</span>?</p>
 <div class="sol">
-<p>Depends on the run; the exercise is the measurement protocol, not a fixed ranking.</p>
+<p>For <span class="math inline">W</span> of shape <span class="math inline">(784,10)</span>:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>column_norms <span class="op">=</span> np.linalg.norm(W, axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(column_norms)</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"Largest-norm output column:"</span>, np.argmax(column_norms))</span></code></pre></div>
+<p>The ranking depends on the run; the exercise is the measurement protocol, not a fixed answer. A larger column norm does not by itself establish better class accuracy or calibration.</p>
 </div></li>
 </ol>
-<h2 id="refs">References</h2>
+<h2 id="refs">Sources, scope and references</h2>
+<h3 id="provenance-and-support-status">Provenance and support status</h3>
+<table class="caption-top">
+<thead>
+<tr class="header">
+<th>Source or scope</th>
+<th>What it establishes here</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Brochure status</strong></td>
+<td>Refresher Neural Nets is independent support outside the brochure, not a listed module with an asserted credit value or equivalence.</td>
+</tr>
+<tr class="even">
+<td><strong>Curriculum context</strong></td>
+<td>Related module names locate further study. Official status, timing, prerequisites and assessments belong to the published curriculum, not to the reading order proposed on this page.</td>
+</tr>
+<tr class="odd">
+<td><strong>Extrapolons recommendations</strong></td>
+<td>The suggested early placement, selective routes, exit checks and approximately 12–18 hours for the full route are self-study recommendations, not enrolment requirements or official workload.</td>
+</tr>
+<tr class="even">
+<td><strong>Empirical starting point</strong></td>
+<td><a href="https://github.com/knoel99/MNIST">knoel99/MNIST</a>, especially <code>MNIST_from_scratch.ipynb</code>: affine MNIST classification, alternative output activations, MSE, manual NumPy training and evaluation plots. Inspect the complete training method when checking reduction conventions.</td>
+</tr>
+<tr class="odd">
+<td><strong>Extrapolons additions</strong></td>
+<td>The worked <span class="math inline">2\to2\to2</span> extension, CE comparison, explicit backward tables, schematic figures, optimizer diagnostics, attention bridge and exercises. Hand calculations and schematic curves are not measured benchmark results.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="references">References</h3>
 <ul>
 <li>Goodfellow, Bengio, Courville, <em>Deep Learning</em>, MIT Press, 2016.</li>
 <li>Nielsen, <em>Neural Networks and Deep Learning</em> (online).</li>
@@ -651,6 +1013,7 @@ e^{0.225}\approx 1.2523,\quad e^{0.19}\approx 1.2092,\quad
 <li>Vaswani et al., <em>Attention Is All You Need</em>, NeurIPS 2017.</li>
 <li>Sibling notes: <a href="../m1p1-deep-learning/index.html">Deep Learning</a> · <a href="../m1p1-refresher-cs/index.html">Refresher CS</a> · <a href="../m1p1-refresher-statistics/index.html">Refresher Statistics</a>.</li>
 <li>Empirical starting point: <a href="https://github.com/knoel99/MNIST">knoel99/MNIST</a> (<code>MNIST_from_scratch.ipynb</code>).</li>
+<li><a href="../../index.html">Extrapolons course map</a>: continue to Machine Learning, Graph ML, NLP and the coordinated Graph × LLM reading path.</li>
 </ul>
 
 </main>
