@@ -74,6 +74,7 @@ site's reading guidance; the badge legend says so.
 - [x] Rev 2: quotas exact — both routes show exactly 3 bright in P1 choose-3 and 1 in P2 choose-1, 0 unmarked electives (gated)
 - [x] Rev 2: refreshers listed in the tree; official documentation section with 5 verified links
 - [x] Rev 3: TBC glossed on its own line before the Slot TBC legend entry; catalogue.html deleted with zero remaining links; one line per non-scientific module (gated, 402/402)
+- [x] Rev 4: path justification paragraph on button selection; coherence + exit-capabilities (+ FR redirects) deleted/merged as “Skill checkpoints” home section, after Official documentation, 5 questions; zero residual links (gated, 610/610)
 - [ ] Dark/mobile smoke (browser) — pending post-merge check (no browser in the build
       environment; dim/badge styles use theme variables only)
 
@@ -85,3 +86,15 @@ site's reading guidance; the badge legend says so.
 - Non-scientific modules get one line each in the tree: M1 · P1 sub-list
   (Strategy/Marketing, Sports, Humanities, Languages) and M2 transverse split
   (Humanities — 8 ECTS total with languages and sports / Languages / Sports).
+
+## Revision 4 (2026-09-07) — path justifications; satellites merged into home
+
+- **Path descriptions**: selecting a route button now shows a justification paragraph
+  (`#path-desc`, aria-live) under the buttons — why each preselection was made and the
+  target profile; hidden on Full curriculum.
+- **`coherence-2years/` deleted** (with its FR redirect `coherence-2ans/`): the home tree
+  is the only structural map. No page links the deleted dirs (gated).
+- **`exit-capabilities/` merged into home** as the **“Skill checkpoints”** section
+  (after Official documentation), reduced from ~17 questions to 5 representative ones;
+  FR redirect `capacites-sortie/` deleted. Fiche links retargeted to
+  `../../index.html#checkpoints`.

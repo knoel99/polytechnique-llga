@@ -18,7 +18,7 @@ Before merging a module / CSS refactor:
 
 - [ ] **Contract**: `specs/<module-id>.md` present (or updated) for a new course / rewrite > ~one screen.
 - [ ] **Pages**: `courses/<id>/index.qmd` (Quarto source) + rendered `courses/<id>/index.html` (English, at site root). See `specs/quarto-migration.md`.
-- [ ] **Index**: module reachable from root `index.html` — the home curriculum tree lists every module, plus the coherence/exit maps (see `specs/homepage-source-decision.md`, `specs/competency-tree.md`, `specs/path-preselection.md`); honest status.
+- [ ] **Index**: module reachable from root `index.html` — the home curriculum tree lists every module (see `specs/homepage-source-decision.md`, `specs/competency-tree.md`, `specs/path-preselection.md`); honest status.
 - [ ] **CSS**: dark (`prefers-color-scheme` / `data-theme`) + mobile (no blocking horizontal overflow; tables / code / KaTeX scrollable) checked on one course page + the index.
 - [ ] **Theme**: `assets/theme.js` loaded; toggle localStorage OK; UI strings in English.
 - [ ] **Pedagogy**: ≥ 6 exercises on science modules (non-science pages exempt, see `specs/non-science-pages.md`); NumPy primary if NN/ML module; full sentences in English.

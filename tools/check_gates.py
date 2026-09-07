@@ -117,10 +117,7 @@ for spec in sorted((ROOT / "specs").glob("*.md")):
 
 # --- Single structural source (specs/competency-tree.md) ----------------------
 # Structure pages never cite the brochure; the wiki is the only structural source.
-structure_pages = [
-    "index.html",
-    "coherence-2years/index.html", "exit-capabilities/index.html",
-]
+structure_pages = ["index.html"]
 for page in structure_pages:
     p = ROOT / page
     check(p.is_file(), f"structure: {page} present")
@@ -132,12 +129,29 @@ check(not (ROOT / "curriculum.html").exists(),
 check(not (ROOT / "catalogue.html").exists(),
       "catalogue.html deleted (home tree is the full module index)")
 
-NON_SCI = ["m1p1-strategy-marketing", "m1-sports", "m1-humanites", "m1-langues"]
-for page in [ROOT / "index.html"] + list(ROOT.glob("courses/*/index.html")) + [
-        ROOT / "coherence-2years/index.html", ROOT / "exit-capabilities/index.html"]:
+# Satellite pages deleted (rev 4): coherence + exit-capabilities (+ FR redirects)
+for gone in ["coherence-2years", "coherence-2ans", "exit-capabilities", "capacites-sortie"]:
+    check(not (ROOT / gone).exists(), f"{gone}/ deleted")
+FORBIDDEN = ["catalogue.html", "coherence-2years/", "exit-capabilities/",
+             "coherence-2ans/", "capacites-sortie/"]
+all_pages = list(ROOT.glob("*.html")) + list(ROOT.glob("courses/*/index.html")) + [ROOT / "en/index.html"]
+for page in all_pages:
     if page.is_file():
-        check("catalogue.html" not in read(page),
-              f"no catalogue.html link in {page.relative_to(ROOT)}")
+        content = read(page)
+        for f_ in FORBIDDEN:
+            check(f_ not in content, f"no {f_} link in {page.relative_to(ROOT)}")
+
+# Path descriptions (rev 4): justification paragraph wired to the buttons
+home = read(ROOT / "index.html")
+check('id="path-desc"' in home, "home: path description paragraph present")
+check("generative spine" in home and "deployment spine" in home,
+      "home: both route justifications written")
+check('aria-live="polite"' in home, "home: path description announced politely")
+
+# Skill checkpoints section (ex exit-capabilities), after Official documentation
+check('id="checkpoints"' in home, "home: skill checkpoints section present")
+check(home.find('id="official"') < home.find('id="checkpoints"'),
+      "home: checkpoints section after official documentation")
 
 home = read(ROOT / "index.html")
 check('class="badge mandatory"' in home, "home: official Mandatory badges")
