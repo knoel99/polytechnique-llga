@@ -26,12 +26,30 @@ site's reading guidance; the badge legend says so.
 
 ## Mechanics
 
-- Elective tree items carry `data-p="gllm sys"` (space-separated). Selecting a path sets
-  `data-path` on the tree container; non-matching elective items dim to 30 % opacity.
-  Pure CSS + a 10-line inline script; without JS the full tree shows.
+- Elective tree items carry `data-p` (space-separated route tags; `data-p=""` marks an
+  elective in no route — it dims under every route). Selecting a path sets `data-path`
+  on the tree container; non-matching elective items dim to 30 % opacity. **Every `li`
+  inside a choice group carries a marker** (gated), so the bright count per group can
+  never exceed the official quota. Pure CSS + a 10-line inline script; without JS the
+  full tree shows.
 - Both routes include Deep Learning, in different periods (P1 route 1, P2 variant route 2)
   so each preselection stays feasible against the official `Choose 3` / `Choose 1` rules.
 - `Mandatory (brochure)`-style conflicts stay settled per `specs/competency-tree.md`.
+
+## Revision 2 (2026-09-07) — exact quotas, refreshers, official docs
+
+- **Quota fix**: in the first version, unmarked electives stayed bright on every route
+  (inflating the visible count beyond `Choose N`), and the AI-systems route preselected
+  2 items in the `Choose 1` group. Now: every elective in a choice group carries
+  `data-p` (empty = in no route); gates enforce **exactly 3** bright per route in P1
+  choose-3 and **exactly 1** in P2 choose-1. AI systems: P2 choice = Deep Learning
+  (P2 variant); Optimization for AI demoted to no-route.
+- **Refreshers in the tree**: Refresher in Statistics + Refresher in Computer Science
+  (official pre-programme, badge “Pre-programme”) and Refresher Neural Nets
+  (independent, “Off-curriculum support”), at the top of M1 · P1.
+- **Official documentation section on the home page**: programme page, course content,
+  LLGA wiki + curriculum page (single structural source), SynapseS catalog 2026–2027,
+  application procedure — all URLs verified HTTP 200.
 
 ## Plan (files)
 
@@ -52,6 +70,8 @@ site's reading guidance; the badge legend says so.
 - [x] 3 path buttons; each path preselects a feasible set (Choose 3 / Choose 1 respected;
       DL-once satisfied via P1 for Graph × LLM, via the P2 variant for AI systems)
 - [x] Mandatory items never dimmed; no-JS shows the full tree
-- [x] `python3 tools/check_gates.py` passes (341/341); static link/HTML checks pass
+- [x] `python3 tools/check_gates.py` passes (353/353); static link/HTML checks pass
+- [x] Rev 2: quotas exact — both routes show exactly 3 bright in P1 choose-3 and 1 in P2 choose-1, 0 unmarked electives (gated)
+- [x] Rev 2: refreshers listed in the tree; official documentation section with 5 verified links
 - [ ] Dark/mobile smoke (browser) — pending post-merge check (no browser in the build
       environment; dim/badge styles use theme variables only)
