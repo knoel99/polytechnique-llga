@@ -18,3 +18,9 @@ Closes the open “after Pages rebuild” test-plan items of PRs #25 and #26:
 - [x] Live <https://knoel99.github.io/polytechnique-llga/> serves the single Graph × LLM map home (hero → Start here → route → Maps and index).
 - [x] Full module list on `catalogue.html`; official programme links in the footer only.
 - [x] No French text and no FR/EN switcher on the published home.
+
+## 2026-09-07 update
+
+`catalogue.html` is deleted; the home curriculum tree (one column, `specs/path-preselection.md`)
+is now the single full module list. Items 5–6 above are superseded; item 8's "Full module index"
+step is the home tree itself.

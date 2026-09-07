@@ -6,7 +6,7 @@ Exit code 0 = all gates pass; 1 = at least one gate failed.
 
 Checks (code-level proxies for the manual gates):
 - Pages: courses/<id>/index.qmd + rendered index.html, lang="en", theme.js loaded.
-- Index: every course linked from root index.html or catalogue.html (homepage-source-decision).
+- Index: every course linked from the root index.html curriculum tree.
 - No FR switcher on any published page.
 - Pedagogy: >= 6 exercises on science modules (specs/non-science-pages.md exempt);
   NumPy primary in the NN/ML refresher.
@@ -87,14 +87,14 @@ for cdir in course_dirs:
 check(nn_numpy_seen, "NN refresher: NumPy primary")
 
 # --- Root surface ------------------------------------------------------------
-root_pages = ["index.html", "catalogue.html"]
+root_pages = ["index.html"]
 for page in root_pages:
     p = ROOT / page
     check(p.is_file(), f"root: {page} present")
     if p.is_file():
         check(not FR_SWITCHER.search(read(p)), f"root: {page} no FR switcher")
 
-linked_from = read(ROOT / "index.html") + read(ROOT / "catalogue.html")
+linked_from = read(ROOT / "index.html")
 for cdir in course_dirs:
     check(f"courses/{cdir.name}/" in linked_from, f"index: {cdir.name} reachable")
 
@@ -118,7 +118,7 @@ for spec in sorted((ROOT / "specs").glob("*.md")):
 # --- Single structural source (specs/competency-tree.md) ----------------------
 # Structure pages never cite the brochure; the wiki is the only structural source.
 structure_pages = [
-    "index.html", "catalogue.html",
+    "index.html",
     "coherence-2years/index.html", "exit-capabilities/index.html",
 ]
 for page in structure_pages:
@@ -129,12 +129,21 @@ for page in structure_pages:
 
 check(not (ROOT / "curriculum.html").exists(),
       "curriculum.html deleted (tree lives on the home page)")
+check(not (ROOT / "catalogue.html").exists(),
+      "catalogue.html deleted (home tree is the full module index)")
 
-cat = read(ROOT / "catalogue.html")
-check('class="badge mandatory"' in cat, "catalogue: official Mandatory badges")
-check('class="badge choice"' in cat, "catalogue: official Choose-N badges")
-check("not yet published" in cat, "catalogue: M2 P2 honesty line")
-check("curriculum.html" not in cat, "catalogue: no link to the deleted curriculum.html")
+NON_SCI = ["m1p1-strategy-marketing", "m1-sports", "m1-humanites", "m1-langues"]
+for page in [ROOT / "index.html"] + list(ROOT.glob("courses/*/index.html")) + [
+        ROOT / "coherence-2years/index.html", ROOT / "exit-capabilities/index.html"]:
+    if page.is_file():
+        check("catalogue.html" not in read(page),
+              f"no catalogue.html link in {page.relative_to(ROOT)}")
+
+home = read(ROOT / "index.html")
+check('class="badge mandatory"' in home, "home: official Mandatory badges")
+check('class="badge choice"' in home, "home: official Choose-N badges")
+check("not yet published" in home, "home: M2 P2 honesty line")
+check("TBC = " in home, "home: TBC abbreviation glossed")
 
 # --- Home tree + path preselection (specs/path-preselection.md) ---------------
 home = read(ROOT / "index.html")
