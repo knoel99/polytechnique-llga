@@ -118,7 +118,7 @@ for spec in sorted((ROOT / "specs").glob("*.md")):
 # --- Single structural source (specs/competency-tree.md) ----------------------
 # Structure pages never cite the brochure; the wiki is the only structural source.
 structure_pages = [
-    "index.html", "catalogue.html", "curriculum.html",
+    "index.html", "catalogue.html",
     "coherence-2years/index.html", "exit-capabilities/index.html",
 ]
 for page in structure_pages:
@@ -127,18 +127,35 @@ for page in structure_pages:
     if p.is_file():
         check("brochure" not in read(p).lower(), f"structure: {page} brochure-free")
 
-cur = ROOT / "curriculum.html"
-check(cur.is_file(), "curriculum tree page present")
-if cur.is_file():
-    check("msct.dix.polytechnique.fr/llga/wiki" in read(cur),
-          "curriculum tree links the official wiki")
-check("curriculum.html" in read(ROOT / "index.html"),
-      "home links the curriculum tree")
+check(not (ROOT / "curriculum.html").exists(),
+      "curriculum.html deleted (tree lives on the home page)")
 
 cat = read(ROOT / "catalogue.html")
 check('class="badge mandatory"' in cat, "catalogue: official Mandatory badges")
 check('class="badge choice"' in cat, "catalogue: official Choose-N badges")
 check("not yet published" in cat, "catalogue: M2 P2 honesty line")
+check("curriculum.html" not in cat, "catalogue: no link to the deleted curriculum.html")
+
+# --- Home tree + path preselection (specs/path-preselection.md) ---------------
+home = read(ROOT / "index.html")
+check('id="curriculum-tree"' in home, "home: full curriculum tree present")
+check("tree-cols" not in home, "home: tree is single-column")
+buttons = home.count('data-path=')
+check(buttons == 3, "home: exactly 3 path buttons", f"found {buttons}")
+check(home.count("data-p=") >= 15, "home: elective items carry path markers")
+check('data-path="gllm"' in home and 'data-path="sys"' in home,
+      "home: both recommended routes wired")
+check("curriculum.html" not in home, "home: no link to the deleted curriculum.html")
+
+# --- De-branding: "Extrapolons" never appears on published pages --------------
+published = [p for p in list(ROOT.glob("*.html")) + list((ROOT / "courses").glob("*/index.html"))
+             + list((ROOT / "courses").glob("*/index.qmd"))
+             + [ROOT / "assets/ATTRIBUTION.md", ROOT / "en/index.html",
+                ROOT / "coherence-2ans/index.html", ROOT / "capacites-sortie/index.html"]
+             if p.is_file()]
+branded = [str(p.relative_to(ROOT)) for p in published
+           if "extrapolons" in read(p).lower()]
+check(not branded, "published pages Extrapolons-free", f"in {branded[:5]}")
 
 # --- Report ------------------------------------------------------------------
 total = passed + len(failures)
