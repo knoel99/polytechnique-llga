@@ -75,6 +75,7 @@ site's reading guidance; the badge legend says so.
 - [x] Rev 2: refreshers listed in the tree; official documentation section with 5 verified links
 - [x] Rev 3: TBC glossed on its own line before the Slot TBC legend entry; catalogue.html deleted with zero remaining links; one line per non-scientific module (gated, 402/402)
 - [x] Rev 4: path justification paragraph on button selection; coherence + exit-capabilities (+ FR redirects) deleted/merged as “Skill checkpoints” home section, after Official documentation, 5 questions; zero residual links (gated, 610/610)
+- [x] Rev 5: section reframed as “After the master” (5 roles + problematics); Start here removed
 - [ ] Dark/mobile smoke (browser) — pending post-merge check (no browser in the build
       environment; dim/badge styles use theme variables only)
 
@@ -98,3 +99,13 @@ site's reading guidance; the badge legend says so.
   (after Official documentation), reduced from ~17 questions to 5 representative ones;
   FR redirect `capacites-sortie/` deleted. Fiche links retargeted to
   `../../index.html#checkpoints`.
+
+## Revision 5 (2026-09-07) — careers framing; Start here removed
+
+- **“Skill checkpoints” → “After the master”**: the section is now an overview of the
+  roles and problem spaces students can tackle after the degree (five entries: Graph×LLM
+  systems engineer, retrieval/knowledge-platform engineer, ML infrastructure engineer
+  for industrial graphs, trustworthy-AI engineer, research engineer / PhD track), each
+  with its problematics and notes links. Anchor stays `#checkpoints` so fiche links hold.
+- **“Start here” section removed** (readiness-checks table): the refreshers remain
+  visible in the tree as pre-programme lines.
