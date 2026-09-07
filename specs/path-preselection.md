@@ -76,6 +76,7 @@ site's reading guidance; the badge legend says so.
 - [x] Rev 3: TBC glossed on its own line before the Slot TBC legend entry; catalogue.html deleted with zero remaining links; one line per non-scientific module (gated, 402/402)
 - [x] Rev 4: path justification paragraph on button selection; coherence + exit-capabilities (+ FR redirects) deleted/merged as “Skill checkpoints” home section, after Official documentation, 5 questions; zero residual links (gated, 610/610)
 - [x] Rev 5: section reframed as “After the master” (5 roles + problematics); Start here removed
+- [x] Rev 6: official title/subtitle + sommaire + description/about sections; Notes lists removed from After the master; ATTRIBUTION.md deleted (gated)
 - [ ] Dark/mobile smoke (browser) — pending post-merge check (no browser in the build
       environment; dim/badge styles use theme variables only)
 
@@ -109,3 +110,15 @@ site's reading guidance; the badge legend says so.
   with its problematics and notes links. Anchor stays `#checkpoints` so fiche links hold.
 - **“Start here” section removed** (readiness-checks table): the refreshers remain
   visible in the tree as pre-programme lines.
+
+## Revision 6 (2026-09-07) — official identity header; notes-free careers; ATTRIBUTION gone
+
+- **Home identity**: title “Large Language Models, Graphs and Applications (LLGA)”,
+  subtitle “Programme of the Master of Science and Technology (MScT) of École
+  Polytechnique”; contents nav (sommaire) listing the five sections.
+- **New sections**: “Official description of the master” (three paragraphs quoted from the
+  official programme page, source-linked) and “What is this website?” (independence,
+  open-community purpose, AI-assisted organisation, pointer to official documentation).
+- **“After the master”**: per-role Notes link lists removed — roles and problematics only.
+- **`assets/ATTRIBUTION.md` deleted** (footer link removed; illustrations are CC0
+  generated for this repo).

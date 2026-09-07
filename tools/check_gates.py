@@ -156,6 +156,25 @@ check("After the master" in home, "home: after-the-master heading present")
 check("Start here" not in home and 'id="start"' not in home,
       "home: Start here section removed")
 
+# Home identity (rev 6): official title/subtitle, contents nav, description + about
+check("Large Language Models, Graphs and Applications (LLGA)" in home,
+      "home: official master title used")
+check("Programme of the Master of Science and Technology (MScT)" in home,
+      "home: MScT subtitle used")
+check('aria-label="Contents"' in home, "home: contents nav present")
+for sec in ['id="description"', 'id="about"']:
+    check(sec in home, f"home: {sec.strip(chr(34)).replace(chr(61),chr(32))} section present")
+check("Official description of the master" in home and "What is this website?" in home,
+      "home: description + about headings present")
+
+# After the master: no per-role Notes link lists (rev 6)
+checkpoints = home.split('id="checkpoints"')[1].split("</section>")[0]
+check("<em>Notes:</em>" not in checkpoints, "home: after-the-master has no Notes lists")
+
+# ATTRIBUTION.md deleted (rev 6)
+check(not (ROOT / "assets/ATTRIBUTION.md").exists(), "assets/ATTRIBUTION.md deleted")
+check("ATTRIBUTION" not in home, "home: no ATTRIBUTION link")
+
 home = read(ROOT / "index.html")
 check('class="badge mandatory"' in home, "home: official Mandatory badges")
 check('class="badge choice"' in home, "home: official Choose-N badges")
