@@ -148,10 +148,13 @@ check("generative spine" in home and "deployment spine" in home,
       "home: both route justifications written")
 check('aria-live="polite"' in home, "home: path description announced politely")
 
-# Skill checkpoints section (ex exit-capabilities), after Official documentation
-check('id="checkpoints"' in home, "home: skill checkpoints section present")
+# "After the master" section (ex Skill checkpoints / exit-capabilities)
+check('id="checkpoints"' in home, "home: after-the-master section present")
 check(home.find('id="official"') < home.find('id="checkpoints"'),
-      "home: checkpoints section after official documentation")
+      "home: after-the-master section after official documentation")
+check("After the master" in home, "home: after-the-master heading present")
+check("Start here" not in home and 'id="start"' not in home,
+      "home: Start here section removed")
 
 home = read(ROOT / "index.html")
 check('class="badge mandatory"' in home, "home: official Mandatory badges")
