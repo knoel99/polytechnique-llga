@@ -29,3 +29,4 @@ Every contract maps to merged PR(s) — the "Prove" half of the BMAD-light loop.
 | `quarto-pilot` | Quarto Markdown pilot (refreshers stats + CS) | #16 | implemented |
 | `quarto-migration` | Quarto source (`.qmd`) for all remaining courses | #22 | implemented |
 | `stats-concise-illustrations` | Refresher Statistics: prose condensed (~-16% words), 9 new SVG illustrations (13 total) | #35 | implemented |
+| `theorem-box-framing` | Normed box framing (def tinted, thm/prop ink-left frame, ex bar) + aerated proofs (site-wide CSS + stats qmd) | #36 | implemented |
