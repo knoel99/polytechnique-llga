@@ -31,3 +31,4 @@ Every contract maps to merged PR(s) — the "Prove" half of the BMAD-light loop.
 | `stats-concise-illustrations` | Refresher Statistics: prose condensed (~-16% words), 9 new SVG illustrations (13 total) | #35 | implemented |
 | `theorem-box-framing` | Normed box framing (def tinted, thm/prop ink-left frame, ex bar) + aerated proofs (site-wide CSS + stats qmd) | #36 | implemented |
 | `stats-clear-prose` | Stats page: full sentences everywhere (no note-taking style) + one equation per line with connecting prose | #37 | implemented |
+| `display-math-spacing` | Fix doubled display-math margins (nested .katex-display in .math.display); 2.6rem → 1.15rem | #38 | implemented |
