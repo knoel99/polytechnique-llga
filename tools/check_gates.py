@@ -142,10 +142,58 @@ check('id="curriculum-tree"' in home, "home: full curriculum tree present")
 check("tree-cols" not in home, "home: tree is single-column")
 buttons = home.count('data-path=')
 check(buttons == 3, "home: exactly 3 path buttons", f"found {buttons}")
-check(home.count("data-p=") >= 15, "home: elective items carry path markers")
 check('data-path="gllm"' in home and 'data-path="sys"' in home,
       "home: both recommended routes wired")
 check("curriculum.html" not in home, "home: no link to the deleted curriculum.html")
+
+# Refreshers listed inside the tree section
+tree_html = home.split('id="curriculum-tree"')[1].split("</section>")[0]
+for ref in ["m1p1-refresher-statistics", "m1p1-refresher-cs",
+            "m1p1-refresher-neural-nets"]:
+    check(f"courses/{ref}/index.html" in tree_html, f"home tree: {ref} listed")
+
+
+# Route quotas: each route preselects EXACTLY N per official choice group, and
+# every elective in a choice group carries a data-p marker (an unmarked li would
+# stay bright on every route and inflate the visible count).
+def _choice_group(marker: str) -> str:
+    return home.split(marker)[1].split("</ul>")[0]
+
+
+LI_ATTRS = re.compile(r"<li([^>]*)>")
+
+
+def route_counts(seg: str):
+    counts, unmarked = {"gllm": 0, "sys": 0}, 0
+    for attrs in LI_ATTRS.findall(seg):
+        m = re.search(r'data-p="([^"]*)"', attrs)
+        if m is None:
+            unmarked += 1
+            continue
+        for r in counts:
+            if r in m.group(1).split():
+                counts[r] += 1
+    return counts, unmarked
+
+
+for marker, quota, label in [
+    ('class="badge choice">Choose 3</span> of:', 3, "P1 choose-3"),
+    ('class="badge choice">Choose 1</span> of:', 1, "P2 choose-1"),
+]:
+    seg = _choice_group(marker)
+    counts, unmarked = route_counts(seg)
+    check(unmarked == 0, f"home {label}: every elective carries a path marker",
+          f"{unmarked} unmarked")
+    for r, c in counts.items():
+        check(c == quota, f"home {label}: {r} preselects exactly {quota}",
+              f"found {c}")
+
+# Official documentation section (verified URLs)
+off = home.split('id="official"')[1].split("</section>")[0] if 'id="official"' in home else ""
+check(bool(off), "home: official documentation section present")
+for domain in ["programmes.polytechnique.edu", "msct.dix.polytechnique.fr",
+               "synapses.polytechnique.fr"]:
+    check(domain in off, f"home: official docs link {domain}")
 
 # --- De-branding: "Extrapolons" never appears on published pages --------------
 published = [p for p in list(ROOT.glob("*.html")) + list((ROOT / "courses").glob("*/index.html"))
