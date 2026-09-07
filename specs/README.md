@@ -20,7 +20,7 @@ Every contract maps to merged PR(s) — the "Prove" half of the BMAD-light loop.
 | `homepage-redesign` | Homepage redesign + illustrations | #7 | implemented |
 | `homepage-source-decision` | Extrapolons-only home; catalogue off home; official links in footer | #25, #26 | implemented |
 | `competency-tree` | Curriculum tree (mandatory vs choices); wiki = single structural source; brochure retired from structure pages | #28 | implemented |
-| `path-preselection` | Home = full one-column tree with 3 path buttons (Full / Graph×LLM / AI systems); “Extrapolons” removed from all published pages; `curriculum.html` merged into home | #29 | implemented |
+| `path-preselection` | Home = full one-column tree with 3 path buttons (Full / Graph×LLM / AI systems); “Extrapolons” removed from all published pages; `curriculum.html` merged into home | #29, #30 | implemented |
 | `coherence-2ans` | Two-year pedagogical coherence (lot E) | #11 | implemented |
 | `clarity-lot-d1-refreshers` | Clarity: science refreshers + ML entry (lot D1) | #8 | implemented |
 | `clarity-lot-d2-p1` | Clarity: P1 science modules (lot D2) | #9 | implemented |
