@@ -73,5 +73,15 @@ site's reading guidance; the badge legend says so.
 - [x] `python3 tools/check_gates.py` passes (353/353); static link/HTML checks pass
 - [x] Rev 2: quotas exact — both routes show exactly 3 bright in P1 choose-3 and 1 in P2 choose-1, 0 unmarked electives (gated)
 - [x] Rev 2: refreshers listed in the tree; official documentation section with 5 verified links
+- [x] Rev 3: TBC glossed on its own line before the Slot TBC legend entry; catalogue.html deleted with zero remaining links; one line per non-scientific module (gated, 402/402)
 - [ ] Dark/mobile smoke (browser) — pending post-merge check (no browser in the build
       environment; dim/badge styles use theme variables only)
+
+## Revision 3 (2026-09-07) — TBC glossary, catalogue deleted, one module per line
+
+- Legend: new line before the Slot TBC explanation — “TBC = ‘to be confirmed’”.
+- `catalogue.html` deleted (last duplicate structure page): the home tree is the full module
+  index; coherence / exit maps remain the only satellite pages.
+- Non-scientific modules get one line each in the tree: M1 · P1 sub-list
+  (Strategy/Marketing, Sports, Humanities, Languages) and M2 transverse split
+  (Humanities — 8 ECTS total with languages and sports / Languages / Sports).
