@@ -7,9 +7,10 @@ We encode a **Spec Kit–compatible** and **BMAD-inspired** base (spec → plan 
 
 1. **Contract before large rewrite** — any new module or major refactor starts with a contract in `specs/` (see template).
 2. **Proofs before “done”** — a PR is “done” only if the gates below are checked in the PR description.
-3. **No invented UE codes** — outside the brochure = explicit badge, no fake SynapseS codes.
+3. **No invented UE codes** — outside the official curriculum = explicit badge, no fake SynapseS codes.
 4. **EN only (until further notice)** — published site source of truth is **English at the repository root**. No FR mirror, no FR/EN language switcher. See `specs/en-only.md`.
 5. **Paper look** — `assets/paper.css` is the visual source of truth; light “LaTeX” mode must not regress.
+6. **One structural source** — the official LLGA curriculum wiki is the *only* source for track structure (mandatory modules, choice groups, periods, ECTS). The brochure is never cited as a competing structure: structure pages don’t mention it; course provenance sections may cite it factually. See `specs/competency-tree.md`.
 
 ## Mandatory gates (Definition of Done)
 
@@ -17,7 +18,7 @@ Before merging a module / CSS refactor:
 
 - [ ] **Contract**: `specs/<module-id>.md` present (or updated) for a new course / rewrite > ~one screen.
 - [ ] **Pages**: `courses/<id>/index.qmd` (Quarto source) + rendered `courses/<id>/index.html` (English, at site root). See `specs/quarto-migration.md`.
-- [ ] **Index**: module reachable from root `index.html` — the home links `catalogue.html` for the full per-period list (see `specs/homepage-source-decision.md`); honest status.
+- [ ] **Index**: module reachable from root `index.html` — the home links `curriculum.html` (tree), `catalogue.html` (full per-period list) and the coherence/exit maps (see `specs/homepage-source-decision.md`, `specs/competency-tree.md`); honest status.
 - [ ] **CSS**: dark (`prefers-color-scheme` / `data-theme`) + mobile (no blocking horizontal overflow; tables / code / KaTeX scrollable) checked on one course page + the index.
 - [ ] **Theme**: `assets/theme.js` loaded; toggle localStorage OK; UI strings in English.
 - [ ] **Pedagogy**: ≥ 6 exercises on science modules (non-science pages exempt, see `specs/non-science-pages.md`); NumPy primary if NN/ML module; full sentences in English.

@@ -115,6 +115,31 @@ for spec in sorted((ROOT / "specs").glob("*.md")):
         continue
     check(f"`{spec.stem}`" in readme, f"specs index: {spec.stem} listed")
 
+# --- Single structural source (specs/competency-tree.md) ----------------------
+# Structure pages never cite the brochure; the wiki is the only structural source.
+structure_pages = [
+    "index.html", "catalogue.html", "curriculum.html",
+    "coherence-2years/index.html", "exit-capabilities/index.html",
+]
+for page in structure_pages:
+    p = ROOT / page
+    check(p.is_file(), f"structure: {page} present")
+    if p.is_file():
+        check("brochure" not in read(p).lower(), f"structure: {page} brochure-free")
+
+cur = ROOT / "curriculum.html"
+check(cur.is_file(), "curriculum tree page present")
+if cur.is_file():
+    check("msct.dix.polytechnique.fr/llga/wiki" in read(cur),
+          "curriculum tree links the official wiki")
+check("curriculum.html" in read(ROOT / "index.html"),
+      "home links the curriculum tree")
+
+cat = read(ROOT / "catalogue.html")
+check('class="badge mandatory"' in cat, "catalogue: official Mandatory badges")
+check('class="badge choice"' in cat, "catalogue: official Choose-N badges")
+check("not yet published" in cat, "catalogue: M2 P2 honesty line")
+
 # --- Report ------------------------------------------------------------------
 total = passed + len(failures)
 print(f"check_gates: {passed}/{total} checks passed")
