@@ -13,9 +13,11 @@
 2.
 
 ## “Done” proofs (check)
-- [ ] `courses/<id>/index.html` (English, site root)
-- [ ] Link from root `index.html`
-- [ ] ≥ 6 exercises
+- [ ] Source: `courses/<id>/index.qmd` (Quarto, see `specs/quarto-migration.md`)
+- [ ] Rendered: `courses/<id>/index.html` (English, site root)
+- [ ] Link reachable from root `index.html` (home → `catalogue.html`, per `specs/homepage-source-decision.md`)
+- [ ] ≥ 6 exercises (science modules; exempt: `specs/non-science-pages.md`)
 - [ ] Dark/mobile OK (`assets/paper.css` + `assets/theme.js`)
 - [ ] No regression of light “paper” look
 - [ ] No FR/EN language switcher
+- [ ] `python3 tools/check_gates.py` passes
