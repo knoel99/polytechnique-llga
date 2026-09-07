@@ -28,3 +28,4 @@ Every contract maps to merged PR(s) — the "Prove" half of the BMAD-light loop.
 | `clarity-lot-d4-rest` | Voice purge + clarity, remaining science modules (lot D4a/b) | #12, #13, #14 | implemented |
 | `quarto-pilot` | Quarto Markdown pilot (refreshers stats + CS) | #16 | implemented |
 | `quarto-migration` | Quarto source (`.qmd`) for all remaining courses | #22 | implemented |
+| `stats-concise-illustrations` | Refresher Statistics: prose condensed (~-16% words), 9 new SVG illustrations (13 total) | #35 | implemented |
