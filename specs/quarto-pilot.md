@@ -9,7 +9,7 @@
 1. `courses/m1p1-refresher-statistics/`
 2. `courses/m1p1-refresher-cs/`
 
-EN only. Faithful content conversion (no pedagogical rewrite). Paper look via `assets/paper.css` + `assets/theme.js`. KaTeX via Quarto `html-math-method: katex`.
+EN only. Faithful content conversion (no pedagogical rewrite). Paper look via `assets/paper.css` + `assets/theme.js`. KaTeX via Quarto `html-math-method`, pinned to jsDelivr `katex@0.19.0` with subresource integrity on the rendered page.
 
 ## Approach chosen
 - **Source**: `index.qmd` per course (Pandoc/Quarto Markdown + fenced divs for `.def` / `.thm` / `.note` / `.proof` / `.ex` / `.sol` / `.recap`).

@@ -22,7 +22,9 @@ format:
     minimal: true
     toc: false
     anchor-sections: false
-    html-math-method: katex
+    html-math-method:
+      method: katex
+      url: "https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.js"
     highlight-style: github
     embed-resources: false
     css: ../../assets/paper.css

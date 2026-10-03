@@ -11,6 +11,7 @@ Checks (code-level proxies for the manual gates):
 - Pedagogy: >= 6 exercises on science modules (specs/non-science-pages.md exempt);
   NumPy primary in the NN/ML refresher.
 - Theme: paper.css defines .def/.thm/.note and a dark block; theme.js uses localStorage.
+- KaTeX: published pages and Quarto sources pin 0.19.0 and carry subresource integrity.
 - Specs: every contract file has a row in specs/README.md (index stays honest).
 """
 
@@ -107,6 +108,41 @@ check(".def" in css and ".thm" in css and ".note" in css,
 check("prefers-color-scheme: dark" in css and 'data-theme="dark"' in css,
       "paper.css: dark blocks present")
 check("localStorage" in read(ROOT / "assets/theme.js"), "theme.js: localStorage toggle")
+
+# --- Third-party math: pinned KaTeX + subresource integrity -----------------
+# Quarto's default katex URL is the floating @latest tag. Published pages must
+# load one version and refuse a substituted file. Re-rendering drops integrity
+# attributes; this gate fails until they are put back.
+KATEX_JS = "https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.js"
+KATEX_CSS = "https://cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.css"
+KATEX_JS_SRI = "sha384-QFFtAGzvvj+bfgCGxXJlNZZR1nXEZgvG8tDLCCY1F19xl20WlfTYgguB4VcNdxYk"
+KATEX_CSS_SRI = "sha384-3rdsX6e5mueWyoweR9NIVmtEsUkokpBT/0ALqKKIBMr9j4qhHkaIkAcGgsE6uVlp"
+published_html = list(ROOT.glob("*.html")) + list((ROOT / "courses").glob("*/index.html"))
+published_html.append(ROOT / "en/index.html")
+for page in published_html:
+    if not page.is_file():
+        continue
+    html = read(page)
+    rel = str(page.relative_to(ROOT))
+    check("katex@latest" not in html, f"{rel}: KaTeX is not the floating @latest tag")
+    if "cdn.jsdelivr.net/npm/katex" not in html:
+        continue
+    check(KATEX_JS in html and KATEX_JS_SRI in html and "crossorigin=\"anonymous\"" in html,
+          f"{rel}: pinned KaTeX script with integrity")
+    check(KATEX_CSS in html and KATEX_CSS_SRI in html,
+          f"{rel}: pinned KaTeX stylesheet with integrity")
+
+for qmd in (ROOT / "courses").glob("*/index.qmd"):
+    text = read(qmd)
+    if "html-math-method" not in text:
+        continue
+    rel = str(qmd.relative_to(ROOT))
+    check("katex@latest" not in text and KATEX_JS in text,
+          f"{rel}: Quarto math URL pinned")
+
+converter = read(ROOT / "tools/html_to_qmd.py")
+check("katex@latest" not in converter and KATEX_JS in converter,
+      "html_to_qmd.py: new courses pin KaTeX")
 
 # --- Specs index honesty -----------------------------------------------------
 readme = read(ROOT / "specs/README.md")
