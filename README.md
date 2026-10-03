@@ -34,7 +34,7 @@ Cette sélection correspond aux tracks *« Graph AI / Structured Generative AI �
 
 ## Utilisation
 
-Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste des modules ci-dessous. Les formules mathématiques sont rendues par [KaTeX](https://katex.org) (chargé via CDN — une connexion internet est donc utile, le contenu reste lisible hors ligne).
+Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste des modules ci-dessous. Les formules mathématiques sont rendues par [KaTeX](https://katex.org) 0.19.0, chargé depuis jsDelivr avec une empreinte d'intégrité (une connexion internet reste utile ; le texte reste lisible hors ligne).
 
 ## Structure
 

@@ -13,7 +13,7 @@ Every directory under `courses/` with a paper-shell `index.html`. Pilot already 
 
 All remaining courses (~47) converted in the catalog migration PR.
 
-EN-facing notes; FR language strings in materials lines are normalized by the converter (`FR_FIXES`). Faithful content conversion (no pedagogical rewrite). Paper look via `assets/paper.css` + `assets/theme.js`. KaTeX via Quarto `html-math-method: katex`.
+EN-facing notes; FR language strings in materials lines are normalized by the converter (`FR_FIXES`). Faithful content conversion (no pedagogical rewrite). Paper look via `assets/paper.css` + `assets/theme.js`. KaTeX via Quarto `html-math-method`, pinned to jsDelivr `katex@0.19.0` with subresource integrity on the rendered pages.
 
 ## Workflow (convert → render → commit)
 
