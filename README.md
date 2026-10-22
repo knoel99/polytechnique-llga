@@ -47,8 +47,8 @@ Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste de
 
 ```
 index.html                 English homepage (canonical GitHub Pages root)
-assets/paper.css           Single stylesheet (minimal, LaTeX/Wikipedia-like)
-assets/theme.js            Theme toggle (English UI)
+assets/paper.css           Single stylesheet (high contrast, light/dark, mobile)
+assets/theme.js            Theme button, side contents, tables (English UI)
 exit-capabilities/         Exit capabilities synthesis
 coherence-2years/          Two-year pedagogical coherence
 courses/<module>/index.html  One long page per module
@@ -69,8 +69,9 @@ Chaque cours est **une longue page unique** (comme un article Wikipédia) : somm
 
 ## Apparence (dark mode & mobile)
 
-- `assets/paper.css` : thème clair « papier / LaTeX », **dark** via `prefers-color-scheme` et `data-theme`, plus styles **responsive** (TOC, code, tableaux, KaTeX).
-- `assets/theme.js` : bouton de bascule clair/sombre avec persistance `localStorage` (`llga-theme`).
+- `assets/paper.css` : thème à **fort contraste** (texte ≥ 7:1, lisible au vidéoprojecteur), **dark** via `prefers-color-scheme` et `data-theme`, encadrés colorés par type, styles **responsive** (code, tableaux, KaTeX). Règles : `specs/front-redesign.md`.
+- `assets/theme.js` : barre supérieure (bouton *Contents*, section en cours, bouton *Dark/Light* avec persistance `localStorage` `llga-theme`), sommaire latéral toujours visible sur grand écran et en tiroir sur mobile, tableaux défilants.
+- `tools/check_airiness.py` : contrôle d'aération du texte (paragraphe ≤ 100 mots, ≤ 6 formules en ligne, formule en ligne ≤ 50 caractères TeX, sinon formule centrée sur sa propre ligne).
 
 ## Gouvernance Spec-Driven / BMAD (légère)
 

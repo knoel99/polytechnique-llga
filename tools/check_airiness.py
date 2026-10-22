@@ -62,15 +62,15 @@ def blocks(src: str):
         if in_code:
             i += 1
             continue
+        if in_math:
+            if s.endswith("$$"):
+                in_math = False
+            i += 1
+            continue
         if s.startswith("$$"):
             yield from flush()
             if s == "$$" or not s.endswith("$$") or len(s) < 4:
                 in_math = True
-            i += 1
-            continue
-        if in_math:
-            if s.endswith("$$"):
-                in_math = False
             i += 1
             continue
         if not s or s.startswith((":::", "#", "<")) or re.fullmatch(r"\[[^\]]*\]\{\.tag\}", s):

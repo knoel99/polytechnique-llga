@@ -286,12 +286,16 @@ branded = [str(p.relative_to(ROOT)) for p in published
            if "extrapolons" in read(p).lower()]
 check(not branded, "published pages Extrapolons-free", f"in {branded[:5]}")
 
-# --- Hours and progression (specs/hours-and-progression.md) -----------------
+# --- Hours and progression, airy prose (specs/hours-and-progression.md, front-redesign.md)
 import subprocess  # noqa: E402
 prog = subprocess.run([sys.executable, str(ROOT / "tools/check_progression.py")],
                       capture_output=True, text=True)
 check(prog.returncode == 0, "check_progression: every science module passes",
       prog.stdout.strip().splitlines()[-1] if prog.stdout.strip() else prog.stderr[-200:])
+air = subprocess.run([sys.executable, str(ROOT / "tools/check_airiness.py")],
+                     capture_output=True, text=True)
+check(air.returncode == 0, "check_airiness: every page passes A1-A3 (specs/front-redesign.md)",
+      "; ".join(l for l in air.stdout.splitlines() if "FAIL" in l)[:300])
 home = read(ROOT / "index.html")
 check('id="programme"' in home and "<!-- programme:start -->" in home,
       "home: programme 2026-2027 table present")
