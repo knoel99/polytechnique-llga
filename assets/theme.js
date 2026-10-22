@@ -236,6 +236,19 @@
     });
   }
 
+  /* ---------- 4. Display formulas: shrink to fit narrow screens ---------- */
+  function fitFormulas() {
+    document.querySelectorAll("main .math.display").forEach(function (m) {
+      m.style.fontSize = "";
+      var w = m.clientWidth, sw = m.scrollWidth;
+      if (w > 0 && sw > w + 1) m.style.fontSize = Math.max(0.6, (w / sw) * 0.98).toFixed(3) + "em";
+    });
+  }
+  var fitTimer = null;
+  function scheduleFit() { clearTimeout(fitTimer); fitTimer = setTimeout(fitFormulas, 150); }
+  window.addEventListener("load", fitFormulas);
+  window.addEventListener("resize", scheduleFit);
+
   function mount() {
     setupTables();
     setupToc();
