@@ -8,6 +8,7 @@ renders each given module and restores the two tags exactly as published.
 Usage (repository root):
     python3 tools/render.py m1p1-machine-learning m1p2-graph-ml
     python3 tools/render.py --all
+    python3 tools/render.py projects        # the end-of-year projects page
 Quarto 1.7.32 reproduces the committed pages byte for byte
 (pip install quarto-cli==1.7.32).
 """
@@ -32,7 +33,7 @@ CSS_RE = re.compile(r'<link rel="stylesheet" href="https://cdn\.jsdelivr\.net/np
 
 
 def render(slug: str) -> None:
-    qmd = ROOT / "courses" / slug / "index.qmd"
+    qmd = ROOT / ("projects" if slug == "projects" else f"courses/{slug}") / "index.qmd"
     subprocess.run(["quarto", "render", str(qmd), "--quiet"], check=True)
     html_path = qmd.with_name("index.html")
     html = html_path.read_text(encoding="utf-8")
@@ -47,6 +48,8 @@ if __name__ == "__main__":
     args = sys.argv[1:]
     if args == ["--all"]:
         args = sorted(p.parent.name for p in (ROOT / "courses").glob("*/index.qmd"))
+        if (ROOT / "projects/index.qmd").is_file():
+            args.append("projects")
     if not args:
         sys.exit(__doc__)
     for slug in args:
