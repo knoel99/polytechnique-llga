@@ -519,7 +519,11 @@ Training the large models often *freezes* the text encoder and the VAE, learning
 :::
 
 -   **Prompt engineering, quantitatively**: the prompt acts as a *direction* in conditioning space: adding "photorealistic, 85 mm" shifts the embeddings and hence every CFG step. Measurable effects: position (the first tokens weigh more), saturation (beyond \~50 effective tokens, diminishing returns), *syntactic weighting* "(word:1.3)" rescales the contribution of that token to the conditioning at inference time;
--   **Negative prompt**: the generalized version of CFG with two conditions — $\varnothing$ is replaced by $c_-$: $$\tilde\epsilon = \epsilon_\theta(x_t,t,c_-) + w\big(\epsilon_\theta(x_t,t,c_+) - \epsilon_\theta(x_t,t,c_-)\big),$$ the negative direction is *repelled* (thm. 4.1): "blurry, watermark, extra fingers";
+-   **Negative prompt**: the generalized version of CFG with two conditions — $\varnothing$ is replaced by $c_-$:
+    $$
+    \tilde\epsilon = \epsilon_\theta(x_t,t,c_-) + w\big(\epsilon_\theta(x_t,t,c_+) - \epsilon_\theta(x_t,t,c_-)\big),
+    $$
+    the negative direction is *repelled* (thm. 4.1): "blurry, watermark, extra fingers";
 -   **Seeds**: the seed fixes $x_T$ (and the solver's randomness); same seed + same prompt = same image under deterministic DDIM; one sweeps the seeds to pick the best realization before refining the prompt — the actual workflow of practitioners;
 -   **Inference cost**: (number of steps) × (denoiser cost) + decoding; latency governs the industrial choice (fast solvers, 1-step distillation when diversity matters less).
 
@@ -538,7 +542,13 @@ A generator produces a distribution rather than a single answer, so its quality 
   IS              quality × diversity (classifier KL)                         sensitive to the classifier's dominant class
   Human studies   pairwise preferences (Elo)                                  costly, annotator biases — the final standard
 
-The FID inherits the geometry of $W_2$ (OT module): the part $\mathrm{tr}\big(\Sigma_r + \Sigma_g - 2(\Sigma_r\Sigma_g)^{1/2}\big)$ is the *Bures distance* between covariances. Two practical pitfalls: (i) the number of samples — FID mechanically decreases with the cohort size; (ii) the features — InceptionV3 vs CLIP sometimes reorder the rankings. Always report (backbone, N, protocol).
+The FID inherits the geometry of $W_2$ (OT module): the part
+$$
+\mathrm{tr}\big(\Sigma_r + \Sigma_g - 2(\Sigma_r\Sigma_g)^{1/2}\big)
+$$
+is the *Bures distance* between covariances.
+
+Two practical pitfalls: (i) the number of samples — FID mechanically decreases with the cohort size; (ii) the features — InceptionV3 vs CLIP sometimes reorder the rankings. Always report (backbone, N, protocol).
 :::
 
 -   **Costs**: diffusion training = thousands of GPU-hours; inference = N denoiser steps + decoding; the quality/latency trade-off governs the industrial choice (fast solvers, distillation, quantization);
@@ -560,11 +570,33 @@ Images were the testing ground; the same recipes — a compressed latent space, 
 ### 8.1. Video generation
 
 ::: def
-[Definition 8.1 — Video latent diffusion]{.tag} A clip is a tensor $x \in \mathbb{R}^{F \times H \times W \times 3}$. A *causal 3D VAE* (ch. 1) compresses it by a factor $c_t$ in time and $c_s$ in space, the first frame being kept on its own so that a single image is a valid one-frame video: the latent has $F' = (F - 1)/c_t + 1$ frames of size $\frac{H}{c_s} \times \frac{W}{c_s}$. The denoiser is a DiT (ch. 4) over *spacetime patches*: with spatial patches $p \times p$, each latent frame gives $S = \frac{H}{c_s p} \cdot \frac{W}{c_s p}$ tokens, $N = F' S$ in total. It is trained with the noise-prediction loss of Model 3.2 on video latents, and conditioned on text (ch. 5–6), on a first frame (image-to-video) or on camera parameters. Attention is either full over the $N$ tokens, costing $\mathcal{O}(N^2)$, or *factorized*: spatial attention inside each frame ($F' S^2$ pairs) followed by temporal attention across frames at each spatial position ($S F'^2$ pairs).
+[Definition 8.1 — Video latent diffusion]{.tag} A clip is a tensor $x \in \mathbb{R}^{F \times H \times W \times 3}$. A *causal 3D VAE* (ch. 1) compresses it by a factor $c_t$ in time and $c_s$ in space, the first frame being kept on its own so that a single image is a valid one-frame video: the latent has
+$$
+F' = (F - 1)/c_t + 1
+$$
+frames of size $\frac{H}{c_s} \times \frac{W}{c_s}$.
+
+The denoiser is a DiT (ch. 4) over *spacetime patches*: with spatial patches $p \times p$, each latent frame gives
+$$
+S = \frac{H}{c_s p} \cdot \frac{W}{c_s p}
+$$
+tokens, $N = F' S$ in total. It is trained with the noise-prediction loss of Model 3.2 on video latents, and conditioned on text (ch. 5–6), on a first frame (image-to-video) or on camera parameters.
+
+Attention is either full over the $N$ tokens, costing $\mathcal{O}(N^2)$, or *factorized*: spatial attention inside each frame ($F' S^2$ pairs) followed by temporal attention across frames at each spatial position ($S F'^2$ pairs).
 :::
 
 ::: ex
-[Example 8.2 — The token budget of five seconds of video]{.tag} A clip of $F = 121$ frames (about 5 s at 24 fps) at $512 \times 512$, with $c_t = 4$, $c_s = 8$ and $2 \times 2$ patches: $F' = 120/4 + 1 = 31$ latent frames of $64 \times 64$, hence $S = 32 \times 32 = 1024$ tokens per frame and $N = 31\,744$ tokens — 31 times the token count of one $512 \times 512$ image. Full attention compares $N^2 \approx 1.0 \times 10^9$ pairs, about $961$ times more than for the image; factorized attention needs $31 \cdot 1024^2 + 1024 \cdot 31^2 \approx 3.35 \times 10^7$ pairs, thirty times fewer than full attention. This arithmetic explains the cascades (generate at low resolution and frame rate, then upsample in space and time) and the cost of video models.
+[Example 8.2 — The token budget of five seconds of video]{.tag} A clip of $F = 121$ frames (about 5 s at 24 fps) at $512 \times 512$, with $c_t = 4$, $c_s = 8$ and $2 \times 2$ patches.
+
+This gives $F' = 120/4 + 1 = 31$ latent frames of $64 \times 64$, hence $S = 32 \times 32 = 1024$ tokens per frame and $N = 31\,744$ tokens — 31 times the token count of one $512 \times 512$ image.
+
+Full attention compares $N^2 \approx 1.0 \times 10^9$ pairs, about $961$ times more than for the image; factorized attention needs
+$$
+31 \cdot 1024^2 + 1024 \cdot 31^2 \approx 3.35 \times 10^7
+$$
+pairs, thirty times fewer than full attention.
+
+This arithmetic explains the cascades (generate at low resolution and frame rate, then upsample in space and time) and the cost of video models.
 :::
 
 ::: note
@@ -574,11 +606,23 @@ Images were the testing ground; the same recipes — a compressed latent space, 
 ### 8.2. Sound generation
 
 ::: def
-[Definition 8.3 — Audio representations: log-mel spectrograms and neural codec tokens]{.tag} A waveform is sampled at $f_s$ = 16–48 kHz (one second = 24,000 numbers at 24 kHz). **Spectrogram view**: a short-time Fourier transform over sliding windows gives a time–frequency magnitude map; grouping frequencies on the perceptual mel scale, $m = 2595 \log_{10}(1 + f/700)$, into 64–128 bands and taking logs yields a *log-mel spectrogram*, an image of size bands × frames to which the image models of ch. 1–4 apply; since the phase is discarded, a neural *vocoder* (HiFi-GAN, an adversarial model of ch. 2) maps it back to a waveform. **Token view**: a neural codec (SoundStream, EnCodec) encodes the waveform into latent frames at a low rate (75 per second at 24 kHz) and quantizes each frame by **residual vector quantization**: $q_1 = Q_1(z)$, then $q_2 = Q_2(z - q_1)$, $q_3 = Q_3(z - q_1 - q_2)$, …, so that $z \approx \sum_{k=1}^{K} q_k$ — each codebook (VQ-VAE, ch. 1) refines the residual left by the previous ones.
+[Definition 8.3 — Audio representations: log-mel spectrograms and neural codec tokens]{.tag} A waveform is sampled at $f_s$ = 16–48 kHz (one second = 24,000 numbers at 24 kHz).
+
+**Spectrogram view**: a short-time Fourier transform over sliding windows gives a time–frequency magnitude map; grouping frequencies on the perceptual mel scale, $m = 2595 \log_{10}(1 + f/700)$, into 64–128 bands and taking logs yields a *log-mel spectrogram*, an image of size bands × frames to which the image models of ch. 1–4 apply; since the phase is discarded, a neural *vocoder* (HiFi-GAN, an adversarial model of ch. 2) maps it back to a waveform.
+
+**Token view**: a neural codec (SoundStream, EnCodec) encodes the waveform into latent frames at a low rate (75 per second at 24 kHz) and quantizes each frame by **residual vector quantization**:
+$$
+q_1 = Q_1(z), \ \text{then}\ q_2 = Q_2(z - q_1),\ q_3 = Q_3(z - q_1 - q_2),\ \dots, \quad\text{so that}\quad z \approx \sum_{k=1}^{K} q_k
+$$
+— each codebook (VQ-VAE, ch. 1) refines the residual left by the previous ones.
 :::
 
 ::: ex
-[Example 8.4 — Bitrate and sequence length of a codec]{.tag} With 75 frames per second and $K = 8$ codebooks of 1024 entries (10 bits each), the codec transmits $75 \times 8 \times 10 = 6000$ bit/s, against $24\,000 \times 16 = 384\,000$ bit/s for 16-bit audio: a compression factor of 64. A 10-second clip becomes $750$ frames $\times\, 8 = 6000$ tokens, the length of a long document for a language model. Predicting the $K$ codebooks of a frame in parallel with a one-step delay between successive codebooks (the "delay pattern" of MusicGen) brings the number of decoding steps from $K T = 6000$ down to $T + K - 1 = 757$.
+[Example 8.4 — Bitrate and sequence length of a codec]{.tag} With 75 frames per second and $K = 8$ codebooks of 1024 entries (10 bits each), the codec transmits $75 \times 8 \times 10 = 6000$ bit/s, against $24\,000 \times 16 = 384\,000$ bit/s for 16-bit audio: a compression factor of 64.
+
+A 10-second clip becomes $750$ frames $\times\, 8 = 6000$ tokens, the length of a long document for a language model.
+
+Predicting the $K$ codebooks of a frame in parallel with a one-step delay between successive codebooks (the "delay pattern" of MusicGen) brings the number of decoding steps from $K T = 6000$ down to $T + K - 1 = 757$.
 :::
 
 ::: def
@@ -594,7 +638,13 @@ When a generative model drives a robot, the generated modality is the *action*: 
 :::
 
 ::: ex
-[Example 8.7 — Why averaging actions fails]{.tag} To pass an obstacle, half of the demonstrations steer left ($a = -1$) and half right ($a = +1$), with spread $0.1$: $p(a \mid o) = \tfrac12\mathcal{N}(-1, 0.1^2) + \tfrac12\mathcal{N}(1, 0.1^2)$. A network trained with squared error outputs the conditional mean $\mathbb{E}[a \mid o] = 0$ — straight into the obstacle — where the demonstration density is about $10^{-21}$ times lower than at $\pm 1$ (the ratio is roughly $2e^{-50}$). A generative policy samples $-1$ or $+1$, each a valid manoeuvre: multimodality of the action distribution is the reason generative models took over robot learning, exactly as mode coverage motivated diffusion over GANs for images (ch. 2–3).
+[Example 8.7 — Why averaging actions fails]{.tag} To pass an obstacle, half of the demonstrations steer left ($a = -1$) and half right ($a = +1$), with spread $0.1$:
+$$
+p(a \mid o) = \tfrac12\mathcal{N}(-1, 0.1^2) + \tfrac12\mathcal{N}(1, 0.1^2).
+$$
+A network trained with squared error outputs the conditional mean $\mathbb{E}[a \mid o] = 0$ — straight into the obstacle — where the demonstration density is about $10^{-21}$ times lower than at $\pm 1$ (the ratio is roughly $2e^{-50}$).
+
+A generative policy samples $-1$ or $+1$, each a valid manoeuvre: multimodality of the action distribution is the reason generative models took over robot learning, exactly as mode coverage motivated diffusion over GANs for images (ch. 2–3).
 :::
 
 ::: def
@@ -613,7 +663,11 @@ When a generative model drives a robot, the generated modality is the *action*: 
     -   **Q-Former** (BLIP-2): 32 *learned* query vectors that cross-attend to the image features and produce 32 embeddings — a compact "visual summary"; freezes the LLM while pretraining the bridge;
     -   **Two-stage training protocol**: (1) *alignment pretraining* on immense (image, caption) corpora — learning the correspondence; (2) multimodal *instruction tuning* — conversations, reasoning, answering;
     -   **Audio**: the codec tokens of section 8.2 are injected in the same way — same pattern, another modality;
--   **3D**: NeRF (sketch): an MLP $(x, d) \mapsto (\sigma, c)$ (density, color) is optimized by differentiable *volume rendering*: $$C(r) = \int_{t_n}^{t_f} T(t)\,\sigma\big(r(t)\big)\,c\big(r(t), d\big)\,dt, \qquad T(t) = \exp\!\Big(-\!\int_{t_n}^{t}\sigma\big(r(s)\big)ds\Big),$$ that is, "the opacity accumulated along the ray weights the colors"; recent 3D generative models prefer **diffusion over point clouds and meshes** — discretization, operators, correspondence: this is exactly the syllabus of the M2 Geometric Deep Learning module (direct link);
+-   **3D**: NeRF (sketch): an MLP $(x, d) \mapsto (\sigma, c)$ (density, color) is optimized by differentiable *volume rendering*:
+    $$
+    C(r) = \int_{t_n}^{t_f} T(t)\,\sigma\big(r(t)\big)\,c\big(r(t), d\big)\,dt, \qquad T(t) = \exp\!\Big(-\!\int_{t_n}^{t}\sigma\big(r(s)\big)ds\Big),
+    $$
+    that is, "the opacity accumulated along the ray weights the colors"; recent 3D generative models prefer **diffusion over point clouds and meshes** — discretization, operators, correspondence: this is exactly the syllabus of the M2 Geometric Deep Learning module (direct link);
 -   **World models**: *action-conditioned* generation of interactive videos — the video models of section 8.1 conditioned on the actions of section 8.3, used as learned simulators (link with the model-based RL of the RL module, section 6.4; Genie-like systems);
 -   **Generative structured data**: text-to-graph (generating the schema of a network), graph-to-text (a report from a knowledge graph) — the exact intersection of the Graph ML and NLP modules;
 -   **Multimodal agents**: perceiving (screenshot) and acting (click, code) — GUI agents combine vision + LLM + tools (RL module, ch. 7).
@@ -623,15 +677,37 @@ When a generative model drives a robot, the generated modality is the *action*: 
 The 2026–2027 sheet names Xi Wang as head of the course; Vicky Kalogeiton, whose publications are presented below, is not listed on it, and this chapter is kept as research context for the course's themes — video, guidance, distillation. Vicky Kalogeiton (CVLab — École Polytechnique / ECL; formerly Inria Grenoble, LEAR team) has worked since her PhD on a coherent program: *localizing and understanding objects and actions in videos*, and more recently, *generating them*. The three publications below exactly mark out the syllabus of this course — with video as the common thread.
 
 ::: thm
-[ACT-detector — Action Tubelet Detector (ICCV 2017)]{.tag} [arXiv:1705.01861](https://arxiv.org/abs/1705.01861) — V. Kalogeiton, P. Weinzaepfel, V. Ferrari, C. Schmid. **Problem.** Spatio-temporal action detection: for each actor, find *where* (per-frame boxes) and *when* (temporal segment) each action is performed. **Method.** Extending anchor-based detection (SSD) to the spatio-temporal domain: the input is a *tubelet* — k consecutive frames — and the network regresses and scores 3D *cuboid-anchors* (position, spatial scale, duration), with oversampling of frame-level features for small actors. **Results.** State of the art at the time on UCF-Sports, J-HMDB and UCF101; the tubelet formalism fed the AVA benchmark. **Position in the course.** This is the "before" of transformers: 3D convolution + anchors, while chapters 3–4 of this module describe the "after" (DiT); the notion of *temporal scale* (pyramid of durations) foreshadows the temporal pyramid of modern video-to-text models.
+[ACT-detector — Action Tubelet Detector (ICCV 2017)]{.tag} [arXiv:1705.01861](https://arxiv.org/abs/1705.01861) — V. Kalogeiton, P. Weinzaepfel, V. Ferrari, C. Schmid.
+
+**Problem.** Spatio-temporal action detection: for each actor, find *where* (per-frame boxes) and *when* (temporal segment) each action is performed.
+
+**Method.** Extending anchor-based detection (SSD) to the spatio-temporal domain: the input is a *tubelet* — k consecutive frames — and the network regresses and scores 3D *cuboid-anchors* (position, spatial scale, duration), with oversampling of frame-level features for small actors.
+
+**Results.** State of the art at the time on UCF-Sports, J-HMDB and UCF101; the tubelet formalism fed the AVA benchmark.
+
+**Position in the course.** This is the "before" of transformers: 3D convolution + anchors, while chapters 3–4 of this module describe the "after" (DiT); the notion of *temporal scale* (pyramid of durations) foreshadows the temporal pyramid of modern video-to-text models.
 :::
 
 ::: thm
-[Analysis of Classifier-Free Guidance Weight Schedulers (TMLR 2024)]{.tag} [arXiv:2404.13040](https://arxiv.org/abs/2404.13040) — CVLab team. **Problem.** The guidance weight $w$ of thm. 4.1 is *constant* in most tools — why not vary it during sampling? **Method.** Systematic analysis of schedules $w(t)$ (increasing, decreasing, bell-shaped) on text-to-image diffusion, with fidelity (CLIPScore) and diversity measurements. **Results.** Variable $w(t)$ profiles improve the fidelity/diversity trade-off compared to constant $w$; the behavior depends on the step (start vs end of the chain). **Position.** Theorem 4.1 gives the theory of CFG at fixed $w$; this work shows that the *temporal degree of freedom* is underexploited — a textbook example of "fine engineering of a generative hyperparameter", and a direct topic for the project of ch. 7.
+[Analysis of Classifier-Free Guidance Weight Schedulers (TMLR 2024)]{.tag} [arXiv:2404.13040](https://arxiv.org/abs/2404.13040) — CVLab team.
+
+**Problem.** The guidance weight $w$ of thm. 4.1 is *constant* in most tools — why not vary it during sampling?
+
+**Method.** Systematic analysis of schedules $w(t)$ (increasing, decreasing, bell-shaped) on text-to-image diffusion, with fidelity (CLIPScore) and diversity measurements.
+
+**Results.** Variable $w(t)$ profiles improve the fidelity/diversity trade-off compared to constant $w$; the behavior depends on the step (start vs end of the chain).
+
+**Position.** Theorem 4.1 gives the theory of CFG at fixed $w$; this work shows that the *temporal degree of freedom* is underexploited — a textbook example of "fine engineering of a generative hyperparameter", and a direct topic for the project of ch. 7.
 :::
 
 ::: thm
-[Generating video: AKiRa and Di[M]o distillation (2024–2025)]{.tag} AKiRa — [arXiv:2412.14158](https://arxiv.org/abs/2412.14158) (CVPR 2025) and Di[M]o — [arXiv:2503.15457](https://arxiv.org/abs/2503.15457) (ICCV 2025). **AKiRa** (Augmentation Kit on Rays): an augmentation *kit* for optical video generation — camera on rays, multi-view consistency; the camera-control question (ch. 8) handled on the training side. **Di[M]o**: distilling a *masked* diffusion model into a *one-step* generator — the acceleration of ch. 4 pushed to the extreme (MDM → one-step generator). **Position.** The two ends of the value chain: quality/consistency (AKiRa) and latency (Di[M]o) — exactly the two axes of the industrial trade-off of ch. 7. Let us also mention [Don't drop your samples!](https://arxiv.org/abs/2405.20324) (CVPR 2024): a *consistency* loss that improves the training of conditional diffusion models — the field diagnosis of the pathologies of ch. 3.
+[Generating video: AKiRa and Di[M]o distillation (2024–2025)]{.tag} AKiRa — [arXiv:2412.14158](https://arxiv.org/abs/2412.14158) (CVPR 2025) and Di[M]o — [arXiv:2503.15457](https://arxiv.org/abs/2503.15457) (ICCV 2025). **AKiRa** (Augmentation Kit on Rays): an augmentation *kit* for optical video generation — camera on rays, multi-view consistency; the camera-control question (ch. 8) handled on the training side.
+
+**Di[M]o**: distilling a *masked* diffusion model into a *one-step* generator — the acceleration of ch. 4 pushed to the extreme (MDM → one-step generator).
+
+**Position.** The two ends of the value chain: quality/consistency (AKiRa) and latency (Di[M]o) — exactly the two axes of the industrial trade-off of ch. 7.
+
+Let us also mention [Don't drop your samples!](https://arxiv.org/abs/2405.20324) (CVPR 2024): a *consistency* loss that improves the training of conditional diffusion models — the field diagnosis of the pathologies of ch. 3.
 :::
 
 ::: note
@@ -640,12 +716,23 @@ The 2026–2027 sheet names Xi Wang as head of the course; Vicky Kalogeiton, who
 
 ## Exercises {#ex}
 
-1.  **★ Composition of noises.** Show by induction that $q(x_t \mid x_0) = \mathcal{N}(\sqrt{\bar\alpha_t} x_0, (1-\bar\alpha_t) I)$; why does this closed form make training efficient?
+1.  **★ Composition of noises.** Show by induction that
+    $$
+    q(x_t \mid x_0) = \mathcal{N}(\sqrt{\bar\alpha_t} x_0, (1-\bar\alpha_t) I);
+    $$
+    why does this closed form make training efficient?
 2.  **★ KL of Gaussians.** Prove proposition 0.4 in the scalar case by computing $\mathbb{E}_q[\log q - \log p]$; check that the KL is zero iff $\mu_1 = \mu_2, \sigma_1 = \sigma_2$ and strictly positive otherwise.
 3.  **★ Mode collapse.** Simulate a 2D Gaussian→ring GAN; observe the collapse; compare with a diffusion model trained on the same set (diversity via LPIPS).
 4.  **★ CFG.** Show that $w = 1$ recovers the conditional prediction and $w = 0$ the unconditional one; generate a grid $w \in \{0, 1, 5, 10\}$ and comment on the trade-off.
 5.  **★ CLIP zero-shot.** Compare the zero-shot accuracy of CLIP with the accuracy of a ResNet trained on 10 custom classes, as a function of the training size; where do the curves cross?
-6.  **★ Epsilon or score?** Using $x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon$, show that $\epsilon = -\sqrt{1-\bar\alpha_t}\,\nabla_{x_t}\log p(x_t \mid x_0)$.
+6.  **★ Epsilon or score?** Using
+    $$
+    x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\epsilon,
+    $$
+    show that
+    $$
+    \epsilon = -\sqrt{1-\bar\alpha_t}\,\nabla_{x_t}\log p(x_t \mid x_0).
+    $$
 7.  **★ Truncation.** For a StyleGAN whose $w$ approximately follows a centered Gaussian, show that the rule $w' = \bar w + \psi(w - \bar w)$, $\psi \in [0,1]$, reduces the variance of the generated style and comment on the quality/diversity trade-off as $\psi \to 0$.
 8.  **★★ DDPM ELBO.** Decompose the log-likelihood $\log p_\theta(x_0)$ into per-step terms and show that the noise MSE dominates (the KLs between Gaussians are closed-form).
 9.  **★★ FID and Wasserstein.** Recall the formula for $W_2^2$ between Gaussians (OT module) and show that the FID is an estimate of it (features; sampling bias).
@@ -656,11 +743,35 @@ The 2026–2027 sheet names Xi Wang as head of the course; Vicky Kalogeiton, who
 14. **★★★ Project.** Complete pipeline: light fine-tuning of a latent diffusion model on a small thematic set (LoRA on cross-attention), with parameterizable CFG; evaluate FID/CLIPScore before/after and analyze the effect of the guidance weight $w$ — also testing variable schedules $w(t)$ (cf. ch. 9).
 
 ::: note
-[Solution 1 — Composition of noises]{.tag} Induction: true at $t=1$ by definition; if $x_{t-1}\mid x_0$ is Gaussian with mean $\sqrt{\bar\alpha_{t-1}}x_0$ and variance $(1-\bar\alpha_{t-1})I$, then $x_t = \sqrt{\alpha_t}x_{t-1} + \sqrt{1-\alpha_t}\,\epsilon$ with $\epsilon$ independent; prop. 0.1 (sum of independent Gaussians) gives mean $\sqrt{\alpha_t\bar\alpha_{t-1}}x_0 = \sqrt{\bar\alpha_t}\,x_0$ and variance $\alpha_t(1-\bar\alpha_{t-1}) + (1-\alpha_t) = 1-\bar\alpha_t$. The closed form makes training efficient because the first $t-1$ steps are skipped: direct noising at any $t$, a single forward pass per training example.
+[Solution 1 — Composition of noises]{.tag} Induction: true at $t=1$ by definition. If $x_{t-1}\mid x_0$ is Gaussian with mean $\sqrt{\bar\alpha_{t-1}}x_0$ and variance $(1-\bar\alpha_{t-1})I$, then
+$$
+x_t = \sqrt{\alpha_t}x_{t-1} + \sqrt{1-\alpha_t}\,\epsilon
+$$
+with $\epsilon$ independent; prop. 0.1 (sum of independent Gaussians) gives mean and variance
+$$
+\sqrt{\alpha_t\bar\alpha_{t-1}}x_0 = \sqrt{\bar\alpha_t}\,x_0, \qquad \alpha_t(1-\bar\alpha_{t-1}) + (1-\alpha_t) = 1-\bar\alpha_t.
+$$
+The closed form makes training efficient because the first $t-1$ steps are skipped: direct noising at any $t$, a single forward pass per training example.
 :::
 
 ::: note
-[Solution 2 — KL of Gaussians (scalar case)]{.tag} $\mathrm{KL} = \mathbb{E}_q[\log q - \log p]$ with $\log q(x) = -\frac12\log(2\pi\sigma_1^2) - \frac{(x-\mu_1)^2}{2\sigma_1^2}$ and likewise for $p$. Difference: $\log q - \log p = \frac12\log\frac{\sigma_2^2}{\sigma_1^2} - \frac{(x-\mu_1)^2}{2\sigma_1^2} + \frac{(x-\mu_2)^2}{2\sigma_2^2}$. Now $\mathbb{E}_q[(x-\mu_1)^2] = \sigma_1^2$ and $\mathbb{E}_q[(x-\mu_2)^2] = \mathbb{E}[((x-\mu_1) + (\mu_1-\mu_2))^2] = \sigma_1^2 + (\mu_1-\mu_2)^2$ (zero cross term). Hence $\mathrm{KL}(q\|p) = \frac12\big[\log\frac{\sigma_2^2}{\sigma_1^2} + \frac{\sigma_1^2 + (\mu_1-\mu_2)^2}{\sigma_2^2} - 1\big]$. This is $\frac12[u - 1 - \log u] \ge 0$ with $u = \sigma_2^2/\sigma_1^2$ (since $\log u \le u - 1$) plus a squared term: zero iff $(\mu_1,\sigma_1) = (\mu_2,\sigma_2)$.
+[Solution 2 — KL of Gaussians (scalar case)]{.tag} $\mathrm{KL} = \mathbb{E}_q[\log q - \log p]$ with
+$$
+\log q(x) = -\frac12\log(2\pi\sigma_1^2) - \frac{(x-\mu_1)^2}{2\sigma_1^2}
+$$
+and likewise for $p$. Difference:
+$$
+\log q - \log p = \frac12\log\frac{\sigma_2^2}{\sigma_1^2} - \frac{(x-\mu_1)^2}{2\sigma_1^2} + \frac{(x-\mu_2)^2}{2\sigma_2^2}.
+$$
+Now $\mathbb{E}_q[(x-\mu_1)^2] = \sigma_1^2$ and
+$$
+\mathbb{E}_q[(x-\mu_2)^2] = \mathbb{E}[((x-\mu_1) + (\mu_1-\mu_2))^2] = \sigma_1^2 + (\mu_1-\mu_2)^2
+$$
+(zero cross term). Hence
+$$
+\mathrm{KL}(q\|p) = \frac12\big[\log\frac{\sigma_2^2}{\sigma_1^2} + \frac{\sigma_1^2 + (\mu_1-\mu_2)^2}{\sigma_2^2} - 1\big].
+$$
+This is $\frac12[u - 1 - \log u] \ge 0$ with $u = \sigma_2^2/\sigma_1^2$ (since $\log u \le u - 1$) plus a squared term: zero iff $(\mu_1,\sigma_1) = (\mu_2,\sigma_2)$.
 :::
 
 ::: note
@@ -696,19 +807,57 @@ The collapse is visible when the covered arc shrinks; compare with a 2D diffusio
 :::
 
 ::: note
-[Solution 4 — CFG]{.tag} $\tilde\epsilon = \epsilon_\theta(\varnothing) + w(\epsilon_\theta(c) - \epsilon_\theta(\varnothing))$: for $w = 0$, $\tilde\epsilon = \epsilon_\theta(\varnothing)$ (unconditional); for $w = 1$, $\tilde\epsilon = \epsilon_\theta(c)$ (conditional). For $w > 1$, the proof of thm. 4.1 shows that $\tilde\epsilon$ is the score of $p(x\mid c)^w p(x)^{1-w}$: an "over-weighted" conditional distribution, more peaked — increased prompt fidelity, reduced diversity (fewer samples explored). Typical grid: at $w=0$, off-topic images; $w=1$, correct and varied; $w=5$, highly compliant, repetitive; $w=10$, saturation (burnt colors, artifacts).
+[Solution 4 — CFG]{.tag}
+$$
+\tilde\epsilon = \epsilon_\theta(\varnothing) + w(\epsilon_\theta(c) - \epsilon_\theta(\varnothing)):
+$$
+for $w = 0$, $\tilde\epsilon = \epsilon_\theta(\varnothing)$ (unconditional); for $w = 1$, $\tilde\epsilon = \epsilon_\theta(c)$ (conditional).
+
+For $w > 1$, the proof of thm. 4.1 shows that $\tilde\epsilon$ is the score of $p(x\mid c)^w p(x)^{1-w}$: an "over-weighted" conditional distribution, more peaked — increased prompt fidelity, reduced diversity (fewer samples explored).
+
+Typical grid: at $w=0$, off-topic images; $w=1$, correct and varied; $w=5$, highly compliant, repetitive; $w=10$, saturation (burnt colors, artifacts).
 :::
 
 ::: note
-[Solution 6 — Noise and score]{.tag} See the proof of theorem 3.3: for $p(x_t\mid x_0) = \mathcal{N}(\sqrt{\bar\alpha_t}x_0, (1-\bar\alpha_t)I)$, $\nabla_{x_t}\log p = -(x_t - \sqrt{\bar\alpha_t}x_0)/(1-\bar\alpha_t) = -\epsilon/\sqrt{1-\bar\alpha_t}$, hence $\epsilon = -\sqrt{1-\bar\alpha_t}\,\nabla_{x_t}\log p(x_t\mid x_0)$. Consequence: the denoising MSE is a regression onto the conditional score; integrating over $x_0$, it targets the marginal score $\nabla\log p_t(x_t)$ — the starting point of the SDE formulation (ch. 4).
+[Solution 6 — Noise and score]{.tag} See the proof of theorem 3.3: for
+$$
+p(x_t\mid x_0) = \mathcal{N}(\sqrt{\bar\alpha_t}x_0, (1-\bar\alpha_t)I),
+$$
+$$
+\nabla_{x_t}\log p = -(x_t - \sqrt{\bar\alpha_t}x_0)/(1-\bar\alpha_t) = -\epsilon/\sqrt{1-\bar\alpha_t},
+$$
+hence
+$$
+\epsilon = -\sqrt{1-\bar\alpha_t}\,\nabla_{x_t}\log p(x_t\mid x_0).
+$$
+Consequence: the denoising MSE is a regression onto the conditional score; integrating over $x_0$, it targets the marginal score $\nabla\log p_t(x_t)$ — the starting point of the SDE formulation (ch. 4).
 :::
 
 ::: note
-[Solution 8 — DDPM ELBO (plan)]{.tag} (1) Write the ELBO of the chain $p_\theta(x_{0:T})$ against $q$ and telescope (Markov chain): $L = L_T + \sum_{t \ge 2} L_{t-1} + L_0$ with $L_{t-1} = \mathrm{KL}(q(x_{t-1}\mid x_t,x_0)\,\|\,p_\theta(x_{t-1}\mid x_t))$ and the reconstruction term $L_0 = -\mathbb{E}_q[\log p_\theta(x_0\mid x_1)]$. (2) $q(x_{t-1}\mid x_t,x_0)$ is Gaussian (product of two Gaussians: Bayes + completing the square). (3) Every $L_{t-1}$ is a KL of Gaussians: closed (prop. 0.4); with $\sigma_t^2 = \tilde\beta_t$ there remains the gap between the means $\propto \|\tilde\mu_t - \mu_\theta\|^2$. (4) The parameterization $\mu_\theta = \frac{1}{\sqrt{\alpha_t}}(x_t - \frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\epsilon_\theta)$ exchanges the gap between means for the noise MSE — full details in the proof of model 3.2.
+[Solution 8 — DDPM ELBO (plan)]{.tag}
+
+1.  Write the ELBO of the chain $p_\theta(x_{0:T})$ against $q$ and telescope (Markov chain): $L = L_T + \sum_{t \ge 2} L_{t-1} + L_0$ with
+    $$
+    L_{t-1} = \mathrm{KL}(q(x_{t-1}\mid x_t,x_0)\,\|\,p_\theta(x_{t-1}\mid x_t))
+    $$
+    and the reconstruction term $L_0 = -\mathbb{E}_q[\log p_\theta(x_0\mid x_1)]$.
+2.  $q(x_{t-1}\mid x_t,x_0)$ is Gaussian (product of two Gaussians: Bayes + completing the square).
+3.  Every $L_{t-1}$ is a KL of Gaussians: closed (prop. 0.4); with $\sigma_t^2 = \tilde\beta_t$ there remains the gap between the means $\propto \|\tilde\mu_t - \mu_\theta\|^2$.
+4.  The parameterization
+    $$
+    \mu_\theta = \frac{1}{\sqrt{\alpha_t}}(x_t - \frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\epsilon_\theta)
+    $$
+    exchanges the gap between means for the noise MSE — full details in the proof of model 3.2.
 :::
 
 ::: note
-[Solution 9 — FID and W2 (Bures)]{.tag} For two Gaussians $\mathcal{N}(\mu_1,\Sigma_1)$, $\mathcal{N}(\mu_2,\Sigma_2)$: $$W_2^2 = \|\mu_1 - \mu_2\|^2 + \mathrm{tr}\big(\Sigma_1 + \Sigma_2 - 2(\Sigma_1^{1/2}\Sigma_2\Sigma_1^{1/2})^{1/2}\big)$$ (proof: the diagonal case by rotation, then the general one — OT module). The FID is exactly this formula applied to the Gaussians *fitted to the Inception features* of the two image sets — an approximation of $W_2$ both through the features (transport happens only in the backbone's space) and through the moment estimates ($\hat\mu, \hat\Sigma$ on N samples: the FID is *biased upward* at small N — always compare at equal cohort size).
+[Solution 9 — FID and W2 (Bures)]{.tag} For two Gaussians $\mathcal{N}(\mu_1,\Sigma_1)$, $\mathcal{N}(\mu_2,\Sigma_2)$:
+$$
+W_2^2 = \|\mu_1 - \mu_2\|^2 + \mathrm{tr}\big(\Sigma_1 + \Sigma_2 - 2(\Sigma_1^{1/2}\Sigma_2\Sigma_1^{1/2})^{1/2}\big)
+$$
+(proof: the diagonal case by rotation, then the general one — OT module).
+
+The FID is exactly this formula applied to the Gaussians *fitted to the Inception features* of the two image sets — an approximation of $W_2$ both through the features (transport happens only in the backbone's space) and through the moment estimates ($\hat\mu, \hat\Sigma$ on N samples: the FID is *biased upward* at small N — always compare at equal cohort size).
 :::
 
 ## References {#refs}

@@ -316,7 +316,9 @@ This is the canonical example of the *structural* choice of mechanism according 
 A real analysis never releases a single statistic: it asks many queries, or, in training, takes thousands of gradient steps on the same data. This chapter computes how the privacy losses of successive mechanisms add up, and how Rényi DP keeps the total budget small.
 
 :::: thm
-[Theorem 3.1 — Basic composition, proved]{.tag} If $M_1$ is $\varepsilon_1$-DP and $M_2$, applied *after* $M_1$ and allowed to depend on its output, is $\varepsilon_2$-DP, then $(M_1, M_2)$ is $(\varepsilon_1 + \varepsilon_2)$-DP — adaptive composition *accumulates linearly*.
+[Theorem 3.1 — Basic composition, proved]{.tag} If $M_1$ is $\varepsilon_1$-DP and $M_2$, applied *after* $M_1$ and allowed to depend on its output, is $\varepsilon_2$-DP, then
+$$(M_1, M_2) \text{ is } (\varepsilon_1 + \varepsilon_2)\text{-DP}$$
+— adaptive composition *accumulates linearly*.
 
 ::: proof
 By conditioning then post-processing: for measurable $S$,
@@ -500,11 +502,25 @@ Distribution shift: a third source — the input leaves the training support; th
 :::
 
 ::: def
-[Definition 6.2 — The frequentist contract of calibration]{.tag} A probabilistic predictor $\hat p(y \mid x)$ is **calibrated** if among all the times it announces 80%, the truth occurs \~80% of the time: $$\mathbb{P}\big(y = 1 \mid \hat p(x) = c\big) = c \qquad \text{for (almost) all } c \in [0, 1].$$ Calibrated ≠ accurate: always predicting the prevalence 0.3 is perfectly calibrated and useless; calibrated ≠ certain. Calibration is a *decodability* condition: without it, no threshold, cost, or action derived from the probabilities has the intended meaning. The vocabulary of guarantees extends to sets: marginal coverage (ch. 9), conditional coverage (desired, imperfectly attainable), risk control (ch. 12).
+[Definition 6.2 — The frequentist contract of calibration]{.tag} A probabilistic predictor $\hat p(y \mid x)$ is **calibrated** if among all the times it announces 80%, the truth occurs \~80% of the time:
+$$\mathbb{P}\big(y = 1 \mid \hat p(x) = c\big) = c \qquad \text{for (almost) all } c \in [0, 1].$$
+
+Calibrated ≠ accurate: always predicting the prevalence 0.3 is perfectly calibrated and useless; calibrated ≠ certain. Calibration is a *decodability* condition: without it, no threshold, cost, or action derived from the probabilities has the intended meaning.
+
+The vocabulary of guarantees extends to sets: marginal coverage (ch. 9), conditional coverage (desired, imperfectly attainable), risk control (ch. 12).
 :::
 
 ::: note
-[Map of the UQ part]{.tag} Ch. 7: diagnosing (calibration, Brier). Ch. 8: two practical Bayesian answers (MC dropout, ensembles). Ch. 9: the distribution-free guarantee par excellence (conformal). Ch. 10: the "variable set size" version (quantiles). Ch. 11: the transport to LLMs. Ch. 12: decision-making arbitration (costs, abstention). Philosophy of the module: UQ without a *testable guarantee* is an opinion.
+[Map of the UQ part]{.tag}
+
+-   Ch. 7: diagnosing (calibration, Brier).
+-   Ch. 8: two practical Bayesian answers (MC dropout, ensembles).
+-   Ch. 9: the distribution-free guarantee par excellence (conformal).
+-   Ch. 10: the "variable set size" version (quantiles).
+-   Ch. 11: the transport to LLMs.
+-   Ch. 12: decision-making arbitration (costs, abstention).
+
+Philosophy of the module: UQ without a *testable guarantee* is an opinion.
 :::
 
 ## 7. Calibration: diagrams, ECE, Brier {#ch7}
@@ -512,7 +528,12 @@ Distribution shift: a third source — the input leaves the training support; th
 Before correcting a model's confidence, one must measure how wrong it is. This chapter gives the standard diagnostics — the reliability diagram, the expected calibration error and the Brier score — and the simplest fix, temperature scaling.
 
 ::: def
-[Definition 7.1 — Reliability diagram, bins, ECE]{.tag} Partition $[0, 1]$ into $B$ bins; bin $b$ = predictions with mean confidence $\mathrm{conf}_b$, observed accuracy $\mathrm{acc}_b$, count $n_b$. The **reliability diagram** plots $\mathrm{acc}_b$ against $\mathrm{conf}_b$ (the diagonal = perfect calibration); the **expected calibration error**: $$\mathrm{ECE} = \sum_{b=1}^{B} \frac{n_b}{n} \big| \mathrm{acc}_b - \mathrm{conf}_b \big|.$$ Precautions on binning: the partition influences the measure (10 bins is the de facto standard); kernel / isotonic-regression variants preferable in research (Naeini et al. 2015; see also the Machine Learning module ch. 4 for evaluation curves).
+[Definition 7.1 — Reliability diagram, bins, ECE]{.tag} Partition $[0, 1]$ into $B$ bins; bin $b$ = predictions with mean confidence $\mathrm{conf}_b$, observed accuracy $\mathrm{acc}_b$, count $n_b$.
+
+The **reliability diagram** plots $\mathrm{acc}_b$ against $\mathrm{conf}_b$ (the diagonal = perfect calibration); the **expected calibration error**:
+$$\mathrm{ECE} = \sum_{b=1}^{B} \frac{n_b}{n} \big| \mathrm{acc}_b - \mathrm{conf}_b \big|.$$
+
+Precautions on binning: the partition influences the measure (10 bins is the de facto standard); kernel / isotonic-regression variants preferable in research (Naeini et al. 2015; see also the Machine Learning module ch. 4 for evaluation curves).
 :::
 
 ::: ex
@@ -526,19 +547,47 @@ Before correcting a model's confidence, one must measure how wrong it is. This c
 | [0.8, 0.9) | 25 | 0.85 | 18 | 0.72 | 0.13 | 0.0325 |
 | [0.9, 1.0] | 15 | 0.95 | 12 | 0.80 | 0.15 | 0.0225 |
 
-$$\mathrm{ECE} = 0.005 + 0.010 + 0.025 + 0.0325 + 0.0225 = \mathbf{0.095}.$$ Global check: total accuracy $67/100 = 67\%$, mean confidence $\sum n_b\,\mathrm{conf}_b / n = 76.5\%$ — a gap of $9.5$ points, consistent: the model is **systematically overconfident** by \~10 points, and the reliability diagram would be a curve below the diagonal bending downward. This is the signature measured by Guo et al. (2017) on modern networks: more depth/capacity ⇒ more overconfidence, not less.
+$$\mathrm{ECE} = 0.005 + 0.010 + 0.025 + 0.0325 + 0.0225 = \mathbf{0.095}.$$
+
+Global check: total accuracy $67/100 = 67\%$, mean confidence $\sum n_b\,\mathrm{conf}_b / n = 76.5\%$ — a gap of $9.5$ points, consistent. The model is **systematically overconfident** by \~10 points, and the reliability diagram would be a curve below the diagonal bending downward.
+
+This is the signature measured by Guo et al. (2017) on modern networks: more depth/capacity ⇒ more overconfidence, not less.
 :::
 
 ::: def
-[Definition 7.3 — Brier score and its decomposition (Brier 1950; Murphy 1973)]{.tag} $$\mathrm{BS} = \frac{1}{n}\sum_i (\hat p_i - y_i)^2, \qquad \text{decomposition:} \quad \mathrm{BS} = \underbrace{\text{reliability}}_{\text{calibration}} - \underbrace{\text{resolution}}_{\text{discrimination}} + \underbrace{\text{uncertainty}}_{\text{irreducible}}.$$ The reliability term $= \sum_b \frac{n_b}{n}(\mathrm{conf}_b - \mathrm{acc}_b)^2$ (the squared, weighted ECE); resolution measures the deviation of the $\mathrm{acc}_b$ from the prevalence; uncertainty $= \bar y (1 - \bar y)$ does not depend on the model. BS rewards *both* calibration and discrimination — it is a quadratic Brier distance; not to be confused with the log-loss (cross-entropy), which infinitely punishes wrong certainties.
+[Definition 7.3 — Brier score and its decomposition (Brier 1950; Murphy 1973)]{.tag}
+$$\mathrm{BS} = \frac{1}{n}\sum_i (\hat p_i - y_i)^2, \qquad \text{decomposition:} \quad \mathrm{BS} = \underbrace{\text{reliability}}_{\text{calibration}} - \underbrace{\text{resolution}}_{\text{discrimination}} + \underbrace{\text{uncertainty}}_{\text{irreducible}}.$$
+
+-   the reliability term (the squared, weighted ECE):
+    $$\sum_b \frac{n_b}{n}(\mathrm{conf}_b - \mathrm{acc}_b)^2;$$
+-   resolution measures the deviation of the $\mathrm{acc}_b$ from the prevalence;
+-   uncertainty $= \bar y (1 - \bar y)$ does not depend on the model.
+
+BS rewards *both* calibration and discrimination — it is a quadratic Brier distance; not to be confused with the log-loss (cross-entropy), which infinitely punishes wrong certainties.
 :::
 
 ::: ex
-[Example 7.4 — Brier computed, and the mirage of confidence]{.tag} Four predictions: $(0.9, y{=}1)$, $(0.9, y{=}1)$, $(0.9, y{=}0)$, $(0.3, y{=}1)$: $$\mathrm{BS} = \frac{0.1^2 + 0.1^2 + 0.9^2 + 0.7^2}{4} = \frac{0.01 + 0.01 + 0.81 + 0.49}{4} = 0.33.$$ The *constant* predictor equal to the prevalence $3/4 = 0.75$ achieves $\mathrm{BS} = 0.75 \times 0.25 = 0.1875 < 0.33$: without information, it is better to state the base rate than to assert 90% — exactly the problem of overenthusiastic models.
+[Example 7.4 — Brier computed, and the mirage of confidence]{.tag} Four predictions: $(0.9, y{=}1)$, $(0.9, y{=}1)$, $(0.9, y{=}0)$, $(0.3, y{=}1)$:
+$$\mathrm{BS} = \frac{0.1^2 + 0.1^2 + 0.9^2 + 0.7^2}{4} = \frac{0.01 + 0.01 + 0.81 + 0.49}{4} = 0.33.$$
+The *constant* predictor equal to the prevalence $3/4 = 0.75$ achieves
+$$\mathrm{BS} = 0.75 \times 0.25 = 0.1875 < 0.33 .$$
+Without information, it is better to state the base rate than to assert 90% — exactly the problem of overenthusiastic models.
 :::
 
 ::: thm
-[Procedure 7.5 — Temperature scaling (Guo, Pleiss, Sun, Weinberger, 2017)]{.tag} A single scalar $T > 0$ recalibrates the logits: $\hat p_T(y \mid x) = \mathrm{softmax}(z/T)$; $T$ fitted by NLL on a validation set (a 1D optimization — which does not change the argmax, hence not the accuracy). **Computed.** Two classes, logits $z = (4, 0)$: $\mathrm{softmax}(z) = (0.982, 0.018)$; $T = 2$: $\mathrm{softmax}(2, 0) = (0.881, 0.119)$; $T = 4$: $\mathrm{softmax}(1, 0) = (0.731, 0.269)$. If the true frequency of class 1 in this neighborhood is \~75%, $T \approx 4$ is the right calibration — the ranking of the predictions is intact, only the confidence scale is corrected. Limits: $T$ is global, calibrated on a fixed distribution; local recalibration: isotonic, Platt per bin, or conformalized calibration (ch. 9-10).
+[Procedure 7.5 — Temperature scaling (Guo, Pleiss, Sun, Weinberger, 2017)]{.tag} A single scalar $T > 0$ recalibrates the logits:
+$$\hat p_T(y \mid x) = \mathrm{softmax}(z/T),$$
+$T$ fitted by NLL on a validation set (a 1D optimization — which does not change the argmax, hence not the accuracy).
+
+**Computed.** Two classes, logits $z = (4, 0)$:
+
+-   $T = 1$: $\mathrm{softmax}(z) = (0.982, 0.018)$;
+-   $T = 2$: $\mathrm{softmax}(2, 0) = (0.881, 0.119)$;
+-   $T = 4$: $\mathrm{softmax}(1, 0) = (0.731, 0.269)$.
+
+If the true frequency of class 1 in this neighborhood is \~75%, $T \approx 4$ is the right calibration — the ranking of the predictions is intact, only the confidence scale is corrected.
+
+Limits: $T$ is global, calibrated on a fixed distribution; local recalibration: isotonic, Platt per bin, or conformalized calibration (ch. 9-10).
 :::
 
 ```python
@@ -569,15 +618,24 @@ def fit_temperature(logits, y, grid=np.linspace(0.5, 10, 200)):
 Calibration corrects the confidence of one model, but a single model cannot tell what it has not learned. This chapter gives two practical ways of estimating that epistemic uncertainty — keeping dropout active at inference, and training an ensemble — and compares their costs.
 
 ::: def
-[Definition 8.1 — The Bayesian framework for networks]{.tag} A prior $p(w)$ on the weights, a likelihood $p(y \mid x, w)$; the predictive integrates epistemic uncertainty: $$p(y \mid x, \mathcal D) = \int p(y \mid x, w)\, p(w \mid \mathcal D)\, dw.$$ The posterior $p(w \mid \mathcal D)$ is intractable; the whole field is the art of approximating it without spending one's life on it (variational inference, Laplace, sampling; cf. Refresher Statistics module ch. 8 for the Bayesian foundation).
+[Definition 8.1 — The Bayesian framework for networks]{.tag} A prior $p(w)$ on the weights, a likelihood $p(y \mid x, w)$; the predictive integrates epistemic uncertainty:
+$$p(y \mid x, \mathcal D) = \int p(y \mid x, w)\, p(w \mid \mathcal D)\, dw.$$
+The posterior $p(w \mid \mathcal D)$ is intractable; the whole field is the art of approximating it without spending one's life on it (variational inference, Laplace, sampling; cf. Refresher Statistics module ch. 8 for the Bayesian foundation).
 :::
 
 ::: thm
-[Result 8.2 — MC dropout (Gal & Ghahramani, 2016)]{.tag} Train with dropout (Deep Learning module ch. 3) then, at inference, keep dropout active and average $T$ forward passes: $$\hat p(y \mid x) = \frac{1}{T} \sum_{t=1}^{T} p(y \mid x, \hat w_t), \qquad \hat w_t \sim \text{dropout masks}.$$ Gal & Ghahramani show that this procedure is approximate variational inference (in a deep Gaussian process): the dropout masks define a Bernoulli variational distribution over the weights, and the dropout loss with weight decay minimizes a KL bound toward the true posterior (spirit: like the substitution theorem of the bootstrap in Statistics in Action ch. 8 — an asymptotic justification for a massive procedure). **Cost:** $T$ forwards per example (typically $T \in [10, 100]$), zero retraining. **The variance between passes measures the epistemic part**.
+[Result 8.2 — MC dropout (Gal & Ghahramani, 2016)]{.tag} Train with dropout (Deep Learning module ch. 3) then, at inference, keep dropout active and average $T$ forward passes:
+$$\hat p(y \mid x) = \frac{1}{T} \sum_{t=1}^{T} p(y \mid x, \hat w_t), \qquad \hat w_t \sim \text{dropout masks}.$$
+
+Gal & Ghahramani show that this procedure is approximate variational inference (in a deep Gaussian process): the dropout masks define a Bernoulli variational distribution over the weights, and the dropout loss with weight decay minimizes a KL bound toward the true posterior (spirit: like the substitution theorem of the bootstrap in Statistics in Action ch. 8 — an asymptotic justification for a massive procedure).
+
+**Cost:** $T$ forwards per example (typically $T \in [10, 100]$), zero retraining. **The variance between passes measures the epistemic part**.
 :::
 
 ::: thm
-[Result 8.3 — Deep ensembles (Lakshminarayanan, Pritzel, Blundell, 2017)]{.tag} Train $M$ independent networks (different initializations; option: adversarial training) and aggregate: average of the probabilities (classification), mixture of the predicted Gaussians (regression — the aggregated variance includes the dispersion of the means). Bayesian position (Wilson & Izmailov, 2020): ensembles approximate the *posterior in function space* better than methods in weight space; pragmatic position: the most robust baseline of the field, at the price of $M$ trainings.
+[Result 8.3 — Deep ensembles (Lakshminarayanan, Pritzel, Blundell, 2017)]{.tag} Train $M$ independent networks (different initializations; option: adversarial training) and aggregate: average of the probabilities (classification), mixture of the predicted Gaussians (regression — the aggregated variance includes the dispersion of the means).
+
+Bayesian position (Wilson & Izmailov, 2020): ensembles approximate the *posterior in function space* better than methods in weight space; pragmatic position: the most robust baseline of the field, at the price of $M$ trainings.
 :::
 
 ::: ex
@@ -592,7 +650,9 @@ Calibration corrects the confidence of one model, but a single model cannot tell
   Out-of-distribution detection (OOD)   variance of the passes → score        disagreement between members → score
   LLM scale                             dropout already exists (reasonable)   prohibitive (but cf. snapshots/weight averaging)
 
-The famous "deep ensembles work better than one would expect from a Bayesian perspective" (a position defended by Lakshminarayanan et al.) and the counterpoint "ensembles ARE approximate Bayes model averaging" (Wilson & Izmailov): the disagreement is real, practice decides: *with a free training compute budget, ensembles; otherwise MC dropout*; and in all cases, evaluate the calibration (ch. 7) — not just the RMSE.
+The famous "deep ensembles work better than one would expect from a Bayesian perspective" (a position defended by Lakshminarayanan et al.) and the counterpoint "ensembles ARE approximate Bayes model averaging" (Wilson & Izmailov): the disagreement is real.
+
+Practice decides: *with a free training compute budget, ensembles; otherwise MC dropout*; and in all cases, evaluate the calibration (ch. 7) — not just the RMSE.
 :::
 
 ::: note
@@ -604,19 +664,60 @@ The famous "deep ensembles work better than one would expect from a Bayesian per
 Question: can we build prediction sets with coverage **guaranteed without any distributional assumption**? Answer (Vovk): yes, provided one has *exchangeable* data and accepts *marginal* coverage. This is the most useful result of the UQ part.
 
 ::: def
-[Definition 9.1 — Non-conformity scores and exchangeability]{.tag} Any score $s(x, y)$ (small = conforming): for classification, $s = 1 - \hat p(y \mid x)$ (softmax of the true class); for regression, $s = |y - \hat f(x)|$. The data $Z_1, \dots, Z_n, Z_{n+1}$ are **exchangeable** if their joint law is invariant under permutation (i.i.d. ⇒ exchangeable; cf. Statistics in Action ch. 11 for the de Finetti connection — exchangeability, not i.i.d., is the true foundation). Split conformal: split into *train* (the model learns) and *calibration* (the scores, never seen by the model).
+[Definition 9.1 — Non-conformity scores and exchangeability]{.tag} Any score $s(x, y)$ (small = conforming): for classification, $s = 1 - \hat p(y \mid x)$ (softmax of the true class); for regression, $s = |y - \hat f(x)|$.
+
+The data $Z_1, \dots, Z_n, Z_{n+1}$ are **exchangeable** if their joint law is invariant under permutation (i.i.d. ⇒ exchangeable; cf. Statistics in Action ch. 11 for the de Finetti connection — exchangeability, not i.i.d., is the true foundation).
+
+Split conformal: split into *train* (the model learns) and *calibration* (the scores, never seen by the model).
 :::
 
 :::: thm
-[Theorem 9.2 — Exact marginal coverage (proved)]{.tag} Let $s_1, \dots, s_n$ be the calibration scores and $s_{\text{new}}$ the score of a new pair, **exchangeable** at $(n+1)$ with continuous values. For $\alpha \in (0, 1)$, set $k = \lceil (n+1)(1 - \alpha) \rceil$ and let $\hat q$ be the $k$-th smallest calibration score. Then $$\mathbb{P}\big( s_{\text{new}} \leq \hat q \big) \;\geq\; 1 - \alpha \qquad \text{(exactly } k/(n+1) \text{ for continuous scores).}$$
+[Theorem 9.2 — Exact marginal coverage (proved)]{.tag} Let $s_1, \dots, s_n$ be the calibration scores and $s_{\text{new}}$ the score of a new pair, **exchangeable** at $(n+1)$ with continuous values.
+
+For $\alpha \in (0, 1)$, set $k = \lceil (n+1)(1 - \alpha) \rceil$ and let $\hat q$ be the $k$-th smallest calibration score. Then
+$$\mathbb{P}\big( s_{\text{new}} \leq \hat q \big) \;\geq\; 1 - \alpha \qquad \text{(exactly } k/(n+1) \text{ for continuous scores).}$$
 
 ::: proof
-By exchangeability, the rank of $s_{\text{new}}$ in the multiset $\{s_1, \dots, s_n, s_{\text{new}}\}$ is **uniform over $\{1, \dots, n+1\}$**. Justification: for every permutation $\sigma$ of $\{1, \dots, n+1\}$, the law of $(Z_{\sigma(1)}, \dots, Z_{\sigma(n+1)})$ is that of $(Z_1, \dots, Z_{n+1})$; the event "the rank of the last coordinate equals $r$" is the image by permutation of "the rank equals $r'$" for all $r, r'$ — same probability, and the sum of the $n+1$ probabilities equals 1: each equals $1/(n+1)$. With continuous scores, ties are almost surely absent, and the event $\{s_{\text{new}} \leq \hat q\}$ is exactly $\{\text{rank} \leq k\}$, of probability $k/(n+1) \geq 1 - \alpha$ by definition of $k$. By exchanging the roles of the $n+1$ positions, no asymptotic result is used: the guarantee is *finite-sample*. With ties, taking $\hat q$ as the $k$-th smallest value counting strictly keeps the event $\{s_{\text{new}} < \hat q\} \cup \{s_{\text{new}} = \hat q\}$ of probability $\geq k/(n+1)$ — the bound survives. [∎]{.qed}
+By exchangeability, the rank of $s_{\text{new}}$ in the multiset $\{s_1, \dots, s_n, s_{\text{new}}\}$ is **uniform over $\{1, \dots, n+1\}$**.
+
+Justification: for every permutation $\sigma$ of $\{1, \dots, n+1\}$, the law of $(Z_{\sigma(1)}, \dots, Z_{\sigma(n+1)})$ is that of $(Z_1, \dots, Z_{n+1})$.
+
+The event "the rank of the last coordinate equals $r$" is the image by permutation of "the rank equals $r'$" for all $r, r'$ — same probability, and the sum of the $n+1$ probabilities equals 1: each equals $1/(n+1)$.
+
+With continuous scores, ties are almost surely absent, and the event $\{s_{\text{new}} \leq \hat q\}$ is exactly $\{\text{rank} \leq k\}$, of probability
+$$\frac{k}{n+1} \geq 1 - \alpha$$
+by definition of $k$. By exchanging the roles of the $n+1$ positions, no asymptotic result is used: the guarantee is *finite-sample*.
+
+With ties, taking $\hat q$ as the $k$-th smallest value counting strictly keeps the event
+$$\{s_{\text{new}} < \hat q\} \cup \{s_{\text{new}} = \hat q\}$$
+of probability $\geq k/(n+1)$ — the bound survives. [∎]{.qed}
 :::
 ::::
 
+::: key
+[Key result — split conformal coverage]{.tag}
+$$k = \lceil (n+1)(1 - \alpha) \rceil, \qquad \hat q = s_{(k)}, \qquad \mathbb{P}\big( s_{\text{new}} \leq \hat q \big) \geq 1 - \alpha$$
+:::
+
 ::: ex
-[Example 9.3 — Split conformal, algorithm and worked example]{.tag} **Algorithm.** (1) train $\hat f$ on the train set; (2) compute the scores $s_i$ on the $n$ calibration points; (3) $k = \lceil (n+1)(1-\alpha) \rceil$, $\hat q$ = $k$-th smallest score; (4) predict, for a new $x$, the set $C(x) = \{y : s(x, y) \leq \hat q\}$ — in regression: $[\hat f(x) - \hat q, \hat f(x) + \hat q]$. **Example (regression).** $n = 9$, $\alpha = 0.1$ ⇒ $k = \lceil 10 \times 0.9 \rceil = 9$. Absolute calibration residuals: 0.02 · 0.05 · 0.08 · 0.11 · 0.14 · 0.19 · 0.25 · 0.34 · 0.51 — the 9th (largest) is $\hat q = 0.51$; the prediction for any new $x$ is $\hat f(x) \pm 0.51$, with $\mathbb{P}(\text{cover}) \geq 90\%$ — *exactly* $9/10 = 90\%$ if the future residuals resemble the calibration ones. **Classification**: same steps with $s = 1 - \hat p(\text{candidate predicted class})$; the set $C(x)$ contains the classes with sufficient softmax; typical size 1 where the model is confident, 2-3 at the boundaries — the map of set sizes is a free ambiguity detector. **Effect of $n$**: $\hat q$ is the empirical $(1-\alpha)$-quantile with the finite-sample correction $\lceil(n+1)(1-\alpha)\rceil$; the $+1$ counts the new point, which is the $(n+1)$-th member of the exchangeable sample. When $\alpha < 1/(n+1)$, $k$ exceeds $n$ (e.g. $\alpha = 0.1$, $n = 5$: $k = \lceil 5.4 \rceil = 6 > n$); the set is then all of $\mathbb R$ — the algorithm honestly admits its ignorance.
+[Example 9.3 — Split conformal, algorithm and worked example]{.tag} **Algorithm.**
+
+1.  train $\hat f$ on the train set;
+2.  compute the scores $s_i$ on the $n$ calibration points;
+3.  $k = \lceil (n+1)(1-\alpha) \rceil$, $\hat q$ = $k$-th smallest score;
+4.  predict, for a new $x$, the set $C(x) = \{y : s(x, y) \leq \hat q\}$ — in regression: $[\hat f(x) - \hat q, \hat f(x) + \hat q]$.
+
+**Example (regression).** $n = 9$, $\alpha = 0.1$ ⇒ $k = \lceil 10 \times 0.9 \rceil = 9$. Absolute calibration residuals: 0.02 · 0.05 · 0.08 · 0.11 · 0.14 · 0.19 · 0.25 · 0.34 · 0.51 — the 9th (largest) is $\hat q = 0.51$. The prediction for any new $x$ is
+$$\hat f(x) \pm 0.51, \qquad \mathbb{P}(\text{cover}) \geq 90\%$$
+— *exactly* $9/10 = 90\%$ if the future residuals resemble the calibration ones.
+
+**Classification**: same steps with $s = 1 - \hat p(\text{candidate predicted class})$; the set $C(x)$ contains the classes with sufficient softmax. Typical size 1 where the model is confident, 2-3 at the boundaries — the map of set sizes is a free ambiguity detector.
+
+**Effect of $n$**: $\hat q$ is the empirical $(1-\alpha)$-quantile with the finite-sample correction $\lceil(n+1)(1-\alpha)\rceil$; the $+1$ counts the new point, which is the $(n+1)$-th member of the exchangeable sample.
+
+When $\alpha < 1/(n+1)$, $k$ exceeds $n$ (e.g. $\alpha = 0.1$, $n = 5$):
+$$k = \lceil 5.4 \rceil = 6 > n ;$$
+the set is then all of $\mathbb R$ — the algorithm honestly admits its ignorance.
 :::
 
 ```python
@@ -637,7 +738,11 @@ print(f"qhat = {qhat:.3f}, observed coverage = {cov:.3f} (target >= {1-alpha})")
 ```
 
 ::: note
-[What the theorem says — and does not say]{.tag} Coverage is **marginal**: on average over the draws of the calibration set *and* of new pairs. It can be uneven across groups (conditional coverage); extensions (Mondrian conformal: per-stratum coverage; weighted conformal: known covariate shift) handle structured cases. The train/calibration swap costs data; CV+/jackknife+ variants when $n$ is scarce. Internal link: the Statistics in Action module ch. 8 applies the same "empirical quantile + finite-sample correction" logic to bootstrap intervals.
+[What the theorem says — and does not say]{.tag} Coverage is **marginal**: on average over the draws of the calibration set *and* of new pairs.
+
+It can be uneven across groups (conditional coverage); extensions (Mondrian conformal: per-stratum coverage; weighted conformal: known covariate shift) handle structured cases.
+
+The train/calibration swap costs data; CV+/jackknife+ variants when $n$ is scarce. Internal link: the Statistics in Action module ch. 8 applies the same "empirical quantile + finite-sample correction" logic to bootstrap intervals.
 :::
 
 ## 10. Quantile and conformalized regression {#ch10}
@@ -645,31 +750,63 @@ print(f"qhat = {qhat:.3f}, observed coverage = {cov:.3f} (target >= {1-alpha})")
 Split conformal regression returns intervals of the same width everywhere, even where the noise is small. This chapter makes the width adapt to the input by learning conditional quantiles, then restores the finite-sample guarantee by conformalizing them.
 
 ::: def
-[Definition 10.1 — Distributional quantile, quantile regression, pinball loss (Koenker & Bassett, 1978)]{.tag} The quantile $q_\tau(x)$ of $Y \mid X = x$ satisfies $\mathbb P(Y \leq q_\tau(x) \mid x) = \tau$. One estimates it by minimizing the **pinball loss**: $$\ell_\tau(y, \hat q) = \begin{cases} \tau\,(y - \hat q) & y \geq \hat q \\ (1 - \tau)\,(\hat q - y) & y < \hat q \end{cases} \qquad \text{(subgradients } \in [\tau - 1, \tau]\text{)}.$$ This is a convex problem (a linear program for the linear model; gradient descent for networks); training two heads $\hat q_{\text{lo}} = \hat q_{\alpha/2}$, $\hat q_{\text{hi}} = \hat q_{1 - \alpha/2}$ gives an *adaptive* prediction band — wide where the data are dispersed (heteroscedastic aleatoric, ch. 6). Without an exact coverage guarantee, however: the learned quantiles are optimistic on the train set.
+[Definition 10.1 — Distributional quantile, quantile regression, pinball loss (Koenker & Bassett, 1978)]{.tag} The quantile $q_\tau(x)$ of $Y \mid X = x$ satisfies $\mathbb P(Y \leq q_\tau(x) \mid x) = \tau$. One estimates it by minimizing the **pinball loss**:
+$$\ell_\tau(y, \hat q) = \begin{cases} \tau\,(y - \hat q) & y \geq \hat q \\ (1 - \tau)\,(\hat q - y) & y < \hat q \end{cases} \qquad \text{(subgradients } \in [\tau - 1, \tau]\text{)}.$$
+
+This is a convex problem (a linear program for the linear model; gradient descent for networks).
+
+Training two heads $\hat q_{\text{lo}} = \hat q_{\alpha/2}$, $\hat q_{\text{hi}} = \hat q_{1 - \alpha/2}$ gives an *adaptive* prediction band — wide where the data are dispersed (heteroscedastic aleatoric, ch. 6). Without an exact coverage guarantee, however: the learned quantiles are optimistic on the train set.
 :::
 
 ::: thm
-[Theorem 10.2 — Conformalized Quantile Regression (Romano, Patterson, Candès, 2019)]{.tag} Non-conformity score on calibration: $$s_i = \max\big( \hat q_{\text{lo}}(x_i) - y_i,\; y_i - \hat q_{\text{hi}}(x_i) \big).$$ Taking $\hat q$ = the $\lceil(n+1)(1-\alpha)\rceil$-th smallest score, the band $$C(x) = \big[ \hat q_{\text{lo}}(x) - \hat q,\; \hat q_{\text{hi}}(x) + \hat q \big]$$ has coverage $\geq 1 - \alpha$ in finite samples (thm 9.2), *and* inherits the adaptivity of the learned quantiles: the bands vary with $x$. In short: **CQR = quantiles (local shape) + conformal (global guarantee)** — the dominant recipe in practice.
+[Theorem 10.2 — Conformalized Quantile Regression (Romano, Patterson, Candès, 2019)]{.tag} Non-conformity score on calibration:
+$$s_i = \max\big( \hat q_{\text{lo}}(x_i) - y_i,\; y_i - \hat q_{\text{hi}}(x_i) \big).$$
+Taking $\hat q$ = the $\lceil(n+1)(1-\alpha)\rceil$-th smallest score, the band
+$$C(x) = \big[ \hat q_{\text{lo}}(x) - \hat q,\; \hat q_{\text{hi}}(x) + \hat q \big]$$
+has coverage $\geq 1 - \alpha$ in finite samples (thm 9.2), *and* inherits the adaptivity of the learned quantiles: the bands vary with $x$.
+
+In short: **CQR = quantiles (local shape) + conformal (global guarantee)** — the dominant recipe in practice.
 :::
 
 ::: ex
-[Example 10.3 — CQR on a synthetic case, verified]{.tag} $y = 2x + \sin(2x)\, (1 + 0.5x)\,\varepsilon$ (increasing variance). In the lab: (1) a two-head pinball network ($\tau \in \{0.05, 0.95\}$); (2) 1000 calibration points, scores $s_i$; (3) $\hat q \approx$ corrected empirical quantile; (4) over 100 repetitions, mean coverage 89.8% (target 90%), bands \~3× narrower than the constant-residual split conformal in calm regions — the "hourglass" plot of the bands flaring at large $x$ is the visual deliverable of the lab (exercise 8).
+[Example 10.3 — CQR on a synthetic case, verified]{.tag}
+$$y = 2x + \sin(2x)\, (1 + 0.5x)\,\varepsilon \qquad \text{(increasing variance)}.$$
+In the lab:
+
+1.  a two-head pinball network ($\tau \in \{0.05, 0.95\}$);
+2.  1000 calibration points, scores $s_i$;
+3.  $\hat q \approx$ corrected empirical quantile;
+4.  over 100 repetitions, mean coverage 89.8% (target 90%), bands \~3× narrower than the constant-residual split conformal in calm regions — the "hourglass" plot of the bands flaring at large $x$ is the visual deliverable of the lab (exercise 8).
 :::
 
 ## 11. UQ for LLMs {#ch11}
 
-LLMs add three difficulties to the calibration problem: the output space is combinatorial (sequences, not classes); RLHF training seems to degrade verbal calibration; and generative use (a written answer) does not naturally expose token probabilities. The M2 module "Explainability, Security, Privacy of LLMs" will complete this part (security, jailbreaks, training extraction); cf. also the Large Language Models module, ch. 9.
+LLMs add three difficulties to the calibration problem: the output space is combinatorial (sequences, not classes); RLHF training seems to degrade verbal calibration; and generative use (a written answer) does not naturally expose token probabilities.
+
+The M2 module "Explainability, Security, Privacy of LLMs" will complete this part (security, jailbreaks, training extraction); cf. also the Large Language Models module, ch. 9.
 
 ::: def
-[Definition 11.1 — Verbalized confidence]{.tag} Ask the model for its confidence *in words*: "What's the probability that your answer is correct? Answer with a number in [0, 100]" (Lin, Hilton, Evans, 2022). On pre-trained models (GPT-3 on trivia), verbalized confidence is *fairly well calibrated* — the model has absorbed the calibration of its pre-training log-loss. But: Tian et al. (2023, "Just Ask for Calibration") show that aligned (RLHF) models are clearly overconfident and not very sensitive to the wording; Xiong et al. (2024) confirm the systematic overconfidence and the massive influence of the prompt (chain-of-thought, multiple choice), with calibration gaps depending on the format of several tens of ECE points.
+[Definition 11.1 — Verbalized confidence]{.tag} Ask the model for its confidence *in words*: "What's the probability that your answer is correct? Answer with a number in [0, 100]" (Lin, Hilton, Evans, 2022).
+
+On pre-trained models (GPT-3 on trivia), verbalized confidence is *fairly well calibrated* — the model has absorbed the calibration of its pre-training log-loss.
+
+But: Tian et al. (2023, "Just Ask for Calibration") show that aligned (RLHF) models are clearly overconfident and not very sensitive to the wording; Xiong et al. (2024) confirm the systematic overconfidence and the massive influence of the prompt (chain-of-thought, multiple choice), with calibration gaps depending on the format of several tens of ECE points.
 :::
 
 ::: def
-[Definition 11.2 — Three native sources of generative uncertainty]{.tag} **(1) Token logprobs**: entropy of the distribution of the next token, or sequence probability (product); biased (length, temperature); local calibration per bin (as in ch. 7) on a labeled set. **(2) Self-consistency**: sample $K$ trajectories (temperature > 0) and measure agreement: the frequency of the majority answer is a proxy for confidence (direct link with the ensemble diversity of ch. 8 — prediction averaging vs variance); Kuhn, Gal, Farquhar (2023) refine this into **semantic uncertainty**: cluster the *semantically equivalent* responses (mutual implications predicted by an NLI) and compute the entropy over the clusters — because "Paris", "paris", and "the capital" are the same answer for the user; separates semantic uncertainty (is the answer determined?) from lexical uncertainty. **(3) Generative conformal**: apply ch. 9 to scores (negative sequence logprob, semantic conformity): response sets with guaranteed coverage — the loop is closed with distribution-free methods.
+[Definition 11.2 — Three native sources of generative uncertainty]{.tag}
+
+1.  **Token logprobs**: entropy of the distribution of the next token, or sequence probability (product); biased (length, temperature); local calibration per bin (as in ch. 7) on a labeled set.
+2.  **Self-consistency**: sample $K$ trajectories (temperature > 0) and measure agreement: the frequency of the majority answer is a proxy for confidence (direct link with the ensemble diversity of ch. 8 — prediction averaging vs variance).
+
+    Kuhn, Gal, Farquhar (2023) refine this into **semantic uncertainty**: cluster the *semantically equivalent* responses (mutual implications predicted by an NLI) and compute the entropy over the clusters — because "Paris", "paris", and "the capital" are the same answer for the user; separates semantic uncertainty (is the answer determined?) from lexical uncertainty.
+3.  **Generative conformal**: apply ch. 9 to scores (negative sequence logprob, semantic conformity): response sets with guaranteed coverage — the loop is closed with distribution-free methods.
 :::
 
 ::: note
-[The privacy wall on the LLM side]{.tag} LLMs memorize (ch. 5, Secret Sharer); DP-SGD at the scale of 10¹¹ parameters still costs too much utility for general-purpose pre-training; current industrial leads: DP-SGD on the alignment phases (the most sensitive data), private RAG (the data stay server-side with per-query budgets), federated learning + DP (cf. Emerging ML module ch. 3), and the systematic evaluation of extraction (canaries). An open topic — precisely the crossroads targeted by this module.
+[The privacy wall on the LLM side]{.tag} LLMs memorize (ch. 5, Secret Sharer); DP-SGD at the scale of 10¹¹ parameters still costs too much utility for general-purpose pre-training.
+
+Current industrial leads: DP-SGD on the alignment phases (the most sensitive data), private RAG (the data stay server-side with per-query budgets), federated learning + DP (cf. Emerging ML module ch. 3), and the systematic evaluation of extraction (canaries). An open topic — precisely the crossroads targeted by this module.
 :::
 
 ## 12. Applications: deciding under uncertainty {#ch12}
@@ -677,11 +814,23 @@ LLMs add three difficulties to the calibration problem: the output space is comb
 A probability, an interval or a privacy budget is only useful once it drives a decision: treat or not, raise an alert, abstain and hand over to a human. This chapter turns the guarantees of the module into decision rules.
 
 ::: ex
-[Example 12.1 — Medicine: calibration as a condition of care]{.tag} A risk model announcing "30% complications" triggers a costly protocol: if the patients announced at 30% actually suffer complications 45% of the time (the risk is underestimated), we undertreat; if they suffer them 15% of the time (the risk is overestimated), we overtreat — both harm patients. Van Calster et al. (2019) document the chronic miscalibration of published clinical models and call it the "Achilles heel of predictive analytics"; remedy: mandatory reliability diagrams (ch. 7), recalibration (temperature/isotonic), and for binary decisions: thresholds derived from utility (FN cost / FP cost), not raw probabilities.
+[Example 12.1 — Medicine: calibration as a condition of care]{.tag} A risk model announcing "30% complications" triggers a costly protocol: if the patients announced at 30% actually suffer complications 45% of the time (the risk is underestimated), we undertreat; if they suffer them 15% of the time (the risk is overestimated), we overtreat — both harm patients.
+
+Van Calster et al. (2019) document the chronic miscalibration of published clinical models and call it the "Achilles heel of predictive analytics".
+
+Remedy: mandatory reliability diagrams (ch. 7), recalibration (temperature/isotonic), and for binary decisions: thresholds derived from utility (FN cost / FP cost), not raw probabilities.
 :::
 
 ::: def
-[Definition 12.2 — Expected-utility decision, abstention, risk control]{.tag} With costs $c_{\text{FP}}, c_{\text{FN}}$, the optimal classifier will predict 1 only if $\hat p \geq c_{\text{FP}} / (c_{\text{FP}} + c_{\text{FN}})$ — an exact formula *if* $\hat p$ is calibrated (ch. 6); hence the sequence of the module: calibrate (7), aggregate the sources (8-10), then decide. **Selective abstention**: the model may answer "I don't know" when the conformal set has > k elements or the CQR band is wider than a business threshold (delegation to a human); the risk-coverage curve is plotted in the lab. **Risk control** (Angelopoulos, Bates, Candès, Jordan, Lei, 2021): choose the threshold itself on a calibration set to control an *expectation* of arbitrary risk (error rate > budget; false negatives < budget); it is the same empirical-quantile equation as ch. 9, applied to a decision threshold — the final building block of the "guarantee" chain.
+[Definition 12.2 — Expected-utility decision, abstention, risk control]{.tag} With costs $c_{\text{FP}}, c_{\text{FN}}$, the optimal classifier will predict 1 only if
+$$\hat p \geq c_{\text{FP}} / (c_{\text{FP}} + c_{\text{FN}})$$
+— an exact formula *if* $\hat p$ is calibrated (ch. 6). Hence the sequence of the module: calibrate (7), aggregate the sources (8-10), then decide.
+
+**Selective abstention**: the model may answer "I don't know" when the conformal set has > k elements or the CQR band is wider than a business threshold (delegation to a human); the risk-coverage curve is plotted in the lab.
+
+**Risk control** (Angelopoulos, Bates, Candès, Jordan, Lei, 2021): choose the threshold itself on a calibration set to control an *expectation* of arbitrary risk (error rate > budget; false negatives < budget).
+
+It is the same empirical-quantile equation as ch. 9, applied to a decision threshold — the final building block of the "guarantee" chain.
 :::
 
 ::: ex
@@ -701,17 +850,80 @@ Position in the master: this module is the "guarantees" foundation of M2; the Ge
 
 ## Exercises {#ex}
 
-1.  **★ Laplace mechanism.** (a) Re-prove thm 2.1 for $k = 1$. (b) Counting with ε = ln 20: probability of an error ≥ 2? ≥ 5? (c) 50-bin histogram, total ε = 1; distribute the noise (composition) and compare the mean squared error with the vector Laplace mechanism in a single query.
-2.  **★ Local DP.** (a) Prove the debiasing formula 4.2 and its variance factor. (b) In RAPPOR with 128 bits, 2 successive RRs: what ε per bit? (c) Sizing: precision of ±2 points on a proportion, $p = 0.75$ — how many users?
-3.  **★ Calibration.** (a) Recompute the ECE 7.2 with 10 equal-width bins and comment on the sensitivity. (b) Implement the reliability diagram. (c) Temperature scaling on CIFAR-10 (ResNet): ECE before/after, NLL before/after, accuracy unchanged? (d) Show that the constant 0.75 beats the classifier of example 7.4 in Brier score but not in log-loss if one of the events becomes certain.
-4.  **★★ Composition.** (a) Redo the computation 3.4 for $\sigma = 12$, $k = 256$, $\delta = 10^{-5}$. (b) Inverse: what $\sigma$ for $k = 10^4$ DP-SGD steps, ε = 2, δ = 10⁻⁵, $\gamma = 0.01$ (approximation without amplification, then with the $\gamma^2$ factor)? (c) Show that RDP composition at fixed $\alpha$ is exact for Gaussians (direct computation of the Rényi divergence of a product).
+1.  **★ Laplace mechanism.**
+
+    a.  Re-prove thm 2.1 for $k = 1$.
+
+    b.  Counting with ε = ln 20: probability of an error ≥ 2? ≥ 5?
+
+    c.  50-bin histogram, total ε = 1; distribute the noise (composition) and compare the mean squared error with the vector Laplace mechanism in a single query.
+2.  **★ Local DP.**
+
+    a.  Prove the debiasing formula 4.2 and its variance factor.
+
+    b.  In RAPPOR with 128 bits, 2 successive RRs: what ε per bit?
+
+    c.  Sizing: precision of ±2 points on a proportion, $p = 0.75$ — how many users?
+3.  **★ Calibration.**
+
+    a.  Recompute the ECE 7.2 with 10 equal-width bins and comment on the sensitivity.
+
+    b.  Implement the reliability diagram.
+
+    c.  Temperature scaling on CIFAR-10 (ResNet): ECE before/after, NLL before/after, accuracy unchanged?
+
+    d.  Show that the constant 0.75 beats the classifier of example 7.4 in Brier score but not in log-loss if one of the events becomes certain.
+4.  **★★ Composition.**
+
+    a.  Redo the computation 3.4 for $\sigma = 12$, $k = 256$, $\delta = 10^{-5}$.
+
+    b.  Inverse: what $\sigma$ for $k = 10^4$ DP-SGD steps, ε = 2, δ = 10⁻⁵, $\gamma = 0.01$ (approximation without amplification, then with the $\gamma^2$ factor)?
+
+    c.  Show that RDP composition at fixed $\alpha$ is exact for Gaussians (direct computation of the Rényi divergence of a product).
 5.  **★★ DP-SGD.** On MNIST: implement per-example clipping + noise (numpy or Opacus), plot accuracy vs ε for σ ∈ {0, 0.5, 1, 2}, comment on the frontier; ablation on $C$ (0.1 to 10); verify that without clipping the mechanism is no longer DP.
-6.  **★★ MC dropout versus ensembles.** 1D heteroscedastic regression: train (a) one network + MC dropout ($T = 50$); (b) 5 networks (deep ensemble); compare NLL, RMSE, coverage of the ±2σ bands; (c) test both out of distribution (extrapolation); (d) compare training and inference times, and conclude in a budget-constrained situation.
-7.  **★★ Conformal.** (a) Re-prove the uniformity of the rank with ties (convention of thm 9.2). (b) Empirically verify the coverage over 1000 repetitions (n = 1000, α = 0.1): histogram of the coverages — what happens if the data are *not* exchangeable (drift)? (c) Effect of the calibration size: $n \in \{20, 100, 1000\}$; (d) implement per-class Mondrian and measure the coverage inequality across classes.
+6.  **★★ MC dropout versus ensembles.** 1D heteroscedastic regression: train
+
+    a.  one network + MC dropout ($T = 50$);
+
+    b.  5 networks (deep ensemble); compare NLL, RMSE, coverage of the ±2σ bands;
+
+    c.  test both out of distribution (extrapolation);
+
+    d.  compare training and inference times, and conclude in a budget-constrained situation.
+7.  **★★ Conformal.**
+
+    a.  Re-prove the uniformity of the rank with ties (convention of thm 9.2).
+
+    b.  Empirically verify the coverage over 1000 repetitions (n = 1000, α = 0.1): histogram of the coverages — what happens if the data are *not* exchangeable (drift)?
+
+    c.  Effect of the calibration size: $n \in \{20, 100, 1000\}$;
+
+    d.  implement per-class Mondrian and measure the coverage inequality across classes.
 8.  **★★ CQR.** Reproduce example 10.3; compare the mean widths CQR vs constant split conformal; what happens if the two quantile heads cross (lo > hi)? Fix it (monotonicity constraint or sorting).
-9.  **★★ Decision.** Screening: prevalence 5%, costs $c_{FP} = 1$, $c_{FN} = 20$. (a) Optimal threshold on calibrated probabilities. (b) Re-derive with probabilities overconfident by 10 points — quantify the cost of miscalibration. (c) Add the abstention option with a delegation cost; plot risk-coverage.
-10. **★★★ LLM UQ.** (a) On 100 trivia questions: verbalized confidence vs actual frequency — plot the reliability diagram. (b) Self-consistency K = 10: correlation between agreement and correctness. (c) Group the answers semantically (by hand or NLI) and compare lexical vs semantic entropy. (d) At small scale: build a conformal set of answers and measure the coverage.
-11. **★★★ Project.** Complete "privacy + UQ" pipeline: a sensitive dataset (e.g. Adult): (1) publish useful statistics under budget ε = 2 (mechanisms, composition); (2) train a private predictive model (DP-SGD); (3) calibrate and conformalize its outputs; (4) write the guarantee sheet (ε, δ, coverage, ECE) and the limitations discussion. Grading: 30% privacy, 30% UQ, 20% empirical validation, 20% sheet and honesty about the limits.
+9.  **★★ Decision.** Screening: prevalence 5%, costs $c_{FP} = 1$, $c_{FN} = 20$.
+
+    a.  Optimal threshold on calibrated probabilities.
+
+    b.  Re-derive with probabilities overconfident by 10 points — quantify the cost of miscalibration.
+
+    c.  Add the abstention option with a delegation cost; plot risk-coverage.
+10. **★★★ LLM UQ.**
+
+    a.  On 100 trivia questions: verbalized confidence vs actual frequency — plot the reliability diagram.
+
+    b.  Self-consistency K = 10: correlation between agreement and correctness.
+
+    c.  Group the answers semantically (by hand or NLI) and compare lexical vs semantic entropy.
+
+    d.  At small scale: build a conformal set of answers and measure the coverage.
+11. **★★★ Project.** Complete "privacy + UQ" pipeline: a sensitive dataset (e.g. Adult):
+
+    1.  publish useful statistics under budget ε = 2 (mechanisms, composition);
+    2.  train a private predictive model (DP-SGD);
+    3.  calibrate and conformalize its outputs;
+    4.  write the guarantee sheet (ε, δ, coverage, ECE) and the limitations discussion.
+
+    Grading: 30% privacy, 30% UQ, 20% empirical validation, 20% sheet and honesty about the limits.
 
 ## References {#refs}
 
