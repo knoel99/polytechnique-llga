@@ -126,9 +126,9 @@ format:
   Status in the program   [P1 elective]{.badge .option}[Outside the recommended track]{.badge .position}
   ----------------------- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-**Audience**: an engineer who has already opened an image in NumPy / OpenCV and applied a blur — no need for a projective-geometry PhD on page 1. **Empirical first**: Canny over-sensitive to noise, a homography that breaks on a panorama, a CNN that detects better than SIFT… until labels run out. Only then do we name pinhole, epipolar geometry, ICP.
+**Audience**: an engineer who has already opened an image in NumPy / OpenCV and applied a blur; no projective geometry is assumed on page 1. **Empirical first**: each topic starts from a failure you can observe — Canny over-sensitive to noise, a homography that breaks on a panorama, a CNN that detects better than SIFT until labels run out — and only then names the model behind it (pinhole camera, epipolar geometry, ICP).
 
-Making a machine see: optics → detection CNNs, via filtering, multi-view and 3D point clouds. Classical and learned vision as one story — convolution links ch. 2 to the CNNs of ch. 9 — through to urban LiDAR (IGN). Skills from industrial perception to the program's multimodal models.
+This course is about making a machine see. It goes from optics to detection CNNs, through filtering, multi-view geometry and 3D point clouds, and it tells classical and learned vision as one story: the convolution of ch. 2 is the same operator as the one inside the CNNs of ch. 9. It ends with urban LiDAR, the research field of the instructor at IGN, and the skills it builds serve both industrial perception and the multimodal models of the program.
 
 ### What you will be able to do
 
@@ -179,6 +179,27 @@ Downstream, three modules directly extend this one: [Computer Vision: From Funda
 -   **3D point clouds: ICP and urban analysis**: aligning and analyzing LiDAR clouds — vision beyond images.
 -   **Research at IGN (Brédif): urban LiDAR**: Mathieu Brédif's research, from the 3D city to massive geospatial data.
 
+### Session plan {#sessions}
+
+**36 h in class = 12 sessions of 3 h.** The volume is the one of the SynapseS 2026–2027 sheet (36 h: 18 h of lectures + 18 h of small classes); the sheet publishes no session-by-session programme, so the split below is our proposal for covering these notes in that time. Level 1 = foundations (reviews, definitions, first worked examples), 2 = core methods, 3 = advanced material (3D registration, learning on point clouds); the level never goes down from one session to the next.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Review: SVD, Gaussians; ch. 1 Image formation: pinhole camera, sampling, color | Ex. 1 (a)–(b) |
+| 2 | 3 h | 1 | ch. 2 Filtering and convolution: Gaussian, derivatives, pyramids | Ex. 2 |
+| 3 | 3 h | 1 | ch. 3 Edges: gradient and the Canny detector | lab: Canny on noisy photos, effect of $\sigma$ and thresholds |
+| 4 | 3 h | 2 | ch. 4 Interest points: Harris, SIFT, matching | Ex. 5 |
+| 5 | 3 h | 2 | ch. 5 Homographies: DLT, RANSAC, panoramas | Ex. 1 (c)–(d), Ex. 6 |
+| 6 | 3 h | 2 | ch. 6 Epipolar geometry, the 8-point algorithm, rectified stereo (Def. 6.1–Example 6.4) | Ex. 4 |
+| 7 | 3 h | 2 | ch. 6 (end) Dense stereo, structure from motion, MultiView Stereo (Note, Def. 6.5) | lab: two-view reconstruction with OpenCV |
+| 8 | 3 h | 2 | ch. 7 Optical flow: Lucas-Kanade, Horn-Schunck | Ex. 3 |
+| 9 | 3 h | 2 | ch. 8 Segmentation: k-means and graph cuts | Ex. 8 |
+| 10 | 3 h | 2 | ch. 9 CNNs for vision: detection, segmentation, metrics | lab: fine-tune a pretrained detector, compute AP |
+| 11 | 3 h | 3 | ch. 10 Point clouds: LiDAR, neighborhoods and normals, Kabsch theorem | Ex. 7 (start) |
+| 12 | 3 h | 3 | ch. 10 (end) ICP and its convergence, optimal transport, learning on clouds | Ex. 7; project kick-off |
+
+**Self-study, outside the 36 h** (about 2 h in total): ch. 11 Research at IGN (Brédif): urban LiDAR — the benchmark, LU-Net and disocclusion papers, read as project preparation (≈ 2 h).
+
 ### How to study this module
 
 -   Visualize everything: each chapter benefits from being validated on real images (display the gradients, the Harris maps, the segmentations) — a vision error can be seen.
@@ -189,10 +210,12 @@ Downstream, three modules directly extend this one: [Computer Vision: From Funda
 -   Finish with the 3D chapters: ICP and urban LiDAR are a direct gateway to geospatial internships and to [Computer Vision: From Fundamentals to Applications](../m1p2-computer-vision-applications/index.html) in Period 2.
 
 ::: note
-[independent note]{.tag} Images × graphs (cuts, 3D scenes) and encoders for multimodal models: vision is where the program's two sides meet cleanly. From IGN digital cities to image-text models — jobs and internship topics included. Start from an image ruined by a bad filter, not from a cold 3×4 matrix.
+[independent note]{.tag} Vision is where the two sides of the program meet: images become graphs (graph cuts, 3D scenes), and image encoders feed the multimodal models. The applications range from IGN's digital cities to image-text models, with jobs and internship topics on both sides. A good way into the course is an image ruined by a bad filter, rather than an abstract 3×4 matrix.
 :::
 
 ## 0. Review: linear algebra, convolution, probability {#ch0}
+
+This chapter gathers the tools from linear algebra, calculus and probability that the rest of the course uses constantly. Two results deserve to be known by heart: the singular value decomposition, which solves almost every estimation problem of the geometric chapters, and the behaviour of Gaussians under convolution, which makes the Gaussian the default smoothing kernel.
 
 :::: recap
 ::: recap-title
@@ -209,12 +232,12 @@ L3 review material used
 [Theorem 0.1 — SVD and best rank-k approximation]{.tag} Every real matrix $A \in \mathbb{R}^{m\times n}$ can be written $A = U \Sigma V^\top$ with $U, V$ orthogonal and $\Sigma$ diagonal with entries $\sigma_1 \geq \sigma_2 \geq \dots \geq 0$. Moreover, the best approximation of $A$ in the Frobenius sense by a matrix of rank $\leq k$ is $\sum_{i\leq k} \sigma_i u_i v_i^\top$, with error $\big(\sum_{i>k}\sigma_i^2\big)^{1/2}$ (Eckart-Young theorem).
 
 ::: {.proof style="margin-top:.5rem;"}
-Sketch. The singular vectors are the principal axes of $AA^\top$ and $A^\top A$: the $\sigma_i^2$ are their eigenvalues. The approximation follows from the fact that matrices of rank $\leq k$ form a closed convex set and that the error decomposes orthogonally: $\|A - X\|_F^2 = \sum_{i>k}\sigma_i^2 + \|X_k - \sum_{i \leq k}\sigma_i u_iv_i^\top\|_F^2$. The SVD will be our permanent tool: least squares (DLT of ch. 5), decomposition of homographies, 3D orientation (Kabsch in ch. 10), surface normals.
+Sketch. The singular vectors are the principal axes of $AA^\top$ and $A^\top A$: the $\sigma_i^2$ are their eigenvalues. For the approximation, note first that the truncated sum $A_k = \sum_{i\leq k}\sigma_i u_i v_i^\top$ leaves the error $A - A_k = \sum_{i>k}\sigma_i u_i v_i^\top$, whose squared Frobenius norm is $\sum_{i>k}\sigma_i^2$ because the rank-one terms are orthogonal. Conversely, for any $X$ of rank $\leq k$, Weyl's inequality for singular values gives $\sigma_{i+k}(A) \leq \sigma_i(A - X) + \sigma_{k+1}(X) = \sigma_i(A - X)$, hence $\|A - X\|_F^2 = \sum_i \sigma_i(A-X)^2 \geq \sum_{i>k}\sigma_i(A)^2$: no rank-$k$ matrix does better than $A_k$. (The set of matrices of rank $\leq k$ is *not* convex, which is why the proof goes through singular values rather than a projection argument.) The SVD will be our permanent tool: least squares (DLT of ch. 5), decomposition of homographies, 3D orientation (Kabsch in ch. 10), surface normals.
 :::
 ::::
 
 ::: prop
-[Proposition 0.2 — Sums of independent Gaussians]{.tag} If $X \sim \mathcal{N}(\mu_X, \sigma_X^2)$ and $Y \sim \mathcal{N}(\mu_Y, \sigma_Y^2)$ are independent, then $X + Y \sim \mathcal{N}(\mu_X+\mu_Y, \sigma_X^2 + \sigma_Y^2)$. One-line proof via characteristic functions: $e^{it\mu_X - t^2\sigma_X^2/2}\cdot e^{it\mu_Y - t^2\sigma_Y^2/2} = e^{it(\mu_X+\mu_Y) - t^2(\sigma_X^2+\sigma_Y^2)/2}$. [∎]{.qed style="float:right;"} Immediate application: convolving an image with a Gaussian kernel *amounts to* modeling an additive Gaussian noise — hence the central role of the Gaussian filter in ch. 2-4.
+[Proposition 0.2 — Sums of independent Gaussians]{.tag} If $X \sim \mathcal{N}(\mu_X, \sigma_X^2)$ and $Y \sim \mathcal{N}(\mu_Y, \sigma_Y^2)$ are independent, then $X + Y \sim \mathcal{N}(\mu_X+\mu_Y, \sigma_X^2 + \sigma_Y^2)$. One-line proof via characteristic functions: $e^{it\mu_X - t^2\sigma_X^2/2}\cdot e^{it\mu_Y - t^2\sigma_Y^2/2} = e^{it(\mu_X+\mu_Y) - t^2(\sigma_X^2+\sigma_Y^2)/2}$. [∎]{.qed style="float:right;"} Since the density of $X + Y$ is the convolution of the two densities, the proposition says that a Gaussian convolved with a Gaussian is a Gaussian whose variances add: $G_{\sigma_1} * G_{\sigma_2} = G_{\sqrt{\sigma_1^2 + \sigma_2^2}}$. Immediate application: blurring an image twice, with $\sigma_1 = 3$ then $\sigma_2 = 4$ pixels, is the same as blurring it once with $\sigma = 5$ — the property that makes the Gaussian scale spaces of ch. 2-4 consistent.
 :::
 
 ## 1. Image formation: camera and sampling {#ch1}
@@ -242,7 +265,7 @@ Practical consequence: rectangles do not remain rectangles (except in the fronta
 ::::
 
 ::: ex
-[Example 1.3 — Numbers: field of view and focusing]{.tag} Sensor 4000×3000 pixels of 3.45 µm (physical width $w = 4000 \times 3.45\,\text{µm} = 13.8$ mm), lens of focal length $f = 50$ mm: $$\mathrm{FOV} = 2\arctan\frac{w/2}{f} = 2\arctan\frac{6.9}{50} = 2 \times 7.86^\circ \approx 15.7^\circ.$$ The same optics on a "full frame" 36 mm sensor would give $2\arctan(18/50) \approx 39.6^\circ$: at equal focal length, the field depends on the sensor size — hence the use of *35 mm-equivalent* focal lengths. In pixels, $f_x = 0.05/3.45\times10^{-3} \approx 14\,490$ px.
+[Example 1.3 — Numbers: field of view and focusing]{.tag} Sensor 4000×3000 pixels of 3.45 µm (physical width $w = 4000 \times 3.45\,\text{µm} = 13.8$ mm), lens of focal length $f = 50$ mm: $$\mathrm{FOV} = 2\arctan\frac{w/2}{f} = 2\arctan\frac{6.9}{50} = 2 \times 7.86^\circ \approx 15.7^\circ.$$ The same optics on a "full frame" 36 mm sensor would give $2\arctan(18/50) \approx 39.6^\circ$: at equal focal length, the field depends on the sensor size — hence the use of *35 mm-equivalent* focal lengths. In pixels, $f_x = f/dx = 50\,\text{mm}/3.45\,\text{µm} = 50/0.00345 \approx 14\,490$ px.
 :::
 
 ::: def
@@ -262,21 +285,21 @@ Practical consequence: rectangles do not remain rectangles (except in the fronta
 Filtering an image means replacing each pixel with a combination of its neighborhood: smoothing noise, sharpening details, detecting variations. The universal tool is convolution, already met in 1D in the *Signal Processing* module (ch. 2): everything that follows is its 2D translation.
 
 ::: def
-[Definition 2.1 — 2D convolution and correlation]{.tag} For an image $I$ and a kernel $K$ with finite support: $$(I \* K)(x, y) = \sum_{i}\sum_{j} I(x-i,\,y-j)\,K(i, j).$$ Convolution flips the kernel; *correlation* $\sum I(x+i, y+j) K(i,j)$ does not — for symmetric kernels (Gaussian, box), the two coincide. A convolutional filter is **linear** and **translation-invariant**: these are exactly the LTI systems of signal processing, and the convolution theorem applies: $I \* K \longleftrightarrow \hat I \cdot \hat K$ (2D Fourier transform).
+[Definition 2.1 — 2D convolution and correlation]{.tag} For an image $I$ and a kernel $K$ with finite support: $$(I * K)(x, y) = \sum_{i}\sum_{j} I(x-i,\,y-j)\,K(i, j).$$ Convolution flips the kernel; *correlation* $\sum I(x+i, y+j) K(i,j)$ does not — for symmetric kernels (Gaussian, box), the two coincide. A convolutional filter is **linear** and **translation-invariant**: these are exactly the LTI systems of signal processing, and the convolution theorem applies: $I * K \longleftrightarrow \hat I \cdot \hat K$ (2D Fourier transform).
 :::
 
 :::: prop
 [Proposition 2.2 — Separability of the Gaussian]{.tag} The 2D Gaussian kernel factors: $G_\sigma(x, y) = \frac{1}{2\pi\sigma^2}e^{-(x^2+y^2)/2\sigma^2} = g_\sigma(x)\,g_\sigma(y)$ with $g_\sigma(t) = \frac{1}{\sqrt{2\pi}\sigma} e^{-t^2/2\sigma^2}$. Convolving by $G_\sigma$ therefore amounts to convolving first along rows then along columns.
 
 ::: {.proof style="margin-top:.5rem;"}
-The factorization is an algebraic identity: $e^{-(x^2+y^2)/2\sigma^2} = e^{-x^2/2\sigma^2}\cdot e^{-y^2/2\sigma^2}$ and $\frac{1}{2\pi\sigma^2} = \frac{1}{\sqrt{2\pi}\sigma}\cdot\frac{1}{\sqrt{2\pi}\sigma}$. The rest follows by associativity of convolution: $I \* G_\sigma = I \* (g_\sigma^{col} \* g_\sigma^{row}) = (I \* g_\sigma^{col}) \* g_\sigma^{row}$. [∎]{.qed}
+The factorization is an algebraic identity: $e^{-(x^2+y^2)/2\sigma^2} = e^{-x^2/2\sigma^2}\cdot e^{-y^2/2\sigma^2}$ and $\frac{1}{2\pi\sigma^2} = \frac{1}{\sqrt{2\pi}\sigma}\cdot\frac{1}{\sqrt{2\pi}\sigma}$. The rest follows by associativity of convolution: $I * G_\sigma = I * (g_\sigma^{col} * g_\sigma^{row}) = (I * g_\sigma^{col}) * g_\sigma^{row}$. [∎]{.qed}
 :::
 
 Gain: a $k\times k$ kernel costs $k^2$ multiplications per pixel in 2D, $2k$ in two passes; for $k = 31$: 961 → 62, i.e. 15.5× fewer. In practice one samples $g_\sigma$ over $[-3\sigma, 3\sigma]$ (99.7% of the mass) and normalizes the sum to 1.
 ::::
 
 ::: def
-[Definition 2.3 — Derivatives and finite differences]{.tag} The discrete derivative is approximated by centered differences $\frac{\partial I}{\partial x}(x, y) \approx \frac{I(x+1,y) - I(x-1,y)}{2}$, that is, a convolution by $\frac12[-1, 0, 1]$. On a noisy image, differentiating *amplifies* the high-frequency noise; one smooths first: $$\frac{\partial}{\partial x}(G_\sigma \* I) = \Big(\frac{\partial G_\sigma}{\partial x}\Big) \* I,$$ the equality coming from swapping derivative and convolution (Fubini; see the ch. 0 review and the *Signal Processing* module). Conclusion: differentiating a smoothed image = convolving by the derivative of a Gaussian — a single kernel, optimal in the sense of the chosen scale. This is the starting point of ch. 3.
+[Definition 2.3 — Derivatives and finite differences]{.tag} The discrete derivative is approximated by centered differences $\frac{\partial I}{\partial x}(x, y) \approx \frac{I(x+1,y) - I(x-1,y)}{2}$, that is, a convolution by $\frac12[-1, 0, 1]$. On a noisy image, differentiating *amplifies* the high-frequency noise; one smooths first: $$\frac{\partial}{\partial x}(G_\sigma * I) = \Big(\frac{\partial G_\sigma}{\partial x}\Big) * I,$$ the equality coming from swapping derivative and convolution (Fubini; see the ch. 0 review and the *Signal Processing* module). Conclusion: differentiating a smoothed image = convolving by the derivative of a Gaussian — a single kernel, optimal in the sense of the chosen scale. This is the starting point of ch. 3.
 :::
 
 ::: ex
@@ -289,11 +312,11 @@ Gain: a $k\times k$ kernel costs $k^2$ multiplications per pixel in 2D, $2k$ in 
   Sobel-x     $\frac14\begin{pmatrix}-1&0&1\\-2&0&2\\-1&0&1\end{pmatrix}$   horizontal derivative smoothed vertically
   Laplacian   $\begin{pmatrix}0&1&0\\1&-4&1\\0&1&0\end{pmatrix}$             second derivative; edges = zero crossings
   median      non-linear                                                           impulse noise (salt/pepper) without blurring edges
-  unsharp     $I + \lambda\,(I - G_\sigma\*I)$                                 sharpening (the "unsharp mask")
+  unsharp     $I + \lambda\,(I - G_\sigma*I)$                                 sharpening (the "unsharp mask")
 :::
 
 ::: prop
-[Proposition 2.5 — Pyramids: subsampling without folding]{.tag} Halving the resolution without precaution folds the frequencies beyond the new Nyquist frequency (Def. 1.4). The **Gaussian pyramid** therefore applies $G_{\sigma_0}$ (with $\sigma_0 \geq \tfrac{\sqrt{2}}{2}$ pixel) before keeping one pixel out of two; each level $I^{(k+1)} = \downarrow_2 (G \* I^{(k)})$ represents the image at scale $2^k$. These pyramids speed up multi-scale search (ch. 4: SIFT, ch. 7: pyramidal Lucas-Kanade) and progressive rendering.
+[Proposition 2.5 — Pyramids: subsampling without folding]{.tag} Halving the resolution without precaution folds the frequencies beyond the new Nyquist frequency (Def. 1.4). The **Gaussian pyramid** therefore applies $G_{\sigma_0}$ (with $\sigma_0 \geq \tfrac{\sqrt{2}}{2}$ pixel) before keeping one pixel out of two; each level $I^{(k+1)} = \downarrow_2 (G * I^{(k)})$ represents the image at scale $2^k$. These pyramids speed up multi-scale search (ch. 4: SIFT, ch. 7: pyramidal Lucas-Kanade) and progressive rendering.
 :::
 
 ## 3. Edges: gradient and Canny {#ch3}
@@ -320,7 +343,7 @@ Two settings ($\sigma$, thresholds) — and a remarkable property: good detectio
 :::
 
 ::: note
-[Note — Zero crossings of the Laplacian (LoG)]{.tag} The second order detects edges as the zeros of $\Delta(G\*I) = (\Delta G)\*I$ — the "LoG" kernel, close to the "difference of Gaussians" of ch. 4. The zero crossing is finer than the gradient maximum but more sensitive to noise, and the sign on either side encodes the bright/dark transition. Marr and Hildreth made it a model of the first level of the visual cortex — the biological prehistory of the convolutional networks of ch. 9.
+[Note — Zero crossings of the Laplacian (LoG)]{.tag} The second order detects edges as the zeros of $\Delta(G*I) = (\Delta G)*I$ — the "LoG" kernel, close to the "difference of Gaussians" of ch. 4. The zero crossing is finer than the gradient maximum but more sensitive to noise, and the sign on either side encodes the bright/dark transition. Marr and Hildreth made it a model of the first level of the visual cortex — the biological prehistory of the convolutional networks of ch. 9.
 :::
 
 ## 4. Interest points: Harris and SIFT {#ch4}
@@ -332,7 +355,7 @@ Matching two images amounts to finding points that are *distinctive* and *stable
 :::
 
 ::: ex
-[Example 4.2 — Harris with numbers]{.tag} A window yields $\sum I_x^2 = 126$, $\sum I_xI_y = 43$, $\sum I_y^2 = 18$: $M = \begin{pmatrix}126 & 43\\ 43 & 18\end{pmatrix}$, $\det M = 2268 - 1849 = 419$, $\mathrm{tr}M = 144$, hence $R = 419 - 0.04\times 144^2 = 419 - 829 = -410 < 0$ → *edge*. The eigenvalues $\lambda_{1,2} = \frac{144 \pm \sqrt{144^2 - 4\cdot419}}{2} \approx 141$ and $3$ confirm: one direction varies 47× more than the other. A corner would typically have $M \sim \begin{pmatrix}400 & 10\\ 10 & 380\end{pmatrix}$, $R = 151\,900 - 0.04\times 625^2 \approx 137\,000 > 0$.
+[Example 4.2 — Harris with numbers]{.tag} A window yields $\sum I_x^2 = 126$, $\sum I_xI_y = 43$, $\sum I_y^2 = 18$: $M = \begin{pmatrix}126 & 43\\ 43 & 18\end{pmatrix}$, $\det M = 2268 - 1849 = 419$, $\mathrm{tr}M = 144$, hence $R = 419 - 0.04\times 144^2 = 419 - 829 = -410 < 0$ → *edge*. The eigenvalues $\lambda_{1,2} = \frac{144 \pm \sqrt{144^2 - 4\cdot419}}{2} \approx 141$ and $3$ confirm: one direction varies 47× more than the other. A corner would typically have $M \sim \begin{pmatrix}400 & 10\\ 10 & 380\end{pmatrix}$: $\det M = 152\,000 - 100 = 151\,900$, $\mathrm{tr}M = 780$, $R = 151\,900 - 0.04\times 780^2 \approx 127\,600 > 0$.
 :::
 
 ::: prop
@@ -342,9 +365,9 @@ Matching two images amounts to finding points that are *distinctive* and *stable
 ::: thm
 [Algorithm 4.4 — SIFT: detection + description]{.tag}
 
-1.  **scale space**: convolve with Gaussians $L(x, \sigma) = G_\sigma \* I$ for $\sigma$ increasing by octaves; the difference of Gaussians $\mathrm{DoG}(x,\sigma) = L(x, k\sigma) - L(x, \sigma)$ approximates the normalized Laplacian $\sigma^2\Delta I$, required for scale invariance;
+1.  **scale space**: convolve with Gaussians $L(x, \sigma) = G_\sigma * I$ for $\sigma$ increasing by octaves; the difference of Gaussians $\mathrm{DoG}(x,\sigma) = L(x, k\sigma) - L(x, \sigma)$ approximates the normalized Laplacian $\sigma^2\Delta I$, required for scale invariance;
 2.  **space-scale extrema**: keypoints are the local extrema of DoG in the volume $(x, y, \sigma)$ — comparison with the 26 neighbors (8 in space, 9×2 in scale);
-3.  **localization**: refinement by 2D Taylor; rejection of low-contrast points and of edges via the Harris ratio applied to the 2×2 Hessian matrix ($\mathrm{tr}^2/\det < r$ rejected);
+3.  **localization**: refinement by a second-order Taylor expansion of DoG in $(x, y, \sigma)$; rejection of low-contrast points and of edges via the Harris ratio applied to the 2×2 Hessian matrix ($\mathrm{tr}^2/\det < r$ rejected);
 4.  **orientation**: histogram (36 bins) of the gradients of a neighborhood, weighted by a Gaussian; the dominant orientation provides the canonical frame of the descriptor → **rotation invariance**;
 5.  **descriptor**: around the point, 4×4 cells, each an orientation histogram with 8 bins → $4\times4\times8 = 128$ values, normalized (thresholding at 0.2 for robustness to saturations) → **affine illumination invariance**.
 
@@ -374,11 +397,11 @@ R  = (A*C - B*B) - 0.04*(A + C)**2
 corners = np.argwhere(R > 0.01 * R.max())        # relative thresholding
 
 # --- 2. OpenCV versions
- Rc = cv2.cornerHarris(imgf, 2, 3, 0.04)
- sift = cv2.SIFT_create(nfeatures=2000)
- kps, desc = sift.detectAndCompute(img, None)   # 128-D per keypoint
- img2 = cv2.drawKeypoints(img, kps, None,
-                          flags=cv2.DRAW_RICH_KEYPOINTS)
+Rc = cv2.cornerHarris(imgf, 2, 3, 0.04)
+sift = cv2.SIFT_create(nfeatures=2000)
+kps, desc = sift.detectAndCompute(img, None)   # 128-D per keypoint
+img2 = cv2.drawKeypoints(img, kps, None,
+                         flags=cv2.DRAW_RICH_KEYPOINTS)
 
 # --- 3. matching two views with Lowe's ratio test
 kps2, desc2 = sift.detectAndCompute(cv2.imread("scene2.jpg", 0), None)
@@ -402,16 +425,16 @@ Two views of the same *plane* (facade, document, whiteboard), or one camera that
 [Theorem 5.2 — When a homography applies]{.tag} The relation between two views is a homography if (i) the scene is planar, or (ii) the camera undergoes only a pure rotation about its optical center.
 
 ::: {.proof style="margin-top:.5rem;"}
-Case (i): plane $\Pi = \{\tilde{X} : \tilde{n}^\top \tilde{X} = d\}$ in the frame of camera 1, relative motion $(R, t)$. For $X \in \Pi$: $X_2 = R X_1 + t = (R + t\,\tilde{n}^\top/d)\,X_1$ — the depth is eliminated in favor of a 3×3 linear combination; with $u_1 \sim K_1 X_1$ it follows that $u_2 \sim K_2 (R + t\tilde n^\top/d) R_1^\top K_1^{-1} u_1 = H u_1$. Case (ii): if $t = 0$, $P = K R$ and $\tilde{u}_2 \sim K_2 R_2 R_1^\top K_1^{-1}\,\tilde{u}_1$ — a $3\times3$ product, and we are done. [∎]{.qed}
+Case (i): plane $\Pi = \{\tilde{X} : \tilde{n}^\top \tilde{X} = d\}$ in the frame of camera 1, relative motion $(R, t)$. For $X \in \Pi$: $X_2 = R X_1 + t = (R + t\,\tilde{n}^\top/d)\,X_1$ — the depth is eliminated in favor of a 3×3 linear combination; with $u_1 \sim K_1 X_1$ it follows that $u_2 \sim K_2 (R + t\tilde n^\top/d) K_1^{-1} u_1 = H u_1$. Case (ii): if $t = 0$, $P = K R$ and $\tilde{u}_2 \sim K_2 R_2 R_1^\top K_1^{-1}\,\tilde{u}_1$ — a $3\times3$ product, and we are done. [∎]{.qed}
 :::
 ::::
 
 ::: prop
-[Proposition 5.3 — Direct linear estimation (DLT)]{.tag} Each correspondence $\tilde{x} \leftrightarrow \tilde{x}'$ provides $\tilde{x}' \times (H\tilde{x}) = 0$, i.e. 2 linear equations in the 9 coefficients of $H$ (up to scale, one fixes $\|h\| = 1$). With $n \geq 4$ correspondences, the system $Ah = 0$ ($2n \times 9$) is solved by SVD: $h$ is the right singular vector associated with the smallest singular value — the "smallest residual" version of homogeneous least squares. Golden rule: **normalize** the points before DLT (translate the centroid to the origin, scale so that the mean distance is $\sqrt2$; Hartley) — otherwise the conditioning degrades the solution by several orders of magnitude. With noisy correspondences: nonlinear refinement (Levenberg-Marquardt) of the reprojection error $\sum_i \|\tilde{x}'_i \times H\tilde{x}_i\|^2$.
+[Proposition 5.3 — Direct linear estimation (DLT)]{.tag} Each correspondence $\tilde{x} \leftrightarrow \tilde{x}'$ provides $\tilde{x}' \times (H\tilde{x}) = 0$, i.e. 2 linear equations in the 9 coefficients of $H$ (up to scale, one fixes $\|h\| = 1$). With $n \geq 4$ correspondences, the system $Ah = 0$ ($2n \times 9$) is solved by SVD: $h$ is the right singular vector associated with the smallest singular value — the "smallest residual" version of homogeneous least squares. Golden rule: **normalize** the points before DLT (translate the centroid to the origin, scale so that the mean distance is $\sqrt2$; Hartley) — otherwise the conditioning degrades the solution by several orders of magnitude. With noisy correspondences, the DLT minimizes only an *algebraic* error; one then refines $H$ by Levenberg-Marquardt on the geometric (reprojection) error $\sum_i \|x'_i - \pi(H\tilde{x}_i)\|^2$, where $\pi(a, b, c) = (a/c, b/c)$ returns to pixel coordinates.
 :::
 
 ::: prop
-[Proposition 5.4 — RANSAC: estimating amid outliers]{.tag} SIFT correspondences contain *false positives*. The RANSAC paradigm (RANdom SAmple Consensus) draws at random a minimal set of points (here 4), estimates $H$, counts the *inliers* (residual < $\varepsilon$), repeats, and refines the model on the best consensus. With a proportion $w$ of inliers and 4 points drawn: probability that a draw is clean $= w^4$; for a success rate $p$ after $N$ draws: $$N \;\geq\; \frac{\log(1-p)}{\log(1-w^4)}.$$ Worked example: 50% inliers, $p = 0.99$ → $N = \frac{-4.605}{\ln(1 - 0.0625)} = \frac{-4.605}{-0.0645} \approx 72$ draws. At 90% inliers: $w^4 = 0.656$, $N = 3$. The cost is trivial compared to least squares on contaminated data — and the model extends to any pair (minimal estimator, number of inliers).
+[Proposition 5.4 — RANSAC: estimating amid outliers]{.tag} SIFT correspondences contain *false positives*. The RANSAC paradigm (RANdom SAmple Consensus) draws at random a minimal set of points (here 4), estimates $H$, counts the *inliers* (residual < $\varepsilon$), repeats, and refines the model on the best consensus. With a proportion $w$ of inliers and 4 points drawn: probability that a draw is clean $= w^4$; for a success rate $p$ after $N$ draws: $$N \;\geq\; \frac{\log(1-p)}{\log(1-w^4)}.$$ Worked example: 50% inliers, $p = 0.99$ → $N = \frac{-4.605}{\ln(1 - 0.0625)} = \frac{-4.605}{-0.0645} \approx 72$ draws. At 90% inliers: $w^4 = 0.656$, $N = \frac{-4.605}{\ln 0.344} = \frac{-4.605}{-1.067} \approx 4.3$, i.e. 5 draws. The cost is trivial compared to least squares on contaminated data — and the model extends to any pair (minimal estimator, number of inliers).
 :::
 
 ::: note
@@ -423,7 +446,7 @@ Case (i): plane $\Pi = \{\tilde{X} : \tilde{n}^\top \tilde{X} = d\}$ in the fram
 Two views of a 3D scene, taken from different points: the **epipolar** constraint says that the correspondent of a pixel lies on a known line in the second image. All of stereo vision — from reconstruction to robotics — follows from this geometric observation.
 
 ::: def
-[Definition 6.1 — Epipolar geometry, F and E]{.tag} Consider a pair of cameras $P_1 = K_1[I \mid 0]$, $P_2 = K_2[R \| t]$. The 3D point $X$ projects to $x_1$ and $x_2$; the **epipolar plane** passes through $X$, $x_1$, $x_2$, and the two optical centers; its intersection with image plane 2 is the **epipolar line** of $x_1$ — every match must live on it. The constraint reads $$\tilde{x}_2^\top F\, \tilde{x}_1 = 0,\qquad F = K_2^{-\top} [t]_\times R\, K_1^{-1},$$ $F$ is the **fundamental matrix** (rank 2, 7 dof); its version normalized by the intrinsic matrices, $E = K_2^\top F\,K_1 = [t]_\times R$, is the **essential matrix** (5 dof): it depends only on the relative motion.
+[Definition 6.1 — Epipolar geometry, F and E]{.tag} Consider a pair of cameras $P_1 = K_1[I \mid 0]$, $P_2 = K_2[R \mid t]$. The 3D point $X$ projects to $x_1$ and $x_2$; the **epipolar plane** passes through $X$, $x_1$, $x_2$, and the two optical centers; its intersection with image plane 2 is the **epipolar line** of $x_1$ — every match must live on it. The constraint reads $$\tilde{x}_2^\top F\, \tilde{x}_1 = 0,\qquad F = K_2^{-\top} [t]_\times R\, K_1^{-1},$$ $F$ is the **fundamental matrix** (rank 2, 7 dof); its version normalized by the intrinsic matrices, $E = K_2^\top F\,K_1 = [t]_\times R$, is the **essential matrix** (5 dof): it depends only on the relative motion.
 :::
 
 ::: prop
@@ -434,7 +457,7 @@ Two views of a 3D scene, taken from different points: the **epipolar** constrain
 [Theorem 6.3 — Rectified stereo: disparity and depth]{.tag} After **rectification** (resampling of both images so that the epipolar lines are the horizontal lines — a pair of homographies, ch. 5), a point at depth $Z$ is seen at abscissae $x_1, x_2$ with $$d = x_1 - x_2 = \frac{f\,B}{Z}\;\;\Longleftrightarrow\;\; Z = \frac{fB}{d},$$ $f$: focal length in pixels, $B$: baseline (distance between cameras), $d$: **disparity**.
 
 ::: {.proof style="margin-top:.5rem;"}
-Elementary triangulation: the 3D point $(X, Y, Z)$ projects to $x_1 = fX/Z$ in the left camera; the right camera, translated by $B$ along the common optical axis, sees $x_2 = f(X - B)/Z$. The difference $x_1 - x_2 = fB/Z$ no longer depends on $X$: disparity encodes depth. [∎]{.qed}
+Elementary triangulation: the 3D point $(X, Y, Z)$ projects to $x_1 = fX/Z$ in the left camera; the right camera, translated by $B$ along the $X$ axis (the baseline, perpendicular to the parallel optical axes), sees $x_2 = f(X - B)/Z$. The difference $x_1 - x_2 = fB/Z$ no longer depends on $X$: disparity encodes depth. [∎]{.qed}
 :::
 
 ::: {.ex style="margin-top:.4rem;"}
@@ -490,7 +513,7 @@ Segmenting means partitioning the image into coherent regions: objects of intere
 :::
 
 ::: ex
-[Example 8.2 — k-means in grayscale, by hand]{.tag} Intensities $\{10, 12, 11, 40, 42, 90\}$, $k = 2$, initial centroids $10$ and $40$. Assignment: 10, 12, 11 → $C_1$ (distances 0, 2, 1 versus 30, 28, 29); 40, 42, 90 → $C_2$. Recentering: $\mu_1 = 11$, $\mu_2 = 57.3$. Second pass: no reassignment (12 remains at distance 1 versus 45.3…): convergence. $J = (1+1+0) + (17.3^2 + 15.3^2 + 32.7^2) \approx 1606$. The pixel 90, at 33 from its centroid, drives the whole cost: a $k=3$ would isolate it — the choice of $k$ (elbow, silhouette, domain prior) is the real problem, not convergence.
+[Example 8.2 — k-means in grayscale, by hand]{.tag} Intensities $\{10, 12, 11, 40, 42, 90\}$, $k = 2$, initial centroids $10$ and $40$. Assignment: 10, 12, 11 → $C_1$ (distances 0, 2, 1 versus 30, 28, 29); 40, 42, 90 → $C_2$. Recentering: $\mu_1 = 11$, $\mu_2 = 57.3$. Second pass: no reassignment (12 remains at distance 1 versus 45.3…): convergence. $J = (1+1+0) + (17.3^2 + 15.3^2 + 32.7^2) \approx 1605$. The pixel 90, at 33 from its centroid, drives the whole cost: a $k=3$ would isolate it — the choice of $k$ (elbow, silhouette, domain prior) is the real problem, not convergence.
 :::
 
 ::: def
@@ -527,7 +550,7 @@ Convolutional networks, introduced in ch. 4 of the *Deep Learning* module, have 
 :::
 
 :::: def
-[Definition 9.4 — Metrics: IoU and mAP]{.tag} The intersection-over-union between predicted boxes (or masks) $P$ and ground truth $G$: $\mathrm{IoU} = \|P \cap G\|\,/\,\|P \cup G\|$ — a prediction is a true positive if $\mathrm{IoU} > \tau$ (typically 0.5) and if the class is correct. **Average precision** (AP): sort the detections by decreasing score, plot the (recall, precision) points, integrate (area under the curve); mAP averages the APs over classes — and sometimes over IoU thresholds (COCO: mAP@[0.5:0.95]).
+[Definition 9.4 — Metrics: IoU and mAP]{.tag} The intersection-over-union between predicted boxes (or masks) $P$ and ground truth $G$: $\mathrm{IoU} = |P \cap G|\,/\,|P \cup G|$ (areas, or pixel counts for masks) — a prediction is a true positive if $\mathrm{IoU} > \tau$ (typically 0.5) and if the class is correct. **Average precision** (AP): sort the detections by decreasing score, plot the (recall, precision) points, integrate (area under the curve); mAP averages the APs over classes — and sometimes over IoU thresholds (COCO: mAP@[0.5:0.95]).
 
 ::: {.ex style="margin-top:.4rem;"}
 [Example 9.5 — AP by hand (1 class, IoU threshold 0.5)]{.tag} Detections sorted by score: $D_1$ (IoU 0.8), $D_2$ (IoU 0.3), $D_3$ (IoU 0.6), $D_4$ (IoU 0.55 with an object already covered) — 2 objects in total. Cumulative counts:
@@ -563,7 +586,7 @@ Mobile or airborne LiDAR, photogrammetry, RGB-D depth: the world also arrives as
 [Theorem 10.3 — ICP: optimal rigid transform (Kabsch)]{.tag} Given two paired sets $\{p_i\}, \{q_i\}$, $i = 1..n$, seeking $R \in SO(3)$ and $t$ minimizing $\sum_i \|R\,p_i + t - q_i\|^2$ has an exact solution: $t = \bar q - R\bar p$ (centroids) and, setting $H = \sum_i (p_i - \bar p)(q_i - \bar q)^\top = U\Lambda V^\top$ (SVD), $R = V\,U^\top$ (and $R = V\,\mathrm{diag}(1, 1, \det(VU^\top))\,U^\top$ if $\det(VU^\top) = -1$, the "reflection" case).
 
 ::: {.proof style="margin-top:.5rem;"}
-The term in $t$ is quadratic: setting the derivative to zero gives $t = \bar q - R\bar p$. Substituting, the sum becomes $\sum_i \|R\,\tilde p_i - \tilde q_i\|^2 = \sum \|\tilde p_i\|^2 + \sum\|\tilde q_i\|^2 - 2\sum \tilde q_i^\top R\tilde p_i$, where the $\tilde{}$ denote centered points: minimizing amounts to *maximizing* $\sum_i \tilde q_i^\top R \tilde p_i = \mathrm{tr}(RH)$. Now $\mathrm{tr}(RH) = \mathrm{tr}(R\,U\Lambda V^\top) = \mathrm{tr}(\underbrace{V^\top R U}_{=\,Z}\,\Lambda) = \sum_i Z_{ii}\, \lambda_i$ with $Z$ orthogonal, so $Z_{ii} \leq 1$ and $\lambda_i \geq 0$ give $\mathrm{tr}(RH) \leq \sum_i \lambda_i$, attained for $Z = I$, i.e. $R = VU^\top$. The negative-determinant correction maximizes under the constraint $\det R = +1$ by zeroing $Z_{33}$ (smallest singular value). [∎]{.qed}
+The term in $t$ is quadratic: setting the derivative to zero gives $t = \bar q - R\bar p$. Substituting, the sum becomes $\sum_i \|R\,\tilde p_i - \tilde q_i\|^2 = \sum \|\tilde p_i\|^2 + \sum\|\tilde q_i\|^2 - 2\sum \tilde q_i^\top R\tilde p_i$, where the $\tilde{}$ denote centered points: minimizing amounts to *maximizing* $\sum_i \tilde q_i^\top R \tilde p_i = \mathrm{tr}(RH)$. Now $\mathrm{tr}(RH) = \mathrm{tr}(R\,U\Lambda V^\top) = \mathrm{tr}(\underbrace{V^\top R U}_{=\,Z}\,\Lambda) = \sum_i Z_{ii}\, \lambda_i$ with $Z$ orthogonal, so $Z_{ii} \leq 1$ and $\lambda_i \geq 0$ give $\mathrm{tr}(RH) \leq \sum_i \lambda_i$, attained for $Z = I$, i.e. $R = VU^\top$. When $\det(VU^\top) = -1$, the maximizer $Z = I$ would give a reflection; under the constraint $\det R = +1$ the best choice is $Z = \mathrm{diag}(1, 1, -1)$, which sacrifices only the term of the smallest singular value $\lambda_3$. [∎]{.qed}
 :::
 ::::
 
@@ -595,8 +618,9 @@ def best_rigid_transform(P, Q):            # theorem 10.3 (Kabsch)
 def icp(P, Q, iters=50, tol=1e-7):
     tree = cKDTree(Q); R = np.eye(3); t = np.zeros(3); prev = np.inf
     for _ in range(iters):
-        d, idx = tree.query(P @ R.T + t)          # (1) matching
-        Rk, tk = best_rigid_transform(P, Q[idx])  # (2) Kabsch
+        Pk = P @ R.T + t                          # current position of P
+        d, idx = tree.query(Pk)                   # (1) matching
+        Rk, tk = best_rigid_transform(Pk, Q[idx]) # (2) Kabsch increment
         R, t = Rk @ R, Rk @ t + tk                # (3) accumulation
         err = np.mean(d**2)
         if prev - err < tol: break
@@ -639,14 +663,14 @@ The module is taught by Mathieu Brédif, researcher at IGN (MATIS laboratory, EN
 
 ## Exercises {#ex}
 
-1.  **Camera (solved).** Sensor 3000×2000 of 2.2 µm, focal length 24 mm. (a) Horizontal field of view? (b) Focal length in pixels? (c) How many point pairs for a homography, and why 4? (d) Does a pure rotation of the camera give a homography between views (justify)? *Solution.* (a) $w = 6.6$ mm, $\mathrm{FOV} = 2\arctan(3.3/24) \approx 15.6^\circ$. (b) $f_x = 0.024/2.2\,\text{µm} \approx 10\,900$ px. (c) 4 pairs: $H$ has 8 dof (9 coefficients − 1 scale), each pair provides 2 independent equations (Prop. 5.3). (d) Yes: Theorem 5.2, case (ii) — it is even the only non-planar case that qualifies.
-2.  **Convolution (solved).** (a) Convolve $[10, 12, 11, 40, 42]$ with the kernel $[0.25,\,0.5,\,0.25]$ (replicated borders). (b) How many multiplications per pixel for a 5×5 Gaussian, direct then separable? (c) Why is a 3×3 box filter *not* an ideal smoother? *Solution.* (a) $[10.5,\,11.25,\,18.5,\,33.25,\,41.5]$ — the jump 11→40 is smoothed over two samples. (b) 25 direct, $2\times5 = 10$ separated (Prop. 2.2), ratio 2.5×. (c) its frequency response is a sinc (Def. 2.1 and the *Signal Processing* module, ch. 5): negative lobes create contrast reversals at high frequencies — the Gaussian has no rebound.
-3.  **Lucas-Kanade (solved).** Window of 4 pixels, measurements $(I_x, I_y\,;\,I_t)$: (2, 1; 6), (4, 2; 10), (3, 1; 7), (5, 2; 12). Solve for the flow; compute the eigenvalues of the tensor; is the flow reliable? Propose two remedies. *Solution.* $M = \begin{pmatrix}54 & 23\\ 23 & 10\end{pmatrix}$, right-hand side $-(133, 57)^\top$. $\det M = 11$ — nearly singular: $\lambda_1 \approx 63.8$, $\lambda_2 \approx 0.17$. Cramer: $u = v = -19/11 \approx -1.73$. Reliability: no — $\lambda_2 \ll \lambda_1$ signals an edge (aperture problem, Thm 7.2); the uncertainty ellipse is very elongated: the flow component along the edge is poorly observed. Remedies: pyramid (large → small motion) and Gaussian weighting of the window; failing that, reject the pixel ($\lambda_2 < \tau$).
-4.  **Stereo (solved).** $f = 721$ px, $B = 0.54$ m. (a) Disparity of an object at 25 m, at 5 m? (b) Depth if $d = 25$ px? (c) Depth uncertainty at 25 m if the disparity is known to ±0.25 px? (d) Why double the baseline? *Solution.* (a) $d = fB/Z$: 15.6 px at 25 m; 77.9 px at 5 m. (b) $Z = fB/d = 721\times0.54/25 \approx 15.6$ m. (c) $\Delta Z/Z = \Delta d/d = 0.25/15.6 \approx 1.6\,\%$ → ±0.4 m (Thm 6.3). (d) $Z = fB/d$: doubling $B$ doubles $d$ at equal depth, hence *halves* the relative error — at the price of a wider separation and increased occlusion areas between views.
-5.  **Harris in practice.** Implement the structure tensor (Example 4.6), threshold $R > 0.01\,R_{max}$, display the corners on a photo; compare with `cv2.cornerMinEigenVal`. Rotate the image by 30° and measure the stability of the detection (Prop. 4.3). *Hint:* smoothing with $\sigma \approx 1{-}2$ before the Sobels; measure stability by the number of corners rematched within ±2 px.
-6.  **RANSAC.** (a) Derive the formula for the number of draws $N \geq \ln(1-p)/\ln(1-w^s)$ for an $s$-point estimator (independence of the draws). (b) Compute $N$ for $s = 4$, $w = 0.3$, $p = 0.999$. (c) Adaptive RANSAC: how to stop before $N$ draws? *Hint:* (a) failure probability $1-w^s$ per draw, independent ⇒ $(1-w^s)^N \leq 1-p$. (b) $w^4 = 0.0081$, $N = 6.908/0.00813 \approx 850$. (c) update $w$ with the current best consensus and recompute $N$ on the fly.
-7.  **ICP.** Generate a noisy planar cloud, transform it (30° rotation), run the ICP of Example 10.5 from increasingly bad initializations; measure the basin of convergence. Test the point-to-plane variant on planes. *Hint:* plot the RMS error per iteration (log); the basin closes when matches cross the edges of the cloud — hence the value of rejecting distant pairs and of initial RANSAC.
-8.  **Segmentation, up close.** On a photo, compare k-means on (a) RGB, (b) RGB + $(x, y)/10$, (c) Lab; choose $k$ by the elbow method. Where do SLIC superpixels fit in a modern vision pipeline (ch. 8-9)? *Hint:* (b) forces spatial compactness — connected regions; (c) separates hue from luminance (Def. 1.5); connect to the *Machine Learning* module, ch. 6.
+1.  **★ Camera (solved).** Sensor 3000×2000 of 2.2 µm, focal length 24 mm. (a) Horizontal field of view? (b) Focal length in pixels? (c) How many point pairs for a homography, and why 4? (d) Does a pure rotation of the camera give a homography between views (justify)? *Solution.* (a) $w = 6.6$ mm, $\mathrm{FOV} = 2\arctan(3.3/24) \approx 15.6^\circ$. (b) $f_x = 0.024/2.2\,\text{µm} \approx 10\,900$ px. (c) 4 pairs: $H$ has 8 dof (9 coefficients − 1 scale), each pair provides 2 independent equations (Prop. 5.3). (d) Yes: Theorem 5.2, case (ii) — it is even the only non-planar case that qualifies.
+2.  **★ Convolution (solved).** (a) Convolve $[10, 12, 11, 40, 42]$ with the kernel $[0.25,\,0.5,\,0.25]$ (replicated borders). (b) How many multiplications per pixel for a 5×5 Gaussian, direct then separable? (c) Why is a 3×3 box filter *not* an ideal smoother? *Solution.* (a) $[10.5,\,11.25,\,18.5,\,33.25,\,41.5]$ — the jump 11→40 is smoothed over two samples. (b) 25 direct, $2\times5 = 10$ separated (Prop. 2.2), ratio 2.5×. (c) its frequency response is a sinc (Def. 2.1 and the *Signal Processing* module, ch. 5): negative lobes create contrast reversals at high frequencies — the Gaussian has no rebound.
+3.  **★ Lucas-Kanade (solved).** Window of 4 pixels, measurements $(I_x, I_y\,;\,I_t)$: (2, 1; 6), (4, 2; 10), (3, 1; 7), (5, 2; 12). Solve for the flow; compute the eigenvalues of the tensor; is the flow reliable? Propose two remedies. *Solution.* $M = \begin{pmatrix}54 & 23\\ 23 & 10\end{pmatrix}$, right-hand side $-(133, 57)^\top$. $\det M = 11$ — nearly singular: $\lambda_1 \approx 63.8$, $\lambda_2 \approx 0.17$. Cramer: $u = v = -19/11 \approx -1.73$. Reliability: no — $\lambda_2 \ll \lambda_1$ signals an edge (aperture problem, Thm 7.2); the uncertainty ellipse is very elongated: the flow component along the edge is poorly observed. Remedies: pyramid (large → small motion) and Gaussian weighting of the window; failing that, reject the pixel ($\lambda_2 < \tau$).
+4.  **★ Stereo (solved).** $f = 721$ px, $B = 0.54$ m. (a) Disparity of an object at 25 m, at 5 m? (b) Depth if $d = 25$ px? (c) Depth uncertainty at 25 m if the disparity is known to ±0.25 px? (d) Why double the baseline? *Solution.* (a) $d = fB/Z$: 15.6 px at 25 m; 77.9 px at 5 m. (b) $Z = fB/d = 721\times0.54/25 \approx 15.6$ m. (c) $\Delta Z/Z = \Delta d/d = 0.25/15.6 \approx 1.6\,\%$ → ±0.4 m (Thm 6.3). (d) $Z = fB/d$: doubling $B$ doubles $d$ at equal depth, hence *halves* the relative error — at the price of a wider separation and increased occlusion areas between views.
+5.  **★★ Harris in practice.** Implement the structure tensor (Example 4.6), threshold $R > 0.01\,R_{max}$, display the corners on a photo; compare with `cv2.cornerMinEigenVal`. Rotate the image by 30° and measure the stability of the detection (Prop. 4.3). *Hint:* smoothing with $\sigma \approx 1{-}2$ before the Sobels; measure stability by the number of corners rematched within ±2 px.
+6.  **★★ RANSAC.** (a) Derive the formula for the number of draws $N \geq \ln(1-p)/\ln(1-w^s)$ for an $s$-point estimator (independence of the draws). (b) Compute $N$ for $s = 4$, $w = 0.3$, $p = 0.999$. (c) Adaptive RANSAC: how to stop before $N$ draws? *Hint:* (a) failure probability $1-w^s$ per draw, independent ⇒ $(1-w^s)^N \leq 1-p$. (b) $w^4 = 0.0081$, $N = 6.908/0.00813 \approx 850$. (c) update $w$ with the current best consensus and recompute $N$ on the fly.
+7.  **★★ ICP.** Generate a noisy planar cloud, transform it (30° rotation), run the ICP of Example 10.5 from increasingly bad initializations; measure the basin of convergence. Test the point-to-plane variant on planes. *Hint:* plot the RMS error per iteration (log); the basin closes when matches cross the edges of the cloud — hence the value of rejecting distant pairs and of initial RANSAC.
+8.  **★★ Segmentation, up close.** On a photo, compare k-means on (a) RGB, (b) RGB + $(x, y)/10$, (c) Lab; choose $k$ by the elbow method. Where do SLIC superpixels fit in a modern vision pipeline (ch. 8-9)? *Hint:* (b) forces spatial compactness — connected regions; (c) separates hue from luminance (Def. 1.5); connect to the *Machine Learning* module, ch. 6.
 
 ## References {#refs}
 

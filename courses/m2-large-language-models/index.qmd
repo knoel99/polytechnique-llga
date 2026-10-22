@@ -124,9 +124,9 @@ format:
   Status in the program   [M2]{.badge .m2} M2 program being finalized by the course instructors (the wiki indicates that the detailed M2 curriculum is still under development); course unit description confirmed by the wiki, SynapseS 2026-2027 sheet not yet published (the S3/S4 tracks of the catalog are currently empty).
   ----------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-**Audience**: an engineer who has already called a chat API / fine-tuned a small model and wants to know *why* token cost explodes, a RAG hallucinates, or DPO beats RLHF on a given budget. **Empirical first**: perplexity dropping with no usefulness; KV-cache OOM; leaderboard eval ≠ prod — then we name tokenizer, scaling, alignment.
+**Audience**: an engineer who has already called a chat API or fine-tuned a small model and wants to know *why* the token cost explodes, why a RAG system hallucinates, or why DPO beats RLHF on a given budget. **Empirical first**: we start from what goes wrong in practice — a perplexity that drops while the model stays useless, a KV-cache that runs out of GPU memory, a leaderboard score that does not survive production — and only then name the tools (tokenizer, scaling laws, alignment) that explain it.
 
-Full LLM pipeline (tokenization → safety) as theory + labs. M2 pillar; most other modules plug into it. Official 24 h — this material deepens and flags additions.
+The module covers the full LLM pipeline, from tokenization to safety, as theory and labs. It is a pillar of the M2: most other M2 modules build on it. The official volume is 24 h; these notes go deeper in places and flag what they add to the official description.
 
 ### What you will be able to do
 
@@ -170,9 +170,26 @@ An M2 module (period 1), 24 h for 2 ECTS, M2 badge. Three M1 courses prepare it
 -   **RAG in depth** — plugging models into external knowledge, seriously.
 -   **Agents, multimodality and perspectives** — LLMs that act, see and listen.
 -   **Evaluation and safety of LLMs** — measuring what models really do, and containing their risks.
--   **Research (Shang)** — the papers of Guokan Shang, read with the module's grid.
+-   **Research (Shang)** — the papers of Guokan Shang, read with the module's grid (self-study).
 -   **Exercises / Labs** — hands-on sessions that follow each stage of the pipeline.
 -   **References** — the papers and sources of each chapter.
+
+### Session plan {#sessions}
+
+**24 h in class = 8 sessions of 3 h.** The volume is the one the master's wiki gives for this course unit (24 h, 2 ECTS; the SynapseS 2026–2027 sheet is not yet published); no session-by-session programme is published, so the split below is our proposal for covering these notes in that time. Level 1 = foundations (reviews, definitions, first worked examples), 2 = core methods, 3 = advanced theory; the level never goes down from one session to the next.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Background: from word2vec to transformers; ch. 1 Tokenization: byte-level BPE, multilingual costs, special tokens | Ex. 1 |
+| 2 | 3 h | 2 | ch. 2 The architecture: decoder block, pre-norm, RoPE, GQA, MoE, FlashAttention | Ex. 5, 7 |
+| 3 | 3 h | 2 | ch. 3 Pre-training: objectives, data pipeline, scaling laws and the Chinchilla optimum | Ex. 6; lab: mini-GPT |
+| 4 | 3 h | 2 | ch. 4 Post-training: SFT, templates and loss masking; ch. 5 RLHF: reward model, Bradley-Terry, PPO for LLMs | Ex. 3 |
+| 5 | 3 h | 2 | ch. 5 (continued) DPO derivation, GRPO, verifiable rewards and reasoning | Ex. 8, 9 |
+| 6 | 3 h | 2 | ch. 6 Inference: decoding, KV-cache, speculative decoding, quantization, serving | Ex. 2, 10 |
+| 7 | 3 h | 2 | ch. 7 RAG: chunking, hybrid retrieval, reranking, evaluation, GraphRAG; ch. 8.1 The ReAct agent loop | Ex. 11; start Ex. 12 |
+| 8 | 3 h | 2 | ch. 8.2–8.3 Multimodality and perspectives; ch. 9 Evaluation and safety: benchmarks, LLM judges, hallucinations, attacks, watermarking | Ex. 4; final lab |
+
+**Self-study, outside the 24 h** (about 3 h in total): ch. 10 Research (Shang) — FrugalScore, curriculum pre-training, low-resource languages (≈ 3 h).
 
 ### How to study this module
 
@@ -184,7 +201,7 @@ An M2 module (period 1), 24 h for 2 ECTS, M2 badge. Three M1 courses prepare it
 -   Test evaluation concepts on your own model outputs: measuring is harder than it looks.
 
 ::: note
-[independent note]{.tag} LLM half of the master: M2 advanced / safety / MLOps / speech plug in; the graph half rejoins via GNN × LLM (Advanced GNN). LLM engineering or PhD: knowing *where* it breaks (tokens, cache, eval) matters as much as today's paper.
+[independent note]{.tag} This module is the core of the LLM half of the master: the advanced LLM, safety, MLOps and speech modules of the M2 build on it, and the graph half joins it through GNN × LLM (Advanced GNN). Whether you aim at LLM engineering or a PhD, knowing *where* a model breaks (tokens, cache, evaluation) matters as much as knowing today's paper.
 :::
 
 ## 0. Background: from word2vec to transformers {#ch0}
@@ -201,6 +218,8 @@ Prerequisites (M1 modules)
 -   **Cross-entropy and perplexity** (ML ch. 3, NLP ch. 0): the pre-training loss is exactly maximum likelihood of the next token; $\mathrm{PPL}=\exp(\mathcal{L})$ in base e.
 ::::
 
+This chapter places the module in its history: it recalls what M1 already established and the sequence of ideas that led to today's LLMs, so that each later chapter has a clear starting point.
+
 **The trajectory**: n-grams → static embeddings → recurrent networks (LSTM) → attention (Bahdanau 2014) → transformer (Vaswani 2017) → BERT/GPT (2018-2019) → scaling (GPT-3, 2020) → alignment (InstructGPT 2022, RLHF) → general-purpose, multimodal, reasoning and agentic LLMs (2023-2026). This module covers every technical stage of this stack, from the tokenizer (ch. 1) to safety (ch. 9), proving results that M1 left as claims.
 
 ::: note
@@ -209,14 +228,14 @@ Prerequisites (M1 modules)
 
 ## 1. Tokenization {#ch1}
 
-Concrete scene: the same FR vs EN prompt on a Llama-style tokenizer. French typically costs 15–25% more tokens; your context budget melts, and a rare word splits into 6 subwords — the model "understands" less and bills more. This chapter fixes BPE / WordPiece / Unigram *before* architecture.
+Before a model sees any text, a tokenizer cuts it into units from a fixed vocabulary; this chapter explains how that vocabulary is built and why the choice weighs on cost and quality. A concrete scene: send the same prompt in French and in English to a Llama-style tokenizer. The French version typically costs 15–25% more tokens, so your context budget shrinks, and a rare word splits into six subwords — the model "understands" less and bills more. This is why BPE, WordPiece and Unigram come *before* the architecture.
 
 ::: note
 [What breaks]{.tag} Mixing train/inference tokenizers; ignoring multilingual cost (latency + $); treating UNK as a detail. All three sabotage a prod RAG as much as a nanoGPT lab.
 :::
 
 ::: def
-[Definition 1.1 — Byte-level BPE: the exact construction]{.tag} BPE (proved step by step in NLP ch. 1) starts here from the alphabet of 256 *bytes*: any Unicode string can be represented without an "unknown" symbol. Learning loop: $$\mathrm{merge}^{(k)} = \arg\max_{(a,b)}\; f(a,b),\qquad f(a,b)=\sum_{w}\mathrm{freq}(w)\,n_{(a,b)}(w),$$ where $n\_{(a,b)}(w)$ counts the occurrences of the adjacent pair $(a,b)$ in word $w$ (counting weighted by word frequency); the merge is applied everywhere and one starts again until $\|V\|$ (32k-128k). *Encoding* a new text replays the merges in the learned order (GPT-2/4, Llama); WordPiece (BERT) maximizes $\\frac{f(x,y)}{f(x)f(y)}$, Unigram (T5) learns a generative model by EM then segments with Viterbi (NLP ch. 1.2).
+[Definition 1.1 — Byte-level BPE: the exact construction]{.tag} BPE (proved step by step in NLP ch. 1) starts here from the alphabet of 256 *bytes*: any Unicode string can be represented without an "unknown" symbol. Learning loop: $$\mathrm{merge}^{(k)} = \arg\max_{(a,b)}\; f(a,b),\qquad f(a,b)=\sum_{w}\mathrm{freq}(w)\,n_{(a,b)}(w),$$ where $n_{(a,b)}(w)$ counts the occurrences of the adjacent pair $(a,b)$ in word $w$ (counting weighted by word frequency); the merge is applied everywhere and one starts again until $|V|$ (32k-128k). *Encoding* a new text replays the merges in the learned order (GPT-2/4, Llama); WordPiece (BERT) maximizes $\frac{f(x,y)}{f(x)f(y)}$, Unigram (T5) learns a generative model by EM then segments with Viterbi (NLP ch. 1.2).
 :::
 
 ::: note
@@ -238,7 +257,7 @@ for s in (fr, de, "1234 + 5678 = ?"):
     print(len(okapi.encode(s)), "vs", len(enc.encode(s)), "->", s[:40])
 
 # "safe" tokenization: special tokens are NOT decoded by default
-b = enc.encode("fin <|endoftext|> suite", allowed_special=set())
+b = enc.encode("end <|endoftext|> next", allowed_special=set())
 print("ids :", b, "| decode round-trip ok :", enc.decode(b))
 ```
 
@@ -248,42 +267,46 @@ print("ids :", b, "| decode round-trip ok :", enc.decode(b))
 
 ## 2. The architecture in depth {#ch2}
 
+A language model must turn a sequence of token embeddings into a distribution over the next token, at a cost that stays manageable for long sequences. This chapter dissects the decoder-only transformer that does this in every modern LLM, and the design choices (normalization, positions, attention heads, experts) that make it trainable and cheap to run.
+
 ::: def
-[Definition 2.1 — The decoder block]{.tag} An LLM stacks $N$ blocks: $$x \leftarrow x + \mathrm{MHA}(\mathrm{LN}(x)), \qquad x \leftarrow x + \mathrm{MLP}(\mathrm{LN}(x)),$$ with **causal** attention (triangular mask: token $i$ sees only $j \\leq i$), grouped heads (*grouped-query attention* for inference), a gated MLP (SwiGLU, \~4× expansion), **RoPE** positional embeddings (rotations; relative generalization to long contexts), and a final LN.
+[Definition 2.1 — The decoder block]{.tag} An LLM stacks $N$ blocks: $$x \leftarrow x + \mathrm{MHA}(\mathrm{LN}(x)), \qquad x \leftarrow x + \mathrm{MLP}(\mathrm{LN}(x)),$$ with **causal** attention (triangular mask: token $i$ sees only $j \leq i$), grouped heads (*grouped-query attention* for inference), a gated MLP (SwiGLU, \~4× expansion), **RoPE** positional embeddings (rotations; relative generalization to long contexts), and a final LN.
 :::
 
 ::: prop
-[Proposition 2.2 — Pre-norm vs post-norm: the gradient flow]{.tag} **Post-LN** (original transformer): $x\_{l+1}=\\mathrm{LN}(x_l+F(x_l))$ — each block renormalizes *the residual itself*; the gradient of $x_L$ to $x_0$ crosses $L$ LN Jacobians whose product decays/explodes exponentially with $L$: warmup mandatory, fragile depth. **Pre-LN** (GPT-2+, all modern LLMs): $x\_{l+1}=x_l+F(\\mathrm{LN}(x_l))$ — the residual path is *the identity*: $$\frac{\partial x_L}{\partial x_l} = I + \sum_{l'\,>\,l}\frac{\partial F_{l'}}{\partial x_l}$$ → a gradient that reaches every layer without multiplicative attenuation: stable training without fine warmup. Price: the norm $\|x_l\|$ grows with depth (additive contributions), hence the **final LN**. (Xiong et al., ICML 2020.)
+[Proposition 2.2 — Pre-norm vs post-norm: the gradient flow]{.tag} **Post-LN** (original transformer): $x_{l+1}=\mathrm{LN}(x_l+F(x_l))$ — each block renormalizes *the residual itself*; the gradient of $x_L$ to $x_0$ crosses $L$ LN Jacobians whose product decays/explodes exponentially with $L$: warmup mandatory, fragile depth. **Pre-LN** (GPT-2+, all modern LLMs): $x_{l+1}=x_l+F(\mathrm{LN}(x_l))$ — the residual path is *the identity*: $$\frac{\partial x_L}{\partial x_l} = I + \sum_{l'\,>\,l}\frac{\partial F_{l'}}{\partial x_l}$$ → a gradient that reaches every layer without multiplicative attenuation: stable training without fine warmup. Price: the norm $\|x_l\|$ grows with depth (additive contributions), hence the **final LN**. (Xiong et al., ICML 2020.)
 :::
 
 :::: thm
-[Theorem 2.3 — RoPE derived (Su et al., 2021)]{.tag} Position is injected by rotation: the dimension-$d$ vector is viewed as $d/2$ 2D pairs; pair $i$ of the token at position $m$ undergoes $R(m\\theta_i)$ with $\\theta_i = 10000\^{-2i/d}$: $$R(\varphi)=\begin{pmatrix}\cos\varphi & -\sin\varphi\ \sin\varphi & \cos\varphi\end{pmatrix}, \qquad q^{(i)}_m = R(m\theta_i)\,q^{(i)},\quad k^{(i)}_n = R(n\theta_i)\,k^{(i)}.$$
+[Theorem 2.3 — RoPE derived (Su et al., 2021)]{.tag} Position is injected by rotation: the dimension-$d$ vector is viewed as $d/2$ 2D pairs; pair $i$ of the token at position $m$ undergoes $R(m\theta_i)$ with $\theta_i = 10000^{-2i/d}$: $$R(\varphi)=\begin{pmatrix}\cos\varphi & -\sin\varphi\\ \sin\varphi & \cos\varphi\end{pmatrix}, \qquad q^{(i)}_m = R(m\theta_i)\,q^{(i)},\quad k^{(i)}_n = R(n\theta_i)\,k^{(i)}.$$
 
 ::: proof
-**Relative property**: the dot product of a pair depends only on the *difference* of positions: $\\langle q\^{(i)}\_m,k\^{(i)}\_n\\rangle = q\^{(i)\\top} R(m\\theta_i)\^\\top R(n\\theta_i)\\, k\^{(i)} = q\^{(i)\\top} R\\big((n-m)\\theta_i\\big)\\,k\^{(i)}$, since 2D rotations commute and $R(a)\^\\top R(b)=R(b-a)$. Summing over pairs = an attention score depending on $(n-m)$ and the contents — a "soft" generalization of relative embeddings. Practical bonus: to extend the context, one *interpolates* the angles ($m\\to m/L$) instead of relearning. [∎]{.qed}
+**Relative property**: the dot product of a pair depends only on the *difference* of positions: $\langle q^{(i)}_m,k^{(i)}_n\rangle = q^{(i)\top} R(m\theta_i)^\top R(n\theta_i)\, k^{(i)} = q^{(i)\top} R\big((n-m)\theta_i\big)\,k^{(i)}$, since 2D rotations commute and $R(a)^\top R(b)=R(b-a)$. Summing over pairs = an attention score depending on $(n-m)$ and the contents — a "soft" generalization of relative embeddings. Practical bonus: to extend the context, one *interpolates* the angles ($m\to m/L$) instead of relearning. [∎]{.qed}
 :::
 ::::
 
 ::: prop
-[Proposition 2.4 — MQA/GQA: the memory arithmetic of the KV-cache]{.tag} The cache stores keys and values of all past tokens: $$\text{bytes/token} = 2\ (\text{K and V}) \times N_{\text{layers}} \times n_{\text{KV heads}} \times d_{\text{head}} \times \text{bytes/element}.$$ **Multi-Query Attention** (Shazeer, 2019): a single shared KV head; **Grouped-Query** (Ainslie et al., 2023): $n\_{\\text{KV}} < n\_{\\text{heads}}$ — e.g. Llama-3-8B: 32 heads, 8 KV heads, 32 layers, $d\_{\\text{head}}=128$, fp16 → $2\\times32\\times8\\times128\\times2 = 128\\,\\text{KiB/token}$; a 100k-token context ≈ **12.8 GB** of cache (versus \~51 GB with full attention — a 4× reduction, nearly identical quality). This is THE lever of long context (ch. 6).
+[Proposition 2.4 — MQA/GQA: the memory arithmetic of the KV-cache]{.tag} The cache stores keys and values of all past tokens: $$\text{bytes/token} = 2\ (\text{K and V}) \times N_{\text{layers}} \times n_{\text{KV heads}} \times d_{\text{head}} \times \text{bytes/element}.$$ **Multi-Query Attention** (Shazeer, 2019): a single shared KV head; **Grouped-Query** (Ainslie et al., 2023): $n_{\text{KV}} < n_{\text{heads}}$ — e.g. Llama-3-8B: 32 heads, 8 KV heads, 32 layers, $d_{\text{head}}=128$, fp16 → $2\times32\times8\times128\times2 = 128\,\text{KiB/token}$; a 100k-token context ≈ **12.8 GB** of cache (versus \~51 GB with full attention — a 4× reduction, nearly identical quality). This is THE lever of long context (ch. 6).
 :::
 
 ::: thm
-[Mixture-of-Experts (MoE): routing and balancing]{.tag} Each MLP block is replaced by $E$ experts $\\{E_i\\}$; a router $g(x)=\\mathrm{softmax}(W_g x)$ activates only the top-$k$: $$y = \sum_{i\in \mathrm{top}\text{-}k} g_i(x)\,E_i(x), \qquad \#\text{active params} \ll \#\text{total params}.$$ Capacity decorrelated from inference cost (Switch Transformer: Fedus et al. 2021; DeepSeek-V3: 671B total, \~37B active). **Trap: routing collapse** — the winning experts attract everything. Auxiliary balancing loss (Switch): $$\mathcal{L}_{\text{aux}} = \alpha\, E \sum_{i=1}^{E} f_i\,P_i,$$ $f_i$ = fraction of tokens routed to $i$, $P_i=\\frac{1}{T}\\sum_t g_i(x_t)$ = mean router probability; minimum reached at the uniform distribution ($f_i=P_i=1/E$) — zero penalty iff the router is balanced *and* confident. Modern variants: fine experts + *shared* experts, balancing without an auxiliary loss (dynamically adjusted bias, DeepSeek-V3).
+[Mixture-of-Experts (MoE): routing and balancing]{.tag} Each MLP block is replaced by $E$ experts $\{E_i\}$; a router $g(x)=\mathrm{softmax}(W_g x)$ activates only the top-$k$: $$y = \sum_{i\in \mathrm{top}\text{-}k} g_i(x)\,E_i(x), \qquad \#\text{active params} \ll \#\text{total params}.$$ Capacity decorrelated from inference cost (Switch Transformer: Fedus et al. 2021; DeepSeek-V3: 671B total, \~37B active). **Trap: routing collapse** — the winning experts attract everything. Auxiliary balancing loss (Switch): $$\mathcal{L}_{\text{aux}} = \alpha\, E \sum_{i=1}^{E} f_i\,P_i,$$ $f_i$ = fraction of tokens routed to $i$, $P_i=\frac{1}{T}\sum_t g_i(x_t)$ = mean router probability; minimum reached at the uniform distribution ($f_i=P_i=1/E$) — zero penalty iff the router is balanced *and* confident. Modern variants: fine experts + *shared* experts, balancing without an auxiliary loss (dynamically adjusted bias, DeepSeek-V3).
 :::
 
 ::: note
-[Efficient attention: FlashAttention and IO complexity]{.tag} Exact attention costs $\\mathcal{O}(n\^2)$ compute but is *dominated in practice by input/output*: the naive implementation writes the $n\\times n$ matrix to HBM (large, slow memory). FlashAttention (Dao et al., 2022): *exact* tiled computation that fits in SRAM, "online" softmax with an accumulator (running max $m$ and sum $\\ell$ updated per tile: $m\_{\\text{new}}=\\max(m,x)$, $\\ell\_{\\text{new}}=e\^{m-m\_{\\text{new}}}\\ell+e\^{x-m\_{\\text{new}}}$) — the $n\^2$ matrix is never materialized; HBM reads reduced from $\\Theta(n\^2)$ to $\\Theta(n\^2d\^2/M)$ ($M$ = SRAM size). The general lesson: *optimize memory access, not just FLOPs* (cf. Signal Processing module for the memory hierarchy).
+[Efficient attention: FlashAttention and IO complexity]{.tag} Exact attention costs $\mathcal{O}(n^2)$ compute but is *dominated in practice by input/output*: the naive implementation writes the $n\times n$ matrix to HBM (large, slow memory). FlashAttention (Dao et al., 2022): *exact* tiled computation that fits in SRAM, "online" softmax with an accumulator (running max $m$ and sum $\ell$ updated per tile: $m_{\text{new}}=\max(m,x)$, $\ell_{\text{new}}=e^{m-m_{\text{new}}}\ell+e^{x-m_{\text{new}}}$) — the $n^2$ matrix is never materialized; HBM reads reduced from $\Theta(n^2)$ to $\Theta(n^2d^2/M)$ ($M$ = SRAM size). The general lesson: *optimize memory access, not just FLOPs* (cf. Signal Processing module for the memory hierarchy).
 :::
 
 ::: def
-[Beyond: SSM/Mamba (state equation sketch)]{.tag} A state-space model discretizes a linear system $x'(t)=Ax(t)+Bu(t),\\ y=Cx$: $$x_k = \bar A x_{k-1} + \bar B u_k,\qquad y_k = C x_k,\qquad \bar A = e^{\Delta A},\ \bar B \approx \Delta B,$$ computable in $\\mathcal{O}(n)$ by a scan (no $n\^2$ matrix). The *selectivity* of Mamba (Gu & Dao, 2023): $\\bar B, C, \\Delta$ depend on the input → content-dependent (selective forgetting), which yields attention quality at linear cost. SSD duality (Mamba-2, 2024): the same computation rewrites as $y_k=\\sum\_{s\\le k} C_k\^\\top\\big(\\prod\_{s<k'}\\bar A\\big)\\bar B_s\\,u_s$ — a "attention" with a causal kernel; hence the attention+SSM hybrid architectures. Continued in ch. 8.
+[Beyond: SSM/Mamba (state equation sketch)]{.tag} A state-space model discretizes a linear system $x'(t)=Ax(t)+Bu(t),\ y=Cx$: $$x_k = \bar A x_{k-1} + \bar B u_k,\qquad y_k = C x_k,\qquad \bar A = e^{\Delta A},\ \bar B \approx \Delta B,$$ computable in $\mathcal{O}(n)$ by a scan (no $n^2$ matrix). The *selectivity* of Mamba (Gu & Dao, 2023): $\bar B, C, \Delta$ depend on the input → content-dependent (selective forgetting), which yields attention quality at linear cost. SSD duality (Mamba-2, 2024): the same computation rewrites as $y_k=\sum_{s\le k} C_k^\top\big(\prod_{s<k'}\bar A\big)\bar B_s\,u_s$ — a "attention" with a causal kernel; hence the attention+SSM hybrid architectures. Continued in ch. 8.
 :::
 
--   **Parameters: where are they?** embedding ($\|V\| \\times d$), attention ($4d\^2$/block), MLP ($8d\^2$/block, \~$12d\^2$/block with SwiGLU) — the rule $\\#\\text{params} \\approx 12 N d\^2$ and the training memory cost (parameters + Adam + activations + gradients: \~20 bytes/parameter in mixed precision; cf. ch. 3 for actual compute);
+-   **Parameters: where are they?** embedding ($|V| \times d$), attention ($4d^2$/block), MLP ($8d^2$/block, \~$12d^2$/block with SwiGLU) — the rule $\#\text{params} \approx 12 N d^2$ and the training memory cost (parameters + Adam + activations + gradients: \~20 bytes/parameter in mixed precision; cf. ch. 3 for actual compute);
 -   **LLGA bridge**: attention *is* message passing on a token graph (Graph ML module ch. 2, Advanced GNN); graph transformers inherit from it.
 
 ## 3. Pre-training {#ch3}
+
+Pre-training gives the model its knowledge of language by training it on trillions of tokens of raw text. This chapter answers three questions: which objective to optimize, which data to feed, and how to split a fixed compute budget between model size and data size.
 
 ::: thm
 [Pre-training objectives]{.tag}
@@ -296,7 +319,7 @@ print("ids :", b, "| decode round-trip ok :", enc.decode(b))
 ### 3.1. The data pipeline: quality, filtering, deduplication
 
 -   **Curation**: web → rule-based filtering (length, code/punctuation ratio, languages), then *model-based* filtering (quality classifiers trained on reference pages — e.g. distilled judges); controlled mixture (web, code, books, articles, mathematics, synthetic data generated then filtered);
--   **MinHash-LSH deduplication** (proved in NLP ch. 8.3): k-gram shingles → MinHash signatures (a min-hash collision has probability equal to the Jaccard similarity) → LSH bands/ranks with $\\mathbb{P}\_{\\text{detect}}(J)=1-(1-J\^r)\^b$ → remove near-duplicates down to a threshold. At scale: tens of TB of text, approximately linear clustering; measured effect: less memorization, better benchmark (*deduplicating is regularizing* — LLMs learn duplicates "twice");
+-   **MinHash-LSH deduplication** (proved in NLP ch. 8.3): k-gram shingles → MinHash signatures (a min-hash collision has probability equal to the Jaccard similarity) → LSH bands/ranks with $\mathbb{P}_{\text{detect}}(J)=1-(1-J^r)^b$ → remove near-duplicates down to a threshold. At scale: tens of TB of text, approximately linear clustering; measured effect: less memorization, better benchmark (*deduplicating is regularizing* — LLMs learn duplicates "twice");
 -   **Mixtures and curriculum**: per-domain proportions (annealing: raise quality/lower web at the end of training); *easy→hard* ordering (by perplexity) improves compute efficiency — demonstrated at scale by Shang (ch. 10, "Beyond Random Sampling");
 -   **Multilingual**: balancing per language (otherwise the tokenizer and the model drift toward English — cf. ch. 1 and 10).
 
@@ -307,10 +330,10 @@ print("ids :", b, "| decode round-trip ok :", enc.decode(b))
 :::
 
 :::: thm
-[Theorem 3.1 — The compute optimum $D\^\\star \\approx 20\\,N$, derived]{.tag} At fixed budget $C$, with $\\mathrm{FLOPs}(C) \\approx 6ND$ (2 per parameter × forward + backward, × D tokens): $$(N^\star, D^\star) = \arg\min_{N,D}\; L(N,D)\quad \text{s.t.}\quad 6ND = C.$$
+[Theorem 3.1 — The compute optimum $D^\star \approx 20\,N$, derived]{.tag} At fixed budget $C$, with $\mathrm{FLOPs}(C) \approx 6ND$ (2 per parameter × forward + backward, × D tokens): $$(N^\star, D^\star) = \arg\min_{N,D}\; L(N,D)\quad \text{s.t.}\quad 6ND = C.$$
 
 ::: proof
-Lagrangian $\\mathcal{J}=E+AN\^{-\\alpha}+BD\^{-\\beta}-\\lambda(6ND-C)$: $$\frac{\partial\mathcal{J}}{\partial N}= -\alpha A N^{-\alpha-1}-6\lambda D=0, \qquad \frac{\partial\mathcal{J}}{\partial D}= -\beta B D^{-\beta-1}-6\lambda N=0.$$ Dividing side by side, $\\lambda$ cancels: $$\frac{\alpha A\,N^{-\alpha-1}}{\beta B\,D^{-\beta-1}} = \frac{D}{N} \;\Longrightarrow\; \frac{\alpha A}{\beta B}\,D^{\beta} = N^{\alpha} \;\Longrightarrow\; \frac{N^{\alpha}}{D^{\beta}} = \frac{\alpha A}{\beta B}.$$ With Chinchilla's fitted constants ($\\alpha\\approx0.34$, $\\beta\\approx0.28$, $A\\approx406$, $B\\approx411$): the right-hand side equals $\\approx 1.2$, and the condition together with $6ND=C$ gives $N\^\\star\\propto C\^{0.46}$, $D\^\\star\\propto C\^{0.54}$ — *both grow like $\\sqrt{C}$*, and numerically $D\^\\star/N\^\\star\\approx 20$ tokens per parameter. GPT-3 (300B tokens for 175B params, ratio 1.7) was therefore "undertrained" at its budget. [∎]{.qed}
+Lagrangian $\mathcal{J}=E+AN^{-\alpha}+BD^{-\beta}-\lambda(6ND-C)$: $$\frac{\partial\mathcal{J}}{\partial N}= -\alpha A N^{-\alpha-1}-6\lambda D=0, \qquad \frac{\partial\mathcal{J}}{\partial D}= -\beta B D^{-\beta-1}-6\lambda N=0.$$ Dividing side by side, $\lambda$ cancels: $$\frac{\alpha A\,N^{-\alpha-1}}{\beta B\,D^{-\beta-1}} = \frac{D}{N} \;\Longrightarrow\; \frac{\alpha A}{\beta B}\,D^{\beta} = N^{\alpha} \;\Longrightarrow\; \frac{N^{\alpha}}{D^{\beta}} = \frac{\alpha A}{\beta B}.$$ With Chinchilla's fitted constants ($\alpha\approx0.34$, $\beta\approx0.28$, $A\approx406$, $B\approx411$): the right-hand side equals $\approx 1.2$, and the condition together with $6ND=C$ gives $N^\star\propto C^{0.46}$, $D^\star\propto C^{0.54}$ — *both grow like $\sqrt{C}$*, and numerically $D^\star/N^\star\approx 20$ tokens per parameter. GPT-3 (300B tokens for 175B params, ratio 1.7) was therefore "undertrained" at its budget. [∎]{.qed}
 :::
 ::::
 
@@ -319,10 +342,12 @@ Lagrangian $\\mathcal{J}=E+AN\^{-\\alpha}+BD\^{-\\beta}-\\lambda(6ND-C)$: $$\fra
 :::
 
 ::: ex
-[Lab: training a mini-GPT]{.tag} On a Shakespeare-type corpus (\~1 MB), train a \~10M-parameter transformer (nanoGPT): 30 minutes of GPU suffice to generate credible text. Observe: the loss curve, the effect of context, the sampling temperature (ch. 6). Extend: do exercise 4 (check the law $L(N,D)$ by regression on the published points).
+[Lab: training a mini-GPT]{.tag} On a Shakespeare-type corpus (\~1 MB), train a \~10M-parameter transformer (nanoGPT): 30 minutes of GPU suffice to generate credible text. Observe: the loss curve, the effect of context, the sampling temperature (ch. 6). Extend: do exercise 6 (check the law $L(N,D)$ by regression on the published points).
 :::
 
 ## 4. Post-training: SFT and alignment {#ch4}
+
+A pre-trained model only continues text; it does not follow instructions or hold a conversation. Post-training turns it into an assistant, and this chapter covers its first stage, supervised fine-tuning, and explains why a second stage based on preferences (chapter 5) is needed.
 
 ::: def
 [Step 1 — Supervised Fine-Tuning (instruction tuning)]{.tag} Fine-tune the base model on quality (instruction, response) pairs — a few tens/hundreds of thousands of examples suffice to turn an autocomplete into an assistant. Engineering details: loss mask (the loss is computed only on the response), chat templates, data "distilled" from a large model.
@@ -361,59 +386,63 @@ trainer.train()
 
 ## 5. RLHF, DPO, GRPO {#ch5}
 
+This chapter continues chapter 4: once the model imitates good answers, we want it to prefer better answers to worse ones. It derives the three methods that do this — RLHF, which learns a reward and optimizes it with PPO; DPO, which skips the reward model; and GRPO, which uses verifiable rewards and no critic.
+
 ::: thm
 [RLHF — the classic pipeline (Ouyang et al., 2022)]{.tag}
 
-1.  **Reward model**: train $r\_\\phi(x, y)$ on *human preferences* (response pairs); Bradley-Terry loss: $$\mathcal{L} = -\log \sigma\big(r_\phi(x, y^+) - r_\phi(x, y^-)\big).$$
+1.  **Reward model**: train $r_\phi(x, y)$ on *human preferences* (response pairs); Bradley-Terry loss: $$\mathcal{L} = -\log \sigma\big(r_\phi(x, y^+) - r_\phi(x, y^-)\big).$$
 2.  **Policy optimization** with PPO (RL module, ch. 4): $$\max_\theta\ \mathbb{E}\big[r_\phi(x, y)\big] - \beta\, \mathrm{KL}\big(\pi_\theta \| \pi_{\mathrm{SFT}}\big)$$ — the KL term prevents *reward hacking* and out-of-distribution drift.
 :::
 
 :::: prop
-[Proposition 5.1 — Bradley-Terry, derived]{.tag} If humans compare pairs $(y\^+,y\^-)$ with a probability of preferring $y\^+$ increasing in the "strength" difference, the axiomatics (transitive binary choice, invariance) imposes a logistic model on the *difference* of latent scores: $$\mathbb{P}(y^+ \succ y^- \mid x) = \sigma\big(r(x,y^+)-r(x,y^-)\big),$$ and the log-likelihood of the observed preferences gives the loss above — only the *difference* of rewards is identifiable (adding a function of $x$ changes nothing); hence the need for the KL penalty to pin down the zero.
+[Proposition 5.1 — Bradley-Terry, derived]{.tag} If humans compare pairs $(y^+,y^-)$ with a probability of preferring $y^+$ increasing in the "strength" difference, the axiomatics (transitive binary choice, invariance) imposes a logistic model on the *difference* of latent scores: $$\mathbb{P}(y^+ \succ y^- \mid x) = \sigma\big(r(x,y^+)-r(x,y^-)\big),$$ and the log-likelihood of the observed preferences gives the loss above — only the *difference* of rewards is identifiable (adding a function of $x$ changes nothing); hence the need for the KL penalty to pin down the zero.
 
 ::: proof
-Derivative in $r\^+$: $-\\big(1-\\sigma(r\^+-r\^-)\\big)$ — the penalty is maximal when the pair is misclassified, zero when the margin is amply positive; it is a logistic regression on reward differences. [∎]{.qed}
+Derivative in $r^+$: $-\big(1-\sigma(r^+-r^-)\big)$ — the penalty is maximal when the pair is misclassified, zero when the margin is amply positive; it is a logistic regression on reward differences. [∎]{.qed}
 :::
 ::::
 
 ::: note
-[PPO for LLMs — the concrete protocol]{.tag} Four models in memory: policy $\\pi\_\\theta$, reference $\\pi\_{\\mathrm{SFT}}$ (frozen, for the KL), reward $r\_\\phi$ (frozen), critic (value head). Sensitive hyperparameters: $\\beta\\in[0.01,\\,0.2]$; *low* learning rate (≈ 10× smaller than in SFT); PPO clip $\\epsilon\\sim0.2$; prompt batch > completion batch. Classic symptoms: KL explodes (β too small); degenerate responses (hacked reward); drifting length (RM verbosity bias). This is chapter 4 of the RL module applied word for word — the prerequisite reading.
+[PPO for LLMs — the concrete protocol]{.tag} Four models in memory: policy $\pi_\theta$, reference $\pi_{\mathrm{SFT}}$ (frozen, for the KL), reward $r_\phi$ (frozen), critic (value head). Sensitive hyperparameters: $\beta\in[0.01,\,0.2]$; *low* learning rate (≈ 10× smaller than in SFT); PPO clip $\epsilon\sim0.2$; prompt batch > completion batch. Classic symptoms: KL explodes (β too small); degenerate responses (hacked reward); drifting length (RM verbosity bias). This is chapter 4 of the RL module applied word for word — the prerequisite reading.
 :::
 
 :::: thm
 [Theorem 5.2 — DPO (Rafailov et al., 2023): complete derivation]{.tag} The loss $$\mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Big(\beta \log\tfrac{\pi_\theta(y^+ \mid x)}{\pi_{\mathrm{SFT}}(y^+\mid x)} - \beta \log\tfrac{\pi_\theta(y^- \mid x)}{\pi_{\mathrm{SFT}}(y^-\mid x)}\Big)$$ optimizes *the policy directly* on preferences — without a reward model or rollouts.
 
 ::: proof
-**Step 1 (closed-form solution of the KL-penalized problem).** For fixed $x$, maximizing $\\mathbb{E}\_{y\\sim\\pi}[r(y)] - \\beta\\,\\mathrm{KL}(\\pi\|\\pi\_{\\mathrm{SFT}})$ rewrites as $$\max_\pi \int \pi(y)\Big[r(y) - \beta\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)}\Big]dy = -\beta\int \pi\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)e^{r(y)/\beta}}\,dy,$$ which is $-\\beta\\,\\mathrm{KL}\\big(\\pi\\,\\big\|\\,\\tfrac{1}{Z}\\pi\_{\\mathrm{SFT}}e\^{r/\\beta}\\big)+\\beta\\log Z$; the KL is minimal at zero, so $\\;\\pi\^\\star(y\\mid x) = \\frac{1}{Z(x)}\\,\\pi\_{\\mathrm{SFT}}(y\\mid x)\\,e\^{r(x,y)/\\beta}$. **Step 2 (implicit reward).** Inverting: $r(x,y) = \\beta\\log\\frac{\\pi\^\\star(y\|x)}{\\pi\_{\\mathrm{SFT}}(y\|x)} + \\beta\\log Z(x)$. **Step 3 (injection into Bradley-Terry).** In $\\sigma(r\^+-r\^-)$, the term $Z(x)$ — the same for $y\^+$ and $y\^-$ — *cancels*: only the difference of log-ratios matters; maximizing the likelihood of the preferences gives $\\mathcal{L}\_{\\mathrm{DPO}}$ above (with $\\theta$ in place of $\\pi\^\\star$). **Gradient**: $-\\beta\\,\\sigma(-\\hat r)\\,\\nabla\_\\theta\\big[\\log\\pi(y\^+\|x)-\\log\\pi(y\^-\|x)\\big]$ with implicit reward $\\hat r = \\beta\\log\\frac{\\pi\_\\theta(y\^+)}{\\pi\_{\\mathrm{SFT}}(y\^+)} -\\beta\\log\\frac{\\pi\_\\theta(y\^-)}{\\pi\_{\\mathrm{SFT}}(y\^-)}$: the log-ratio margin of the preferred responses is increased, all the more strongly as the pair is misclassified. [∎]{.qed}
+**Step 1 (closed-form solution of the KL-penalized problem).** For fixed $x$, maximizing $\mathbb{E}_{y\sim\pi}[r(y)] - \beta\,\mathrm{KL}(\pi\|\pi_{\mathrm{SFT}})$ rewrites as $$\max_\pi \int \pi(y)\Big[r(y) - \beta\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)}\Big]dy = -\beta\int \pi\log\frac{\pi(y)}{\pi_{\mathrm{SFT}}(y)e^{r(y)/\beta}}\,dy,$$ which is $-\beta\,\mathrm{KL}\big(\pi\,\big\|\,\tfrac{1}{Z}\pi_{\mathrm{SFT}}e^{r/\beta}\big)+\beta\log Z$; the KL is minimal at zero, so $\;\pi^\star(y\mid x) = \frac{1}{Z(x)}\,\pi_{\mathrm{SFT}}(y\mid x)\,e^{r(x,y)/\beta}$. **Step 2 (implicit reward).** Inverting: $r(x,y) = \beta\log\frac{\pi^\star(y|x)}{\pi_{\mathrm{SFT}}(y|x)} + \beta\log Z(x)$. **Step 3 (injection into Bradley-Terry).** In $\sigma(r^+-r^-)$, the term $Z(x)$ — the same for $y^+$ and $y^-$ — *cancels*: only the difference of log-ratios matters; maximizing the likelihood of the preferences gives $\mathcal{L}_{\mathrm{DPO}}$ above (with $\theta$ in place of $\pi^\star$). **Gradient**: $-\beta\,\sigma(-\hat r)\,\nabla_\theta\big[\log\pi(y^+|x)-\log\pi(y^-|x)\big]$ with implicit reward $\hat r = \beta\log\frac{\pi_\theta(y^+)}{\pi_{\mathrm{SFT}}(y^+)} -\beta\log\frac{\pi_\theta(y^-)}{\pi_{\mathrm{SFT}}(y^-)}$: the log-ratio margin of the preferred responses is increased, all the more strongly as the pair is misclassified. [∎]{.qed}
 :::
 ::::
 
 :::: thm
-[Theorem 5.3 — GRPO (Shao et al., DeepSeekMath 2024): derivation]{.tag} Generate a *group* of $G$ responses $\\{y_i\\}$ per prompt; rewards $\\{r_i\\}$; advantages *within the group*: $$A_i = \frac{r_i - \mathrm{mean}(r_{1..G})}{\mathrm{std}(r_{1..G})},\qquad \nabla_\theta J = \mathbb{E}\Big[\frac{1}{G}\sum_i \frac{1}{\|y_i\|}\sum_t \nabla_\theta\log\pi_\theta(y_{i,t}\mid x)\,A_i\Big] - \beta\,\nabla_\theta \widehat{\mathrm{KL}},$$ with $\\widehat{\\mathrm{KL}}$ an unbiased, low-variance estimator $\\;\\mathbb{E}\\big[\\frac{\\pi\_{\\mathrm{ref}}}{\\pi\_\\theta}-\\log\\frac{\\pi\_{\\mathrm{ref}}}{\\pi\_\\theta}-1\\big]$.
+[Theorem 5.3 — GRPO (Shao et al., DeepSeekMath 2024): derivation]{.tag} Generate a *group* of $G$ responses $\{y_i\}$ per prompt; rewards $\{r_i\}$; advantages *within the group*: $$A_i = \frac{r_i - \mathrm{mean}(r_{1..G})}{\mathrm{std}(r_{1..G})},\qquad \nabla_\theta J = \mathbb{E}\Big[\frac{1}{G}\sum_i \frac{1}{|y_i|}\sum_t \nabla_\theta\log\pi_\theta(y_{i,t}\mid x)\,A_i\Big] - \beta\,\nabla_\theta \widehat{\mathrm{KL}},$$ with $\widehat{\mathrm{KL}}$ an unbiased, low-variance estimator $\;\mathbb{E}\big[\frac{\pi_{\mathrm{ref}}}{\pi_\theta}-\log\frac{\pi_{\mathrm{ref}}}{\pi_\theta}-1\big]$.
 
 ::: proof
-**Variance.** REINFORCE: $\\nabla\\mathbb{E}[r]=\\mathbb{E}[r\\,\\nabla\\log\\pi]$ is unbiased for any *baseline* independent of the action: $\\mathbb{E}[b\\,\\nabla\\log\\pi]=b\\,\\nabla\\!\\int\\pi=0$; subtracting $b=\\mathrm{mean}(r)$ divides the variance (better than $b=0$ or a learned baseline); normalizing by the standard deviation makes the gradient scale invariant across prompts (easy ones: small spreads → amplified; hard ones: damped). **No more critic.** Unlike PPO, the baseline comes from *the group itself* — the value network (and its memory/training) disappears; it is the Monte-Carlo estimation of $A(s,a)=Q(s,a)-V(s)$ by multiple sampling. [∎]{.qed}
+**Variance.** REINFORCE: $\nabla\mathbb{E}[r]=\mathbb{E}[r\,\nabla\log\pi]$ is unbiased for any *baseline* independent of the action: $\mathbb{E}[b\,\nabla\log\pi]=b\,\nabla\!\int\pi=0$; subtracting $b=\mathrm{mean}(r)$ divides the variance (better than $b=0$ or a learned baseline); normalizing by the standard deviation makes the gradient scale invariant across prompts (easy ones: small spreads → amplified; hard ones: damped). **No more critic.** Unlike PPO, the baseline comes from *the group itself* — the value network (and its memory/training) disappears; it is the Monte-Carlo estimation of $A(s,a)=Q(s,a)-V(s)$ by multiple sampling. [∎]{.qed}
 :::
 ::::
 
 ::: thm
-[RLVR and reasoning (2024-2026)]{.tag} When quality is **verifiable** (a passing unit test, an exact mathematical answer), the reward no longer needs to be learned: *RL with Verifiable Rewards*. GRPO is the engine of DeepSeek-R1: by optimizing verifiable correctness, *long chains of thought* emerge (self-verification, backtracking, "aha" moments) — the "o1" style. **Self-consistency** at inference (Wang et al., 2023): sample $n$ reasonings, answer by *majority vote* — accuracy climbing at $\\Theta(\\sqrt n)$-ish as long as errors are weakly correlated. Costs: 10× more tokens; recent works regularize length (ch. 10: "Shorter but not Worse"). Exploration (bandits, RL module ch. 6) becomes central: the GRPO group *is* structured exploration.
+[RLVR and reasoning (2024-2026)]{.tag} When quality is **verifiable** (a passing unit test, an exact mathematical answer), the reward no longer needs to be learned: *RL with Verifiable Rewards*. GRPO is the engine of DeepSeek-R1: by optimizing verifiable correctness, *long chains of thought* emerge (self-verification, backtracking, "aha" moments) — the "o1" style. **Self-consistency** at inference (Wang et al., 2023): sample $n$ reasonings, answer by *majority vote* — accuracy climbing at $\Theta(\sqrt n)$-ish as long as errors are weakly correlated. Costs: 10× more tokens; recent works regularize length (ch. 10: "Shorter but not Worse"). Exploration (bandits, RL module ch. 6) becomes central: the GRPO group *is* structured exploration.
 :::
 
 ::: note
-[Overview]{.tag} SFT (imitate) → RLHF (optimize preferences) → DPO (preferences without RL) → RLVR/GRPO (optimize verifiable truth). A "modern" LLM chains: base → SFT → rejection sampling → DPO/GRPO; this is exactly the plan of the official course ("post-training methods"). In the lab: toy DPO (exercise 7) then GRPO (exercise 8).
+[Overview]{.tag} SFT (imitate) → RLHF (optimize preferences) → DPO (preferences without RL) → RLVR/GRPO (optimize verifiable truth). A "modern" LLM chains: base → SFT → rejection sampling → DPO/GRPO; this is exactly the plan of the official course ("post-training methods"). In the lab: DPO on paper (exercise 8) then toy GRPO (exercise 9).
 :::
 
 ## 6. Running an LLM: inference {#ch6}
 
+A trained model still has to produce text, one token at a time, under memory and latency constraints. This chapter explains how tokens are chosen (decoding), where the memory goes (the KV-cache), and the three main ways to make serving faster or cheaper without changing the output much: speculative decoding, quantization and smarter batching.
+
 ### 6.1. Decoding: formulas and effects
 
 ::: def
-[Definition 6.1 — From greedy to nucleus]{.tag} At each step, logits $z$ over $\|V\|$;
+[Definition 6.1 — From greedy to nucleus]{.tag} At each step, logits $z$ over $|V|$;
 
--   **Temperature**: $p_i = \\dfrac{\\exp(z_i/T)}{\\sum_j \\exp(z_j/T)}$ — $T\\to0$: argmax (greedy); large $T$: uniformization;
+-   **Temperature**: $p_i = \dfrac{\exp(z_i/T)}{\sum_j \exp(z_j/T)}$ — $T\to0$: argmax (greedy); large $T$: uniformization;
 -   **Top-k**: truncate to the $k$ best logits then renormalize;
--   **Top-p (nucleus)**: smallest set of tokens with cumulative probability $\\ge p$ (*adaptive* size: wide on an uncertain step, narrow on a deterministic step);
+-   **Top-p (nucleus)**: smallest set of tokens with cumulative probability $\ge p$ (*adaptive* size: wide on an uncertain step, narrow on a deterministic step);
 -   **Repetition penalty**: divide the logit of already emitted tokens (factor 1.1-1.3); **min-p**: threshold relative to the best token.
 :::
 
@@ -426,23 +455,23 @@ Derivative in $r\^+$: $-\\big(1-\\sigma(r\^+-r\^-)\\big)$ — the penalty is max
 ### 6.2. KV-cache: the memory arithmetic
 
 ::: prop
-[Proposition 6.2 — Cache memory = $\\mathcal{O}(n\\cdot d)$, quantified]{.tag} In autoregression, each new token must attend to the keys/values of the whole past — they are cached (prop. 2.4): bytes/token $= 2\\,N\_{\\text{layers}}\\,n\_{\\text{KV}}\\,d\_{\\text{head}}\\times$ precision. **Llama-3-8B** (32 layers, 8 KV heads, 128 dim, fp16) → 128 KiB/token: 8k context ≈ 1 GB, 100k ≈ 12.8 GB, 1M ≈ 128 GB (weights excluded!). Three ways out: GQA (÷4 here), int8 cache quantization (÷2), and eviction/recomputation (sliding window). Engineering rule: *context length is first a memory bandwidth problem*, not a FLOPs problem — hence the next chapter.
+[Proposition 6.2 — Cache memory = $\mathcal{O}(n\cdot d)$, quantified]{.tag} In autoregression, each new token must attend to the keys/values of the whole past — they are cached (prop. 2.4): bytes/token $= 2\,N_{\text{layers}}\,n_{\text{KV}}\,d_{\text{head}}\times$ precision. **Llama-3-8B** (32 layers, 8 KV heads, 128 dim, fp16) → 128 KiB/token: 8k context ≈ 1 GB, 100k ≈ 12.8 GB, 1M ≈ 128 GB (weights excluded!). Three ways out: GQA (÷4 here), int8 cache quantization (÷2), and eviction/recomputation (sliding window). Engineering rule: *context length is first a memory bandwidth problem*, not a FLOPs problem — hence the techniques of the next sections.
 :::
 
 ### 6.3. Speculative decoding: the correction proved
 
 :::: thm
-[Theorem 6.3 — Speculative decoding (Leviathan et al., 2023)]{.tag} A small model $q$ proposes $\\gamma$ tokens; the large model $p$ computes the $\\gamma$ distributions *in a single forward*; each proposal $y$ is accepted with probability $\\min(1, p(y)/q(y))$; at the first rejection, one resamples from the normalized residual $\\mathrm{norm}\\big(\\max(0,\\,p-q)\\big)$. Then the marginal distribution of each produced token is *exactly* $p$ — quality unchanged, latency divided by \~2-3 when $q\\approx p$.
+[Theorem 6.3 — Speculative decoding (Leviathan et al., 2023)]{.tag} A small model $q$ proposes $\gamma$ tokens; the large model $p$ computes the $\gamma$ distributions *in a single forward*; each proposal $y$ is accepted with probability $\min(1, p(y)/q(y))$; at the first rejection, one resamples from the normalized residual $\mathrm{norm}\big(\max(0,\,p-q)\big)$. Then the marginal distribution of each produced token is *exactly* $p$ — quality unchanged, latency divided by \~2-3 when $q\approx p$.
 
 ::: proof
-For one token: acceptance contribution $q(y)\\min(1,p(y)/q(y)) = \\min(q(y),p(y))$; rejection contribution: the total rejected mass equals $\\sum_x q(x)\\big(1-\\min(1,p(x)/q(x))\\big) = \\sum_x \\max(0,q(x)-p(x)) = R$, and the resampled residual adds $R\\cdot\\frac{\\max(0,p(y)-q(y))}{R} = \\max(0,p(y)-q(y))$. Total: $\\min(q,p)+\\max(0,p-q)=p$. [∎]{.qed}
+For one token: acceptance contribution $q(y)\min(1,p(y)/q(y)) = \min(q(y),p(y))$; rejection contribution: the total rejected mass equals $\sum_x q(x)\big(1-\min(1,p(x)/q(x))\big) = \sum_x \max(0,q(x)-p(x)) = R$, and the resampled residual adds $R\cdot\frac{\max(0,p(y)-q(y))}{R} = \max(0,p(y)-q(y))$. Total: $\min(q,p)+\max(0,p-q)=p$. [∎]{.qed}
 :::
 ::::
 
 ### 6.4. Quantization: principles and errors
 
 -   **Post-training int8**: nearly lossless (batch calibration, per-channel scales); **int4**: the standard compromise;
--   **GPTQ** (Frantar et al., 2022): layer by layer, minimize $\|Wx-\\hat W x\|\_2\^2$ on a calibration set — column-by-column quantization *with error compensation* on the remaining columns (via the inverse of the Hessian $\\mathbf{H}=2\\mathbf{X}\\mathbf{X}\^\\top$);
+-   **GPTQ** (Frantar et al., 2022): layer by layer, minimize $\|Wx-\hat W x\|_2^2$ on a calibration set — column-by-column quantization *with error compensation* on the remaining columns (via the inverse of the Hessian $\mathbf{H}=2\mathbf{X}\mathbf{X}^\top$);
 -   **AWQ** (Lin et al., 2023): protect the "salient" channels (high activations) with per-channel scaling *before* quantization — the error is shifted toward weakly active channels;
 -   **Typical errors**: int8 ≈ +0.0-0.1 PPL; well-calibrated int4 ≈ +0.1-0.5 PPL (often imperceptible); below 4 bits, degradation accelerates (2-3-bit quantization = research); in production, always re-validate on *your* benchmarks, not PPL alone.
 
@@ -465,6 +494,8 @@ from transformers import SpeculativeDecodingSpec  # (illustrative; cf. vLLM lab)
 ```
 
 ## 7. RAG in depth {#ch7}
+
+A model only knows what was in its training data, up to its cutoff date, and cannot cite sources. Retrieval-augmented generation fixes this by fetching relevant documents at query time and placing them in the context; this chapter goes through each stage of such a pipeline and how to evaluate it.
 
 ::: def
 [Definition 7.1 — RAG (Retrieval-Augmented Generation)]{.tag} $$p(y \mid q) \approx p_\theta\big(y \mid q, \mathrm{top}_k\, \mathrm{sim}(e_q, e_d)\big)$$ index documents by embeddings, retrieve those closest to the prompt, inject them into the context. Reduces hallucinations, updates knowledge, handles proprietary data *without retraining*.
@@ -504,7 +535,7 @@ Lab protocol: QA set with reference context (*golden context*), compare faithful
 
 -   **HyDE** (Gao et al., 2022): generate a *hypothetical answer* to the question and search *with its embedding* — the imaginary answer is closer to the documents than the question;
 -   **GraphRAG**: retrieval traverses a *knowledge graph* (entity-relation extraction by NER/RE — NLP ch. 6; communities-summaries; multi-hop queries); detailed in the Graph ML module ch. 8 — the LLGA heart; Buscaldi's work (AI-KG/CS-KG, NLP ch. 9) builds exactly such graphs from scientific corpora;
--   **Structured queries**: text → graph query (linearization, ch. 10.3) or SQL (text-to-SQL): the LLM writes the query, the database answers — maximal auditability.
+-   **Structured queries**: text → graph query (graph linearization, see the publications in ch. 10) or SQL (text-to-SQL): the LLM writes the query, the database answers — maximal auditability.
 
 ```python
 # minimal RAG (pseudocode with sentence-transformers + FAISS)
@@ -517,7 +548,7 @@ idx = faiss.IndexFlatIP(384); idx.add(enc.encode(chunks, normalize_embeddings=Tr
 def answer(question, k=4):
     D, I = idx.search(enc.encode([question], normalize_embeddings=True), k)
     context = "\n".join(chunks[i] for i in I[0])
-    prompt = f"Réponds selon le contexte suivant :\n{context}\n\nQuestion : {question}"
+    prompt = f"Answer using the following context:\n{context}\n\nQuestion: {question}"
     return llm.chat(prompt)   # + citations = retrieved sources
 
 # lab extension: cross-encoder reranking on the top-20, then
@@ -526,6 +557,8 @@ def answer(question, k=4):
 
 ## 8. Agents, multimodality and perspectives {#ch8}
 
+So far the model only reads text and writes text. This chapter extends it in two directions: agents, which let it call tools and act in a loop, and multimodal models, which let images, audio and documents enter its context; it ends with the directions research is taking.
+
 ### 8.1. The ReAct loop, with a real trace
 
 ::: def
@@ -533,14 +566,14 @@ def answer(question, k=4):
 :::
 
 ```python
-Question : quel module du M1 couvre les HMM ?
+Question: which M1 module covers HMMs?
 
-Thought: je dois chercher dans le programme du master.
-Action: search["programme M1 NLP HMM"]
+Thought: I need to search the master's curriculum.
+Action: search["M1 curriculum NLP HMM"]
 Observation: ... CSC_52082_EP "Introduction to Text Mining and NLP",
              ch. 6 "Sequences: NER, HMM, CRF" ...
-Thought: la réponse est dans la liste des chapitres.
-Action: finish["Le module NLP (CSC_52082_EP), chapitre 6"]
+Thought: the answer is in the list of chapters.
+Action: finish["The NLP module (CSC_52082_EP), chapter 6"]
 
 # modern function calling: JSON typed by the chat engine
 tools = [{"type": "function", "name": "search",
@@ -570,15 +603,17 @@ tools = [{"type": "function", "name": "search",
 
 ### 8.3. Perspectives
 
--   **Alternative architectures**: attention+SSM hybrids (ch. 2), xLSTM, latent transformers (deraising diffusion LMs — cf. ch. 10); the transformer does not have a monopoly;
+-   **Alternative architectures**: attention+SSM hybrids (ch. 2), xLSTM, latent transformers and diffusion language models (cf. ch. 10); the transformer does not have a monopoly;
 -   **Small Language Models & distillation**: the quality/cost/latency trade-off governs enterprise deployment (ch. 6);
--   **Open research**: reasoning (ch. 5), long-term memory, LLMs *on graphs* (linearization vs structured embeddings — ch. 10.3 and the Graph ML/Advanced GNN modules), evaluation (ch. 9).
+-   **Open research**: reasoning (ch. 5), long-term memory, LLMs *on graphs* (linearization vs structured embeddings — ch. 10 and the Graph ML/Advanced GNN modules), evaluation (ch. 9).
 
 ::: ex
 [Final lab]{.tag} Build a documentation-assistant: technical corpus → RAG pipeline (chunks, embeddings, reranking); measure faithfulness (verifiable citations) for vector RAG versus a *GraphRAG* version; cost report (tokens, latency). Extension: an agentic version (ch. 8) that chooses between vector retrieval and a graph query depending on the question type.
 :::
 
 ## 9. Evaluation and safety of LLMs {#ch9}
+
+A score on a benchmark is only useful if it measures what we think it measures, and a deployed model must resist misuse. This chapter covers how benchmarks are built and skewed, the biases of LLM judges, hallucinations, attacks on LLM systems, and a statistical test to detect machine-generated text.
 
 ### 9.1. Benchmarks: construction and contamination
 
@@ -621,7 +656,7 @@ Under H₀ (unmarked text), each token is green with probability $\gamma$ indepe
 
 ## 10. Research (Shang) {#ch10}
 
-Guokan Shang (lead research scientist, MBZUAI; PhD at the LIX laboratory, École Polytechnique, 2021, under the supervision of M. Vazirgiannis — the LLGA loop) works on the evaluation of generative models, efficient pre-training, multilingual LLMs and dialogue summarization. Three axes presented in detail, then the rest of the filmography, each positioned relative to the chapters.
+Guokan Shang (lead research scientist, MBZUAI; PhD at the LIX laboratory, École Polytechnique, 2021, under the supervision of M. Vazirgiannis — the LLGA loop) works on the evaluation of generative models, efficient pre-training, multilingual LLMs and dialogue summarization. Three research axes are presented in detail, then the rest of his publications, each positioned relative to the chapters.
 
 ::: thm
 [Axis 1 — Frugal evaluation: FrugalScore (ACL 2022)]{.tag} *Kamal Eddine, Shang, Tixier & Vazirgiannis, FrugalScore: Learning Cheaper, Lighter and Faster Evaluation Metrics for Automatic Text Generation* — [arXiv:2110.08559](https://arxiv.org/abs/2110.08559). **Problem**: neural generation metrics (BERTScore, MoverScore…) cost one large-model forward *per pair* — prohibitive in a learning or LLM-judge evaluation loop. **Method**: *distill* the reference metric (the scores, not the texts!) into a tiny student (T5-small), with an input representation compatible with the mother metric. **Result**: correlation nearly preserved for a cost reduced by a factor of up to \~700× (plus pre-trained V2 variants). **Position:** the "evaluation at an industrializable price" link of ch. 9 — evaluate often, at low cost, before evaluating well (heavy judges) on a subsample.
@@ -636,7 +671,7 @@ Guokan Shang (lead research scientist, MBZUAI; PhD at the LIX laboratory, École
 :::
 
 ::: note
-[The rest of the filmography (with positioning)]{.tag}
+[The other publications (with positioning)]{.tag}
 
 -   **Meeting summarization** (the PhD thread): [unsupervised abstractive summarization](https://arxiv.org/abs/1805.05271) by multi-sentence compression + budgeted submodular maximization (ACL 2018 — the "graphical text mining" of M1 NLP ch. 8); [self-attentive abstractive communities](https://arxiv.org/abs/1904.09491) (AACL 2020); [speaker-change-aware CRF](https://arxiv.org/abs/2004.02913) for dialogue acts (COLING 2020 — the CRFs of M1 NLP ch. 6); TACL 2023 survey ([arXiv:2208.04163](https://arxiv.org/abs/2208.04163)); French corpora [FREDSum](https://arxiv.org/abs/2312.04843) (political debates) and [Claire](https://arxiv.org/abs/2311.16840) (spontaneous French dialogue); back to extraction: [discourse and extractive summarization](https://arxiv.org/abs/2405.11055) (2024);
 -   **LLM faithfulness and diversity**: "LLM as a Broken Telephone" (ACL 2025, [arXiv:2502.20258](https://arxiv.org/abs/2502.20258)) — iterative generation distorts information (ch. 9); benchmark of [linguistic diversity of LLMs](https://arxiv.org/abs/2412.10271) (TACL 2025); Markov generation chains (2026, [arXiv:2603.11228](https://arxiv.org/abs/2603.11228));
@@ -646,46 +681,46 @@ Guokan Shang (lead research scientist, MBZUAI; PhD at the LIX laboratory, École
 
 ## Exercises / Labs {#ex}
 
-1.  **Multilingual tokenization.** Compare BPE vs Unigram vs SentencePiece on a multilingual corpus: compression (characters/token), coverage of numbers; measure the French "extra cost" over English for the same text.
+1.  **★ Multilingual tokenization.** Compare BPE vs Unigram vs SentencePiece on a multilingual corpus: compression (characters/token), coverage of numbers; measure the French "extra cost" over English for the same text.
 
     ::: proof
     Guidance (expected results): aligned professional translations (fr/en/de) → tokens/word; typically fr ≈ 1.15-1.25× en; German with compounds even more — until frequent compounds become tokens; check that o200k (GPT-4o) narrows the gap vs cl100k. Conclude on the real cost (context, API price) of the same application depending on the language. [∎]{.qed}
     :::
-2.  **RoPE.** Prove the relative property of thm 2.3 ($R(a)^\top R(b) = R(b-a)$), then check numerically that the attention score is invariant under a common translation of positions; implement context interpolation $m\to m/L$ and measure perplexity beyond the training length.
-
-    ::: proof
-    Guidance: 2D rotations = complex numbers — commutativity and $e^{-ia}e^{ib}=e^{i(b-a)}$; translation invariance follows from the theorem; in practice naive extrapolation degrades PPL, interpolation largely preserves it (this is the basis of extended contexts 32k→128k without full retraining). [∎]{.qed}
-    :::
-3.  **KV-cache arithmetic.** For Llama-3-8B (32 layers, 8 KV heads, 128 dim) and a 128k-token context: compute the cache memory in fp16, then in int8, then with MQA; what maximum batch fits on an 80 GB GPU (int4 weights ≈ 5 GB)?
+2.  **★ KV-cache arithmetic.** For Llama-3-8B (32 layers, 8 KV heads, 128 dim) and a 128k-token context: compute the cache memory in fp16, then in int8, then with MQA; what maximum batch fits on an 80 GB GPU (int4 weights ≈ 5 GB)?
 
     ::: proof
     Guidance: 128 KiB/token (prop. 2.4) → 128k tokens = 16 GiB; int8 → 8 GiB; MQA (1 KV head) → 2 GiB; available budget ≈ 80−5 = 75 GiB → batch of \~4 (fp16) to \~37 (MQA int8): GQA/MQA and cache quantization *determine* the served throughput. [∎]{.qed}
     :::
-4.  **Scaling.** From published data (LLaMA 1/2/3, Chinchilla), verify the law $\mathcal{L} \approx A N^{-\alpha} + B D^{-\beta} + E$ by regression; situate each model relative to the compute optimum (thm 3.1).
-5.  **MoE.** Derive the minimum of the auxiliary loss $\alpha E\sum_i f_iP_i$ under the constraint $\sum_i f_i=1$ and show it corresponds to uniform routing; simulate the collapse (biased initialization of the router) without then with the loss.
-
-    ::: proof
-    Guidance: at router equilibrium, $P_i=f_i$; minimize $E\sum f_i^2$ under $\sum f_i=1$ → Lagrange → uniform $f_i=1/E$; without the loss, the winning expert attracts tokens (reinforced feedback) and specialization degenerates. [∎]{.qed}
-    :::
-6.  **Guided SFT.** Fine-tune a small instructed model (1-3B) on 500 (question, answer) pairs from your domain: strict template, masked labels (code of ch. 4), 2-3 epochs; measure the effect of a wrong template at test time (a spectacular drop to witness once and for all).
-7.  **DPO on paper.** Derive the closed form $\pi^\star$ of the KL-penalized problem (classical calculus of variations), then the DPO loss by re-injecting into Bradley-Terry; check the gradient: it increases the log-ratio margin of the preferred responses.
-
-    ::: proof
-    Guidance: follow the proof of thm 5.2 step by step — the key argument is that $\mathcal{J}=-\beta\,\mathrm{KL}(\pi\|\pi_{\mathrm{ref}}e^{r/\beta}/Z)+\beta\log Z$; then $Z(x)$ disappears in the difference $r^+-r^-$. The gradient pushes $\log\pi(y^+)-\log\pi_{\mathrm{ref}}(y^+)$ up and the $y^-$ down, modulated by $\sigma(-\hat r)$ (hard pairs first). [∎]{.qed}
-    :::
-8.  **Toy GRPO.** On a verifiable task (binary arithmetic), train a mini-model with GRPO (group of 8 responses); plot accuracy and response length — observe the emergence of longer "reasoning"; compare gradient variance with/without normalization by the group standard deviation.
-9.  **Speculative, on paper.** Write out completely the proof of thm 6.3 in the case $\gamma=2$, then estimate the expected latency gain if $q=p$ on 80% of the mass but diverges on the rest.
-
-    ::: proof
-    Guidance: accept token 1 (probability $\sum_y\min(q,p)$), then the second conditionally; the expected number of accepted tokens per round is $\frac{1}{1-\alpha}$ (geometric) with $\alpha\approx0.8$ → \~5 tokens/forward; gain bounded by $\gamma$ and by the small/large model cost ratio. [∎]{.qed}
-    :::
-10. **RAG vs context length.** Query an LLM with 4k/32k/128k of context over a corpus: does the "lost in the middle" effect appear? Compare with RAG; discuss the trade-offs (cost, faithfulness, indexing overhead).
-11. **Watermark.** With $\gamma=0.5$ and $T=400$ tokens, compute $z$ for a text carrying 230 green tokens; threshold at 5%; how many tokens are needed to detect a +5% green bias?
+3.  **★ Guided SFT.** Fine-tune a small instructed model (1-3B) on 500 (question, answer) pairs from your domain: strict template, masked labels (code of ch. 4), 2-3 epochs; measure the effect of a wrong template at test time (a spectacular drop to witness once and for all).
+4.  **★ Watermark.** With $\gamma=0.5$ and $T=400$ tokens, compute $z$ for a text carrying 230 green tokens; threshold at 5%; how many tokens are needed to detect a +5% green bias?
 
     ::: proof
     Guidance: $z=(230-200)/10 = 3$ → p ≈ 0.1%: rejected (marked); for a small bias $\varepsilon$, the expectation of $z$ grows like $\varepsilon\sqrt{T/\gamma(1-\gamma)}$ → one needs $T\sim (1.96/\varepsilon)^2\gamma(1-\gamma)$; with $\varepsilon=0.05$, \~770 tokens — hence the difficulty on short texts. [∎]{.qed}
     :::
-12. **Agent project.** Extend the final lab: an agent that chooses *between* vector retrieval and a graph query depending on the question type (relational or factual) — measure the improvement and the extra cost.
+5.  **★★ RoPE.** Prove the relative property of thm 2.3 ($R(a)^\top R(b) = R(b-a)$), then check numerically that the attention score is invariant under a common translation of positions; implement context interpolation $m\to m/L$ and measure perplexity beyond the training length.
+
+    ::: proof
+    Guidance: 2D rotations = complex numbers — commutativity and $e^{-ia}e^{ib}=e^{i(b-a)}$; translation invariance follows from the theorem; in practice naive extrapolation degrades PPL, interpolation largely preserves it (this is the basis of extended contexts 32k→128k without full retraining). [∎]{.qed}
+    :::
+6.  **★★ Scaling.** From published data (LLaMA 1/2/3, Chinchilla), verify the law $\mathcal{L} \approx A N^{-\alpha} + B D^{-\beta} + E$ by regression; situate each model relative to the compute optimum (thm 3.1).
+7.  **★★ MoE.** Derive the minimum of the auxiliary loss $\alpha E\sum_i f_iP_i$ under the constraint $\sum_i f_i=1$ and show it corresponds to uniform routing; simulate the collapse (biased initialization of the router) without then with the loss.
+
+    ::: proof
+    Guidance: at router equilibrium, $P_i=f_i$; minimize $E\sum f_i^2$ under $\sum f_i=1$ → Lagrange → uniform $f_i=1/E$; without the loss, the winning expert attracts tokens (reinforced feedback) and specialization degenerates. [∎]{.qed}
+    :::
+8.  **★★ DPO on paper.** Derive the closed form $\pi^\star$ of the KL-penalized problem (classical calculus of variations), then the DPO loss by re-injecting into Bradley-Terry; check the gradient: it increases the log-ratio margin of the preferred responses.
+
+    ::: proof
+    Guidance: follow the proof of thm 5.2 step by step — the key argument is that $\mathcal{J}=-\beta\,\mathrm{KL}(\pi\|\pi_{\mathrm{ref}}e^{r/\beta}/Z)+\beta\log Z$; then $Z(x)$ disappears in the difference $r^+-r^-$. The gradient pushes $\log\pi(y^+)-\log\pi_{\mathrm{ref}}(y^+)$ up and the $y^-$ down, modulated by $\sigma(-\hat r)$ (hard pairs first). [∎]{.qed}
+    :::
+9.  **★★ Toy GRPO.** On a verifiable task (binary arithmetic), train a mini-model with GRPO (group of 8 responses); plot accuracy and response length — observe the emergence of longer "reasoning"; compare gradient variance with/without normalization by the group standard deviation.
+10. **★★ Speculative, on paper.** Write out completely the proof of thm 6.3 in the case $\gamma=2$, then estimate the expected latency gain if $q=p$ on 80% of the mass but diverges on the rest.
+
+    ::: proof
+    Guidance: accept token 1 (probability $\sum_y\min(q,p)$), then the second conditionally; the expected number of accepted tokens per round is $\frac{1}{1-\alpha}$ (geometric) with $\alpha\approx0.8$ → \~5 tokens/forward; gain bounded by $\gamma$ and by the small/large model cost ratio. [∎]{.qed}
+    :::
+11. **★★ RAG vs context length.** Query an LLM with 4k/32k/128k of context over a corpus: does the "lost in the middle" effect appear? Compare with RAG; discuss the trade-offs (cost, faithfulness, indexing overhead).
+12. **★★★ Agent project.** Extend the final lab: an agent that chooses *between* vector retrieval and a graph query depending on the question type (relational or factual) — measure the improvement and the extra cost.
 
 ## References {#refs}
 
