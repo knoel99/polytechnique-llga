@@ -163,7 +163,11 @@ Every control technique of this module modifies one of three things: the way a m
 Prerequisites (M1 and M2 modules) — what is assumed acquired
 :::
 
--   **Autoregressive generation** (LLMs M2 module, ch. 1-2): factorization $p_\theta(y \mid x) = \prod_{t} p_\theta(y_t \mid x, y_{<t})$, softmax over the vocabulary (BPE: tokens are *subword units*, not characters), sampling with temperature, top-$k$, top-$p$ (ch. 6 of the same module);
+-   **Autoregressive generation** (LLMs M2 module, ch. 1-2): factorization
+    $$
+    p_\theta(y \mid x) = \prod_{t} p_\theta(y_t \mid x, y_{<t}),
+    $$
+    softmax over the vocabulary (BPE: tokens are *subword units*, not characters), sampling with temperature, top-$k$, top-$p$ (ch. 6 of the same module);
 -   **Conditioning and alignment** (LLMs M2 module, ch. 4-5): prompting, SFT, RLHF/DPO/GRPO — we return to these in ch. 5 as *control* mechanisms;
 -   **Diffusion** (Multimodal GenAI M1 module, ch. 3-4): DDPM, noise prediction $\hat\epsilon_\theta(x_t, t)$, classifier guidance and classifier-*free* guidance (CFG), DDIM and its inversion — recalled in ch. 7 with proof;
 -   **VAE and ELBO** (Multimodal GenAI ch. 1): the variational bound, the reconstruction/regularization trade-off;
@@ -190,7 +194,13 @@ Consider an agent that "follows" its prompt in every respect except the output g
 A generator is a *law* over an immense space. Asking it politely (a prompt) only constrains this law statistically: no theorem guarantees the exact format, the safety of the content or the traceability of the origin.
 
 ::: def
-[Definition 1.1 — Controlling a generator]{.tag} Let $p_\theta(\cdot \mid x)$ be a conditional law over outputs $y \in \mathcal{Y}^*$ (token sequences, images, graphs). **Controlling** means replacing $p_\theta$ with a law $\tilde p$ that (i) lives on a specified subset $S \subseteq \mathcal{Y}^*$ (*support constraint*: a language, a JSON schema, a chemical valence); or (ii) maximizes in expectation a property $c$ (*fidelity constraint*: following the instruction, the style, the target); or (iii) carries a verifiable mark of origin (*provenance constraint*: watermarking). Chapters 3 to 8 realize (i)-(ii)-(iii) through different mechanisms; ch. 2 will organize them.
+[Definition 1.1 — Controlling a generator]{.tag} Let $p_\theta(\cdot \mid x)$ be a conditional law over outputs $y \in \mathcal{Y}^*$ (token sequences, images, graphs). **Controlling** means replacing $p_\theta$ with a law $\tilde p$ that
+
+-   **(i)** lives on a specified subset $S \subseteq \mathcal{Y}^*$ (*support constraint*: a language, a JSON schema, a chemical valence); or
+-   **(ii)** maximizes in expectation a property $c$ (*fidelity constraint*: following the instruction, the style, the target); or
+-   **(iii)** carries a verifiable mark of origin (*provenance constraint*: watermarking).
+
+Chapters 3 to 8 realize (i)-(ii)-(iii) through different mechanisms; ch. 2 will organize them.
 :::
 
 ::: ex
@@ -202,7 +212,9 @@ A generator is a *law* over an immense space. Asking it politely (a prompt) only
 :::
 
 ::: thm
-[Theorem 1.3 — Intellectual property and law as drivers of control]{.tag} Regulation (EU) 2024/1689 ("AI Act", art. 50) imposes **provenance transparency**: providers of generative systems must mark their outputs in a machine-readable way and make them detectable as artificially generated. Concretely: watermarking (ch. 6) is no longer an academic exercise but a compliance requirement; likewise for audio marking (cf. Signal Processing module) and images. This legal framework motivates the control/robustness articulation (ch. 10): an attackable mark is not a proof.
+[Theorem 1.3 — Intellectual property and law as drivers of control]{.tag} Regulation (EU) 2024/1689 ("AI Act", art. 50) imposes **provenance transparency**: providers of generative systems must mark their outputs in a machine-readable way and make them detectable as artificially generated.
+
+Concretely: watermarking (ch. 6) is no longer an academic exercise but a compliance requirement; likewise for audio marking (cf. Signal Processing module) and images. This legal framework motivates the control/robustness articulation (ch. 10): an attackable mark is not a proof.
 :::
 
 ::: note
@@ -217,16 +229,39 @@ Many techniques claim to "control" a generator; this chapter sorts them into fou
 [Definition 2.1 — The four families]{.tag} Let $c$ be the control signal (instruction, target property, admissible language).
 
 1.  **Conditioning**: $c$ enters the model (prompt, prefix, fused embedding); the law becomes $p_\theta(\cdot \mid x, c)$. Zero inference cost, no guarantee — *soft* control;
-2.  **Guidance**: one biases the sampling toward $c$ without relearning $p_\theta$ — guided score $\hat\epsilon_u + w(\hat\epsilon_c - \hat\epsilon_u)$ in diffusion (ch. 7), activation steering for LLMs (ch. 4), gradient guidance of flows (ch. 8); the strength $w$ tunes fidelity at the price of diversity;
+2.  **Guidance**: one biases the sampling toward $c$ without relearning $p_\theta$ — guided score
+    $$
+    \hat\epsilon_u + w(\hat\epsilon_c - \hat\epsilon_u)
+    $$
+    in diffusion (ch. 7), activation steering for LLMs (ch. 4), gradient guidance of flows (ch. 8); the strength $w$ tunes fidelity at the price of diversity;
 3.  **Hard constraints**: one restricts the *support* — automaton-constrained decoding (ch. 3), valence masks (ch. 8), inpainting. A 100% guarantee; risk: a renormalized law, possibly impoverished;
 4.  **Post-processing / filtering**: generate, check $c$, reject (best-of-$n$, resampling, correction); exact but costly when $c$ is rare.
 :::
 
 :::: thm
-[Theorem 2.2 — The mask is an exact conditioning (renormalization)]{.tag} Let $S \subseteq \mathcal{Y}^*$ be a set of admissible outputs and $p_\theta$ a stepwise law (allowed at each step: a subset of tokens). If at each step one *masks* the tokens that make $S$ unreachable, the effective law is exactly $$\tilde p_\theta(y \mid x) = \frac{p_\theta(y \mid x)\, \mathbf{1}[y \in S]} {\sum_{y' \in S} p_\theta(y' \mid x)} = p_\theta(y \mid x,\ y \in S).$$
+[Theorem 2.2 — The mask is an exact conditioning (renormalization)]{.tag} Let $S \subseteq \mathcal{Y}^*$ be a set of admissible outputs and $p_\theta$ a stepwise law (allowed at each step: a subset of tokens). If at each step one *masks* the tokens that make $S$ unreachable, the effective law is exactly
+
+::: key
+[Key result — masking is exact conditioning]{.tag}
+$$
+\tilde p_\theta(y \mid x) = \frac{p_\theta(y \mid x)\, \mathbf{1}[y \in S]} {\sum_{y' \in S} p_\theta(y' \mid x)} = p_\theta(y \mid x,\ y \in S).
+$$
+:::
 
 ::: proof
-By recursion over the steps: at step $t$, the mask allows exactly the tokens $v$ such that there exists a suffix $s$ with $y_{<t} v s \in S$. The probability of an admissible prefix is therefore $p_\theta(\text{prefix}) \cdot Z_{t}^{-1}$ where $Z_t$ is the mass of allowed continuations — the normalization factor telescopes from step to step and, at the final step, the total mass over $S$ equals 1: the conditional law is exact. Useful corollary: if the model estimates correctly the *ratios* of admissible outputs (the training data are already in $S$ up to a few exceptions), then $\tilde p_\theta \approx p_\theta(\cdot \mid S) \approx p_\star$ — the mask is nearly free in bias and massive in guarantee. This is the analysis made in ch. 3 of the Graph Generative Models module for valences; it holds for any language. [∎]{.qed}
+By recursion over the steps.
+
+1.  At step $t$, the mask allows exactly the tokens $v$ such that there exists a suffix $s$ with $y_{<t} v s \in S$.
+2.  The probability of an admissible prefix is therefore $p_\theta(\text{prefix}) \cdot Z_{t}^{-1}$ where $Z_t$ is the mass of allowed continuations.
+3.  The normalization factor telescopes from step to step and, at the final step, the total mass over $S$ equals 1: the conditional law is exact.
+
+Useful corollary: if the model estimates correctly the *ratios* of admissible outputs (the training data are already in $S$ up to a few exceptions), then
+$$
+\tilde p_\theta \approx p_\theta(\cdot \mid S) \approx p_\star
+$$
+— the mask is nearly free in bias and massive in guarantee.
+
+This is the analysis made in ch. 3 of the Graph Generative Models module for valences; it holds for any language. [∎]{.qed}
 :::
 ::::
 
@@ -234,7 +269,11 @@ By recursion over the steps: at step $t$, the mask allows exactly the tokens $v$
 [Proposition 2.3 — Rejection costs $1/p_\star(S)$]{.tag} Filtering by rejection (drawing iid until landing in $S$) *also* realizes $p_\theta(\cdot \mid S)$, but the number of draws follows a geometric law of expectation $1/p_\theta(S \mid x)$.
 
 ::: proof
-Each draw is an independent Bernoulli trial with success probability $q = p_\theta(S \mid x)$; the waiting time for the first success is geometric, $\mathbb{E}[N] = \sum_{k \geq 1} k(1-q)^{k-1}q = 1/q$. For complex unconstrained JSON, $q$ can be $10^{-2}$ (100 draws on average); for a valid molecule without constraint, GraphAF measures 68% (ch. 8); for a sentence satisfying *both* ten rare constraints, $q$ collapses exponentially — hence the structural superiority of the mask, which pays only a single pass. [∎]{.qed}
+Each draw is an independent Bernoulli trial with success probability $q = p_\theta(S \mid x)$; the waiting time for the first success is geometric,
+$$
+\mathbb{E}[N] = \sum_{k \geq 1} k(1-q)^{k-1}q = 1/q .
+$$
+For complex unconstrained JSON, $q$ can be $10^{-2}$ (100 draws on average); for a valid molecule without constraint, GraphAF measures 68% (ch. 8); for a sentence satisfying *both* ten rare constraints, $q$ collapses exponentially — hence the structural superiority of the mask, which pays only a single pass. [∎]{.qed}
 :::
 ::::
 
@@ -256,7 +295,16 @@ The technical heart of the module for text: guaranteeing that an output *authori
 ### 3.1. From regex to automaton
 
 ::: def
-[Definition 3.1 — DFA and regular language]{.tag} A deterministic finite automaton is a quintuple $A = (Q, \Sigma, \delta, q_0, F)$: states $Q$, alphabet $\Sigma$, transition $\delta : Q \times \Sigma \to Q$, initial state $q_0$, accepting states $F$. One extends $\delta$ to words by $\delta^*(q, uv) = \delta^*(\delta^*(q, u), v)$. The recognized language is $L(A) = \{w \in \Sigma^* : \delta^*(q_0, w) \in F\}$. **Construction**: regex $\to$ $\varepsilon$-NFA (Thompson, linear in the pattern size), then determinization by *subset construction* ($2^{|Q|}$ states at worst, rare in practice). Course example, the ISO date: `\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])` — a nontrivial $F$: "2026-02-31" must be *syntactically* accepted (calendar semantics is not a simple regular language: we return to this).
+[Definition 3.1 — DFA and regular language]{.tag} A deterministic finite automaton is a quintuple $A = (Q, \Sigma, \delta, q_0, F)$: states $Q$, alphabet $\Sigma$, transition $\delta : Q \times \Sigma \to Q$, initial state $q_0$, accepting states $F$.
+
+One extends $\delta$ to words by $\delta^*(q, uv) = \delta^*(\delta^*(q, u), v)$. The recognized language is
+$$
+L(A) = \{w \in \Sigma^* : \delta^*(q_0, w) \in F\}.
+$$
+
+**Construction**: regex $\to$ $\varepsilon$-NFA (Thompson, linear in the pattern size), then determinization by *subset construction* ($2^{|Q|}$ states at worst, rare in practice).
+
+Course example, the ISO date: `\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])` — a nontrivial $F$: "2026-02-31" must be *syntactically* accepted (calendar semantics is not a simple regular language: we return to this).
 :::
 
 ::: prop
@@ -266,10 +314,26 @@ The technical heart of the module for text: guaranteeing that an output *authori
 ### 3.2. The masking algorithm, in detail
 
 :::: thm
-[Theorem 3.3 — Constrained decoding by state→tokens index (Willard & Louf, 2023)]{.tag} Let $V$ be the *tokenizer* vocabulary (multi-character tokens!). One precomputes, for each state $q$ of the pruned DFA, the set of admissible tokens $$\mathrm{Adm}(q) = \big\{ v \in V \ : \ \delta^*(q, \mathrm{str}(v)) \ \text{is defined and co-accessible} \big\},$$ with the table $\mathrm{next}(q, v) = \delta^*(q, \mathrm{str}(v))$. Constrained decoding replaces each distribution with $$p^{\mathrm{mask}}_\theta(v \mid y_{<t}) \propto p_\theta(v \mid y_{<t})\, \mathbf{1}\big[v \in \mathrm{Adm}(q_t)\big], \qquad q_{t+1} = \mathrm{next}(q_t, v_t),$$ and allows EOS only if $q_t \in F$. Then every output is in $L(A)$: the guarantee is *structural*, by induction over the steps (theorem 2.2).
+[Theorem 3.3 — Constrained decoding by state→tokens index (Willard & Louf, 2023)]{.tag} Let $V$ be the *tokenizer* vocabulary (multi-character tokens!). One precomputes, for each state $q$ of the pruned DFA, the set of admissible tokens
+$$
+\mathrm{Adm}(q) = \big\{ v \in V \ : \ \delta^*(q, \mathrm{str}(v)) \ \text{is defined and co-accessible} \big\},
+$$
+with the table $\mathrm{next}(q, v) = \delta^*(q, \mathrm{str}(v))$.
+
+Constrained decoding replaces each distribution with
+$$
+p^{\mathrm{mask}}_\theta(v \mid y_{<t}) \propto p_\theta(v \mid y_{<t})\, \mathbf{1}\big[v \in \mathrm{Adm}(q_t)\big], \qquad q_{t+1} = \mathrm{next}(q_t, v_t),
+$$
+and allows EOS only if $q_t \in F$.
+
+Then every output is in $L(A)$: the guarantee is *structural*, by induction over the steps (theorem 2.2).
 
 ::: proof
-**Complexity.** Precomputation: $|Q| \times |V|$ token reads, each $\mathcal{O}(|v|)$ transitions — once and for all (and shareable between requests of the same grammar: XGrammar further accelerates by separating *context-independent* tokens, pre-checked globally, from *dependent* ones, the only ones resimulated). Online: one lookup per step, $\mathcal{O}(1)$ — the overhead over the LLM pass ($\mathcal{O}(n^2)$) is negligible. **BPE subtlety**: a token is not a character; `"12"` and `"12/"` are two distinct tokens; the definition of $\mathrm{Adm}$ copes with this because $\delta^*$ reads *the string* of the token, character by character — the DFA does not even know it is being run over BPEs. Instructive counterexample: a token can cross the boundary of the language (`"},"` is valid at the end of JSON, `"},x"` is not); this is precisely why one must index over *tokens* and not over characters. [∎]{.qed}
+-   **Complexity.** Precomputation: $|Q| \times |V|$ token reads, each $\mathcal{O}(|v|)$ transitions — once and for all (and shareable between requests of the same grammar: XGrammar further accelerates by separating *context-independent* tokens, pre-checked globally, from *dependent* ones, the only ones resimulated).
+-   **Online**: one lookup per step, $\mathcal{O}(1)$ — the overhead over the LLM pass ($\mathcal{O}(n^2)$) is negligible.
+-   **BPE subtlety**: a token is not a character; `"12"` and `"12/"` are two distinct tokens; the definition of $\mathrm{Adm}$ copes with this because $\delta^*$ reads *the string* of the token, character by character — the DFA does not even know it is being run over BPEs.
+
+Instructive counterexample: a token can cross the boundary of the language (`"},"` is valid at the end of JSON, `"},x"` is not); this is precisely why one must index over *tokens* and not over characters. [∎]{.qed}
 :::
 ::::
 
@@ -306,11 +370,15 @@ class DfaMask:
 ```
 
 ::: ex
-[Example 3.4 — A date by hand]{.tag} Constraint with a month check, `\d{2}/(0[1-9]|1[0-2])/\d{4}`. After `"26/0"`, the state encodes "second digit of the month in progress, 0 already seen"; the token `"0"` is masked (only `1`-`9` complete a month `01`-`09`), and so is `"/"`. Conversely, if the first digit of the month were `1`, the second would be restricted to `0-2`. Writing the table $\mathrm{Adm}(q)$ for these states is exercise 1; the classic pitfall: allowing the token `"13"` as a single BPE block when the state accepts only `"1"` followed by `"0-2"` — `"13"` must be masked *as a whole*.
+[Example 3.4 — A date by hand]{.tag} Constraint with a month check, `\d{2}/(0[1-9]|1[0-2])/\d{4}`. After `"26/0"`, the state encodes "second digit of the month in progress, 0 already seen"; the token `"0"` is masked (only `1`-`9` complete a month `01`-`09`), and so is `"/"`. Conversely, if the first digit of the month were `1`, the second would be restricted to `0-2`.
+
+Writing the table $\mathrm{Adm}(q)$ for these states is exercise 1; the classic pitfall: allowing the token `"13"` as a single BPE block when the state accepts only `"1"` followed by `"0-2"` — `"13"` must be masked *as a whole*.
 :::
 
 ::: note
-[Beyond regular languages: grammars and JSON Schema]{.tag} Regular languages cannot express nesting (`{"a": {"b": ...}}` of arbitrary depth). One needs context-free grammars: PICARD (Scholak et al., EMNLP 2021) constrains a T5 on SQL by *incremental parsing* (forbidden logits are set to $-\infty$ as soon as the token makes the derivation dead); XGrammar compiles EBNF/JSON Schema into nearly free online masks (2-10× faster than the previous state of the art). In 2026 industrial practice: *every* LLM tool call (function calling) goes through a grammar mask — the output is valid JSON *by construction*. Cf. LLMs module (M2) ch. 8 for the agent layer.
+[Beyond regular languages: grammars and JSON Schema]{.tag} Regular languages cannot express nesting (`{"a": {"b": ...}}` of arbitrary depth). One needs context-free grammars: PICARD (Scholak et al., EMNLP 2021) constrains a T5 on SQL by *incremental parsing* (forbidden logits are set to $-\infty$ as soon as the token makes the derivation dead).
+
+XGrammar compiles EBNF/JSON Schema into nearly free online masks (2-10× faster than the previous state of the art). In 2026 industrial practice: *every* LLM tool call (function calling) goes through a grammar mask — the output is valid JSON *by construction*. Cf. LLMs module (M2) ch. 8 for the agent layer.
 :::
 
 ## 4. Steering: controlling in activation space {#ch4}
@@ -318,23 +386,57 @@ class DfaMask:
 Constrained decoding acts on the *outputs*. Steering acts *inside* the network: if concepts ("positivity", "gender", "refusal") are encoded by directions of the activation space, then moving them *should* move the behavior. This is the most fascinating and least guaranteed control of the module.
 
 ::: def
-[Definition 4.1 — Steering vector (ActAdd, Turner et al. 2023)]{.tag} Let $h^{(l)}(x) \in \mathbb{R}^d$ be the residual activation of layer $l$ after reading the prefix $x$. For two contrasted prompts $x^+$ ("Love") and $x^-$ ("Hate"), one defines $$v = h^{(l)}(x^+) - h^{(l)}(x^-) \in \mathbb{R}^d,$$ and, during generation, one replaces $h^{(l)}(x_t) \leftarrow h^{(l)}(x_t) + \alpha\, v$ at *every* step (and often on the first token only); $\alpha \in [-4, 4]$ is the guidance strength. The model, the weights, the prompt: nothing changes — only a vector is added.
+[Definition 4.1 — Steering vector (ActAdd, Turner et al. 2023)]{.tag} Let $h^{(l)}(x) \in \mathbb{R}^d$ be the residual activation of layer $l$ after reading the prefix $x$. For two contrasted prompts $x^+$ ("Love") and $x^-$ ("Hate"), one defines
+$$
+v = h^{(l)}(x^+) - h^{(l)}(x^-) \in \mathbb{R}^d,
+$$
+and, during generation, one replaces
+$$
+h^{(l)}(x_t) \leftarrow h^{(l)}(x_t) + \alpha\, v
+$$
+at *every* step (and often on the first token only); $\alpha \in [-4, 4]$ is the guidance strength.
+
+The model, the weights, the prompt: nothing changes — only a vector is added.
 :::
 
 ::: ex
-[Example 4.2 — The founding experiment, described step by step (to replay in lab 3)]{.tag} Model: GPT-2 (124M-1.5B in the paper; the lab uses the small one). (i) compute $v$ = $h^{(6)}(\texttt{Love}) - h^{(6)}(\texttt{Hate})$; (ii) generate 200 continuations of the prompt "I want to tell you something" *without* steering, then with $\alpha = +1$, then $\alpha = -1$; (iii) count the marriage-related words ("love, wedding, bride, forever…"): their frequency jumps by a factor of several tens at $\alpha = +1$, drops below the baseline at $\alpha = -1$; (iv) measure the perplexity on OpenWebText: nearly unchanged at $\alpha = \pm 1$, it explodes toward $|\alpha| \gtrsim 5$ (degenerate outputs); (v) observe the inter-layer disagreement: steering works "better" (strong effect, coherent text) on some layers (middle of the network) than others — one more hyperparameter.
+[Example 4.2 — The founding experiment, described step by step (to replay in lab 3)]{.tag} Model: GPT-2 (124M-1.5B in the paper; the lab uses the small one).
+
+1.  Compute $v$ = $h^{(6)}(\texttt{Love}) - h^{(6)}(\texttt{Hate})$.
+2.  Generate 200 continuations of the prompt "I want to tell you something" *without* steering, then with $\alpha = +1$, then $\alpha = -1$.
+3.  Count the marriage-related words ("love, wedding, bride, forever…"): their frequency jumps by a factor of several tens at $\alpha = +1$, drops below the baseline at $\alpha = -1$.
+4.  Measure the perplexity on OpenWebText: nearly unchanged at $\alpha = \pm 1$, it explodes toward $|\alpha| \gtrsim 5$ (degenerate outputs).
+5.  Observe the inter-layer disagreement: steering works "better" (strong effect, coherent text) on some layers (middle of the network) than others — one more hyperparameter.
 :::
 
 :::: prop
-[Proposition 4.3 — Why a simple addition shifts the output (first-order analysis)]{.tag} Let $W_U$ denote the unembedding matrix (output layer). The logit of token $w$ equals $\ell_w = \langle W_U^{(w)}, h^{(L)} \rangle$ (final layer, ignoring the softmax). If the steered residual $h^{(L)} + \alpha v^{(L)}$ stays within the network's linearity domain, then $$\Delta \ell_w \;=\; \alpha\, \langle W_U^{(w)}, v^{(L)} \rangle\ :$$ *all tokens aligned with the direction $v$ are favored proportionally to $\alpha$* — a global, monotone reweighting, even before any nonlinear effect.
+[Proposition 4.3 — Why a simple addition shifts the output (first-order analysis)]{.tag} Let $W_U$ denote the unembedding matrix (output layer). The logit of token $w$ equals $\ell_w = \langle W_U^{(w)}, h^{(L)} \rangle$ (final layer, ignoring the softmax).
+
+If the steered residual $h^{(L)} + \alpha v^{(L)}$ stays within the network's linearity domain, then
+$$
+\Delta \ell_w \;=\; \alpha\, \langle W_U^{(w)}, v^{(L)} \rangle\ :
+$$
+*all tokens aligned with the direction $v$ are favored proportionally to $\alpha$* — a global, monotone reweighting, even before any nonlinear effect.
 
 ::: proof
-Differentiability: to first order, $h^{(L)} \mapsto \ell_w$ is affine; $\Delta \ell_w = \nabla_h \ell_w^\top (\alpha v) = \alpha \langle W_U^{(w)}, v\rangle$. This is exactly the structure of *guidance* (ch. 2, family 2): each token's logit is shifted by a "compatibility with the direction" score. The difference from the mask: here no logit is sent to $-\infty$ — the law keeps full support, the control is soft; and the linear approximation becomes false as $\alpha$ grows, hence the observed degeneration. [∎]{.qed}
+Differentiability: to first order, $h^{(L)} \mapsto \ell_w$ is affine;
+$$
+\Delta \ell_w = \nabla_h \ell_w^\top (\alpha v) = \alpha \langle W_U^{(w)}, v\rangle.
+$$
+This is exactly the structure of *guidance* (ch. 2, family 2): each token's logit is shifted by a "compatibility with the direction" score.
+
+The difference from the mask: here no logit is sent to $-\infty$ — the law keeps full support, the control is soft; and the linear approximation becomes false as $\alpha$ grows, hence the observed degeneration. [∎]{.qed}
 :::
 ::::
 
 ::: note
-[The steering family in 2026: reading, writing, weights]{.tag} **Read**: probing and concept directions (cf. Explainability module ch. 1); **write**: ActAdd (difference of two activations), contrastive activation addition (differences averaged over pairs of behaviors), inference-time intervention (moving activations *toward* the truthfulness direction), representation engineering (Zou et al., 2023: extracting via self-interpretation directions of honesty, refusal, bias and subtracting/adding them); **on weights**: task arithmetic (Ilharco et al., ICLR 2023): adding to the *weights* the difference between a fine-tuned model and the base model — the same "add a direction" gesture moved from one space to another, composable (adding two tasks, canceling one by subtraction). Common limits: empirical choice of layer and $\alpha$, non-monotone effects, fragile out-of-distribution generalization — and no support guarantee: to *truly* forbid a format, only ch. 3 applies.
+[The steering family in 2026: reading, writing, weights]{.tag}
+
+-   **Read**: probing and concept directions (cf. Explainability module ch. 1);
+-   **write**: ActAdd (difference of two activations), contrastive activation addition (differences averaged over pairs of behaviors), inference-time intervention (moving activations *toward* the truthfulness direction), representation engineering (Zou et al., 2023: extracting via self-interpretation directions of honesty, refusal, bias and subtracting/adding them);
+-   **on weights**: task arithmetic (Ilharco et al., ICLR 2023): adding to the *weights* the difference between a fine-tuned model and the base model — the same "add a direction" gesture moved from one space to another, composable (adding two tasks, canceling one by subtraction).
+
+Common limits: empirical choice of layer and $\alpha$, non-monotone effects, fragile out-of-distribution generalization — and no support guarantee: to *truly* forbid a format, only ch. 3 applies.
 :::
 
 ## 5. RLHF: control in behavior space {#ch5}
@@ -342,15 +444,57 @@ Differentiability: to first order, $h^{(L)} \mapsto \ell_w$ is affine; $\Delta \
 RLHF was presented as alignment (cf. LLMs M2 module ch. 5 — we do not redo its practice); here we reread it as a *control* mechanism, and we prove that it is — mathematically — the *twin* of classifier-free guidance in ch. 7. This double reading is the module's synthesis point.
 
 :::: thm
-[Theorem 5.1 — RLHF = exponential guidance of the output law (closed-form solution proved)]{.tag} The alignment program with KL penalty reads $$\pi^* = \arg\max_{\pi}\ \mathbb{E}_{y \sim \pi(\cdot \mid x)}\big[r(y, x)\big] \;-\; \beta\, \mathrm{KL}\big(\pi(\cdot \mid x)\,\|\,\pi_{\mathrm{ref}}(\cdot \mid x)\big).$$ Its unique solution is $$\pi^*(y \mid x) \;=\; \frac{1}{Z(x)}\, \pi_{\mathrm{ref}}(y \mid x)\, \exp\big(r(y, x)/\beta\big), \qquad Z(x) = \sum_{y'} \pi_{\mathrm{ref}}(y' \mid x) e^{r(y',x)/\beta}.$$
+[Theorem 5.1 — RLHF = exponential guidance of the output law (closed-form solution proved)]{.tag} The alignment program with KL penalty reads
+$$
+\pi^* = \arg\max_{\pi}\ \mathbb{E}_{y \sim \pi(\cdot \mid x)}\big[r(y, x)\big] \;-\; \beta\, \mathrm{KL}\big(\pi(\cdot \mid x)\,\|\,\pi_{\mathrm{ref}}(\cdot \mid x)\big).
+$$
+Its unique solution is
+
+::: key
+[Key result — closed form of the KL-regularized policy]{.tag}
+$$
+\pi^*(y \mid x) \;=\; \frac{1}{Z(x)}\, \pi_{\mathrm{ref}}(y \mid x)\, \exp\big(r(y, x)/\beta\big), \qquad Z(x) = \sum_{y'} \pi_{\mathrm{ref}}(y' \mid x) e^{r(y',x)/\beta}.
+$$
+:::
 
 ::: proof
-One maximizes over the law $\pi$ (an infinite-dimensional variable). Set $J(\pi) = \mathbb{E}_\pi[r] - \beta\,\mathbb{E}_\pi[\log \frac{\pi}{\pi_{\mathrm{ref}}}]$. First order: for every perturbation $\pi + \varepsilon(\nu - \pi)$ ($\nu$ any law), $\frac{d}{d\varepsilon} J\big|_{\varepsilon=0} = \mathbb{E}_{\nu}[r - \beta\log\frac{\pi}{\pi_{\mathrm{ref}}} - \beta - c] = 0$ for all $\nu$, where $c$ is the multiplier of the constraint $\sum_y \pi(y) = 1$. This forces $r(y,x) - \beta \log\frac{\pi(y \mid x)}{\pi_{\mathrm{ref}}(y \mid x)}$ constant in $y$: $\log \frac{\pi}{\pi_{\mathrm{ref}}} = r/\beta + \mathrm{const}$, giving the result (the constant is fixed by normalization; the strict concavity of the KL gives uniqueness). **Control reading**: the aligned policy is the reference law *reweighted by an exponential factor in the reward*, exactly as CFG reweights $p(x_t)$ by $p(c \mid x_t)^w$ (ch. 7); $\beta$ (the inverse of the reward temperature) plays the role of the guidance strength $w$, and the KL is the *budget* of allowed deviation — high fidelity to $r$, low diversity if $\beta$ is small. [∎]{.qed}
+One maximizes over the law $\pi$ (an infinite-dimensional variable). Set
+$$
+J(\pi) = \mathbb{E}_\pi[r] - \beta\,\mathbb{E}_\pi[\log \frac{\pi}{\pi_{\mathrm{ref}}}].
+$$
+
+First order: for every perturbation $\pi + \varepsilon(\nu - \pi)$ ($\nu$ any law),
+$$
+\frac{d}{d\varepsilon} J\big|_{\varepsilon=0} = \mathbb{E}_{\nu}[r - \beta\log\frac{\pi}{\pi_{\mathrm{ref}}} - \beta - c] = 0
+$$
+for all $\nu$, where $c$ is the multiplier of the constraint $\sum_y \pi(y) = 1$.
+
+This forces
+$$
+r(y,x) - \beta \log\frac{\pi(y \mid x)}{\pi_{\mathrm{ref}}(y \mid x)}
+$$
+to be constant in $y$:
+$$
+\log \frac{\pi}{\pi_{\mathrm{ref}}} = r/\beta + \mathrm{const},
+$$
+giving the result (the constant is fixed by normalization; the strict concavity of the KL gives uniqueness).
+
+**Control reading**: the aligned policy is the reference law *reweighted by an exponential factor in the reward*, exactly as CFG reweights $p(x_t)$ by $p(c \mid x_t)^w$ (ch. 7); $\beta$ (the inverse of the reward temperature) plays the role of the guidance strength $w$, and the KL is the *budget* of allowed deviation — high fidelity to $r$, low diversity if $\beta$ is small. [∎]{.qed}
 :::
 ::::
 
 ::: prop
-[Proposition 5.2 — DPO: the same solution, without a reward model]{.tag} By rewriting $r = \beta \log \frac{\pi^*}{\pi_{\mathrm{ref}}} + \beta\log Z$, the preference between $y_w \succ y_l$ is expressed directly in policies: the DPO loss $$\mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Big(\beta \log\tfrac{\pi_\theta(y_w \mid x)}{\pi_{\mathrm{ref}}(y_w \mid x)} - \beta \log\tfrac{\pi_\theta(y_l \mid x)}{\pi_{\mathrm{ref}}(y_l \mid x)}\Big)$$ is the likelihood of the preferences *under the closed form of theorem 5.1*: DPO learns the same exponential guidance by direct regression on pairs. GRPO (group-relative reinforcement) is its extension via within-group comparisons — developed in detail in ch. 5 of the LLMs module (M2), which should be consulted for the actual training.
+[Proposition 5.2 — DPO: the same solution, without a reward model]{.tag} By rewriting
+$$
+r = \beta \log \frac{\pi^*}{\pi_{\mathrm{ref}}} + \beta\log Z,
+$$
+the preference between $y_w \succ y_l$ is expressed directly in policies: the DPO loss
+$$
+\mathcal{L}_{\mathrm{DPO}} = -\log \sigma\Big(\beta \log\tfrac{\pi_\theta(y_w \mid x)}{\pi_{\mathrm{ref}}(y_w \mid x)} - \beta \log\tfrac{\pi_\theta(y_l \mid x)}{\pi_{\mathrm{ref}}(y_l \mid x)}\Big)
+$$
+is the likelihood of the preferences *under the closed form of theorem 5.1*: DPO learns the same exponential guidance by direct regression on pairs.
+
+GRPO (group-relative reinforcement) is its extension via within-group comparisons — developed in detail in ch. 5 of the LLMs module (M2), which should be consulted for the actual training.
 :::
 
 ::: note
@@ -362,27 +506,84 @@ One maximizes over the law $\pi$ (an infinite-dimensional variable). Set $J(\pi)
 Provenance constraint (def. 1.1 iii): modify *the generation* so that outputs carry a secret statistical mark, verifiable without wiggle room. The green/red scheme of Kirchenbauer et al. (ICML 2023) is the most taught because its test can be proved at the M2 level — it is also the bridge with the audio watermarking of the Signal Processing module and ch. 9 of the Explainability module.
 
 ::: def
-[Definition 6.1 — Green/red watermark (Kirchenbauer et al., 2023)]{.tag} **Key**: secret $k$. **At every step**: one hashes the *previous* token with $k$ (PRF $h_k$), the result serves as a pseudo-random seed to partition the vocabulary: a *green list* $G_k(y_{t-1})$ of fraction $\gamma$ (typically $\gamma = 0.5$), the rest in the red list. **Generation**: before the softmax, one adds $\delta$ to the green logits (typ. $\delta = 2$): $$\ell^{(t)}_v \leftarrow \ell^{(t)}_v + \delta \cdot \mathbf{1}\big[v \in G_k(y_{t-1})\big].$$ **Detection**: knowing $k$, one recounts the greens.
+[Definition 6.1 — Green/red watermark (Kirchenbauer et al., 2023)]{.tag} **Key**: secret $k$.
+
+**At every step**: one hashes the *previous* token with $k$ (PRF $h_k$), the result serves as a pseudo-random seed to partition the vocabulary: a *green list* $G_k(y_{t-1})$ of fraction $\gamma$ (typically $\gamma = 0.5$), the rest in the red list.
+
+**Generation**: before the softmax, one adds $\delta$ to the green logits (typ. $\delta = 2$):
+$$
+\ell^{(t)}_v \leftarrow \ell^{(t)}_v + \delta \cdot \mathbf{1}\big[v \in G_k(y_{t-1})\big].
+$$
+
+**Detection**: knowing $k$, one recounts the greens.
 :::
 
 :::: thm
-[Theorem 6.2 — The z-test, proved (H0: unmarked text)]{.tag} Let a suspect text of $T$ tokens, $s = \sum_{t=1}^T \mathbf{1}[y_t \in G_k(y_{t-1})]$ its number of greens, and the statistic $$z \;=\; \frac{s - \gamma T}{\sqrt{T\, \gamma (1 - \gamma)}}.$$ Under the null hypothesis "text written without knowledge of $k$" (hence human, or an unmarked model), $z$ converges in law to $\mathcal{N}(0, 1)$ as $T \to \infty$, and one rejects $H_0$ at threshold $\alpha$ if $z > \Phi^{-1}(1 - \alpha)$.
+[Theorem 6.2 — The z-test, proved (H0: unmarked text)]{.tag} Let a suspect text of $T$ tokens, $s = \sum_{t=1}^T \mathbf{1}[y_t \in G_k(y_{t-1})]$ its number of greens, and the statistic
+
+::: key
+[Key result — watermark z-score]{.tag}
+$$
+z \;=\; \frac{s - \gamma T}{\sqrt{T\, \gamma (1 - \gamma)}}.
+$$
+:::
+
+Under the null hypothesis "text written without knowledge of $k$" (hence human, or an unmarked model), $z$ converges in law to $\mathcal{N}(0, 1)$ as $T \to \infty$, and one rejects $H_0$ at threshold $\alpha$ if
+$$
+z > \Phi^{-1}(1 - \alpha).
+$$
 
 ::: proof
-\(i\) *Law under H0*. The seed $h_k(y_{t-1})$ is pseudo-random: for a text that was *not* generated according to the lists, the membership of $y_t$ in the green list is a Bernoulli($\gamma$) draw — independent of $k$ in practice (this is the cryptographic property of the PRF; a standard heuristic in information theory). Hence $s \sim \mathrm{Bin}(T, \gamma)$ (neglecting the weak sequential dependence). (ii) *Normality*. $\mathbb{E}[s] = \gamma T$, $\mathrm{Var}(s) = T\gamma(1-\gamma)$; the De Moivre-Laplace theorem (binomial CLT — Refresher Statistics module) gives $\frac{s - \gamma T}{\sqrt{T\gamma(1-\gamma)}} \Rightarrow \mathcal{N}(0,1)$. (iii) *Threshold*. P(false positive) $= \alpha$: with $z_{\mathrm{threshold}} = 4$, $\alpha \approx 3.2 \times 10^{-5}$ — a human text is accused once in \~30,000. (iv) *Power under H1*. For a marked text, each step draws a green with probability $p_\delta > \gamma$ (the bump $\delta$ favors greens); $\mathbb{E}[z \mid H1] \approx (p_\delta - \gamma)\sqrt{T}/\sqrt{\gamma(1-\gamma)}$, which grows in $\sqrt{T}$: with $\gamma = 0.5$, $\delta = 2$, $p_\delta \approx 0.7$-0.8 in practice, and $T = 200$, $\mathbb{E}[z] \approx 5.7$-8.5 — detection is nearly certain. [∎]{.qed}
+1.  *Law under H0*. The seed $h_k(y_{t-1})$ is pseudo-random: for a text that was *not* generated according to the lists, the membership of $y_t$ in the green list is a Bernoulli($\gamma$) draw — independent of $k$ in practice (this is the cryptographic property of the PRF; a standard heuristic in information theory). Hence $s \sim \mathrm{Bin}(T, \gamma)$ (neglecting the weak sequential dependence).
+2.  *Normality*. $\mathbb{E}[s] = \gamma T$, $\mathrm{Var}(s) = T\gamma(1-\gamma)$; the De Moivre-Laplace theorem (binomial CLT — Refresher Statistics module) gives
+    $$
+    \frac{s - \gamma T}{\sqrt{T\gamma(1-\gamma)}} \Rightarrow \mathcal{N}(0,1).
+    $$
+3.  *Threshold*. P(false positive) $= \alpha$: with $z_{\mathrm{threshold}} = 4$, $\alpha \approx 3.2 \times 10^{-5}$ — a human text is accused once in \~30,000.
+4.  *Power under H1*. For a marked text, each step draws a green with probability $p_\delta > \gamma$ (the bump $\delta$ favors greens);
+    $$
+    \mathbb{E}[z \mid H1] \approx (p_\delta - \gamma)\sqrt{T}/\sqrt{\gamma(1-\gamma)},
+    $$
+    which grows in $\sqrt{T}$.
+
+    With $\gamma = 0.5$, $\delta = 2$, $p_\delta \approx 0.7$-0.8 in practice, and $T = 200$, $\mathbb{E}[z] \approx 5.7$-8.5 — detection is nearly certain. [∎]{.qed}
 :::
 ::::
 
 ::: ex
-[Example 6.3 — The test in numbers (exercise 2 in full)]{.tag} $T = 200$, $\gamma = 0.5$. A marked text observes $s = 150$ (75% greens): $z = (150 - 100)/\sqrt{200 \times 0.25} = 50/\sqrt{50} \approx 7.07$ — massive rejection of H0. A *typical* human text would have $s \in [87, 113]$ at 95% ($z \in [-1.96, 1.96]$). Bonus question: how many tokens are needed to distinguish $\gamma = 0.5$ from $p_\delta = 0.6$ at level 5% (two-sided, as above) with power 0.9? The usual sample-size formula for a proportion gives $T \approx \big(\Phi^{-1}(0.975)\sqrt{0.5 \times 0.5} + \Phi^{-1}(0.9)\sqrt{0.6 \times 0.4}\big)^2 / (0.6 - 0.5)^2 = (0.98 + 0.63)^2 / 0.01 \approx 260$. The required length scales as $(p_\delta - \gamma)^{-2}$: halving the bias toward green tokens multiplies by four the length of text needed to detect it — this is *the* scaling law of watermarking.
+[Example 6.3 — The test in numbers (exercise 2 in full)]{.tag} $T = 200$, $\gamma = 0.5$. A marked text observes $s = 150$ (75% greens):
+$$
+z = (150 - 100)/\sqrt{200 \times 0.25} = 50/\sqrt{50} \approx 7.07
+$$
+— massive rejection of H0.
+
+A *typical* human text would have $s \in [87, 113]$ at 95% ($z \in [-1.96, 1.96]$).
+
+Bonus question: how many tokens are needed to distinguish $\gamma = 0.5$ from $p_\delta = 0.6$ at level 5% (two-sided, as above) with power 0.9? The usual sample-size formula for a proportion gives
+$$
+T \approx \big(\Phi^{-1}(0.975)\sqrt{0.5 \times 0.5} + \Phi^{-1}(0.9)\sqrt{0.6 \times 0.4}\big)^2 / (0.6 - 0.5)^2 = (0.98 + 0.63)^2 / 0.01 \approx 260.
+$$
+
+The required length scales as $(p_\delta - \gamma)^{-2}$: halving the bias toward green tokens multiplies by four the length of text needed to detect it — this is *the* scaling law of watermarking.
 :::
 
 ::: prop
-[Proposition 6.4 — The family: distortion, robustness, undetectability]{.tag} Four descendants structure the field. (i) **Unigram** (Zhao et al., 2023): the green list is *fixed* (context-independent) — robust to paraphrase (tokens survive reordering), at the price of lower detectability at given $T$. (ii) **Gumbel/Aaronson**: the token draw follows an inverse rank sampled by PRF — *distortion-free* (the per-step marginal law is exactly the model's); the score becomes a sum of logs. (iii) **Kuditipudi et al. (2023)**: marking by a re-parameterizable *key sequence*, zero distortion and robust to edits; (iv) **SynthID-Text** (Dathathri et al., Nature 2024): deployed in production at Gemini's scale — a *tournament* of keys per step, qualitatively preserved, corpus-aggregated test. In contrast: the negative result of Sadasivan et al. (2023) — against a paraphraser *good enough*, every detector (watermark included) tends toward blindness; and Christ, Gunn & Zamir (2024) show the other extreme: a cryptographic watermark can be made *undetectable* without the key (marked outputs are computationally indistinguishable from the model's), but such constructions are fragile to edits. Ch. 10 returns to this in attack mode.
+[Proposition 6.4 — The family: distortion, robustness, undetectability]{.tag} Four descendants structure the field.
+
+1.  **Unigram** (Zhao et al., 2023): the green list is *fixed* (context-independent) — robust to paraphrase (tokens survive reordering), at the price of lower detectability at given $T$.
+2.  **Gumbel/Aaronson**: the token draw follows an inverse rank sampled by PRF — *distortion-free* (the per-step marginal law is exactly the model's); the score becomes a sum of logs.
+3.  **Kuditipudi et al. (2023)**: marking by a re-parameterizable *key sequence*, zero distortion and robust to edits;
+4.  **SynthID-Text** (Dathathri et al., Nature 2024): deployed in production at Gemini's scale — a *tournament* of keys per step, qualitatively preserved, corpus-aggregated test.
+
+In contrast: the negative result of Sadasivan et al. (2023) — against a paraphraser *good enough*, every detector (watermark included) tends toward blindness.
+
+Christ, Gunn & Zamir (2024) show the other extreme: a cryptographic watermark can be made *undetectable* without the key (marked outputs are computationally indistinguishable from the model's), but such constructions are fragile to edits. Ch. 10 returns to this in attack mode.
 :::
 
 ::: note
-[Tuning: $\gamma$, $\delta$, and the triple trade-off]{.tag} Increasing $\delta$ → easy detection ($p_\delta \to 1$) but degraded text (the choice is biased toward greens even when a red was the "right" word); decreasing $\gamma$ → rare green lists, a sharper signal but a stiffer constraint on quality. In production one targets $\gamma = 0.25$-0.5, $\delta = 1$-2: imperceptible quality loss (evaluated by perplexity and human tests), $z > 4$ reached from $T \approx 50$-100. The same bipolar tuning *signal quality / law fidelity* structures *audio* watermarking (WavMark, AudioSeal — cf. Speech Technology module ch. 9): two modalities, one theory.
+[Tuning: $\gamma$, $\delta$, and the triple trade-off]{.tag} Increasing $\delta$ → easy detection ($p_\delta \to 1$) but degraded text (the choice is biased toward greens even when a red was the "right" word); decreasing $\gamma$ → rare green lists, a sharper signal but a stiffer constraint on quality.
+
+In production one targets $\gamma = 0.25$-0.5, $\delta = 1$-2: imperceptible quality loss (evaluated by perplexity and human tests), $z > 4$ reached from $T \approx 50$-100. The same bipolar tuning *signal quality / law fidelity* structures *audio* watermarking (WavMark, AudioSeal — cf. Speech Technology module ch. 9): two modalities, one theory.
 :::
 
 ## 7. Controlling diffusions: CFG, ControlNet, inversion {#ch7}
@@ -392,20 +593,60 @@ Control of diffusion models was introduced in M1 (Multimodal GenAI module ch. 4)
 ### 7.1. CFG: the short proof
 
 :::: thm
-[Theorem 7.1 — Classifier guidance and CFG are the same exponential reweighting]{.tag} Let $\hat\epsilon_c, \hat\epsilon_u$ denote the noises predicted with/without conditioning, and $\hat\epsilon_w = \hat\epsilon_u + w\,(\hat\epsilon_c - \hat\epsilon_u)$ the CFG prediction. Since $\hat\epsilon(x_t, t) = -\sqrt{1 - \bar\alpha_t}\, \nabla_{x_t} \log p(x_t)$ (score parametrization), the CFG combination realizes $$\nabla_{x_t} \log p_w(x_t) \;=\; \nabla_{x_t} \log p(x_t) + w\, \nabla_{x_t} \log p(c \mid x_t) \;=\; \nabla_{x_t} \log \big[p(x_t \mid c)^w \, p(x_t)^{1-w}\big],$$ that is, sampling from the *reweighted* law $p_w \propto p(x_t \mid c)^w p(x_t)^{1-w}$ — exactly the family of theorem 5.1 (RLHF) with $w \leftrightarrow 1/\beta$.
+[Theorem 7.1 — Classifier guidance and CFG are the same exponential reweighting]{.tag} Let $\hat\epsilon_c, \hat\epsilon_u$ denote the noises predicted with/without conditioning, and
+$$
+\hat\epsilon_w = \hat\epsilon_u + w\,(\hat\epsilon_c - \hat\epsilon_u)
+$$
+the CFG prediction. Since
+$$
+\hat\epsilon(x_t, t) = -\sqrt{1 - \bar\alpha_t}\, \nabla_{x_t} \log p(x_t)
+$$
+(score parametrization), the CFG combination realizes
+$$
+\nabla_{x_t} \log p_w(x_t) \;=\; \nabla_{x_t} \log p(x_t) + w\, \nabla_{x_t} \log p(c \mid x_t) \;=\; \nabla_{x_t} \log \big[p(x_t \mid c)^w \, p(x_t)^{1-w}\big],
+$$
+that is, sampling from the *reweighted* law
+
+::: key
+[Key result — CFG samples a reweighted law]{.tag}
+$$
+p_w \propto p(x_t \mid c)^w p(x_t)^{1-w}
+$$
+:::
+
+— exactly the family of theorem 5.1 (RLHF) with $w \leftrightarrow 1/\beta$.
 
 ::: proof
-Linearity of the score: $\hat\epsilon_w = (1 - w)\hat\epsilon_u + w \hat\epsilon_c$ (rewrite the combination); each term is proportional to the gradient of the corresponding log-density, so the sum is the gradient of the *sum* of the logs. For the conditional term, Bayes' rule $p(x_t \mid c) \propto p(c \mid x_t)\, p(x_t)$ gives $\nabla \log p(x_t \mid c)^w p(x_t)^{1-w} = w\nabla\log p(c \mid x_t) + \nabla \log p(x_t)$ — which is precisely the formula of *classifier guidance* with weight $w$: CFG obtains it *without a classifier*, by training the same network with conditioning dropout. At $w = 1$: pure conditional model; $w > 1$: over-guidance (fidelity $\uparrow$, diversity $\downarrow$, color saturation — the classic visual symptom); $w < 1$: interpolation toward the unconditional. [∎]{.qed}
+Linearity of the score: $\hat\epsilon_w = (1 - w)\hat\epsilon_u + w \hat\epsilon_c$ (rewrite the combination); each term is proportional to the gradient of the corresponding log-density, so the sum is the gradient of the *sum* of the logs.
+
+For the conditional term, Bayes' rule $p(x_t \mid c) \propto p(c \mid x_t)\, p(x_t)$ gives
+$$
+\nabla \log p(x_t \mid c)^w p(x_t)^{1-w} = w\nabla\log p(c \mid x_t) + \nabla \log p(x_t)
+$$
+— which is precisely the formula of *classifier guidance* with weight $w$: CFG obtains it *without a classifier*, by training the same network with conditioning dropout.
+
+-   At $w = 1$: pure conditional model;
+-   $w > 1$: over-guidance (fidelity $\uparrow$, diversity $\downarrow$, color saturation — the classic visual symptom);
+-   $w < 1$: interpolation toward the unconditional. [∎]{.qed}
 :::
 ::::
 
 ### 7.2. ControlNet: spatial control, without breaking the pre-training
 
 :::: thm
-[Theorem 7.2 — ControlNet architecture (Zhang, Rao & Agrawala, ICCV 2023)]{.tag} Let $F(x ; \Theta)$ be a frozen UNet block (operation on the activation $x$ of layer $i$). ControlNet branches off a *trainable copy* initialized at $\Theta$ and locks the output with two *null* convolutions (zero-convolutions): $$y \;=\; F(x;\Theta) \;+\; Z_2\Big(F_c\big(Z_1(c;\Theta_{z_1});\ \Theta_c\big);\ \Theta_{z_2}\Big),$$ where $c$ is the control map (Canny edges, depth, skeletal pose…); $Z_i$ is a $1\times1$ convolution with *zero weights at initialization*.
+[Theorem 7.2 — ControlNet architecture (Zhang, Rao & Agrawala, ICCV 2023)]{.tag} Let $F(x ; \Theta)$ be a frozen UNet block (operation on the activation $x$ of layer $i$). ControlNet branches off a *trainable copy* initialized at $\Theta$ and locks the output with two *null* convolutions (zero-convolutions):
+$$
+y \;=\; F(x;\Theta) \;+\; Z_2\Big(F_c\big(Z_1(c;\Theta_{z_1});\ \Theta_c\big);\ \Theta_{z_2}\Big),
+$$
+where $c$ is the control map (Canny edges, depth, skeletal pose…); $Z_i$ is a $1\times1$ convolution with *zero weights at initialization*.
 
 ::: proof
-**Identity property at the start.** At $t = 0$: $Z_2(\cdot) = W_2 \, h = 0$ since $W_2 = 0$ — the branch outputs exactly zero, and the composed model is *identically* the pre-trained model: fine-tuning starts from the initial quality, without "catastrophic shift". **The gradient does not vanish.** The derivative of the output with respect to $W_2$ equals $\partial y / \partial W_2 = h_c \neq 0$ (the copy $F_c$, initialized at $\Theta$, produces nonzero activations): the first update pulls $W_2$ away from zero, which then *unlocks* the gradients toward $F_c$ and $Z_1$ (which were zero as long as $W_2 = 0$, by the chain rule). Compare the naive alternative (branching $F_c$ directly): at step 0, uncontrolled random noise is added to the activations of the frozen UNet and destroys the coherence of the output for hundreds of steps. [∎]{.qed}
+-   **Identity property at the start.** At $t = 0$: $Z_2(\cdot) = W_2 \, h = 0$ since $W_2 = 0$ — the branch outputs exactly zero, and the composed model is *identically* the pre-trained model: fine-tuning starts from the initial quality, without "catastrophic shift".
+-   **The gradient does not vanish.** The derivative of the output with respect to $W_2$ equals $\partial y / \partial W_2 = h_c \neq 0$ (the copy $F_c$, initialized at $\Theta$, produces nonzero activations).
+
+    The first update pulls $W_2$ away from zero, which then *unlocks* the gradients toward $F_c$ and $Z_1$ (which were zero as long as $W_2 = 0$, by the chain rule).
+
+Compare the naive alternative (branching $F_c$ directly): at step 0, uncontrolled random noise is added to the activations of the frozen UNet and destroys the coherence of the output for hundreds of steps. [∎]{.qed}
 :::
 ::::
 
@@ -416,11 +657,37 @@ Linearity of the score: $\hat\epsilon_w = (1 - w)\hat\epsilon_u + w \hat\epsilon
 ### 7.3. Editing a real image: inversion and null-text
 
 ::: prop
-[Proposition 7.3 — DDIM inversion and its failure under CFG]{.tag} DDIM defines a deterministic step linking $x_t$ and $x_{t-1}$ via the prediction $\hat x_0(x_t, c)$; *inversion* traverses the relation backwards (reminder: Multimodal GenAI module ch. 4): $$x_{t+1} = \sqrt{\bar\alpha_{t+1}}\, \hat x_0(x_t, c) + \sqrt{1 - \bar\alpha_{t+1}}\; \hat\epsilon_c(x_t, c).$$ With CFG, the applied "noise" depends on a $w$-combination of the conditional/unconditional predictions; inversion becomes an implicit equation (the step depends on $x_t$ through two networks): error accumulates, the reconstruction drifts. **Null-text inversion** (Mokady et al., CVPR 2023): keep the inversion trajectory as an *anchor* and optimize, step by step, the *null* condition embedding $c_\varnothing^{(t)}$ to minimize $\|\hat x_0\big(x_t; c, c_\varnothing^{(t)}\big) - x_0\|^2$ — a few dozen gradient steps per image; editing (Prompt-to-Prompt: substituting the cross-attention maps; InstructPix2Pix: learning editing on synthetic data) then operates *along* this faithful trajectory.
+[Proposition 7.3 — DDIM inversion and its failure under CFG]{.tag} DDIM defines a deterministic step linking $x_t$ and $x_{t-1}$ via the prediction $\hat x_0(x_t, c)$; *inversion* traverses the relation backwards (reminder: Multimodal GenAI module ch. 4):
+$$
+x_{t+1} = \sqrt{\bar\alpha_{t+1}}\, \hat x_0(x_t, c) + \sqrt{1 - \bar\alpha_{t+1}}\; \hat\epsilon_c(x_t, c).
+$$
+
+With CFG, the applied "noise" depends on a $w$-combination of the conditional/unconditional predictions; inversion becomes an implicit equation (the step depends on $x_t$ through two networks): error accumulates, the reconstruction drifts.
+
+**Null-text inversion** (Mokady et al., CVPR 2023): keep the inversion trajectory as an *anchor* and optimize, step by step, the *null* condition embedding $c_\varnothing^{(t)}$ to minimize
+$$
+\|\hat x_0\big(x_t; c, c_\varnothing^{(t)}\big) - x_0\|^2
+$$
+— a few dozen gradient steps per image.
+
+Editing (Prompt-to-Prompt: substituting the cross-attention maps; InstructPix2Pix: learning editing on synthetic data) then operates *along* this faithful trajectory.
 :::
 
 ::: ex
-[Example 7.4 — CFG by hand (pen-and-paper, in the graph module's format)]{.tag} Vocabulary of 3 artistic "directions", logits of step $t$ without conditioning: $(\text{painting}: 2.0,\ \text{photo}: 1.5,\ \text{3D}: 0.5)$; with condition "watercolor": $(3.0,\ 0.5,\ 0.5)$. Without guidance the softmax of $u$ is $\approx (0.55,\ 0.33,\ 0.12)$. At $w = 3$: guided logits $u + w(c - u) = (1-w)\,u + w\,c = (5.0,\ -1.5,\ 0.5)$ — softmax $\approx (0.988,\ 0.001,\ 0.011)$: the target style crushes the distribution, exactly like the molecular CFG of example 7.3 of the Graph Generative Models module. $w = 8$ → a single mode survives: the curve of ch. 9, readable on a single step.
+[Example 7.4 — CFG by hand (pen-and-paper, in the graph module's format)]{.tag} Vocabulary of 3 artistic "directions", logits of step $t$ without conditioning:
+$$
+(\text{painting}: 2.0,\ \text{photo}: 1.5,\ \text{3D}: 0.5);
+$$
+with condition "watercolor": $(3.0,\ 0.5,\ 0.5)$.
+
+-   Without guidance the softmax of $u$ is $\approx (0.55,\ 0.33,\ 0.12)$.
+-   At $w = 3$: guided logits
+    $$
+    u + w(c - u) = (1-w)\,u + w\,c = (5.0,\ -1.5,\ 0.5)
+    $$
+    — softmax $\approx (0.988,\ 0.001,\ 0.011)$.
+
+The target style crushes the distribution, exactly like the molecular CFG of example 7.3 of the Graph Generative Models module. $w = 8$ → a single mode survives: the curve of ch. 9, readable on a single step.
 :::
 
 ## 8. Controlling graph generators {#ch8}
@@ -430,7 +697,11 @@ Synthesis chapter: the Graph Generative Models module (M2) develops each family 
 ::: thm
 [Theorem 8.1 — Three controls, three mechanisms, one grid]{.tag}
 
-1.  **Hard constraints: chemical valence**. Each decoding step masks the bonds that would exceed the remaining valence $r_v$ of atom $v$ — NeVAE (AAAI 2019) pushes validity above 90% without post-processing (versus a few percent otherwise); GraphAF masks likewise and reaches 100% with rules (68% without). This is *word for word* theorem 2.2: renormalization over the legal set $\mathcal{L}$, guaranteed by construction;
+1.  **Hard constraints: chemical valence**. Each decoding step masks the bonds that would exceed the remaining valence $r_v$ of atom $v$.
+
+    NeVAE (AAAI 2019) pushes validity above 90% without post-processing (versus a few percent otherwise); GraphAF masks likewise and reaches 100% with rules (68% without).
+
+    This is *word for word* theorem 2.2: renormalization over the legal set $\mathcal{L}$, guaranteed by construction;
 2.  **Gradient guidance**: GraphAF (ICLR 2020) — each decision starts from a $z_t \sim \mathcal N(0,1)$ passed through a flow; to maximize a property $Q(G)$ (solubility, docking), one moves $z_t$ along $\nabla_{z_t} Q(G_t)$ *during* generation — the guidance strength is the gradient step, the fidelity/diversity trade-off is measured there (the graph module ch. 4 derives it);
 3.  **Conditioning + inpainting**: DiGress (ICLR 2023) trains the denoiser with a descriptor $c$ sometimes masked (classifier-free: thm 7.1 transposed) and freezes partial scaffolds; the discrete posterior allows generating *around* an imposed motif — the exact analogue of the image null-text/inpainting of ch. 7.
 :::
@@ -443,7 +714,10 @@ Synthesis chapter: the Graph Generative Models module (M2) develops each family 
   Text → graph          heavy conditioning (LLM)    ch. 7 (text-to-graph)   prompting            full text-to-image
 
 ::: note
-[What graphs teach control]{.tag} Two specific lessons. (i) *Local* constraints (valence) are trivially masked, *global* constraints (connectivity, ring size) are not: the corresponding automaton would be exponential — the search for "tractable global constraints" is open; (ii) the evaluation of control is the most mature there (validity/uniqueness/novelty + FCD; graph module ch. 6) — it is the template of ch. 9.
+[What graphs teach control]{.tag} Two specific lessons.
+
+1.  *Local* constraints (valence) are trivially masked, *global* constraints (connectivity, ring size) are not: the corresponding automaton would be exponential — the search for "tractable global constraints" is open;
+2.  the evaluation of control is the most mature there (validity/uniqueness/novelty + FCD; graph module ch. 6) — it is the template of ch. 9.
 :::
 
 ## 9. Evaluating control: fidelity versus diversity {#ch9}
@@ -451,23 +725,72 @@ Synthesis chapter: the Graph Generative Models module (M2) develops each family 
 Controlling without measuring is believing. This chapter sets the protocol: two axes (fidelity, diversity), one curve (the strength sweep), one decomposition (precision/recall), and a bound showing that the trade-off is *structural*, not an engineering defect.
 
 ::: def
-[Definition 9.1 — Fidelity and diversity]{.tag} **Control fidelity**: $\mathrm{Fid}(S) = \frac{1}{n}\sum_i \mathbf{1}[y_i \in S]$ (pass rate; or a continuous metric — property score, similarity to the prompt). **Diversity**: mean intra-batch distance $\mathrm{Div} = \frac{2}{n(n-1)}\sum_{i<j} d(y_i, y_j)$ (self-BLEU for text, LPIPS distance for images, Tanimoto for molecules — graph module ch. 6); or entropy of the effective law. **Quality** in the data-fidelity sense: FID (recall of the Multimodal GenAI module ch. 7), perplexity under a reference model.
+[Definition 9.1 — Fidelity and diversity]{.tag} **Control fidelity**:
+$$
+\mathrm{Fid}(S) = \frac{1}{n}\sum_i \mathbf{1}[y_i \in S]
+$$
+(pass rate; or a continuous metric — property score, similarity to the prompt).
+
+**Diversity**: mean intra-batch distance
+$$
+\mathrm{Div} = \frac{2}{n(n-1)}\sum_{i<j} d(y_i, y_j)
+$$
+(self-BLEU for text, LPIPS distance for images, Tanimoto for molecules — graph module ch. 6); or entropy of the effective law.
+
+**Quality** in the data-fidelity sense: FID (recall of the Multimodal GenAI module ch. 7), perplexity under a reference model.
 :::
 
 :::: thm
-[Theorem 9.2 — The trade-off is structural (entropy bound)]{.tag} Let $S \subset \mathcal{Y}^*$ be the admissible set ($|S| = m$ finite; for sequences, consider outputs of length $\leq L$ over a vocabulary of size $k$: $m \leq k^L$, the whole space). Every law $\tilde p$ supported on $S$ satisfies $$H(\tilde p) \;\leq\; \log m \;=\; H_{\max}(\mathcal{Y}^{\leq L}) \;-\; \log\frac{k^L}{m}.$$
+[Theorem 9.2 — The trade-off is structural (entropy bound)]{.tag} Let $S \subset \mathcal{Y}^*$ be the admissible set ($|S| = m$ finite; for sequences, consider outputs of length $\leq L$ over a vocabulary of size $k$: $m \leq k^L$, the whole space).
+
+Every law $\tilde p$ supported on $S$ satisfies
+
+::: key
+[Key result — entropy ceiling of a constrained law]{.tag}
+$$
+H(\tilde p) \;\leq\; \log m \;=\; H_{\max}(\mathcal{Y}^{\leq L}) \;-\; \log\frac{k^L}{m}.
+$$
+:::
 
 ::: proof
-Entropy is maximal for the uniform law (Gibbs' inequality: for every $p$ on $S$, $\mathrm{KL}(p \,\|\, \mathrm{Unif}_S) = \log m - H(p) \geq 0$, with equality iff uniform). Support constraint → entropy ceiling lowered by $\log(k^L/m)$: each division of the number of admissible outputs by $e$ costs 1 nat of maximal diversity. Guidance acts likewise but *smoothly*: $p_w \propto p^{1-w}\mathrm{score}(c)^w$ concentrates mass on the modes compatible with $c$ — the effective entropy decreases monotonically in the usual cases (theorems 5.1 and 7.1: the KL from the start is exactly the price paid); hence the curve. [∎]{.qed}
+Entropy is maximal for the uniform law (Gibbs' inequality: for every $p$ on $S$,
+$$
+\mathrm{KL}(p \,\|\, \mathrm{Unif}_S) = \log m - H(p) \geq 0,
+$$
+with equality iff uniform).
+
+Support constraint → entropy ceiling lowered by $\log(k^L/m)$: each division of the number of admissible outputs by $e$ costs 1 nat of maximal diversity.
+
+Guidance acts likewise but *smoothly*: $p_w \propto p^{1-w}\mathrm{score}(c)^w$ concentrates mass on the modes compatible with $c$ — the effective entropy decreases monotonically in the usual cases (theorems 5.1 and 7.1: the KL from the start is exactly the price paid); hence the curve. [∎]{.qed}
 :::
 ::::
 
 ::: prop
-[Proposition 9.3 — The control curve (protocol)]{.tag} For each strength $w \in \{0, 0.5, 1, 2, 4, 8, \dots\}$ (or the watermark's $\delta$, steering's $\alpha$, RLHF's $\beta^{-1}$): generate a fixed batch (same seeds), measure $(\mathrm{Fid}(w), \mathrm{Div}(w))$, plot the trajectory. Reading: (i) a method *dominates* if its curve is above/to the right of another's everywhere; (ii) the "elbow" (fidelity stops growing, diversity collapses) is the recommended tuning point; (iii) complete with the precision/recall decomposition (Kynkäänniemi et al., NeurIPS 2019): *precision* measures the quality of the occupied modes, *recall* the coverage of the data's modes — over-guidance kills recall (abandoned modes) before precision. Classic anti-protocol: plot only fidelity ("100% valid JSON!") and keep silent that the model now emits only three templates — mode collapse, control version.
+[Proposition 9.3 — The control curve (protocol)]{.tag} For each strength $w \in \{0, 0.5, 1, 2, 4, 8, \dots\}$ (or the watermark's $\delta$, steering's $\alpha$, RLHF's $\beta^{-1}$): generate a fixed batch (same seeds), measure $(\mathrm{Fid}(w), \mathrm{Div}(w))$, plot the trajectory.
+
+Reading:
+
+1.  a method *dominates* if its curve is above/to the right of another's everywhere;
+2.  the "elbow" (fidelity stops growing, diversity collapses) is the recommended tuning point;
+3.  complete with the precision/recall decomposition (Kynkäänniemi et al., NeurIPS 2019): *precision* measures the quality of the occupied modes, *recall* the coverage of the data's modes — over-guidance kills recall (abandoned modes) before precision.
+
+Classic anti-protocol: plot only fidelity ("100% valid JSON!") and keep silent that the model now emits only three templates — mode collapse, control version.
 :::
 
 ::: ex
-[Example 9.4 — Toy curve, by hand]{.tag} Law over 4 outputs with probabilities $(0.4,\ 0.3,\ 0.2,\ 0.1)$; exponential control $p_w \propto p\, e^{w c}$ with score $c = (3,\ 3,\ 0,\ 0)$, so that the admissible set is $S = \{1, 2\}$ ($m = 2$). At $w=0$: entropy 1.28 nats, fidelity $\mathrm{Fid} = p(S) = 0.70$. At $w=1$: weights $\propto (8.03,\ 6.03,\ 0.2,\ 0.1) \to$ probabilities $(0.56,\ 0.42,\ 0.014,\ 0.007)$, entropy 0.78 nats, fidelity 0.979. At $w=2$: weights $(161.4,\ 121.0,\ 0.2,\ 0.1) \to (0.571,\ 0.428,\ 0.0007,\ 0.0004)$, entropy 0.69 nats, fidelity 0.999. As $w \to \infty$ the law tends to $(4/7,\ 3/7,\ 0,\ 0)$: the score does not separate the two admissible outputs, so their ratio 4:3 is preserved and the entropy tends to 0.683 nats, just below the ceiling $\log m = \log 2 \approx 0.693$ of theorem 9.2. Fidelity is bought with entropy, and the price is paid almost entirely between $w = 0$ and $w = 1$. Generalize in exercise 4.
+[Example 9.4 — Toy curve, by hand]{.tag} Law over 4 outputs with probabilities $(0.4,\ 0.3,\ 0.2,\ 0.1)$; exponential control $p_w \propto p\, e^{w c}$ with score $c = (3,\ 3,\ 0,\ 0)$, so that the admissible set is $S = \{1, 2\}$ ($m = 2$).
+
+-   At $w=0$: entropy 1.28 nats, fidelity $\mathrm{Fid} = p(S) = 0.70$.
+-   At $w=1$: weights $\propto (8.03,\ 6.03,\ 0.2,\ 0.1) \to$ probabilities $(0.56,\ 0.42,\ 0.014,\ 0.007)$, entropy 0.78 nats, fidelity 0.979.
+-   At $w=2$: weights
+    $$
+    (161.4,\ 121.0,\ 0.2,\ 0.1) \to (0.571,\ 0.428,\ 0.0007,\ 0.0004),
+    $$
+    entropy 0.69 nats, fidelity 0.999.
+
+As $w \to \infty$ the law tends to $(4/7,\ 3/7,\ 0,\ 0)$: the score does not separate the two admissible outputs, so their ratio 4:3 is preserved and the entropy tends to 0.683 nats, just below the ceiling $\log m = \log 2 \approx 0.693$ of theorem 9.2.
+
+Fidelity is bought with entropy, and the price is paid almost entirely between $w = 0$ and $w = 1$. Generalize in exercise 4.
 :::
 
 ## 10. Attacks on control and robustness {#ch10}
@@ -475,7 +798,11 @@ Entropy is maximal for the uniform law (Gibbs' inequality: for every $p$ on $S$,
 Control is a promise; this chapter tests the promise. Four surfaces, in the module's order: the mask, steering/RLHF, the watermark, spatial control.
 
 ::: thm
-[Theorem 10.1 — Attacking constrained decoding (hostile content *inside* the format)]{.tag} The mask guarantees $y \in S$ — *syntax*, never *semantics*. An injected prompt can fill a perfectly valid JSON with `{"instruction": "ignore the previous rules"}`; a constrained tool call can be diverted into hostile parameters (prompt injection in agents: cf. Explainability module ch. 5). Second: the *complexity* of the grammar is a surface — an ambiguous grammar explodes the number of states (subset construction $2^{|Q|}$) and allows a denial of service *of the control itself*; finally the *tokenizer interaction*: changing the tokenizer invalidates the state→tokens index (recompilation). Defenses: downstream semantic validation (schema + bounds: $\delta$-constraints beyond the regular), state-size limits, server-side pre-compiled grammars (defense-in-depth pattern of the Explainability module ch. 6).
+[Theorem 10.1 — Attacking constrained decoding (hostile content *inside* the format)]{.tag} The mask guarantees $y \in S$ — *syntax*, never *semantics*. An injected prompt can fill a perfectly valid JSON with `{"instruction": "ignore the previous rules"}`; a constrained tool call can be diverted into hostile parameters (prompt injection in agents: cf. Explainability module ch. 5).
+
+Second: the *complexity* of the grammar is a surface — an ambiguous grammar explodes the number of states (subset construction $2^{|Q|}$) and allows a denial of service *of the control itself*; finally the *tokenizer interaction*: changing the tokenizer invalidates the state→tokens index (recompilation).
+
+Defenses: downstream semantic validation (schema + bounds: $\delta$-constraints beyond the regular), state-size limits, server-side pre-compiled grammars (defense-in-depth pattern of the Explainability module ch. 6).
 :::
 
 ::: prop
@@ -483,7 +810,9 @@ Control is a promise; this chapter tests the promise. Four surfaces, in the modu
 
 1.  **Edits**: paraphrase, synonym substitution, emoji/homoglyph insertion, LLM rewriting — every exchange of a green token for a red one costs $\approx 1/\sqrt{T\gamma(1-\gamma)}$ in $z$; to bring $\mathbb{E}[z] = 6$ below 2 one must rewrite a substantial fraction of the tokens, at the price of quality;
 2.  **Spoofing**: can an attacker *without the key* mark an innocent text to accuse a provider? Public-key schemes and the reliability analysis (Kirchenbauer et al., ICLR 2024 — "On the Reliability"; already referenced in the LLMs module) quantify these false accusations: key management becomes the real problem (revocation, multi-keys, aggregated tests);
-3.  **Undetectability**: Sadasivan et al. (2023) show that a good enough paraphraser drives *every* detector toward chance; Christ, Gunn & Zamir (2024) show that a watermark can be made undetectable without the key, but their construction does not survive substantial edits: invisibility and robustness pull in opposite directions. Operational conclusion: a watermark is a *provenance marker*, not a cryptographic proof of origin; stacking it (text + audio + image, multi-key styles) is the realistic strategy.
+3.  **Undetectability**: Sadasivan et al. (2023) show that a good enough paraphraser drives *every* detector toward chance; Christ, Gunn & Zamir (2024) show that a watermark can be made undetectable without the key, but their construction does not survive substantial edits: invisibility and robustness pull in opposite directions.
+
+Operational conclusion: a watermark is a *provenance marker*, not a cryptographic proof of origin; stacking it (text + audio + image, multi-key styles) is the realistic strategy.
 :::
 
 ::: note
@@ -491,7 +820,16 @@ Control is a promise; this chapter tests the promise. Four surfaces, in the modu
 :::
 
 ::: def
-[Definition 10.3 — Robustness budget (the quantity to remember)]{.tag} For a fidelity control $c$ and a family of attacks $\mathcal A$, one defines the **degradation** $\Delta(w) = \mathrm{Fid}(w) - \mathbb{E}_{a \sim \mathcal A}[\mathrm{Fid}(w, a)]$. A robust control has flat $\Delta$ in $w$; the evaluation of ch. 9 must therefore be repeated *under attack* — the complete protocol fits in one sentence: *plot the fidelity/diversity curve, with and without an adversary, at fixed quality budget*.
+[Definition 10.3 — Robustness budget (the quantity to remember)]{.tag} For a fidelity control $c$ and a family of attacks $\mathcal A$, one defines the **degradation**
+
+::: key
+[Key result — robustness budget]{.tag}
+$$
+\Delta(w) = \mathrm{Fid}(w) - \mathbb{E}_{a \sim \mathcal A}[\mathrm{Fid}(w, a)].
+$$
+:::
+
+A robust control has flat $\Delta$ in $w$; the evaluation of ch. 9 must therefore be repeated *under attack* — the complete protocol fits in one sentence: *plot the fidelity/diversity curve, with and without an adversary, at fixed quality budget*.
 :::
 
 ## Exercises / Labs {#ex}
@@ -499,32 +837,65 @@ Control is a promise; this chapter tests the promise. Four surfaces, in the modu
 1.  **★ Lab: constrained decoding on regex (the module's lab).** (a) Build the DFA of `^\d{2}/\d{2}/\d{4}$` by hand (states, co-accessible pruning), table $\mathrm{Adm}(q)$ on a mini-vocabulary including the multi-character tokens `"12/"`, `"19"`; (b) implement `DfaMask` (code of ch. 3) with a small GPT's tokenizer; (c) plug in as a HuggingFace `LogitsProcessor` and generate 1,000 dates; (d) measure the pass rate with/without mask and the time overhead compared to free generation.
 
     ::: proof
-    Guidance (expected results): without constraint, the pass rate of a small model on the exact requested date plateaus (`2026-08-26`, `26/08/2026` formats mixed); with mask: 100% — including *false* but syntactically valid dates (`31/02/2026`): semantics requires one more layer (bounds validation), the conclusion of ch. 10 experienced in the lab. Overhead: \~0% (the mask is negligible next to the transformer pass); the real cost is the *precomputation* of the index, paid once. [∎]{.qed}
+    Guidance (expected results): without constraint, the pass rate of a small model on the exact requested date plateaus (`2026-08-26`, `26/08/2026` formats mixed).
+
+    With mask: 100% — including *false* but syntactically valid dates (`31/02/2026`): semantics requires one more layer (bounds validation), the conclusion of ch. 10 experienced in the lab.
+
+    Overhead: \~0% (the mask is negligible next to the transformer pass); the real cost is the *precomputation* of the index, paid once. [∎]{.qed}
     :::
-2.  **★ The z-test in full.** With $\gamma = 0.5$, $\delta = 2$: (a) simulate 10,000 human texts (iid uniform tokens) and empirically verify $\mathbb{P}(z > 4) \approx 3 \times 10^{-5}$; (b) estimate $p_\delta$ empirically by simulating the biased softmax at temperature 1; (c) plot the power of the test as a function of $T \in [20, 500]$; (d) derive the minimal $T$ for power 0.9 (compare with example 6.3); (e) repeat with $\gamma = 0.25$ and conclude on the tuning.
+2.  **★ The z-test in full.** With $\gamma = 0.5$, $\delta = 2$: (a) simulate 10,000 human texts (iid uniform tokens) and empirically verify $\mathbb{P}(z > 4) \approx 3 \times 10^{-5}$; (b) estimate $p_\delta$ empirically by simulating the biased softmax at temperature 1.
+
+    Then: (c) plot the power of the test as a function of $T \in [20, 500]$; (d) derive the minimal $T$ for power 0.9 (compare with example 6.3); (e) repeat with $\gamma = 0.25$ and conclude on the tuning.
 
     ::: proof
-    Guidance: (a) the distribution of $z$ sticks to $\mathcal N(0,1)$ from $T \geq 50$ (De Moivre-Laplace); (b) $p_\delta$ depends on the standard deviation of the logits; with logits $\mathcal N(0,1)$, $p_\delta \approx 0.75$; (c) sigmoidal power in $\sqrt{T}$; (d) $T \approx 30$-50 for $(0.5, 2)$; (e) $\gamma = 0.25$ divides the variance under H0 ($\times 0.75$) and concentrates the signal — slightly better at fixed $\delta$, but lower text quality: the triple trade-off of ch. 6 is *verified numerically*. [∎]{.qed}
+    Guidance:
+
+    -   **(a)** the distribution of $z$ sticks to $\mathcal N(0,1)$ from $T \geq 50$ (De Moivre-Laplace);
+    -   **(b)** $p_\delta$ depends on the standard deviation of the logits; with logits $\mathcal N(0,1)$, $p_\delta \approx 0.75$;
+    -   **(c)** sigmoidal power in $\sqrt{T}$;
+    -   **(d)** $T \approx 30$-50 for $(0.5, 2)$;
+    -   **(e)** $\gamma = 0.25$ divides the variance under H0 ($\times 0.75$) and concentrates the signal — slightly better at fixed $\delta$, but lower text quality: the triple trade-off of ch. 6 is *verified numerically*. [∎]{.qed}
     :::
 3.  **★ Steering step by step.** On GPT-2 small: build $v = h^{(l)}(\texttt{Love}) - h^{(l)}(\texttt{Hate})$ for $l \in \{2, 5, 8, 10\}$; sweep $\alpha \in \{-2, -1, -0.5, 0, 0.5, 1, 2\}$; measure (i) frequency of "marriage" words, (ii) perplexity, (iii) intra-batch diversity (self-BLEU).
 
     ::: proof
-    Guidance: the topic effect is clear and quasi-linear in $\alpha$ at small $\alpha$ (prop. 4.3), perplexity moves little up to $\alpha \approx 2$ then derails; diversity drops as $|\alpha|$ grows — the same fidelity/diversity curve as CFG (ch. 9), again. Discuss: why does steering "succeed" on broad latent concepts and fail to impose a precise format (answer: full support — ch. 2). [∎]{.qed}
+    Guidance: the topic effect is clear and quasi-linear in $\alpha$ at small $\alpha$ (prop. 4.3), perplexity moves little up to $\alpha \approx 2$ then derails.
+
+    Diversity drops as $|\alpha|$ grows — the same fidelity/diversity curve as CFG (ch. 9), again. Discuss: why does steering "succeed" on broad latent concepts and fail to impose a precise format (answer: full support — ch. 2). [∎]{.qed}
     :::
-4.  **★★ Theoretical fidelity/diversity frontier.** Prove the entropy bound 9.2 (Gibbs), then generalize example 9.4: arbitrary initial law, score $c$, plot $(\mathrm{Fid}(w), H(w))$ for $w \in [0, 10]$ and verify that the curve converges to $\big(\max c,\ H(p \mid \arg\max c)\big)$ — the corner $(\max c, 0)$ when the maximizer of $c$ is unique (in example 9.4 it is not, hence the limit 0.683 nats). What happens to the curve if $c$ is noisy?
+4.  **★★ Theoretical fidelity/diversity frontier.** Prove the entropy bound 9.2 (Gibbs), then generalize example 9.4: arbitrary initial law, score $c$, plot $(\mathrm{Fid}(w), H(w))$ for $w \in [0, 10]$ and verify that the curve converges to
+    $$
+    \big(\max c,\ H(p \mid \arg\max c)\big)
+    $$
+    — the corner $(\max c, 0)$ when the maximizer of $c$ is unique (in example 9.4 it is not, hence the limit 0.683 nats). What happens to the curve if $c$ is noisy?
 
     ::: proof
-    Guidance: normalize $p_w \propto p\, e^{w c}$ (exponential family) and write $A(w) = \log \sum_y p(y) e^{w c(y)}$, so that $A'(w) = \mathbb{E}_w[c]$ and $\frac{d}{dw}\mathbb{E}_w[f] = \mathrm{Cov}_w(f, c)$. Differentiating $H(w) = -\mathbb{E}_w[\log p] - w\,\mathbb{E}_w[c] + A(w)$ gives $dH/dw = -\mathrm{Cov}_w(\log p, c) - w\,\mathrm{Var}_w(c)$; for a uniform initial law the first term vanishes and $H$ decreases for $w > 0$, otherwise it can rise briefly when $c$ favors outputs that $p$ makes rare. With noise, a plateau appears before the collapse: the analyst chooses the elbow. [∎]{.qed}
+    Guidance: normalize $p_w \propto p\, e^{w c}$ (exponential family) and write $A(w) = \log \sum_y p(y) e^{w c(y)}$, so that $A'(w) = \mathbb{E}_w[c]$ and $\frac{d}{dw}\mathbb{E}_w[f] = \mathrm{Cov}_w(f, c)$.
+
+    Differentiating $H(w) = -\mathbb{E}_w[\log p] - w\,\mathbb{E}_w[c] + A(w)$ gives
+    $$
+    dH/dw = -\mathrm{Cov}_w(\log p, c) - w\,\mathrm{Var}_w(c);
+    $$
+    for a uniform initial law the first term vanishes and $H$ decreases for $w > 0$, otherwise it can rise briefly when $c$ favors outputs that $p$ makes rare.
+
+    With noise, a plateau appears before the collapse: the analyst chooses the elbow. [∎]{.qed}
     :::
 5.  **★★ Zero-convolution: the gradient under the magnifier.** For the ControlNet branch of theorem 7.2 at initialization: (a) show that the output is exactly zero; (b) compute $\partial y / \partial W_2$ and show it is nonzero; (c) show that $\partial y / \partial \Theta_c = 0$ at initialization and explain why this is *not* a deadlock; (d) compare with random initialization (branching $F_c$ without $Z$): simulate 10 descent steps on a toy task and compare the initial losses.
 
     ::: proof
-    Guidance: (a) $Z_2 = W_2 h = 0$; (b) $\partial y/\partial W_2 = h_c \neq 0$ (activations of the copy initialized at $\Theta$); (c) chain rule through $W_2 = 0$, unlocked as soon as $W_2$'s first update happens; (d) the variant without zero-conv starts from a high loss and destroys the frozen model's output — the experiment reproduces the motivation figure of the ControlNet paper. [∎]{.qed}
+    Guidance:
+
+    -   **(a)** $Z_2 = W_2 h = 0$;
+    -   **(b)** $\partial y/\partial W_2 = h_c \neq 0$ (activations of the copy initialized at $\Theta$);
+    -   **(c)** chain rule through $W_2 = 0$, unlocked as soon as $W_2$'s first update happens;
+    -   **(d)** the variant without zero-conv starts from a high loss and destroys the frozen model's output — the experiment reproduces the motivation figure of the ControlNet paper. [∎]{.qed}
     :::
 6.  **★★★ Attacking your own watermark (bonus).** After lab 2: paraphrase the marked texts (via an LLM, instruction "rewrite with the same ideas"), measure the drop in $z$ as a function of the rate of replaced tokens, and estimate the rate needed to fall below $z = 2$. Conclude on the sentence "a watermark is a marker, not a proof".
 
     ::: proof
-    Guidance: each green→red replacement shifts $\mathbb E[z]$ by about $(p_\delta - \gamma)\big/\sqrt{T\gamma(1-\gamma)}$; going from $\mathbb E[z] = 7$ to 2 requires rewriting the majority of tokens — the text that survives the attack is so transformed that *content* traceability (plagiarism) becomes the issue again, not that of *the machine*. Loop closed with ch. 10. [∎]{.qed}
+    Guidance: each green→red replacement shifts $\mathbb E[z]$ by about $(p_\delta - \gamma)\big/\sqrt{T\gamma(1-\gamma)}$.
+
+    Going from $\mathbb E[z] = 7$ to 2 requires rewriting the majority of tokens — the text that survives the attack is so transformed that *content* traceability (plagiarism) becomes the issue again, not that of *the machine*. Loop closed with ch. 10. [∎]{.qed}
     :::
 
 ## References {#refs}
