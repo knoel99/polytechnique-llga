@@ -222,9 +222,9 @@ Reminders — the P1 Deep Learning module, in eight points (each point refers to
 -   **Optimization** (ch. 3): SGD, momentum, Adam/AdamW; warmup and decay — the analytical detail is in the Optimization for AI module, ch. 2–5 and 10.
 -   **CNN** (ch. 4): shared weights, receptive fields; cost dominated by the convolutions.
 -   **Transformers** (ch. 6): multi-head attention $\mathrm{softmax}(QK^\top/\sqrt{d})V$, 4$d$ MLP, residual connections; this is the architecture of all the case studies in this module.
--   **Generative models** (ch. 7): AE/VAE/GAN — their sampling cost will be revisited in ch. 5.
--   **Transfer learning** (ch. 8): fine-tuning vs pre-training — the dividing line of budgets (ch. 1 and 6 here).
--   **Training in practice** (ch. 10): mixed precision, distributed data parallel, monitoring — ch. 4 here provides the theory.
+-   **Generative models** (ch. 9): AE/VAE/GAN — their sampling cost will be revisited in ch. 5.
+-   **Transfer learning** (ch. 7): fine-tuning vs pre-training — the dividing line of budgets (ch. 1 and 6 here).
+-   **Training in practice** (ch. 8): mixed precision, distributed data parallel, monitoring — ch. 4 here provides the theory.
 ::::
 
 ::: note
@@ -277,7 +277,7 @@ The activation line follows Korthikanti et al. (2022): a transformer layer keeps
 :::
 
 ::: note
-[Scaling laws: from Kaplan to Chinchilla (the budget as a primary dimension)]{.tag} **Kaplan et al. 2020**: over decades, the loss follows a power law $L(N, D) \approx (N_c/N)^{\alpha_N} + (D_c/D)^{\alpha_D} + L_\infty$ — first reading: enlarging the model helps more than enlarging the data. **Hoffmann et al. 2022 (Chinchilla)**: with the compute budget $C = 6ND$ *fixed*, the optimum is reached for $D \approx 20 N$ — the models of the Kaplan era were *undertrained*; GPT-3 (300B tokens for 175B parameters) was "too big" for its data, and a 70B on 1.5T tokens dominates it at equal budget. Method lesson for this module: the budget $C$ is not a side constraint, it is the axis along which one *designs* the model. (The M2 LLMs module, ch. 2, revisits these laws in detail; the "energy" angle is in the Optimization and Responsible AI for Sustainability module, ch. 1.)
+[Scaling laws: from Kaplan to Chinchilla (the budget as a primary dimension)]{.tag} **Kaplan et al. 2020**: over decades, the loss follows a power law $L(N, D) \approx (N_c/N)^{\alpha_N} + (D_c/D)^{\alpha_D} + L_\infty$ — first reading: enlarging the model helps more than enlarging the data. **Hoffmann et al. 2022 (Chinchilla)**: with the compute budget $C = 6ND$ *fixed*, the optimum is reached for $D \approx 20 N$ — the models of the Kaplan era were *undertrained*; GPT-3 (300B tokens for 175B parameters) was "too big" for its data, and a 70B on 1.5T tokens dominates it at equal budget. Method lesson for this module: the budget $C$ is not a side constraint, it is the axis along which one *designs* the model. (The M2 LLMs module, ch. 3, revisits these laws in detail; the "energy" angle is in the Optimization and Responsible AI for Sustainability module, ch. 6.)
 :::
 
 ::: ex
@@ -362,7 +362,7 @@ This chapter studies the operation that connects the workers. The real bottlenec
 [Three wars against $\gamma$: overlap, bucketing, compression]{.tag}
 
 -   **Overlap**: while the GPU computes layer $k+1$, the gradient of layer $k$ is already on the network (async by buckets); provided $T_\mathrm{comm} \leq T_\mathrm{calc}$, communication disappears from the critical path — the raison d'être of PyTorch DDP's "bucketing".
--   **Gradient compression**: quantizing the gradients (8 bits, even 1 bit) before exchange divides $S$ by 2–16; *error feedback* (compensating the quantization error at the next step) preserves convergence — at the price of a delicate variance/theory trade-off (see the Emerging ML module, ch. 7–2 for the federated case, where communication is the limiting factor).
+-   **Gradient compression**: quantizing the gradients (8 bits, even 1 bit) before exchange divides $S$ by 2–16; *error feedback* (compensating the quantization error at the next step) preserves convergence — at the price of a delicate variance/theory trade-off (see the Emerging ML module, ch. 2–3 for the federated case, where communication is the limiting factor).
 -   **Locality**: reducing the number of communications (local steps, gossip) is exactly the strategy dictated by the bound of ch. 7: fewer rounds, but more steps — the optimum of Scaman et al. is a precise point on this frontier.
 :::
 
@@ -374,7 +374,7 @@ The 16 bytes per parameter of ch. 1 and the activations rarely fit on one GPU. T
 [Theorem 4.1 — Activation checkpointing: $O(\sqrt{L})$ memory (proved)]{.tag} A network of depth $L$, activations $a$ bytes per layer (per token/batch): (i) without precautions, the backward pass requires $M_\mathrm{full} = L\,a$ bytes of activations; (ii) by storing only the inputs of a partition into $\sqrt{L}$ segments of $\sqrt{L}$ layers and recomputing each segment during the backward pass (gradient checkpointing, Chen et al. 2016): $$M_\mathrm{ckpt} \;\approx\; 2\sqrt{L}\,a \;+\; O(a), \qquad \text{additional cost} \approx +\tfrac{1}{3}\ \text{of time (one extra forward pass per segment).}$$
 
 ::: proof
-*Memory.* We store $\sqrt L$ boundary activations; during the backward pass of a segment, we replay its local forward: at most $\sqrt L$ simultaneous activations *inside* the segment (which can itself be recursively checkpointed: the memory/time trade-off can be tuned over the whole range $[a, La]$, see the $\sqrt$ "compass"). Total $\sqrt L + \sqrt L = 2\sqrt L$ live activations. *Time.* Each layer is recomputed exactly once more in the forward direction: the forward pass accounts for $1/3$ of the total cost (theorem 1.3: 2ND vs 6ND), hence about +33%. [∎]{.qed}
+*Memory.* We store $\sqrt L$ boundary activations; during the backward pass of a segment, we replay its local forward: at most $\sqrt L$ simultaneous activations *inside* the segment (which can itself be recursively checkpointed: the memory/time trade-off can be tuned over the whole range $[a, La]$, see the $\sqrt{L}$ "compass"). Total $\sqrt L + \sqrt L = 2\sqrt L$ live activations. *Time.* Each layer is recomputed exactly once more in the forward direction: the forward pass accounts for $1/3$ of the total cost (theorem 1.3: 2ND vs 6ND), hence about +33%. [∎]{.qed}
 :::
 ::::
 
@@ -391,7 +391,7 @@ Example 6B on 8 GPUs: ZeRO-3 brings the states down to $112/8 = 14$ GB per GPU �
 :::
 
 ::: note
-[Mixed precision: the "free" compression]{.tag} Computing in bf16 (2 bytes) instead of fp32 (4): half the memory and (on tensor cores) 2–8× the throughput; fp32 is kept for accumulators and master weights (long sums and small updates; historical fp16 additionally required *loss scaling* — see the Deep Learning module, ch. 10). Theorem 1.3 remains valid: we count FLOPs, precision changes the price of a FLOP. *Integer* quantization (int8/int4) only serves *inference* — ch. 5; its error analysis is in the Optimization and Responsible AI for Sustainability module, ch. 2 (proved proposition: error $\leq \sum_\ell \frac{\Delta_\ell}{2}\prod_{m>\ell}\mathrm{Lip}_m$).
+[Mixed precision: the "free" compression]{.tag} Computing in bf16 (2 bytes) instead of fp32 (4): half the memory and (on tensor cores) 2–8× the throughput; fp32 is kept for accumulators and master weights (long sums and small updates; historical fp16 additionally required *loss scaling* — see the Deep Learning module, ch. 2 and 8). Theorem 1.3 remains valid: we count FLOPs, precision changes the price of a FLOP. *Integer* quantization (int8/int4) only serves *inference* — ch. 5; its error analysis is in the Optimization and Responsible AI for Sustainability module, ch. 3 (proved proposition: error $\leq \sum_\ell \frac{\Delta_\ell}{2}\prod_{m>\ell}\mathrm{Lip}_m$).
 :::
 
 ::: ex
@@ -432,7 +432,7 @@ At scale (millions of requests), inference dominates the total cost: it deserves
 :::
 
 ::: ex
-[Example 5.4 — Comparing honestly: the module's protocol]{.tag} Any compression claim is verified in four columns: (1) *quality metric* (perplexity/accuracy — not "it feels better"); (2) *latency* at p50 and p99 (tail latency pays for cache misses); (3) *throughput* (aggregate tokens/s); (4) *energy per request* (J/request — Optimization and Responsible AI for Sustainability module, ch. 5). An improvement on three columns with the fourth constant is a result; on a single one, it is a communication angle.
+[Example 5.4 — Comparing honestly: the module's protocol]{.tag} Any compression claim is verified in four columns: (1) *quality metric* (perplexity/accuracy — not "it feels better"); (2) *latency* at p50 and p99 (tail latency pays for cache misses); (3) *throughput* (aggregate tokens/s); (4) *energy per request* (J/request — Optimization and Responsible AI for Sustainability module, ch. 6). An improvement on three columns with the fourth constant is a result; on a single one, it is a communication angle.
 :::
 
 ## 6. Real systems: roofline, GPU, and the complete budget of a 7B LLM {#ch6}
@@ -465,7 +465,7 @@ Sequential time $T_1 = T_s + T_p$ with $s = T_s/T_1$. On $P$ processors, the par
   States memory                                      $16\,N = 16 \times 6.7\times10^9$                           107 GB > 80 GB: ZeRO-2/3 or TP required (ch. 2, 4)
   Activations (checkpointing, batch 4×2048 tokens)   $\approx 2\sqrt{32}\times(\text{layer act.})$                 a few GB/GPU: checkpointing (th. 4.1) makes the batch viable
   Time on 256 GPUs (32 nodes)                        79,000/256 h                                                      ≈ 13 days — hence the vital importance of MFU (half the time = 6 days saved)
-  GPU-only energy                                    79,000 h × 0.4 kW (+ PUE, see the Responsible AI module, ch. 5)   ≈ 32 MWh before PUE; emissions by region: 1.6 t (FR) to \~15 t (world average)
+  GPU-only energy                                    79,000 h × 0.4 kW (+ PUE, see the Responsible AI module, ch. 6)   ≈ 32 MWh before PUE; emissions by region: 1.6 t (FR) to \~15 t (world average)
   fp16 inference                                     weights $2N$ = 13.4 GB; KV cache 2048 ctx ≈ 1.1 GB (def. 5.1)     fits on 1 80 GB GPU; throughput ≈ 140–150 tok/s (memory wall)
 
 This table — reused in exercise 7 — is the module's typical deliverable: a quantified budget, every line traceable to a theorem of the course (1.3, 4.1, 5.1, 6.1), and an engineer's conclusion (where to invest the next euro: MFU? memory? quantization?).
@@ -480,7 +480,7 @@ This table — reused in exercise 7 — is the module's typical deliverable: a q
 The previous chapters made each training step faster with more GPUs; this chapter asks whether there is a *limit* to what parallelism can buy. The answer is yes, and it is *provable*: for distributed optimization over a network, lower bounds say how many computation and communication rounds any algorithm needs. This chapter is the most theoretical of the module, and the instructor's signature result (ch. 8).
 
 ::: def
-[Definition 7.1 — Decentralized distributed optimization over a graph]{.tag} $P$ machines, each with its own convex function $f_i$, connected by a graph $G$ (each machine talks only to its neighbors); common goal: $$\min_x\; f(x) = \frac{1}{P}\sum_{i=1}^{P} f_i(x).$$ The **execution time** counts two currencies: the number of *local* iterations (compute: gradients up to the condition number — see the Optimization for AI module, ch. 7–2) and the **communication rounds** (one gossip round = mixing the vectors between neighbors). The gossip matrix $W$ is symmetric and doubly stochastic, with $W_{ij} > 0$ only between neighbours. The quality of the network is summarized by $\gamma \in [0,1)$, the second largest eigenvalue of $W$ in modulus, or equivalently by the **spectral gap** $1 - \gamma$: the disagreement between machines shrinks like $\gamma^t$ after $t$ gossip rounds — the closer $\gamma$ is to $1$, the slower the network reaches consensus.
+[Definition 7.1 — Decentralized distributed optimization over a graph]{.tag} $P$ machines, each with its own convex function $f_i$, connected by a graph $G$ (each machine talks only to its neighbors); common goal: $$\min_x\; f(x) = \frac{1}{P}\sum_{i=1}^{P} f_i(x).$$ The **execution time** counts two currencies: the number of *local* iterations (compute: gradients up to the condition number — see the Optimization for AI module, ch. 2–3) and the **communication rounds** (one gossip round = mixing the vectors between neighbors). The gossip matrix $W$ is symmetric and doubly stochastic, with $W_{ij} > 0$ only between neighbours. The quality of the network is summarized by $\gamma \in [0,1)$, the second largest eigenvalue of $W$ in modulus, or equivalently by the **spectral gap** $1 - \gamma$: the disagreement between machines shrinks like $\gamma^t$ after $t$ gossip rounds — the closer $\gamma$ is to $1$, the slower the network reaches consensus.
 :::
 
 ::: ex
@@ -488,10 +488,10 @@ The previous chapters made each training step faster with more GPUs; this chapte
 :::
 
 :::: thm
-[Theorem 7.3 — Lower bounds and optimality (Scaman, Bach, Bubeck, Lee, Massoulié, ICML 2017; statement)]{.tag} For $f = \frac1P \sum f_i$ $\mu$-strongly convex and $L$-smooth ($\kappa = L/\mu$), *every* distributed algorithm (in the sense of def. 7.1) requires, to reach precision $\varepsilon$, a time $$T \;=\; \Omega\!\Big(\sqrt{\kappa}\,\Big(1 + \frac{\tau}{\sqrt{1-\gamma}}\Big)\ln\frac{1}{\varepsilon}\Big),$$ where a local gradient computation takes one unit of time and a communication round takes $\tau$ units. This order is **attained**, up to replacing the global condition number by the local ones of the $f_i$, by accelerated gradient ascent on the dual problem (Nesterov's scheme, see the Optimization for AI module, ch. 2) combined with *Chebyshev accelerated gossip* — replacing $W$ by a well-chosen polynomial in $W$ that flattens its spectrum, the same trick that accelerates gradients, applied to the graph (the MSDA algorithm). When communication dominates ($\tau$ large), the time is essentially $\tau\sqrt{\kappa/(1-\gamma)}\,\ln(1/\varepsilon)$: the product of the two obstacles. The JMLR 2019 version extends the analysis to non-smooth convex objectives.
+[Theorem 7.3 — Lower bounds and optimality (Scaman, Bach, Bubeck, Lee, Massoulié, ICML 2017; statement)]{.tag} For $f = \frac1P \sum f_i$ $\mu$-strongly convex and $L$-smooth ($\kappa = L/\mu$), *every* distributed algorithm (in the sense of def. 7.1) requires, to reach precision $\varepsilon$, a time $$T \;=\; \Omega\!\Big(\sqrt{\kappa}\,\Big(1 + \frac{\tau}{\sqrt{1-\gamma}}\Big)\ln\frac{1}{\varepsilon}\Big),$$ where a local gradient computation takes one unit of time and a communication round takes $\tau$ units. This order is **attained**, up to replacing the global condition number by the local ones of the $f_i$, by accelerated gradient ascent on the dual problem (Nesterov's scheme, see the Optimization for AI module, ch. 3) combined with *Chebyshev accelerated gossip* — replacing $W$ by a well-chosen polynomial in $W$ that flattens its spectrum, the same trick that accelerates gradients, applied to the graph (the MSDA algorithm). When communication dominates ($\tau$ large), the time is essentially $\tau\sqrt{\kappa/(1-\gamma)}\,\ln(1/\varepsilon)$: the product of the two obstacles. The JMLR 2019 version extends the analysis to non-smooth convex objectives.
 
 ::: proof
-*Sketch of the lower bound (the "adversary" argument).* One constructs a family of "local" quadratics at each node, whose solution $x^\star$ depends on spread-out information: for machine $i$ to learn what machine $j$ knew, the information must travel along the graph, and the *mixing of the graph* imposes $\Omega(1/\sqrt{1-\gamma})$ communication rounds (each gossip multiplies the imbalance by only $\gamma$); independently, even sequentially, a quadratic with condition number $\kappa$ requires $\Omega(\sqrt\kappa)$ gradient accesses (Nesterov's bound — Optimization for AI module, ch. 2). The construction crosses the two obstacles into a quadratic *on the product* graph × condition number: no algorithm can beat the product of the two bounds. [∎]{.qed}
+*Sketch of the lower bound (the "adversary" argument).* One constructs a family of "local" quadratics at each node, whose solution $x^\star$ depends on spread-out information: for machine $i$ to learn what machine $j$ knew, the information must travel along the graph, and the *mixing of the graph* imposes $\Omega(1/\sqrt{1-\gamma})$ communication rounds (each gossip multiplies the imbalance by only $\gamma$); independently, even sequentially, a quadratic with condition number $\kappa$ requires $\Omega(\sqrt\kappa)$ gradient accesses (Nesterov's bound — Optimization for AI module, ch. 3). The construction crosses the two obstacles into a quadratic *on the product* graph × condition number: no algorithm can beat the product of the two bounds. [∎]{.qed}
 :::
 ::::
 
@@ -501,13 +501,13 @@ The previous chapters made each training step faster with more GPUs; this chapte
   Regime                         Condition                                                          Dominant time                                                Practical equivalent
   ------------------------------ ------------------------------------------------------------------ ------------------------------------------------------------ -----------------------------------------------------------------
   **sequential (compute)**       fast network, small $\gamma$ (NVLink, $\gamma \approx 0.1$)   $\sqrt{\kappa}$: Nesterov reigns                           a single node, 8 tightly linked GPUs
-  **parallel (communication)**   slow network, $\gamma \to 1$ (Ethernet, large clusters)          $\sqrt{\kappa/(1-\gamma)}$: the network caps everything   multi-datacenter, federated (see the Emerging ML module, ch. 2)
+  **parallel (communication)**   slow network, $\gamma \to 1$ (Ethernet, large clusters)          $\sqrt{\kappa/(1-\gamma)}$: the network caps everything   multi-datacenter, federated (see the Emerging ML module, ch. 2–3)
 
 Engineering consequence: **adding machines does not reduce the time below the communication floor**. This is the exact analogue of Amdahl's law (ch. 6) for optimization: the "sequential" part is no longer a program but the geometry of the network. All of ch. 3 (all-reduce, compression, overlap) is a war against this $\sqrt{1/(1-\gamma)}$.
 :::
 
 ::: prop
-[Proposition 7.4 — What parallelism *can* buy: the "finite sum" regime]{.tag} The bound of theorem 7.3 concerns the time to *reach* an $\varepsilon$-optimal point when the data are *partitioned* (each $f_i$ is opaque). If instead all machines can evaluate the *same* function (replicated data), parallelism reduces the variance of SGD (mini-batching: Optimization for AI module, ch. 4) — but the optimal statistical rate bounds the gain (Dieuleveut et al., see the Optimization for AI module, ch. 11). In short: parallelism speeds up *compute*, never (or marginally) the *statistical complexity* — a distinction that commercial announcements like to forget.
+[Proposition 7.4 — What parallelism *can* buy: the "finite sum" regime]{.tag} The bound of theorem 7.3 concerns the time to *reach* an $\varepsilon$-optimal point when the data are *partitioned* (each $f_i$ is opaque). If instead all machines can evaluate the *same* function (replicated data), parallelism reduces the variance of SGD (mini-batching: Optimization for AI module, ch. 5) — but the optimal statistical rate bounds the gain (Dieuleveut et al., see the Optimization for AI module, ch. 11). In short: parallelism speeds up *compute*, never (or marginally) the *statistical complexity* — a distinction that commercial announcements like to forget.
 :::
 
 ## 8. Research of the instructor {#ch8}
@@ -524,7 +524,7 @@ Engineering consequence: **adding machines does not reduce the time below the co
 ::: note
 [Complexity of neural networks: Lipschitz regularity]{.tag}
 
--   A. Virmaux, K. Scaman, [Lipschitz regularity of deep neural networks: analysis and efficient estimation](https://arxiv.org/abs/1805.10965), NeurIPS 2018 — proving that computing *exactly* the Lipschitz constant of a deep network is NP-hard, and designing the estimator (SeqLip, layer-wise power iteration) that became standard. The link with this module: the propagation bound of prop. 5.2/Responsible AI 3.3 involves precisely these $\mathrm{Lip}_m$ constants — and the paper says how far one can (not) compute them; on the robustness side, the Lipschitz constant is the certificate of adversarial guarantees (see the Emerging ML module, ch. 1).
+-   A. Virmaux, K. Scaman, [Lipschitz regularity of deep neural networks: analysis and efficient estimation](https://arxiv.org/abs/1805.10965), NeurIPS 2018 — proving that computing *exactly* the Lipschitz constant of a deep network is NP-hard, and designing the estimator (SeqLip, layer-wise power iteration) that became standard. The link with this module: the propagation bound of prop. 5.2/Responsible AI 3.3 involves precisely these $\mathrm{Lip}_m$ constants — and the paper says how far one can (not) compute them; on the robustness side, the Lipschitz constant is the certificate of adversarial guarantees (see the M2 Security and Robustness module, ch. 5).
 :::
 
 ::: note

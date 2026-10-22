@@ -32,6 +32,13 @@ La sélection suit le **« profil équilibré » recommandé** pour ce master (a
 
 Cette sélection correspond aux tracks *« Graph AI / Structured Generative AI »* et *« Hybrid Neuro-Symbolic / GraphRAG »* — le cœur du master : **faire cohabiter LLMs et données structurées en graphes**.
 
+## Volume horaire et progression (programme 2026-2027)
+
+- La page d'accueil contient un tableau **« Programme 2026–2027 : course units and hours »** : chaque UE de la liste SynapseS du parcours LLGA (année 1, semestres S1 et S2), son code, sa période, son volume officiel, et la façon dont nos notes s'y ajustent. Une liste « What changed » résume les évolutions du catalogue (nouveau *Refresher in Computer Graphics*, *Optimisation and Responsible AI* passé en période 1 sous `CSC_51076_EP`, liste S2 à neuf UE, codes des UE de management et de culture, année 2 pas encore publiée).
+- Chaque cours scientifique a un **plan de séances** (`#sessions`) dont les heures totalisent le volume officiel (12 × 3 h pour 36 h, 4 × 3 h pour un refresher de 12 h, 8 × 3 h pour un cours de M2), avec un niveau 1/2/3 qui ne redescend jamais. Les chapitres qui dépassent ce volume (notes de recherche, approfondissements) sont listés en travail personnel avec une durée estimée.
+- Règles et preuves : `specs/hours-and-progression.md`, contrôle `python3 tools/check_progression.py` (lancé aussi par `tools/check_gates.py`).
+- Outils : `tools/render.py` (rendu Quarto 1.7.32 + empreinte KaTeX), `tools/renumber_chapters.py`, `tools/grade_exercises.py`, `tools/cross_refs.py`, `tools/programme_table.py`.
+
 ## Utilisation
 
 Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste des modules ci-dessous. Les formules mathématiques sont rendues par [KaTeX](https://katex.org) 0.19.0, chargé depuis jsDelivr avec une empreinte d'intégrité (une connexion internet reste utile ; le texte reste lisible hors ligne).
