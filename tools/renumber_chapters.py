@@ -29,7 +29,7 @@ LIST = rf"{NUM}(?:\s*(?:,|and|or|to|–|-|&)\s*{NUM})*"
 KW_RE = re.compile(rf"(?i)(?<![\w.])({KEYWORDS})(\s*\(?)\s*({LIST})")
 PAREN_RE = re.compile(rf"\((?:cf\.\s*)?({NUM}\.\d+)\)")
 CITATION_RE = re.compile(r"\b(?:19|20)\d\d\b|et al\.|\*[^*]+\*,[^.]*$")
-PROTECT_RE = re.compile(r"```.*?```|\$\$.*?\$\$|\$[^$\n]*\$", re.S)
+PROTECT_RE = re.compile(r"(?m:^(?:```|~~~)[\s\S]*?^(?:```|~~~))|```.*?```|\$\$.*?\$\$|\$[^$\n]*\$", re.S)
 
 
 def remap_number(num: str, mapping: dict[int, int]) -> str:

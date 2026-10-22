@@ -27,7 +27,7 @@ CH_REF_RE = re.compile(r"\bch\. ?(\d+)")
 
 
 def prose_words(text: str) -> int:
-    text = re.sub(r"```.*?```", "", text, flags=re.S)
+    text = re.sub(r"^(```|~~~).*?^\1", "", text, flags=re.S | re.M)
     text = re.sub(r"\$\$.*?\$\$", "", text, flags=re.S)
     text = re.sub(r"\$[^$\n]*\$", "", text)
     return len(re.findall(r"[A-Za-z]{2,}", text))
