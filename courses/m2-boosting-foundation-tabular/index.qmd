@@ -103,7 +103,7 @@ format:
 -   [0. Reminders: trees, forests, boosting](#ch0)
 -   [1. Why GBDTs (still) dominate tabular data](#ch1)
 -   [2. Boosting: functional gradient descent](#ch2)
--   [3. XGBoost, LightGBM, CatBoost: three engineering approaches to gradient](#ch3)
+-   [3. XGBoost, LightGBM, CatBoost: three engineering approaches to gradient boosting](#ch3)
 -   [4. Encoding columns: categorical and numerical](#ch4)
 -   [5. Deep tabular: regularized MLPs and FT-Transformer](#ch5)
 -   [6. TabPFN: learning tables in-context](#ch6)
@@ -179,6 +179,23 @@ M2 module offered in period 1, outside the recommended track, designed as an app
 -   **Exercises / Labs** — from hand-computed gradient boosting to the full comparative study on real data.
 -   **References** — founding papers of GBDTs and tabular foundation models.
 
+### Session plan {#sessions}
+
+**24 h in class (assumed) = 8 sessions of 3 h.** The SynapseS 2026–2027 catalogue publishes no sheet and no teaching hours for this module; 24 h is the M2 volume published for the Large Language Models course (CSC_53432_EP: 24 h, 2 ECTS) and is assumed here, and the session split below is our proposal for covering these notes in that time. Level 1 = foundations (reminders, first results), 2 = core methods (boosting engines, encodings, deep tabular models), 3 = recent research and open questions (tabular foundation models, LLMs on tables, benchmarking controversies); the level never goes down from one session to the next.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Reminders: trees, forests, boosting; ch. 1 Why GBDTs still dominate tabular data | Ex. 3 |
+| 2 | 3 h | 2 | ch. 2 Boosting as functional gradient descent; ch. 3.1 XGBoost: leaf weights and split gain | Ex. 1 |
+| 3 | 3 h | 2 | ch. 3.2–3.3 LightGBM (histograms, GOSS, EFB) and CatBoost (oblivious trees, ordered statistics) | Ex. 4 |
+| 4 | 3 h | 2 | ch. 4 Encoding categorical and numerical columns; target leakage | Ex. 2 (central lab) |
+| 5 | 3 h | 2 | ch. 5 Deep tabular: regularized MLPs, FT-Transformer, TabNet, NODE | Ex. 7 (start: GBDT and FT-Transformer baselines) |
+| 6 | 3 h | 3 | ch. 6 TabPFN: prior-fitted networks and in-context learning on tables | Ex. 8 |
+| 7 | 3 h | 3 | ch. 7 LLMs and tables: serialization, TabLLM, text-to-SQL; ch. 8 Synthetic tabular data | Ex. 5, 6 |
+| 8 | 3 h | 3 | ch. 9 Honest benchmarking; ch. 10 Choosing your method, open questions | Ex. 7 (conclusions and decision guide) |
+
+**Self-study, outside the 24 h**: none — every chapter is covered in class; the labs (Ex. 2 and 7 in particular) are the personal work expected alongside.
+
 ### How to study this module
 
 -   Run the code as you read: each chapter comes with short experiments that must be reproduced to believe the curves.
@@ -192,10 +209,12 @@ M2 module offered in period 1, outside the recommended track, designed as an app
 :::
 
 ::: note
-[Independent note]{.tag} Place in the 2-year path: concrete failure modes first, then names and theorems.
+[Independent note]{.tag} Place in the two-year path: like the M1 modules, this course starts from concrete failure modes, then names the methods and proves their formulas.
 :::
 
 ## 0. Reminders: trees, forests, boosting {#ch0}
+
+This module studies the models that work best on tables, starting from the tree ensembles of M1. This chapter lists what is assumed from that course and fixes the notation used afterwards.
 
 :::: recap
 ::: recap-title
@@ -219,7 +238,7 @@ Reminders from the Machine Learning module (M1 P1, ch. 5) — what is assumed ac
 
 ## 1. Why GBDTs (still) dominate tabular data {#ch1}
 
-Concrete scene: a leaderboard win… with temporal leakage. This chapter sets why GBDTs still dominate.
+Concrete scene: a leaderboard is won… thanks to temporal leakage. This chapter explains, with three large empirical studies and one simple invariance property, why gradient-boosted trees still dominate on tables.
 
 ::: note
 [What breaks]{.tag} In-fold target encoding; ignoring trees' monotone invariance; comparing deep vs GBDT without a feature budget.
@@ -284,7 +303,9 @@ $\partial L / \partial a = a - y$, so $-\partial L(y_i, F(x_i))/\partial F = y_i
 [What ch. 3 adds]{.tag} Definition 2.1 says *what* to fit; XGBoost, LightGBM, and CatBoost optimize *how*: closed-form leaf weights via a second-order Taylor expansion, histogram-based splits, large-gradient sampling, symmetric trees, ordered statistics for categoricals. All choices that take the GBDT from "nice idea" to industrial default on tables.
 :::
 
-## 3. XGBoost, LightGBM, CatBoost: three engineering approaches to gradient {#ch3}
+## 3. XGBoost, LightGBM, CatBoost: three engineering approaches to gradient boosting {#ch3}
+
+Chapter 2 says *what* each new tree must fit; the three industrial libraries differ in *how* they fit it fast and without overfitting. This chapter derives the formulas each one relies on — second-order leaf weights, histogram splits and gradient-based sampling, ordered statistics for categories — and compares the resulting biases.
 
 ### 3.1. XGBoost: the second derivative and explicit regularization
 
@@ -311,11 +332,11 @@ The objective factorizes per leaf: $\sum_j [\,w_j G_j + \tfrac{1}{2} w_j^2 (H_j 
 :::
 
 ::: def
-[Definition 3.4 — GOSS (Gradient-based One-Side Sampling)]{.tag} Examples with *small* gradients are well predicted; one keeps the $a \cdot n$ examples with the largest $\|g_i\|$ (set $A$), randomly samples $b \cdot n$ examples from the rest ($B'$), and amplifies their gradients by a factor $(1-a)/b$. The split gain is computed on this weighted selection.
+[Definition 3.4 — GOSS (Gradient-based One-Side Sampling)]{.tag} Examples with *small* gradients are well predicted; one keeps the $a \cdot n$ examples with the largest $|g_i|$ (set $A$), randomly samples $b \cdot n$ examples from the rest ($B'$), and amplifies their gradients by a factor $(1-a)/b$. The split gain is computed on this weighted selection.
 :::
 
 :::: prop
-[Proposition 3.5 — GOSS (approximately) preserves the gain]{.tag} With the weights $\tilde{g}_i = \frac{1-a}{b}\, g_i$ on $B'$, the estimator $\tilde{G}_j = \sum_{i \in A \cap j} g_i + \sum_{i \in B' \cap j} \tilde{g}_i$ is an (approximately) unbiased estimator of $G_j = \sum_{i \in j} g_i$, and likewise for the $H_j$ — hence the gain of theorem 3.2 is estimated consistently.
+[Proposition 3.5 — GOSS (approximately) preserves the gain]{.tag} With the weights $\tilde{g}_i = \frac{1-a}{b}\, g_i$ on $B'$, the estimator $\tilde{G}_j = \sum_{i \in A \cap j} g_i + \sum_{i \in B' \cap j} \tilde{g}_i$ is an unbiased estimator of $G_j = \sum_{i \in j} g_i$, and likewise for the $H_j$ — hence the gain of theorem 3.2 is estimated consistently.
 
 ::: proof
 Write $G_j = G_j^{A} + G_j^{\bar{A}}$. Uniform sampling of $B'$ in $\bar{A}$ gives $\mathbb{E}[\sum_{i \in B' \cap j} \tilde{g}_i] = \frac{1-a}{b}\, \mathbb{E}[\sum_{i \in B' \cap j} g_i] = \frac{1-a}{b} \cdot \frac{b}{1-a} G_j^{\bar{A}} = G_j^{\bar{A}}$, hence the expectation $G_j^{A} + G_j^{\bar{A}} = G_j$. The rest follows by replacing the sums with their estimators in the gain formula (second-order bias, negligible compared to the gain itself). [∎]{.qed}
@@ -472,7 +493,7 @@ prompt = f"Column 'dosage_mg': {x['dose']}; 'age': {x['age']}; ...\nAnswer (0/1)
 #    (the LLM writes the feature engineering code, the GBDT predicts)
 # 3) Query: natural language question -> SQL (schema linking + BIRD)
 question = "top 5 clients by margin in 2025, excluding refunds"
-# -> SELECT c.id, SUM(o.marge) FROM ... WHERE ... GROUP BY ... ORDER BY ... LIMIT 5;
+# -> SELECT c.id, SUM(o.margin) FROM ... WHERE ... GROUP BY ... ORDER BY ... LIMIT 5;
 ```
 
 ::: note
@@ -480,6 +501,8 @@ question = "top 5 clients by margin in 2025, excluding refunds"
 :::
 
 ## 8. Synthetic tabular data {#ch8}
+
+Real tables are often too small, too unbalanced or too sensitive to be shared. This chapter defines what a good synthetic table must achieve, presents the three families of generators, and explains why synthetic data are not anonymous by default.
 
 ::: def
 [Definition 8.1 — The fidelity-utility-privacy triangle]{.tag} A tabular generator $\mathcal{D}_{syn} \sim G(\mathcal{D}_{real})$ is judged on three axes in tension: **fidelity** (marginals and dependencies reproduced; KS/TV distances per column, correlations, detectability by a real-vs-synthetic classifier), **utility** (does a model trained on the synthetic perform on the real? the *train-synthetic-test-real* protocol, TSTR), and **privacy** (no synthetic row should copy an individual; nearest-neighbor distance metrics and membership inference attacks — cf. ch. 8 of the Security and Robustness module).
@@ -518,6 +541,8 @@ The "trees vs deep vs foundations" debate has produced more contradictory conclu
 
 ## 10. Choosing your method: guide and open questions {#ch10}
 
+The previous chapters compared model families regime by regime; this chapter condenses them into a default choice for each situation, then lists the questions that research has not yet settled.
+
   Regime                                                                         Recommended default                             Why
   ------------------------------------------------------------------------------ ----------------------------------------------- -----------------------------------------------------------------
   $n \lesssim 10,000$, no tuning resources                                      TabPFN                                          zero hyperparameters, seconds, uncertainty included (prop. 6.3)
@@ -532,14 +557,14 @@ The "trees vs deep vs foundations" debate has produced more contradictory conclu
 
 ## Exercises / Labs {#ex}
 
-1.  **Theorem 3.2 by hand (ch. 2-3).** Implement in pure NumPy (without a library) a depth-1 tree boosting: residuals, leaf weights $w_j^\star = -G_j/(H_j+\lambda)$, split gain — verify on a toy dataset that the objective of theorem 3.2 decreases by exactly the announced Gain at each split.
-2.  **GOSS and EFB (ch. 3).** In a toy GBDT: implement GOSS ($a = 0.2, b = 0.1$) and numerically verify proposition 3.5 (compare estimated gains with exact gains over 100 splits); build a sparse one-hot and measure the achievable EFB fusion rate (greedy coloring of the conflict graph).
-3.  **Target encoding leakage (ch. 4 — central lab).** On a dataset where the target is pure noise: (i) naive target encoding with an identifier column — measure train/test AUC; (ii) intermediate cardinality (100 categories) — show that partial leakage skews standard CV; (iii) repair with K-fold OOF and Micci-Barreca smoothing (sweep $m$); (iv) rerun CatBoost with native ordered TS and compare.
-4.  **Symmetric benchmark (ch. 5-6-9).** On 8-10 OpenML datasets (Grinsztajn suite): XGBoost/LightGBM/CatBoost with an equal tuning budget (Optuna, 100 trials), FT-Transformer (tokenizer + periodic embeddings), TabPFN. Same folds, 5 seeds, mean ± standard deviation, paired test, total time reported — write the "TabZilla-style" conclusion (ch. 9) then the decision guide (ch. 10) on these data.
-5.  **Prior and in-context (ch. 6).** Generate tables from random SCMs (def. 6.2 — DAG skeleton, piecewise mechanisms, marginal transformations); train a small PFN transformer to predict $p(y\|x, \mathcal{D})$; show in-context learning (performance curve vs context size) and test sensitivity to the prior (Gaussian vs causal prior — when does the PFN fail?).
-6.  **LLM on a table (ch. 7).** Serialize a tabular dataset in 4 formats (CSV/JSON/Markdown/template): measure the effect of format and column order in few-shot (16/64 examples); compare with a GBDT at the same sample sizes — reproduce the crossover of study 7.2; finish with 5 text-to-SQL questions on a mini-database and audit the schema linking errors.
-7.  **Synthetic and privacy (ch. 8).** Generate data with CTGAN, TabDDPM, and a serialized LM (GReaT-like); evaluate fidelity (KS, correlations, detectability) and utility (TSTR vs TRTR); launch a membership inference attack and a nearest-record-distance analysis; redo the generator with light DP and plot the fidelity-privacy curve.
-8.  **Rotation and useless features (ch. 1).** Reproduce the two diagnostics of Grinsztajn et al. on 3 datasets: (i) random column rotation — GBDT vs MLP; (ii) adding noise features then importance-based pruning — who suffers most? Reread proposition 1.3 in light of the results.
+1.  **★ Theorem 3.2 by hand (ch. 2-3).** Implement in pure NumPy (without a library) a depth-1 tree boosting: residuals, leaf weights $w_j^\star = -G_j/(H_j+\lambda)$, split gain — verify on a toy dataset that the objective of theorem 3.2 decreases by exactly the announced Gain at each split.
+2.  **★ Target encoding leakage (ch. 4 — central lab).** On a dataset where the target is pure noise: (i) naive target encoding with an identifier column — measure train/test AUC; (ii) intermediate cardinality (100 categories) — show that partial leakage skews standard CV; (iii) repair with K-fold OOF and Micci-Barreca smoothing (sweep $m$); (iv) rerun CatBoost with native ordered TS and compare.
+3.  **★ Rotation and useless features (ch. 1).** Reproduce the two diagnostics of Grinsztajn et al. on 3 datasets: (i) random column rotation — GBDT vs MLP; (ii) adding noise features then importance-based pruning — who suffers most? Reread proposition 1.3 in light of the results.
+4.  **★★ GOSS and EFB (ch. 3).** In a toy GBDT: implement GOSS ($a = 0.2, b = 0.1$) and numerically verify proposition 3.5 (compare estimated gains with exact gains over 100 splits); build a sparse one-hot and measure the achievable EFB fusion rate (greedy coloring of the conflict graph).
+5.  **★★ LLM on a table (ch. 7).** Serialize a tabular dataset in 4 formats (CSV/JSON/Markdown/template): measure the effect of format and column order in few-shot (16/64 examples); compare with a GBDT at the same sample sizes — reproduce the crossover of study 7.2; finish with 5 text-to-SQL questions on a mini-database and audit the schema linking errors.
+6.  **★★ Synthetic and privacy (ch. 8).** Generate data with CTGAN, TabDDPM, and a serialized LM (GReaT-like); evaluate fidelity (KS, correlations, detectability) and utility (TSTR vs TRTR); launch a membership inference attack and a nearest-record-distance analysis; redo the generator with light DP and plot the fidelity-privacy curve.
+7.  **★★★ Symmetric benchmark (ch. 5-6-9).** On 8-10 OpenML datasets (Grinsztajn suite): XGBoost/LightGBM/CatBoost with an equal tuning budget (Optuna, 100 trials), FT-Transformer (tokenizer + periodic embeddings), TabPFN. Same folds, 5 seeds, mean ± standard deviation, paired test, total time reported — write the "TabZilla-style" conclusion (ch. 9) then the decision guide (ch. 10) on these data.
+8.  **★★★ Prior and in-context (ch. 6).** Generate tables from random SCMs (def. 6.2 — DAG skeleton, piecewise mechanisms, marginal transformations); train a small PFN transformer to predict $p(y \mid x, \mathcal{D})$; show in-context learning (performance curve vs context size) and test sensitivity to the prior (Gaussian vs causal prior — when does the PFN fail?).
 
 ## References {#refs}
 
