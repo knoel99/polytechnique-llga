@@ -65,10 +65,13 @@ Beyond the gate, the editorial rules are:
 
 These are changes of form only: content and mathematics are unchanged, and `tools/check_progression.py` still passes.
 
+Pandoc simple tables whose cells overflowed their column, which cut formulas and showed a stray `$`, become pipe tables with `tools/fix_simple_tables.py`. The tool prints every row it had to cut by position, for review.
+
 ## Proof
 
 - `python3 tools/check_gates.py` passes. It now includes the airiness gate.
 - KaTeX renders every span of every page (`katex.renderToString` over the rendered HTML).
+- No literal `$` outside maths in any rendered page, except escaped currency signs.
 - Playwright, on every page, at 1440 px and 390 px, in light and in dark mode:
   - no horizontal overflow;
   - no script error;

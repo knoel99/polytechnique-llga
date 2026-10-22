@@ -11,7 +11,8 @@ cell that starts one character too far left or right loses a character to
 its neighbour — a formula then shows a stray "$". A table is rewritten only
 when one of its lines has a non-space character just before a column start,
 and only if every line splits into exactly one cell per column on runs of
-two or more spaces; otherwise it is reported and left alone.
+two or more spaces, or cut at the nearest spaces around the column starts
+(such rows are printed for review); otherwise it is reported and left alone.
 """
 
 import re
@@ -57,6 +58,8 @@ def split(line: str, starts):
             return None
     bounds = [0] + cuts + [len(line)]
     cells = [line[a:b].strip() for a, b in zip(bounds, bounds[1:])]
+    if cells[0]:  # an empty first header cell is normal; anything else deserves a look
+        print(f"  check this row (cut by position): {' | '.join(cells)}")
     return cells
 
 
