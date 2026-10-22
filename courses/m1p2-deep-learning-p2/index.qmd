@@ -980,14 +980,14 @@ This ceiling — and not FLOPs — governs token-by-token generation (ch. 6, roo
 ::: prop
 [Proposition 5.2 — PTQ/QAT quantization, pruning, distillation (compact map)]{.tag}
 
-  Lever                  Idea                                                                                     Memory/speed effect                                              Ref. / cross-reference
-  ---------------------- ---------------------------------------------------------------------------------------- ---------------------------------------------------------------- ---------------------------------------------------------------
-  int8/int4 PTQ          round the trained weights, calibration only                                              2–8× memory, up to 4× CPU/latency                                Jacob et al. 2018; error bounds: Responsible AI module, ch. 3
-  QAT                    simulate rounding *during* training (STE)                                                int8 nearly lossless, int4 on large models                       Jacob et al. 2018
-  Structured pruning     remove whole heads/channels/layers                                                       *effective* speedup (unlike unstructured)                        Han et al. 2016
-  Distillation           student trained on the teacher's logits (temperature $\tau$)                            10–100× fewer parameters at similar quality on the target task   Hinton et al. 2015; Responsible AI module, ch. 3 (full lab)
-  Speculative decoding   small model proposes, large model verifies *in parallel* — same distribution in theory   2–3× tokens/s without loss                                       Leviathan et al. 2023
-  IO-aware attention     rewrite attention for the GPU memory hierarchy (tiling, kernel fusion)                   2–4× training/inference on long contexts, $O(n)$ memory          Dao et al. 2022 (FlashAttention, see M2 LLMs ch. 2)
+| Lever | Idea | Memory/speed effect | Ref. / cross-reference |
+|---|---|---|---|
+| int8/int4 PTQ | round the trained weights, calibration only | 2–8× memory, up to 4× CPU/latency | Jacob et al. 2018; error bounds: Responsible AI module, ch. 3 |
+| QAT | simulate rounding *during* training (STE) | int8 nearly lossless, int4 on large models | Jacob et al. 2018 |
+| Structured pruning | remove whole heads/channels/layers | *effective* speedup (unlike unstructured) | Han et al. 2016 |
+| Distillation | student trained on the teacher's logits (temperature $\tau$) | 10–100× fewer parameters at similar quality on the target task | Hinton et al. 2015; Responsible AI module, ch. 3 (full lab) |
+| Speculative decoding | small model proposes, large model verifies *in parallel* — same distribution in theory | 2–3× tokens/s without loss | Leviathan et al. 2023 |
+| IO-aware attention | rewrite attention for the GPU memory hierarchy (tiling, kernel fusion) | 2–4× training/inference on long contexts, $O(n)$ memory | Dao et al. 2022 (FlashAttention, see M2 LLMs ch. 2) |
 :::
 
 ::: note
@@ -1075,15 +1075,15 @@ increasing in $P$ and bounded above by $1/s$. [∎]{.qed}
 ::: ex
 [Example 6.4 — Complete case study: training a "7B" LLM (end-to-end computation)]{.tag} Assumptions (close to Touvron et al. 2023): $N = 6.7\times10^9$ parameters, $D = 10^{12}$ tokens, A100-80GB bf16 (312 TFLOP/s peak, 2 TB/s HBM, 400 W), one node = 8 GPUs + NVLink.
 
-  Question                                           Computation                                                       Result
-  -------------------------------------------------- ----------------------------------------------------------------- --------------------------------------------------------------------------------
-  Total FLOPs                                        $6ND = 6 \times 6.7\times10^9 \times 10^{12}$              $4.0\times10^{22}$ FLOPs
-  GPU-hours (45% MFU)                                $4\times10^{22} / (312\times10^{12}\times0.45) / 3600$     ≈ 79,000 GPU·h — the paper announces 82,432: the $6ND$ rule is accurate to ±5%
-  States memory                                      $16\,N = 16 \times 6.7\times10^9$                           107 GB > 80 GB: ZeRO-2/3 or TP required (ch. 2, 4)
-  Activations (checkpointing, batch 4×2048 tokens)   $\approx 2\sqrt{32}\times(\text{layer act.})$                 a few GB/GPU: checkpointing (th. 4.1) makes the batch viable
-  Time on 256 GPUs (32 nodes)                        79,000/256 h                                                      ≈ 13 days — hence the vital importance of MFU (half the time = 6 days saved)
-  GPU-only energy                                    79,000 h × 0.4 kW (+ PUE, see the Responsible AI module, ch. 6)   ≈ 32 MWh before PUE; emissions by region: 1.6 t (FR) to \~15 t (world average)
-  fp16 inference                                     weights $2N$ = 13.4 GB; KV cache 2048 ctx ≈ 1.1 GB (def. 5.1)     fits on 1 80 GB GPU; throughput ≈ 140–150 tok/s (memory wall)
+| Question | Computation | Result |
+|---|---|---|
+| Total FLOPs | $6ND = 6 \times 6.7\times10^9 \times 10^{12}$ | $4.0\times10^{22}$ FLOPs |
+| GPU-hours (45% MFU) | $4\times10^{22} / (312\times10^{12}\times0.45) / 3600$ | ≈ 79,000 GPU·h — the paper announces 82,432: the $6ND$ rule is accurate to ±5% |
+| States memory | $16\,N = 16 \times 6.7\times10^9$ | 107 GB > 80 GB: ZeRO-2/3 or TP required (ch. 2, 4) |
+| Activations (checkpointing, batch 4×2048 tokens) | $\approx 2\sqrt{32}\times(\text{layer act.})$ | a few GB/GPU: checkpointing (th. 4.1) makes the batch viable |
+| Time on 256 GPUs (32 nodes) | 79,000/256 h | ≈ 13 days — hence the vital importance of MFU (half the time = 6 days saved) |
+| GPU-only energy | 79,000 h × 0.4 kW (+ PUE, see the Responsible AI module, ch. 6) | ≈ 32 MWh before PUE; emissions by region: 1.6 t (FR) to \~15 t (world average) |
+| fp16 inference | weights $2N$ = 13.4 GB; KV cache 2048 ctx ≈ 1.1 GB (def. 5.1) | fits on 1 80 GB GPU; throughput ≈ 140–150 tok/s (memory wall) |
 
 This table — reused in exercise 7 — is the module's typical deliverable: a quantified budget, every line traceable to a theorem of the course (1.3, 4.1, 5.1, 6.1), and an engineer's conclusion (where to invest the next euro: MFU? memory? quantization?).
 :::
@@ -1417,10 +1417,10 @@ The construction crosses the two obstacles into a quadratic *on the product* gra
 ::: note
 [Reading: the two regimes, and why they structure practice]{.tag}
 
-  Regime                         Condition                                                          Dominant time                                                Practical equivalent
-  ------------------------------ ------------------------------------------------------------------ ------------------------------------------------------------ -----------------------------------------------------------------
-  **sequential (compute)**       fast network, small $\gamma$ (NVLink, $\gamma \approx 0.1$)   $\sqrt{\kappa}$: Nesterov reigns                           a single node, 8 tightly linked GPUs
-  **parallel (communication)**   slow network, $\gamma \to 1$ (Ethernet, large clusters)          $\sqrt{\kappa/(1-\gamma)}$: the network caps everything   multi-datacenter, federated (see the Emerging ML module, ch. 2–3)
+| Regime | Condition | Dominant time | Practical equivalent |
+|---|---|---|---|
+| **sequential (compute)** | fast network, small $\gamma$ (NVLink, $\gamma \approx 0.1$) | $\sqrt{\kappa}$: Nesterov reigns | a single node, 8 tightly linked GPUs |
+| **parallel (communication)** | slow network, $\gamma \to 1$ (Ethernet, large clusters) | $\sqrt{\kappa/(1-\gamma)}$: the network caps everything | multi-datacenter, federated (see the Emerging ML module, ch. 2–3) |
 
 Engineering consequence: **adding machines does not reduce the time below the communication floor**. This is the exact analogue of Amdahl's law (ch. 6) for optimization: the "sequential" part is no longer a program but the geometry of the network. All of ch. 3 (all-reduce, compression, overlap) is a war against this $\sqrt{1/(1-\gamma)}$.
 :::

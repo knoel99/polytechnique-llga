@@ -635,11 +635,11 @@ that is, we look for $Z Z^\top \approx M$; $T$ plays the role of the effective h
 
 Consequences:
 
-(i) a theoretical bridge — DeepWalk, LINE, PTE and node2vec are all factorizations of variants of $M$ (hence the name "NetMF", *Network Embedding as Matrix Factorization*);
+\(i\) a theoretical bridge — DeepWalk, LINE, PTE and node2vec are all factorizations of variants of $M$ (hence the name "NetMF", *Network Embedding as Matrix Factorization*);
 
-(ii) a deterministic algorithm — factorizing $M$ directly (truncated SVD) matches or beats DeepWalk without drawing a single walk;
+\(ii\) a deterministic algorithm — factorizing $M$ directly (truncated SVD) matches or beats DeepWalk without drawing a single walk;
 
-(iii) a diagnostic — the target matrix is built on $P = D^{-1}A$: the embeddings encode the *walks*, not the features, and remain *transductive* (a new node requires recomputing everything — direct motivation for the inductive GNNs of ch. 5).
+\(iii\) a diagnostic — the target matrix is built on $P = D^{-1}A$: the embeddings encode the *walks*, not the features, and remain *transductive* (a new node requires recomputing everything — direct motivation for the inductive GNNs of ch. 5).
 :::
 
 ::: note
@@ -810,7 +810,19 @@ Cost: $\mathcal{O}(K |E|)$ per application — linear in the size of the graph.
 [Proposition 4.6 — From spectral to spatial: the equality demonstrated]{.tag} Every filter that is a *polynomial of degree $K$* in $L$ is exactly a $K$-localized operator, and conversely every message passing operator with $K$ layers whose propagation is a polynomial of $A$ realizes a polynomial spectral filter.
 
 ::: proof
-Forward direction: developed in (iii) above. Conversely: a local layer $y_v = \sum_{u \in \{v\} \cup \mathcal{N}(v)} c_{uv} x_u$ with uniform weights by symmetry writes in matrix form $y = \sum_{k \leq 1} c_k\, \Pi_k(A) x$ for polynomials $\Pi_k$ of degree $\leq 1$ (the diagonal term is $\Pi_0$, the edges $\Pi_1$); composing $K$ layers without non-linearity, $y = \Pi(A) x$ with $\deg \Pi \leq K$, and since $L = D - A$ is itself a polynomial in $A$ (with $D$ fixed by the graph), $\Pi(A) = g(L)$ for a polynomial $g$ of the same degree. The non-linearities between layers break the exact equality — this is precisely the gap between the spectral "CNN on graph" and the spatial GNN: the GNN generalizes the filter by inserting point-wise non-linearities, like a 1D CNN. [∎]{.qed}
+Forward direction: developed in (iii) above.
+
+Conversely: a local layer
+$$
+y_v = \sum_{u \in \{v\} \cup \mathcal{N}(v)} c_{uv} x_u
+$$
+with uniform weights by symmetry writes in matrix form $y = \sum_{k \leq 1} c_k\, \Pi_k(A) x$ for polynomials $\Pi_k$ of degree $\leq 1$ (the diagonal term is $\Pi_0$, the edges $\Pi_1$).
+
+Composing $K$ layers without non-linearity, $y = \Pi(A) x$ with $\deg \Pi \leq K$.
+
+Since $L = D - A$ is itself a polynomial in $A$ (with $D$ fixed by the graph), $\Pi(A) = g(L)$ for a polynomial $g$ of the same degree.
+
+The non-linearities between layers break the exact equality — this is precisely the gap between the spectral "CNN on graph" and the spatial GNN: the GNN generalizes the filter by inserting point-wise non-linearities, like a 1D CNN. [∎]{.qed}
 :::
 ::::
 
@@ -819,12 +831,42 @@ Forward direction: developed in (iii) above. Conversely: a local layer $y_v = \s
 Spectral filters are tied to the eigenvectors of one fixed graph. We want instead a layer that applies to any graph, costs time linear in the number of edges and trains like an ordinary network layer; message passing is that layer — each node updates its vector from the vectors of its neighbors.
 
 ::: def
-[Definition 5.1 — The message passing layer (MPNN, Gilmer et al., 2017)]{.tag} $$h_v^{(\ell+1)} = \phi\Big(h_v^{(\ell)},\ \underset{u \in \mathcal{N}(v)}{\mathrm{AGG}}\ \big\{\psi\big(h_v^{(\ell)}, h_u^{(\ell)}\big)\big\}\Big)$$ **message** $\psi$ (computed by the neighbor), **aggregation** $\mathrm{AGG}$ (permutation-invariant: sum, mean, max, attention), **update** $\phi$. One layer = one round of message passing = one convolution = one diffusion step on the graph. The choice of $\mathrm{AGG}$ is not innocent: mean/max lose cardinality ({a, a} and {a} have the same mean and the same max); this is the subject of the GIN theorem (M2, ch. 2).
+[Definition 5.1 — The message passing layer (MPNN, Gilmer et al., 2017)]{.tag}
+$$
+h_v^{(\ell+1)} = \phi\Big(h_v^{(\ell)},\ \underset{u \in \mathcal{N}(v)}{\mathrm{AGG}}\ \big\{\psi\big(h_v^{(\ell)}, h_u^{(\ell)}\big)\big\}\Big)
+$$
+**message** $\psi$ (computed by the neighbor), **aggregation** $\mathrm{AGG}$ (permutation-invariant: sum, mean, max, attention), **update** $\phi$.
+
+One layer = one round of message passing = one convolution = one diffusion step on the graph. The choice of $\mathrm{AGG}$ is not innocent: mean/max lose cardinality ({a, a} and {a} have the same mean and the same max); this is the subject of the GIN theorem (M2, ch. 2).
 :::
 
-::: thm
-[Derivation 5.2 — GCN from spectral convolution (Kipf & Welling, 2017)]{.tag} Start from the Chebyshev filter of Theorem 4.5 truncated at $K = 1$, on the normalized Laplacian $L_{\mathrm{sym}} = I - D^{-1/2} A D^{-1/2}$, whose eigenvalues lie in $[0, 2]$. Approximating $\lambda_{\max} \approx 2$ gives $\tilde L = L_{\mathrm{sym}} - I$, hence $$g_\theta(L)\, x \approx \theta_0\, x + \theta_1 (L_{\mathrm{sym}} - I)\, x = \theta_0\, x - \theta_1\, D^{-1/2} A D^{-1/2}\, x.$$ Keeping a single parameter $\theta = \theta_0 = -\theta_1$ (fewer parameters, less overfitting on small graphs): $$g_\theta(L)\, x \approx \theta\,\big(I + D^{-1/2} A D^{-1/2}\big)\, x.$$ The operator $I + D^{-1/2} A D^{-1/2}$ has its eigenvalues in $[0, 2]$: applied $\ell$ times it can multiply some components by up to $2^\ell$, and deep stacks become numerically unstable. The **renormalization trick** replaces it by $\tilde D^{-1/2} \tilde A \tilde D^{-1/2}$, where $\tilde A = A + I$ adds a self-loop to each node and $\tilde D$ is the degree matrix of $\tilde A$; its eigenvalues lie in $(-1, 1]$. Adding the features $X$, a weight matrix and a non-linearity, we obtain the GCN layer: $$H^{(\ell+1)} = \sigma\Big(\tilde D^{-1/2}\, \tilde A\, \tilde D^{-1/2}\, H^{(\ell)}\, W^{(\ell)}\Big), \qquad H^{(0)} = X,$$ a degree-normalized mean of the transformed representations of the node and of its neighbors; $L$ layers give a receptive field of $L$ hops. Because the gains of the propagator stay in $(-1, 1]$, depth no longer makes the signal explode — but repeated averaging makes it collapse instead: this is the over-smoothing of Theorem 5.3.
+:::: thm
+[Derivation 5.2 — GCN from spectral convolution (Kipf & Welling, 2017)]{.tag} Start from the Chebyshev filter of Theorem 4.5 truncated at $K = 1$, on the normalized Laplacian $L_{\mathrm{sym}} = I - D^{-1/2} A D^{-1/2}$, whose eigenvalues lie in $[0, 2]$.
+
+1.  Approximating $\lambda_{\max} \approx 2$ gives $\tilde L = L_{\mathrm{sym}} - I$, hence
+    $$
+    g_\theta(L)\, x \approx \theta_0\, x + \theta_1 (L_{\mathrm{sym}} - I)\, x = \theta_0\, x - \theta_1\, D^{-1/2} A D^{-1/2}\, x.
+    $$
+2.  Keeping a single parameter $\theta = \theta_0 = -\theta_1$ (fewer parameters, less overfitting on small graphs):
+    $$
+    g_\theta(L)\, x \approx \theta\,\big(I + D^{-1/2} A D^{-1/2}\big)\, x.
+    $$
+3.  The operator $I + D^{-1/2} A D^{-1/2}$ has its eigenvalues in $[0, 2]$: applied $\ell$ times it can multiply some components by up to $2^\ell$, and deep stacks become numerically unstable.
+4.  The **renormalization trick** replaces it by $\tilde D^{-1/2} \tilde A \tilde D^{-1/2}$, where $\tilde A = A + I$ adds a self-loop to each node and $\tilde D$ is the degree matrix of $\tilde A$; its eigenvalues lie in $(-1, 1]$.
+
+Adding the features $X$, a weight matrix and a non-linearity, we obtain the GCN layer:
+
+::: key
+[Key result — the GCN layer]{.tag}
+$$
+H^{(\ell+1)} = \sigma\Big(\tilde D^{-1/2}\, \tilde A\, \tilde D^{-1/2}\, H^{(\ell)}\, W^{(\ell)}\Big), \qquad H^{(0)} = X,
+$$
 :::
+
+a degree-normalized mean of the transformed representations of the node and of its neighbors; $L$ layers give a receptive field of $L$ hops.
+
+Because the gains of the propagator stay in $(-1, 1]$, depth no longer makes the signal explode — but repeated averaging makes it collapse instead: this is the over-smoothing of Theorem 5.3.
+::::
 
 ::: thm
 [GraphSAGE (Hamilton et al., 2017) — algorithm and pseudo-code]{.tag} For each node, aggregate a *sample* of neighbors then concatenate with the current representation:
@@ -841,31 +883,73 @@ for l = 1 .. K :
 output : z_v = h_v^(K)
 ```
 
-The **concatenation** preserves the information specific to the node (otherwise the mean of the neighbors crushes the local signal); the **fixed per-layer sampling** bounds the minibatch (ch. 7); the whole scheme is *inductive*: the weights $W_l$ are re-applied to unseen nodes/graphs. Special cases: AGG = mean ≈ GCN without renormalization; AGG = pool (MLP + max); AGG = LSTM over neighbors *randomly ordered* (the ordering breaks invariance… an accepted approximation; the ordering problem is addressed by GOAT, ch. 11).
+The **concatenation** preserves the information specific to the node (otherwise the mean of the neighbors crushes the local signal); the **fixed per-layer sampling** bounds the minibatch (ch. 7); the whole scheme is *inductive*: the weights $W_l$ are re-applied to unseen nodes/graphs.
+
+Special cases: AGG = mean ≈ GCN without renormalization; AGG = pool (MLP + max); AGG = LSTM over neighbors *randomly ordered* (the ordering breaks invariance… an accepted approximation; the ordering problem is addressed by GOAT, ch. 11).
 :::
 
 ::: thm
-[GAT (Veličković et al., 2018) — equations and complexity]{.tag} Edge weights *learned by attention*: $$e_{uv} = \mathrm{LeakyReLU}\big(a^\top [\,W h_u \| W h_v\,]\big), \qquad \alpha_{uv} = \frac{\exp(e_{uv})}{\sum_{u' \in \mathcal{N}(v)} \exp(e_{u'v})}, \qquad h_v^{(\ell+1)} = \sigma\Big(\sum_{u \in \mathcal{N}(v)} \alpha_{uv}\, W h_u^{(\ell)}\Big)$$ with $T$ parallel attention heads (T projections $W^{(t)}$) concatenated or averaged. Per-layer complexity, with $F$ and $F'$ the input and output dimensions: $\mathcal{O}(|V| F F' + |E| F')$ — *linear* in edges, comparable to GCN, but with weights *tailored to each edge*: useful when the graph is noisy or some relations matter more (suspicious transactions!). Structurally identical to the attention of transformers (Deep Learning module): here the attention mask is *given* by the graph, there it is *computed* — the graph transformers of M2 (ch. 5) close the loop by learning the attention *and* biasing it with structure.
+[GAT (Veličković et al., 2018) — equations and complexity]{.tag} Edge weights *learned by attention*:
+$$
+e_{uv} = \mathrm{LeakyReLU}\big(a^\top [\,W h_u \| W h_v\,]\big), \qquad \alpha_{uv} = \frac{\exp(e_{uv})}{\sum_{u' \in \mathcal{N}(v)} \exp(e_{u'v})}, \qquad h_v^{(\ell+1)} = \sigma\Big(\sum_{u \in \mathcal{N}(v)} \alpha_{uv}\, W h_u^{(\ell)}\Big)
+$$
+with $T$ parallel attention heads (T projections $W^{(t)}$) concatenated or averaged.
+
+Per-layer complexity, with $F$ and $F'$ the input and output dimensions: $\mathcal{O}(|V| F F' + |E| F')$ — *linear* in edges, comparable to GCN, but with weights *tailored to each edge*: useful when the graph is noisy or some relations matter more (suspicious transactions!).
+
+Structurally identical to the attention of transformers (Deep Learning module): here the attention mask is *given* by the graph, there it is *computed* — the graph transformers of M2 (ch. 5) close the loop by learning the attention *and* biasing it with structure.
 :::
 
 ::: note
 [Beyond the homogeneous graph: R-GCN, edge features]{.tag}
 
--   **R-GCN** (Schlichtkrull et al., 2018): *relational* graph (edge types $r$ in $\mathcal{R}$); $h_v^{(\ell+1)} = \sigma\big(W_0 h_v^{(\ell)} + \sum_{r \in \mathcal{R}} \sum_{u \in \mathcal{N}_r(v)} \frac{1}{c_{v,r}} W_r\, h_u^{(\ell)}\big)$. To avoid the parameter explosion ($|\mathcal{R}| \times F \times F'$): *basis* decomposition $W_r = \sum_b a_{rb} V_b$ or *block-diagonal*. Typical use: encoding knowledge graphs for link prediction (ch. 6).
+-   **R-GCN** (Schlichtkrull et al., 2018): *relational* graph (edge types $r$ in $\mathcal{R}$);
+    $$
+    h_v^{(\ell+1)} = \sigma\big(W_0 h_v^{(\ell)} + \sum_{r \in \mathcal{R}} \sum_{u \in \mathcal{N}_r(v)} \frac{1}{c_{v,r}} W_r\, h_u^{(\ell)}\big).
+    $$
+    To avoid the parameter explosion ($|\mathcal{R}| \times F \times F'$): *basis* decomposition $W_r = \sum_b a_{rb} V_b$ or *block-diagonal*. Typical use: encoding knowledge graphs for link prediction (ch. 6).
 -   **Edge features**: (a) line graph (each edge becomes a node); (b) convolution over edges (NNConv): $\psi(h_u, e_{uv})$ instead of $\psi(h_u)$ — the chemical bond carries a type; (c) conditioned attention (GAT can inject $e_{uv}$ into the $e_{uv}$-score).
--   **Hierarchical pooling**: DiffPool (Ying et al., 2018) learns a soft assignment matrix $S^{(\ell)} = \mathrm{softmax}(\mathrm{GNN}_A(H^{(\ell)}))$ and contracts the graph: $H^{(\ell+1)} = S^{(\ell)\top} H^{(\ell)}$, $A^{(\ell+1)} = S^{(\ell)\top} A^{(\ell)} S^{(\ell)}$ — neural coarse-graining, costly but hierarchical; alternatives: sort/TopK pooling, pyramidal readout.
+-   **Hierarchical pooling**: DiffPool (Ying et al., 2018) learns a soft assignment matrix
+    $$
+    S^{(\ell)} = \mathrm{softmax}(\mathrm{GNN}_A(H^{(\ell)}))
+    $$
+    and contracts the graph: $H^{(\ell+1)} = S^{(\ell)\top} H^{(\ell)}$, $A^{(\ell+1)} = S^{(\ell)\top} A^{(\ell)} S^{(\ell)}$ — neural coarse-graining, costly but hierarchical; alternatives: sort/TopK pooling, pyramidal readout.
 :::
 
 :::: thm
-[Theorem 5.3 — Over-smoothing: proof on a regular graph]{.tag} On a connected $d$-regular graph, GCN propagation without weights/non-linearity satisfies $H^{(\ell)} = P^\ell X$ with $P = \frac{A + I}{d + 1}$. Then $$H^{(\ell)} \xrightarrow[\ell \to \infty]{} \frac{\mathbf{1}\mathbf{1}^\top}{n}\, X,$$ the *harmonic solution* (global mean), at geometric rate $\rho^\ell$ with $\rho = \max_{i \geq 2} \frac{|\lambda_i(A) + 1|}{d + 1} < 1$.
+[Theorem 5.3 — Over-smoothing: proof on a regular graph]{.tag} On a connected $d$-regular graph, GCN propagation without weights/non-linearity satisfies $H^{(\ell)} = P^\ell X$ with $P = \frac{A + I}{d + 1}$. Then
+$$
+H^{(\ell)} \xrightarrow[\ell \to \infty]{} \frac{\mathbf{1}\mathbf{1}^\top}{n}\, X,
+$$
+the *harmonic solution* (global mean), at geometric rate $\rho^\ell$ with
+$$
+\rho = \max_{i \geq 2} \frac{|\lambda_i(A) + 1|}{d + 1} < 1.
+$$
 
 ::: proof
-On a $d$-regular graph, $\tilde D = (d+1)I$, hence $\tilde D^{-1/2} \tilde A \tilde D^{-1/2} = (A + I)/(d+1) =: P$. Since $A$ is real symmetric, write $X$ in its eigenbasis: $A = \sum_i \lambda_i u_i u_i^\top$ with $u_1 = \mathbf{1}/\sqrt{n}$, $\lambda_1 = d > \lambda_2 \geq \dots$, and $\lambda_i < d$ for $i \geq 2$ (equality only if there is a distinct connected component). Then $P^\ell = \sum_i \big(\frac{\lambda_i + 1}{d+1}\big)^\ell u_i u_i^\top$; the $i = 1$ term equals exactly $\frac{\mathbf{1}\mathbf{1}^\top}{n}$; all the others have a ratio $\frac{\lambda_i + 1}{d + 1}$ in $\big[\frac{1-d}{d+1}, 1\big)$ (since $-d \leq \lambda_i < d$), hence of absolute value $< 1$, and decay geometrically. All the information of the non-constant components is erased: every node converges to the same mean row vector — the embeddings collapse. [∎]{.qed}
+On a $d$-regular graph, $\tilde D = (d+1)I$, hence $\tilde D^{-1/2} \tilde A \tilde D^{-1/2} = (A + I)/(d+1) =: P$.
+
+Since $A$ is real symmetric, write $X$ in its eigenbasis:
+$$
+A = \sum_i \lambda_i u_i u_i^\top,
+$$
+with $u_1 = \mathbf{1}/\sqrt{n}$, $\lambda_1 = d > \lambda_2 \geq \dots$, and $\lambda_i < d$ for $i \geq 2$ (equality only if there is a distinct connected component). Then
+$$
+P^\ell = \sum_i \big(\frac{\lambda_i + 1}{d+1}\big)^\ell u_i u_i^\top .
+$$
+
+The $i = 1$ term equals exactly $\frac{\mathbf{1}\mathbf{1}^\top}{n}$; all the others have a ratio $\frac{\lambda_i + 1}{d + 1}$ in $\big[\frac{1-d}{d+1}, 1\big)$ (since $-d \leq \lambda_i < d$), hence of absolute value $< 1$, and decay geometrically.
+
+All the information of the non-constant components is erased: every node converges to the same mean row vector — the embeddings collapse. [∎]{.qed}
 :::
 
 With weights and non-linearities, the phenomenon persists (rank collapse; Oono & Suzuki, ICLR 2020): this is a *structural* limit of GCN depth. Remedies:
 
--   **Jumping Knowledge** (Xu et al., 2018): the readout aggregates *all* the depths $h_v = \mathrm{JK}(h_v^{(1)}, \dots, h_v^{(L)})$ (concat / max / LSTM-attention): each node chooses its scale;
+-   **Jumping Knowledge** (Xu et al., 2018): the readout aggregates *all* the depths
+    $$
+    h_v = \mathrm{JK}(h_v^{(1)}, \dots, h_v^{(L)})
+    $$
+    (concat / max / LSTM-attention): each node chooses its scale;
 -   residuals and normalizations (GCNII, APPNP — developed in M2, ch. 3);
 -   in practice, 2-4 layers usually suffice: the useful depth is the range of the statistical dependence of the task.
 
@@ -877,29 +961,87 @@ A second structural limit — *over-squashing* (topological bottlenecks) — is 
 The seventh lecture of the official programme treats heterophily and temporal graphs. GCN-style averaging implicitly assumes *homophily* — linked nodes tend to share their label. Fraud rings (fraudsters link to honest accounts they exploit), dating networks, protein interactions or the "is a student of" relation violate it.
 
 ::: def
-[Definition 5.4 — Homophily ratio]{.tag} For a labeled graph, the **edge homophily** is $h = \frac{|\{(u,v) \in E : y_u = y_v\}|}{|E|} \in [0, 1]$. Citation graphs are strongly homophilous (Cora $h \approx 0.81$, Citeseer $\approx 0.74$); the standard heterophilous benchmarks are far lower (Texas $\approx 0.11$, Wisconsin $\approx 0.21$, Chameleon $\approx 0.23$, Squirrel $\approx 0.22$; Pei et al., 2020; Zhu et al., 2020). A low $h$ is not harmful in itself: what matters is whether the label distribution of a node's neighbors is *informative* about its own label (Ma et al., 2022).
+[Definition 5.4 — Homophily ratio]{.tag} For a labeled graph, the **edge homophily** is
+$$
+h = \frac{|\{(u,v) \in E : y_u = y_v\}|}{|E|} \in [0, 1].
+$$
+
+Citation graphs are strongly homophilous (Cora $h \approx 0.81$, Citeseer $\approx 0.74$). The standard heterophilous benchmarks are far lower (Texas $\approx 0.11$, Wisconsin $\approx 0.21$, Chameleon $\approx 0.23$, Squirrel $\approx 0.22$; Pei et al., 2020; Zhu et al., 2020).
+
+A low $h$ is not harmful in itself: what matters is whether the label distribution of a node's neighbors is *informative* about its own label (Ma et al., 2022).
 :::
 
 ::: prop
-[Proposition 5.5 — Mean aggregation on a perfectly heterophilous graph, computed]{.tag} Take a connected $d$-regular bipartite graph whose two sides are the two classes, with a scalar feature $x_v = +1$ on one side and $-1$ on the other ($h = 0$). One GCN propagation (Theorem 5.3, $P = (A + I)/(d+1)$) gives $$(Px)_v = \frac{x_v + \sum_{u \in \mathcal{N}(v)} x_u}{d + 1} = \frac{1 - d}{d + 1}\, x_v.$$ For $d = 1$ the signal is erased; for $d = 3$ it becomes $-0.5\,x_v$: sign flipped, magnitude halved; with $L$ layers it shrinks as $\big(\frac{d-1}{d+1}\big)^L$. Spectral reading (Definition 0.4): this label signal has $x^\top L x = \sum_{(u,v) \in E}(x_u - x_v)^2 = 4m$, the largest possible value for $\pm 1$ signals — it is a *high-frequency* signal, and GCN propagation is a *low-pass* filter (ch. 4) that attenuates exactly such components. Mixing the node with its neighbors inside one average makes the two cancel; keeping them separate — $h_v = W_1 x_v \,\|\, W_2\, \mathrm{mean}_{u \in \mathcal{N}(v)} x_u$, here $(x_v, -x_v)$ — preserves the information fully.
+[Proposition 5.5 — Mean aggregation on a perfectly heterophilous graph, computed]{.tag} Take a connected $d$-regular bipartite graph whose two sides are the two classes, with a scalar feature $x_v = +1$ on one side and $-1$ on the other ($h = 0$). One GCN propagation (Theorem 5.3, $P = (A + I)/(d+1)$) gives
+$$
+(Px)_v = \frac{x_v + \sum_{u \in \mathcal{N}(v)} x_u}{d + 1} = \frac{1 - d}{d + 1}\, x_v.
+$$
+
+For $d = 1$ the signal is erased; for $d = 3$ it becomes $-0.5\,x_v$: sign flipped, magnitude halved; with $L$ layers it shrinks as $\big(\frac{d-1}{d+1}\big)^L$.
+
+Spectral reading (Definition 0.4): this label signal has
+$$
+x^\top L x = \sum_{(u,v) \in E}(x_u - x_v)^2 = 4m,
+$$
+the largest possible value for $\pm 1$ signals — it is a *high-frequency* signal, and GCN propagation is a *low-pass* filter (ch. 4) that attenuates exactly such components.
+
+Mixing the node with its neighbors inside one average makes the two cancel; keeping them separate,
+$$
+h_v = W_1 x_v \,\|\, W_2\, \mathrm{mean}_{u \in \mathcal{N}(v)} x_u, \quad \text{here } (x_v, -x_v),
+$$
+preserves the information fully.
 :::
 
 ::: note
-[Architectures for heterophily]{.tag} **H2GCN** (Zhu et al., 2020) combines three designs: ego/neighbor separation (as above, and as in GraphSAGE's concatenation), aggregation over 2-hop neighborhoods (in a bipartite graph the same class sits two hops away) and combination of all intermediate layers (as Jumping Knowledge). **GPR-GNN** (Chien et al., 2021) learns the coefficients $\gamma_k$ of a polynomial filter $\sum_k \gamma_k P^k X$; negative coefficients produce *high-pass* filters (Proposition 4.6 makes this a spectral design). **FAGCN** uses signed attention weights, letting a node subtract the messages of dissimilar neighbors. The interaction of heterophily with over-smoothing and over-squashing is developed in M2, ch. 3.
+[Architectures for heterophily]{.tag} **H2GCN** (Zhu et al., 2020) combines three designs: ego/neighbor separation (as above, and as in GraphSAGE's concatenation), aggregation over 2-hop neighborhoods (in a bipartite graph the same class sits two hops away) and combination of all intermediate layers (as Jumping Knowledge).
+
+**GPR-GNN** (Chien et al., 2021) learns the coefficients $\gamma_k$ of a polynomial filter $\sum_k \gamma_k P^k X$; negative coefficients produce *high-pass* filters (Proposition 4.6 makes this a spectral design).
+
+**FAGCN** uses signed attention weights, letting a node subtract the messages of dissimilar neighbors. The interaction of heterophily with over-smoothing and over-squashing is developed in M2, ch. 3.
 :::
 
 ### Temporal graphs
 
 ::: def
-[Definition 5.6 — Discrete- and continuous-time dynamic graphs]{.tag} A **discrete-time dynamic graph** is a sequence of snapshots $G_1, \dots, G_T$ (one per day, per week); a **continuous-time dynamic graph** is a stream of timestamped events $(u, v, t, e_{uv})$ — transactions, messages, citations. Tasks: *temporal link prediction* (will $u$ interact with $v$ at time $t$?), *dynamic node classification* (is this account fraudulent now?), and forecasting node signals on a fixed graph (traffic: spatio-temporal graphs). The causality rule: a prediction at time $t$ may use only events with timestamps $< t$.
+[Definition 5.6 — Discrete- and continuous-time dynamic graphs]{.tag} A **discrete-time dynamic graph** is a sequence of snapshots $G_1, \dots, G_T$ (one per day, per week); a **continuous-time dynamic graph** is a stream of timestamped events $(u, v, t, e_{uv})$ — transactions, messages, citations.
+
+Tasks: *temporal link prediction* (will $u$ interact with $v$ at time $t$?), *dynamic node classification* (is this account fraudulent now?), and forecasting node signals on a fixed graph (traffic: spatio-temporal graphs).
+
+The causality rule: a prediction at time $t$ may use only events with timestamps $< t$.
 :::
 
 ::: thm
-[Models 5.7 — Snapshot models, TGAT and TGN]{.tag} **Snapshot models** run a GNN on each $G_\tau$ and an RNN over time, either on the node embeddings (GCRN) or on the GNN weights themselves (EvolveGCN, Pareja et al., 2020). **TGAT** (Xu et al., 2020) handles continuous time with a GAT-like attention over a node's *past* neighbors, each message concatenated with a functional time encoding of the elapsed time $\Delta t$: $$\Phi(\Delta t) = \big[\cos(\omega_1 \Delta t + b_1), \dots, \cos(\omega_k \Delta t + b_k)\big],$$ with learned frequencies — a random-feature form of a translation-invariant kernel in time (Bochner's theorem). **TGN** (Rossi et al., 2020) adds a *memory* $s_v(t)$ per node, updated at each event involving $v$ by a recurrent cell, $s_v(t) \leftarrow \mathrm{GRU}\big(s_v(t^-),\ \mathrm{msg}(s_v(t^-), s_u(t^-), \Delta t, e_{uv})\big)$; embeddings are computed by temporal attention over recent neighbors and their memories, and an MLP decodes link probabilities. Events are processed in chronological batches, and the memory is updated *after* the batch has been predicted, so that no event informs its own prediction.
+[Models 5.7 — Snapshot models, TGAT and TGN]{.tag} **Snapshot models** run a GNN on each $G_\tau$ and an RNN over time, either on the node embeddings (GCRN) or on the GNN weights themselves (EvolveGCN, Pareja et al., 2020).
+
+**TGAT** (Xu et al., 2020) handles continuous time with a GAT-like attention over a node's *past* neighbors, each message concatenated with a functional time encoding of the elapsed time $\Delta t$:
+$$
+\Phi(\Delta t) = \big[\cos(\omega_1 \Delta t + b_1), \dots, \cos(\omega_k \Delta t + b_k)\big],
+$$
+with learned frequencies — a random-feature form of a translation-invariant kernel in time (Bochner's theorem).
+
+**TGN** (Rossi et al., 2020) adds a *memory* $s_v(t)$ per node, updated at each event involving $v$ by a recurrent cell,
+$$
+s_v(t) \leftarrow \mathrm{GRU}\big(s_v(t^-),\ \mathrm{msg}(s_v(t^-), s_u(t^-), \Delta t, e_{uv})\big);
+$$
+embeddings are computed by temporal attention over recent neighbors and their memories, and an MLP decodes link probabilities.
+
+Events are processed in chronological batches, and the memory is updated *after* the batch has been predicted, so that no event informs its own prediction.
 :::
 
 ::: ex
-[Example 5.8 — Temporal neighborhoods and leakage, computed]{.tag} Events: $(a, b, 1)$, $(b, c, 2)$, $(a, c, 5)$, $(c, d, 7)$. Query at $t = 6$: will $c$ interact with $d$? The admissible history is the first three events. The temporal neighbors of $c$ are $b$ (elapsed $\Delta t = 4$) and $a$ ($\Delta t = 1$), with different time encodings $\Phi(4)$ and $\Phi(1)$, so the attention can favour the recent contact. Node $d$ has no past event: the prediction is *inductive* and rests on its features and on the time encoding only. A static GNN trained on the aggregated graph would contain the edge $(c, d)$ — the very event to be predicted — and report an inflated score; the honest protocol splits events chronologically (train on $t \leq 5$, test on $t > 5$), as in Example 8.1. Memory-based models and temporal benchmarks are developed in M2, ch. 6.
+[Example 5.8 — Temporal neighborhoods and leakage, computed]{.tag} Events:
+$$
+(a, b, 1), \quad (b, c, 2), \quad (a, c, 5), \quad (c, d, 7).
+$$
+Query at $t = 6$: will $c$ interact with $d$?
+
+The admissible history is the first three events. The temporal neighbors of $c$ are $b$ (elapsed $\Delta t = 4$) and $a$ ($\Delta t = 1$).
+
+Their time encodings $\Phi(4)$ and $\Phi(1)$ differ, so the attention can favour the recent contact.
+
+Node $d$ has no past event: the prediction is *inductive* and rests on its features and on the time encoding only.
+
+A static GNN trained on the aggregated graph would contain the edge $(c, d)$ — the very event to be predicted — and report an inflated score; the honest protocol splits events chronologically (train on $t \leq 5$, test on $t > 5$), as in Example 8.1. Memory-based models and temporal benchmarks are developed in M2, ch. 6.
 :::
 
 ```python
@@ -934,12 +1076,38 @@ print(f"Cora test accuracy : {acc:.3f}")   # ~0.81 with this simple setting
 Many graphs are incomplete: a recommender wants the purchases that have not happened yet, a knowledge graph misses true facts. This chapter turns the node representations of ch. 3 and 5 into scores for *pairs* of nodes, and trains them to recover the missing edges.
 
 ::: def
-[Definition 6.1 — Link prediction]{.tag} Predicting the existence (or the type) of a missing edge $(u, v)$: the most widespread task in industry — recommendation ("who will like what?"), completion of knowledge graphs ("does this drug target this protein?"), prediction of future interactions (M2 ch. 6 for the temporal case). Protocol: mask a fraction of the edges (10%), sample as many "negatives" (non-adjacent pairs), score all the pairs, measure AUC / Hits@k.
+[Definition 6.1 — Link prediction]{.tag} Predicting the existence (or the type) of a missing edge $(u, v)$: the most widespread task in industry — recommendation ("who will like what?"), completion of knowledge graphs ("does this drug target this protein?"), prediction of future interactions (M2 ch. 6 for the temporal case).
+
+Protocol: mask a fraction of the edges (10%), sample as many "negatives" (non-adjacent pairs), score all the pairs, measure AUC / Hits@k.
 :::
 
-::: thm
-[GAE / VGAE (Kipf & Welling, 2016) — graph auto-encoders]{.tag} **GAE**: encoder $Z = \mathrm{GCN}(X, A)$; decode by dot product — the reconstruction probability of an edge: $$p(A_{uv} = 1 \mid z_u, z_v) = \sigma(z_u^\top z_v).$$ Training: maximize the likelihood of the observed edges *and* minimize that of the negatives — the cross-entropy of the negative sampling of ch. 3, transposed: $$\mathcal{L} = -\sum_{(u,v) \in E^+} \log \sigma(z_u^\top z_v) \; - \sum_{(u,v') \in E^-} \log \big(1 - \sigma(z_u^\top z_{v'})\big).$$ **VGAE**: variational Gaussian encoder $q(Z \mid X, A) = \prod_i \mathcal{N}(z_i;\ \mu_i, \mathrm{diag}(\sigma_i^2))$ with $\mu = \mathrm{GCN}_\mu(X, A)$, $\log\sigma = \mathrm{GCN}_\sigma(X, A)$, prior $\mathcal{N}(0, I)$; one maximizes the ELBO (Deep Learning module): $$\mathcal{L} = \mathbb{E}_{q}[\log p(A \mid Z)] - \mathrm{KL}\big(q(Z \mid X,A)\,\|\,\mathcal{N}(0, I)\big),$$ reparameterization $z_i = \mu_i + \sigma_i \odot \varepsilon$, $\varepsilon \sim \mathcal{N}(0, I)$. Results: on Cora, AUC $\approx 0.91$ (GAE) and $\approx 0.92$ (VGAE) — the prior regularizes the dot product (cf. the connection with SBM inference, ch. 9).
+:::: thm
+[GAE / VGAE (Kipf & Welling, 2016) — graph auto-encoders]{.tag} **GAE**: encoder $Z = \mathrm{GCN}(X, A)$; decode by dot product — the reconstruction probability of an edge:
+
+::: key
+[Key result — the GAE decoder]{.tag}
+$$
+p(A_{uv} = 1 \mid z_u, z_v) = \sigma(z_u^\top z_v).
+$$
 :::
+
+Training: maximize the likelihood of the observed edges *and* minimize that of the negatives — the cross-entropy of the negative sampling of ch. 3, transposed:
+$$
+\mathcal{L} = -\sum_{(u,v) \in E^+} \log \sigma(z_u^\top z_v) \; - \sum_{(u,v') \in E^-} \log \big(1 - \sigma(z_u^\top z_{v'})\big).
+$$
+
+**VGAE**: variational Gaussian encoder
+$$
+q(Z \mid X, A) = \prod_i \mathcal{N}(z_i;\ \mu_i, \mathrm{diag}(\sigma_i^2))
+$$
+with $\mu = \mathrm{GCN}_\mu(X, A)$, $\log\sigma = \mathrm{GCN}_\sigma(X, A)$, prior $\mathcal{N}(0, I)$; one maximizes the ELBO (Deep Learning module):
+$$
+\mathcal{L} = \mathbb{E}_{q}[\log p(A \mid Z)] - \mathrm{KL}\big(q(Z \mid X,A)\,\|\,\mathcal{N}(0, I)\big),
+$$
+reparameterization $z_i = \mu_i + \sigma_i \odot \varepsilon$, $\varepsilon \sim \mathcal{N}(0, I)$.
+
+Results: on Cora, AUC $\approx 0.91$ (GAE) and $\approx 0.92$ (VGAE) — the prior regularizes the dot product (cf. the connection with SBM inference, ch. 9).
+::::
 
 ::: note
 [Scoring pairs: the choice of the decision function]{.tag}
@@ -972,7 +1140,9 @@ LLGA lesson: at this scale, the architecture matters less than the *system* (sam
 The models of ch. 5 were trained on Cora, which fits in memory; industrial graphs have millions of nodes and billions of edges. This chapter explains why full-batch training breaks at that scale and presents the three standard ways of training on pieces of the graph.
 
 ::: def
-[Why full-batch does not fit]{.tag} The gradient of a GCN layer mobilizes *the whole* graph: activation memory $\mathcal{O}((|V| + |E|) d)$ per layer, not to mention the densification of the deep layers. On ogbn-products (2.4 million nodes, 61.9 million edges), the full-batch does not fit on a GPU; three families of solutions, all grounded on the same observation: the dependence of a node over $L$ layers is limited to its $L$-neighborhood.
+[Why full-batch does not fit]{.tag} The gradient of a GCN layer mobilizes *the whole* graph: activation memory $\mathcal{O}((|V| + |E|) d)$ per layer, not to mention the densification of the deep layers.
+
+On ogbn-products (2.4 million nodes, 61.9 million edges), the full-batch does not fit on a GPU; three families of solutions, all grounded on the same observation: the dependence of a node over $L$ layers is limited to its $L$-neighborhood.
 :::
 
 ::: thm
@@ -986,15 +1156,41 @@ compute h^(1), ..., h^(L) layer by layer, layer l only on the nodes of N_l
 update the parameters with the loss on the outputs of B only
 ```
 
-Subgraph size: $|\mathcal{B}| \times (1 + s_L (1 + s_{L-1}(\dots)))$; with $L = 2$, $s_1 = s_2 = 10$, a batch of 1 node touches at most $1 + 10 + 100 = 111$ nodes — *bounded, independent of $n$*. Two subtleties: (i) the estimator is *unbiased in expectation* for the mean over neighbors, but the variance explodes at the hubs (hence decreasing fanouts); (ii) the nested samplings create redundant computation across batches (the "expansive neighborhood"; PyG's NeighborLoader implements exactly this).
+Subgraph size: $|\mathcal{B}| \times (1 + s_L (1 + s_{L-1}(\dots)))$. With $L = 2$, $s_1 = s_2 = 10$, a batch of 1 node touches at most $1 + 10 + 100 = 111$ nodes — *bounded, independent of $n$*.
+
+Two subtleties: (i) the estimator is *unbiased in expectation* for the mean over neighbors, but the variance explodes at the hubs (hence decreasing fanouts); (ii) the nested samplings create redundant computation across batches (the "expansive neighborhood"; PyG's NeighborLoader implements exactly this).
 :::
 
 ::: thm
-[7.2 — Cluster-GCN (Chiang et al., 2019): partitioning]{.tag} Partition the graph into $k$ clusters (METIS), each batch = one *whole cluster*: GCN training on the induced subgraph costs $\mathcal{O}(|E_c| d + |V_c| d^2)$ and each full epoch costs $\mathcal{O}(|E|)$ — like the full-batch, but in constant memory, and deep GCNs become trainable again. The price: the partition bias — the edges between clusters are invisible during the step. The correction of the paper builds each batch from *several* clusters drawn at random, which restores the edges between the chosen clusters and varies the batches from one epoch to the next; for deep models it also enlarges the diagonal of the normalized adjacency, $\bar A = \tilde A + \lambda\,\mathrm{diag}(\tilde A)$, so that each node keeps weight on its own representation. Even better: link the clusters by a "virtual graph" of clusters — a precursor of the GraphRAG hierarchies (ch. 10).
+[7.2 — Cluster-GCN (Chiang et al., 2019): partitioning]{.tag} Partition the graph into $k$ clusters (METIS), each batch = one *whole cluster*: GCN training on the induced subgraph costs $\mathcal{O}(|E_c| d + |V_c| d^2)$ and each full epoch costs $\mathcal{O}(|E|)$ — like the full-batch, but in constant memory, and deep GCNs become trainable again.
+
+The price: the partition bias — the edges between clusters are invisible during the step.
+
+The correction of the paper builds each batch from *several* clusters drawn at random, which restores the edges between the chosen clusters and varies the batches from one epoch to the next; for deep models it also enlarges the diagonal of the normalized adjacency, $\bar A = \tilde A + \lambda\,\mathrm{diag}(\tilde A)$, so that each node keeps weight on its own representation.
+
+Even better: link the clusters by a "virtual graph" of clusters — a precursor of the GraphRAG hierarchies (ch. 10).
 :::
 
 ::: thm
-[7.3 — GraphSAINT (Zeng et al., 2020): sampling subgraphs, unbiasedly]{.tag} Flip the perspective: first sample a subgraph $\mathcal{G}_s$ (by nodes, by edges, or by random walks), then compute a *corrected* gradient on it. The key is the **normalization by inclusion probabilities**. Let $p_v$ be the probability that the sampler includes node $v$ and $p_{uv}$ the probability that it includes edge $(u, v)$ (both estimated once, by pre-sampling). Inside the subgraph, the message from $u$ to $v$ is divided by $\alpha_{uv} = p_{uv}/p_v$, which makes each aggregation an unbiased estimator of the full-graph aggregation, and the loss is reweighted as $$\mathcal{L}_{\mathrm{batch}} = \sum_{v \in \mathcal{G}_s} \frac{\mathcal{L}_v}{\lambda_v}, \qquad \lambda_v = |V|\, p_v,$$ whose expectation is exactly the mean loss over all the nodes ($\mathbb{E}\big[\sum_{v \in \mathcal{G}_s} \mathcal{L}_v / \lambda_v\big] = \sum_{v \in V} p_v \mathcal{L}_v / (|V| p_v)$) — the paper proves both statements by writing the expectation over the sampling scheme. Hidden benefit: the batches are "dense" (no expansive neighborhood), and walk-based sampling captures the community structure. The general picture: *bias-variance-memory* — neighbor-sampling (high variance, zero bias); cluster-GCN (partition bias, zero variance); GraphSAINT (unbiased by reweighting, variance controlled by RW sampling). These trade-offs are the daily bread of M2, ch. 1 (and of the Emerging ML module for the federated parallel: partitions = clients).
+[7.3 — GraphSAINT (Zeng et al., 2020): sampling subgraphs, unbiasedly]{.tag} Flip the perspective: first sample a subgraph $\mathcal{G}_s$ (by nodes, by edges, or by random walks), then compute a *corrected* gradient on it.
+
+The key is the **normalization by inclusion probabilities**. Let $p_v$ be the probability that the sampler includes node $v$ and $p_{uv}$ the probability that it includes edge $(u, v)$ (both estimated once, by pre-sampling).
+
+Inside the subgraph, the message from $u$ to $v$ is divided by $\alpha_{uv} = p_{uv}/p_v$, which makes each aggregation an unbiased estimator of the full-graph aggregation, and the loss is reweighted as
+$$
+\mathcal{L}_{\mathrm{batch}} = \sum_{v \in \mathcal{G}_s} \frac{\mathcal{L}_v}{\lambda_v}, \qquad \lambda_v = |V|\, p_v,
+$$
+whose expectation is exactly the mean loss over all the nodes:
+$$
+\mathbb{E}\big[\sum_{v \in \mathcal{G}_s} \mathcal{L}_v / \lambda_v\big] = \sum_{v \in V} p_v \mathcal{L}_v / (|V| p_v).
+$$
+The paper proves both statements by writing the expectation over the sampling scheme.
+
+Hidden benefit: the batches are "dense" (no expansive neighborhood), and walk-based sampling captures the community structure.
+
+The general picture: *bias-variance-memory* — neighbor-sampling (high variance, zero bias); cluster-GCN (partition bias, zero variance); GraphSAINT (unbiased by reweighting, variance controlled by RW sampling).
+
+These trade-offs are the daily bread of M2, ch. 1 (and of the Emerging ML module for the federated parallel: partitions = clients).
 :::
 
 ::: note
@@ -1021,17 +1217,29 @@ The previous chapters gave the models; this chapter maps them onto the use cases
 -   **Scale up**: neighborhood minibatching, clustering, sampling (ch. 7), multi-node GPUs (M2, ch. 1); open benchmarks: OGB.
 
 ::: note
-[Architecture choice — quick decision sheet]{.tag} Homogeneous graph, rich features: GCN (baseline); noisy/heterogeneous edges (fraud): GAT / R-GCN; inductive production: GraphSAGE; need to distinguish local structures (cycles): GIN + motif features (M2, ch. 2); long-range dependencies (molecules, QA over KGs): graph transformer (M2, ch. 5). Always: 2-4 layers, skip connections, light dropedge as a first choice.
+[Architecture choice — quick decision sheet]{.tag} 
+
+-   Homogeneous graph, rich features: GCN (baseline);
+-   noisy/heterogeneous edges (fraud): GAT / R-GCN;
+-   inductive production: GraphSAGE;
+-   need to distinguish local structures (cycles): GIN + motif features (M2, ch. 2);
+-   long-range dependencies (molecules, QA over KGs): graph transformer (M2, ch. 5).
+
+Always: 2-4 layers, skip connections, light dropedge as a first choice.
 :::
 
 ::: ex
-[Example 8.1 — Hands-on: evaluating link prediction without leakage]{.tag} Take a graph with 10,000 edges and the task "predict the missing edges". The tempting protocol trains a GAE (ch. 6) on all the edges, then scores 1,000 of them as "test" edges: the encoder has already passed messages *along* those edges, so their endpoints have similar embeddings by construction, and the AUC is optimistic. The honest protocol has three steps.
+[Example 8.1 — Hands-on: evaluating link prediction without leakage]{.tag} Take a graph with 10,000 edges and the task "predict the missing edges". The tempting protocol trains a GAE (ch. 6) on all the edges, then scores 1,000 of them as "test" edges.
+
+The encoder has already passed messages *along* those edges, so their endpoints have similar embeddings by construction, and the AUC is optimistic. The honest protocol has three steps.
 
 1.  **Split before training.** Remove 1,000 test edges (10%) and 500 validation edges (5%) from the graph, and draw as many non-adjacent pairs as negatives for each set.
 2.  **Train on what remains.** The encoder sees only the 8,500 training edges, both as supervision and as the graph along which messages are passed; node features computed from the structure (degrees, PageRank) are computed on this training graph too.
 3.  **Score the held-out pairs.** Report the AUC (or Hits@k) of the test positives against the test negatives, after choosing the hyperparameters on the validation set only.
 
-When the edges carry timestamps (transactions, citations), replace the random split by a *temporal* one — train on the edges before a date, test on those after it — since a random split lets the model see the future. In PyG, `RandomLinkSplit` implements steps 1 and 2; the same discipline applies to node classification, where the test labels must never be used, even through the features of their neighbors.
+When the edges carry timestamps (transactions, citations), replace the random split by a *temporal* one — train on the edges before a date, test on those after it — since a random split lets the model see the future.
+
+In PyG, `RandomLinkSplit` implements steps 1 and 2; the same discipline applies to node classification, where the test labels must never be used, even through the features of their neighbors.
 :::
 
 ### Geometric graphs and applications in biomedicine
@@ -1039,29 +1247,75 @@ When the edges carry timestamps (transactions, citations), replace the random sp
 The eighth lecture of the official programme concerns geometric graphs — graphs whose nodes live in physical space — and their applications in biomedicine, where molecules and proteins are the central objects. The new ingredient is a second symmetry, on top of the permutations of Definition 2.1: moving or rotating a molecule does not change its chemistry.
 
 ::: def
-[Definition 8.2 — Geometric graph and E(3) symmetry]{.tag} A **geometric graph** has node features $h_v$ (atom type, residue) and coordinates $x_v \in \mathbb{R}^3$; its edges are chemical bonds or the pairs closer than a cutoff $r$ (*radius graph*). The Euclidean group $E(3)$ acts by $x \mapsto Qx + t$ with $Q$ orthogonal ($Q^\top Q = I$: rotations and reflections) and $t$ a translation. A model predicting a scalar property (energy, solubility) must be **invariant**: $f(QX + t, H) = f(X, H)$; one predicting vectors (forces) must be **equivariant**: $F(QX + t, H) = Q\,F(X, H)$, and for updated positions $X' \mapsto QX' + t$. Feeding raw coordinates into an ordinary MPNN breaks this symmetry; training with random rotations only enforces it approximately.
+[Definition 8.2 — Geometric graph and E(3) symmetry]{.tag} A **geometric graph** has node features $h_v$ (atom type, residue) and coordinates $x_v \in \mathbb{R}^3$; its edges are chemical bonds or the pairs closer than a cutoff $r$ (*radius graph*).
+
+The Euclidean group $E(3)$ acts by $x \mapsto Qx + t$ with $Q$ orthogonal ($Q^\top Q = I$: rotations and reflections) and $t$ a translation.
+
+A model predicting a scalar property (energy, solubility) must be **invariant**; one predicting vectors (forces) must be **equivariant**:
+$$
+f(QX + t, H) = f(X, H), \qquad F(QX + t, H) = Q\,F(X, H),
+$$
+and for updated positions $X' \mapsto QX' + t$.
+
+Feeding raw coordinates into an ordinary MPNN breaks this symmetry; training with random rotations only enforces it approximately.
 :::
 
 :::: prop
-[Proposition 8.3 — The EGNN layer is E(n)-equivariant (Satorras, Hoogeboom & Welling, 2021)]{.tag} The layer $$m_{uv} = \phi_e\big(h_u, h_v, \|x_u - x_v\|^2, a_{uv}\big), \qquad x_v' = x_v + C \sum_{u \neq v} (x_v - x_u)\, \phi_x(m_{uv}), \qquad h_v' = \phi_h\Big(h_v, \sum_{u \in \mathcal{N}(v)} m_{uv}\Big),$$ with MLPs $\phi_e, \phi_x, \phi_h$ and a constant $C$, maps $(QX + t, H)$ to $(QX' + t, H')$: the features are invariant and the coordinates equivariant.
+[Proposition 8.3 — The EGNN layer is E(n)-equivariant (Satorras, Hoogeboom & Welling, 2021)]{.tag} The layer
+$$
+m_{uv} = \phi_e\big(h_u, h_v, \|x_u - x_v\|^2, a_{uv}\big), \qquad x_v' = x_v + C \sum_{u \neq v} (x_v - x_u)\, \phi_x(m_{uv}), \qquad h_v' = \phi_h\Big(h_v, \sum_{u \in \mathcal{N}(v)} m_{uv}\Big),
+$$
+with MLPs $\phi_e, \phi_x, \phi_h$ and a constant $C$, maps $(QX + t, H)$ to $(QX' + t, H')$: the features are invariant and the coordinates equivariant.
 
 ::: proof
-Distances are invariant: $\|(Qx_u + t) - (Qx_v + t)\|^2 = \|Q(x_u - x_v)\|^2 = \|x_u - x_v\|^2$ since $Q$ is orthogonal. Hence every message $m_{uv}$, and therefore $h_v'$, is unchanged. For the coordinates, the translation cancels in the differences and $Q$ factors out of the linear combination: $(Qx_v + t) + C\sum_u Q(x_v - x_u)\,\phi_x(m_{uv}) = Q\big(x_v + C\sum_u (x_v - x_u)\,\phi_x(m_{uv})\big) + t = Q x_v' + t$. [∎]{.qed}
+Distances are invariant since $Q$ is orthogonal:
+$$
+\|(Qx_u + t) - (Qx_v + t)\|^2 = \|Q(x_u - x_v)\|^2 = \|x_u - x_v\|^2 .
+$$
+Hence every message $m_{uv}$, and therefore $h_v'$, is unchanged.
+
+For the coordinates, the translation cancels in the differences and $Q$ factors out of the linear combination:
+$$
+(Qx_v + t) + C\sum_u Q(x_v - x_u)\,\phi_x(m_{uv}) = Q\big(x_v + C\sum_u (x_v - x_u)\,\phi_x(m_{uv})\big) + t = Q x_v' + t .
+$$
+[∎]{.qed}
 :::
 
 The cost is that of an ordinary MPNN. Invariant models that use only distances (SchNet) or distances and angles (DimeNet), and higher-order equivariant networks built on spherical harmonics (tensor field networks, MACE), trade cost for expressivity — developed in M2, ch. 8.
 ::::
 
 ::: ex
-[Example 8.4 — What a rotation changes, and what it does not]{.tag} A water molecule: O at $(0, 0, 0)$, H$_1$ at $(0.96, 0, 0)$, H$_2$ at $(-0.24, 0.93, 0)$ (Å). Distances: O–H$_1 = 0.96$, O–H$_2 = \sqrt{0.0576 + 0.8649} \approx 0.96$, H$_1$–H$_2 = \sqrt{1.2^2 + 0.93^2} \approx 1.52$; the H–O–H angle is $\arccos\big(\frac{-0.2304}{0.96 \cdot 0.9605}\big) \approx 104.5°$. Rotate by $90°$ about the $z$-axis, $(x, y, z) \mapsto (-y, x, z)$: H$_1 \mapsto (0, 0.96, 0)$, H$_2 \mapsto (-0.93, -0.24, 0)$. Every coordinate changed, yet the three distances (H$_1$–H$_2$: $\sqrt{0.93^2 + 1.2^2} \approx 1.52$) and the angle are identical, so an energy model built on them returns the same value, and an EGNN's predicted positions rotate with the molecule.
+[Example 8.4 — What a rotation changes, and what it does not]{.tag} A water molecule: O at $(0, 0, 0)$, H$_1$ at $(0.96, 0, 0)$, H$_2$ at $(-0.24, 0.93, 0)$ (Å).
+
+-   Distances: O–H$_1 = 0.96$, O–H$_2 = \sqrt{0.0576 + 0.8649} \approx 0.96$, H$_1$–H$_2 = \sqrt{1.2^2 + 0.93^2} \approx 1.52$.
+-   The H–O–H angle is
+    $$
+    \arccos\big(\frac{-0.2304}{0.96 \cdot 0.9605}\big) \approx 104.5° .
+    $$
+-   Rotate by $90°$ about the $z$-axis, $(x, y, z) \mapsto (-y, x, z)$: H$_1 \mapsto (0, 0.96, 0)$, H$_2 \mapsto (-0.93, -0.24, 0)$.
+
+Every coordinate changed, yet the three distances (H$_1$–H$_2$: $\sqrt{0.93^2 + 1.2^2} \approx 1.52$) and the angle are identical, so an energy model built on them returns the same value, and an EGNN's predicted positions rotate with the molecule.
 :::
 
 ::: note
-[Applications in biomedicine]{.tag} **Molecular property prediction**: QM9 (about 134k small molecules, 12 quantum-chemical targets) and ogbg-molhiv (ch. 7) for graph regression and classification. **Machine-learned force fields**: forces are $-\nabla_x E$, automatically equivariant when the energy model $E$ is invariant. **Proteins**: AlphaFold 2's structure module reasons over residue frames with *invariant point attention*; RFdiffusion generates protein backbones by diffusion over residue frames; DiffDock predicts how a drug binds to a protein by diffusion over ligand poses. **Biomedical knowledge graphs**: drug repurposing as link prediction (ch. 6) on heterogeneous graphs linking drugs, genes and diseases (Hetionet); protein–protein interaction networks for node classification. Generation of molecules is treated in ch. 9.
+[Applications in biomedicine]{.tag} 
+
+-   **Molecular property prediction**: QM9 (about 134k small molecules, 12 quantum-chemical targets) and ogbg-molhiv (ch. 7) for graph regression and classification.
+-   **Machine-learned force fields**: forces are $-\nabla_x E$, automatically equivariant when the energy model $E$ is invariant.
+-   **Proteins**: AlphaFold 2's structure module reasons over residue frames with *invariant point attention*; RFdiffusion generates protein backbones by diffusion over residue frames; DiffDock predicts how a drug binds to a protein by diffusion over ligand poses.
+-   **Biomedical knowledge graphs**: drug repurposing as link prediction (ch. 6) on heterogeneous graphs linking drugs, genes and diseases (Hetionet); protein–protein interaction networks for node classification.
+
+Generation of molecules is treated in ch. 9.
 :::
 
 ::: note
-[Benchmarking, challenges and future directions]{.tag} The last lecture of the official programme steps back. **Benchmarking**: results on the small Planetoid splits change with the random split (Shchur et al., 2018), and fair protocols showed that many graph-classification gains vanish against structure-agnostic baselines (Errica et al., 2020); hence standardized suites — Benchmarking GNNs (Dwivedi et al.), OGB (ch. 7), the Long Range Graph Benchmark (Dwivedi et al., 2022) — and leakage-free protocols (Example 8.1). **Open challenges**: expressivity beyond 1-WL (Example 2.6), over-smoothing and over-squashing (Theorem 5.3), heterophily (Definition 5.4), scale (ch. 7), distribution shift between training and deployment graphs, time (Definition 5.6) and geometry (Definition 8.2). **Directions**: graph transformers, pretrained "graph foundation models" that transfer across graphs, and the coupling with LLMs of ch. 10.
+[Benchmarking, challenges and future directions]{.tag} The last lecture of the official programme steps back.
+
+**Benchmarking**: results on the small Planetoid splits change with the random split (Shchur et al., 2018), and fair protocols showed that many graph-classification gains vanish against structure-agnostic baselines (Errica et al., 2020); hence standardized suites — Benchmarking GNNs (Dwivedi et al.), OGB (ch. 7), the Long Range Graph Benchmark (Dwivedi et al., 2022) — and leakage-free protocols (Example 8.1).
+
+**Open challenges**: expressivity beyond 1-WL (Example 2.6), over-smoothing and over-squashing (Theorem 5.3), heterophily (Definition 5.4), scale (ch. 7), distribution shift between training and deployment graphs, time (Definition 5.6) and geometry (Definition 8.2).
+
+**Directions**: graph transformers, pretrained "graph foundation models" that transfer across graphs, and the coupling with LLMs of ch. 10.
 :::
 
 ## 9. Graph generation {#ch9}
@@ -1069,13 +1323,26 @@ The cost is that of an ordinary MPNN. Invariant models that use only distances (
 The previous chapters *analyzed* given graphs; this chapter learns to *produce* new ones — molecules with a target property, synthetic networks for testing — which raises difficulties that images and text do not have.
 
 ::: def
-[Problem]{.tag} Sample $G \sim p_\theta(G)$ where $p$ is learned over a family of graphs (active molecules, road networks…) — possibly *conditioned* on a target property ("generate a molecule with this activity") or on text (text-to-graph). This is the "Generative AI" side of the title of the master. Three difficulties specific to graphs: (i) variable size ($n$ random); (ii) *discrete* outputs (atom types, edge types); (iii) a space quotiented by isomorphism — two permuted adjacencies are the same graph: one needs *exchangeable* models (theory below).
+[Problem]{.tag} Sample $G \sim p_\theta(G)$ where $p$ is learned over a family of graphs (active molecules, road networks…) — possibly *conditioned* on a target property ("generate a molecule with this activity") or on text (text-to-graph). This is the "Generative AI" side of the title of the master.
+
+Three difficulties specific to graphs: (i) variable size ($n$ random); (ii) *discrete* outputs (atom types, edge types); (iii) a space quotiented by isomorphism — two permuted adjacencies are the same graph: one needs *exchangeable* models (theory below).
 :::
 
 ::: thm
-[9.1 — The limiting model: graphons and exchangeability]{.tag} A **graphon** is a measurable function $W : [0,1]^2 \to [0,1]$. Given $W$ and $n$: draw $x_i \sim \mathcal{U}([0,1])$, then each edge $(i, j)$ independently with probability $W(x_i, x_j)$ — a graph $G_n$ on $n$ vertices. Two results justify the object: the Aldous-Hoover theorem states that every infinite *exchangeable* random graph (distribution invariant under permutation of the vertices) is a mixture of such graphon models, and Lovász and Szegedy showed that every convergent sequence of dense graphs has a graphon as its limit for the cut metric (Lovász, *Large Networks and Graph Limits*, 2012). The learning connection:
+[9.1 — The limiting model: graphons and exchangeability]{.tag} A **graphon** is a measurable function $W : [0,1]^2 \to [0,1]$. Given $W$ and $n$:
 
--   **estimation**: estimating $W$ from a large graph = approximating it by a step function constant per block — partition the $n$ vertices into $k$ blocks of sizes $n_b$, set $\hat W = \frac{e_{bb'}}{n_b n_{b'}}$ on the block $(b, b')$ (empirical densities); the partition *is* the problem — and SBM/clustering solves it;
+1.  draw $x_i \sim \mathcal{U}([0,1])$;
+2.  then draw each edge $(i, j)$ independently with probability $W(x_i, x_j)$ — a graph $G_n$ on $n$ vertices.
+
+Two results justify the object. The Aldous-Hoover theorem states that every infinite *exchangeable* random graph (distribution invariant under permutation of the vertices) is a mixture of such graphon models; and Lovász and Szegedy showed that every convergent sequence of dense graphs has a graphon as its limit for the cut metric (Lovász, *Large Networks and Graph Limits*, 2012).
+
+The learning connection:
+
+-   **estimation**: estimating $W$ from a large graph = approximating it by a step function constant per block. Partition the $n$ vertices into $k$ blocks of sizes $n_b$, and set
+    $$
+    \hat W = \frac{e_{bb'}}{n_b n_{b'}} \quad \text{on the block } (b, b')
+    $$
+    (empirical densities); the partition *is* the problem — and SBM/clustering solves it;
 -   **generation**: a learned graph model implicitly targets a $\hat W$ (large molecules: large $n$, structured target distribution);
 -   **theory of deep generative models of graphs**: the exchangeable architectures (invariant to permutations of the nodes) are those that approximate graphons — this is the consistency criterion of the models below.
 :::
@@ -1084,11 +1351,28 @@ The previous chapters *analyzed* given graphs; this chapter learns to *produce* 
 [9.2 — Classical random models: ER and SBM (with the math)]{.tag}
 
 -   **Erdős-Rényi** $G(n, p)$: all the edges iid with probability $p$; degrees $\sim \mathrm{Bin}(n-1, p)$, no community; threshold phenomena (at $\frac{\log n}{n}$) for connectivity — the "null" reference against which to test structure (Refresher Statistics module);
--   **SBM** (Holland et al., 1983): each node has a latent block $z_i \in \{1..k\}$ (uniform), and $$P(A_{ij} = 1 \mid z_i = a, z_j = b) = B_{ab}.$$ Likelihood: $\log P(A \mid z, B) = \sum_{a,b} n_{ab} \log B_{ab} + (n_a n_b - n_{ab}) \log(1 - B_{ab})$ (with $n_{ab}$ = observed edges between blocks $a, b$); inference by maximum of likelihood (EM) or Bayesian (MCMC sampling); detectability: for two symmetric blocks, below the Kesten-Stigum threshold no algorithm recovers the blocks better than chance; spectral methods built on the non-backtracking matrix reach this threshold, whereas the plain Laplacian spectral clustering of ch. 4 degrades on very sparse graphs. Generation: sample $z$ then $A$; DCSBM variant (corrected degrees). The SBM is used *in both directions*: generating realistic synthetic graphs (benefit: total control) and inferring the blocks (statistically grounded clustering, without a resolution limit unlike the modularity of ch. 0); topic modeling by SBM (TopSBM, Gerlach et al., 2018) treats a document-term corpus as a bipartite SBM — the "statistical" generalization of the Graph of Words of ch. 11.
+-   **SBM** (Holland et al., 1983): each node has a latent block $z_i \in \{1..k\}$ (uniform), and
+    $$
+    P(A_{ij} = 1 \mid z_i = a, z_j = b) = B_{ab}.
+    $$
+
+    Likelihood (with $n_{ab}$ = observed edges between blocks $a, b$):
+    $$
+    \log P(A \mid z, B) = \sum_{a,b} n_{ab} \log B_{ab} + (n_a n_b - n_{ab}) \log(1 - B_{ab});
+    $$
+    inference by maximum of likelihood (EM) or Bayesian (MCMC sampling).
+
+    Detectability: for two symmetric blocks, below the Kesten-Stigum threshold no algorithm recovers the blocks better than chance; spectral methods built on the non-backtracking matrix reach this threshold, whereas the plain Laplacian spectral clustering of ch. 4 degrades on very sparse graphs.
+
+    Generation: sample $z$ then $A$; DCSBM variant (corrected degrees).
+
+    The SBM is used *in both directions*: generating realistic synthetic graphs (benefit: total control) and inferring the blocks (statistically grounded clustering, without a resolution limit unlike the modularity of ch. 0); topic modeling by SBM (TopSBM, Gerlach et al., 2018) treats a document-term corpus as a bipartite SBM — the "statistical" generalization of the Graph of Words of ch. 11.
 :::
 
 ::: thm
-[9.3 — Graph VAEs: GraphVAE and NeVAE]{.tag} **GraphVAE** (Simonovsky & Komodakis, 2018): a GNN encoder, decoder *in one block* $\hat A, \hat X, \hat E$ (full adjacency); the mismatch of the outputs to the ground truth requires a *matching matrix* (Hungarian matching) — the node ordering problem is paid for here (cf. GOAT, ch. 11). **NeVAE** (Samanta et al., AAAI 2019): a *granular* VAE designed for chemistry:
+[9.3 — Graph VAEs: GraphVAE and NeVAE]{.tag} **GraphVAE** (Simonovsky & Komodakis, 2018): a GNN encoder, decoder *in one block* $\hat A, \hat X, \hat E$ (full adjacency); the mismatch of the outputs to the ground truth requires a *matching matrix* (Hungarian matching) — the node ordering problem is paid for here (cf. GOAT, ch. 11).
+
+**NeVAE** (Samanta et al., AAAI 2019): a *granular* VAE designed for chemistry:
 
 1.  **sparse encoder**: one embedding per atom (no full adjacency — memory $\mathcal{O}(n)$ instead of $\mathcal{O}(n^2)$), MPNN messages between atoms;
 2.  **sequential decoder constrained by valence**: at each step, a new atom is added and its bonds drawn by probability heads *conditioned on the remaining valence* — a carbon cannot receive 5 bonds; aromaticity is handled by dedicated heads;
@@ -1099,24 +1383,55 @@ Moral: injecting domain knowledge (valence) into the architecture beats the post
 :::
 
 ::: thm
-[9.4 — Autoregressive models: GraphRNN (You et al., 2018)]{.tag} Generating a graph = generating a *sequence*. Order the nodes $1, 2, \dots$ (any order: the model must be robust to this choice — in practice canonical BFS orders); the graph is then the sequence of adjacency rows $S^i = (A_{i1}, \dots, A_{i,i-1}) \in \{0,1\}^{i-1}$. Two levels: $$\text{node level: } h_i = \mathrm{RNN}_{node}(h_{i-1}, s_i), \qquad \text{edge level: } P(S^i \mid h_i) = \prod_{j < i} \mathrm{RNN}_{edge}(s_{ij}),$$ where the state $h_i$ conditions the edge RNN which emits $S^i$ bit by bit (Bernoulli categorical per position); training maximizes the sequential likelihood (teacher forcing). Properties: exchangeability approximated by the use of BFS orders (the prefix is invariant to intra-level permutations); complexity $\mathcal{O}(n)$ decoding steps, $\mathcal{O}(n)$ per step → quadratic — very reasonable for $n \leq 100$. Limits: sensitivity to order (aromatic rings depend on the starting point); conditioning on properties is awkward (hence the models below). This "sequentialize the graph" scheme is exactly that of the LLM on text — the text-to-graph convergence is natural (ch. 10).
+[9.4 — Autoregressive models: GraphRNN (You et al., 2018)]{.tag} Generating a graph = generating a *sequence*. Order the nodes $1, 2, \dots$ (any order: the model must be robust to this choice — in practice canonical BFS orders); the graph is then the sequence of adjacency rows
+$$
+S^i = (A_{i1}, \dots, A_{i,i-1}) \in \{0,1\}^{i-1}.
+$$
+
+Two levels:
+$$
+\text{node level: } h_i = \mathrm{RNN}_{node}(h_{i-1}, s_i), \qquad \text{edge level: } P(S^i \mid h_i) = \prod_{j < i} \mathrm{RNN}_{edge}(s_{ij}),
+$$
+where the state $h_i$ conditions the edge RNN which emits $S^i$ bit by bit (Bernoulli categorical per position); training maximizes the sequential likelihood (teacher forcing).
+
+Properties: exchangeability approximated by the use of BFS orders (the prefix is invariant to intra-level permutations); complexity $\mathcal{O}(n)$ decoding steps, $\mathcal{O}(n)$ per step → quadratic — very reasonable for $n \leq 100$.
+
+Limits: sensitivity to order (aromatic rings depend on the starting point); conditioning on properties is awkward (hence the models below). This "sequentialize the graph" scheme is exactly that of the LLM on text — the text-to-graph convergence is natural (ch. 10).
 :::
 
 ::: thm
-[9.5 — Discrete diffusion: DiGress (Vignac et al., 2023)]{.tag} The molecular state of the art 2023-2026 transposes the diffusion of the Multimodal GenAI module to *categories* (atom types, bond types). Forward process (noising): at each step, each node and edge type is re-drawn $$q(X_t \mid X_{t-1}) = \mathrm{Cat}\big(X_t;\ X_{t-1} Q^X_t\big), \qquad q(E_t \mid E_{t-1}) = \mathrm{Cat}\big(E_t;\ E_{t-1} Q^E_t\big),$$ where $Q^X_t, Q^E_t$ are transition matrices (one row = law of the new type given the old one); after $T$ steps, the stationary law is the marginal of the datasets (distribution of the atoms/bonds). Backward process (denoising): a GNN $\theta_\phi$ (MPNN + attention) predicts $X_0$ and $E_0$ *clean* from $(X_t, E_t)$, then a Bayesian denoising step $q(X_{t-1} \mid X_t, \hat X_0)$ is derived in closed form; *perturbations*: edges are also added/removed during noising (discrete topology). Three winning choices: extra input features recomputed at each step (cycle counts, spectral features, and valency for molecules), which compensate for the limited expressivity of message passing; guaranteed *exchangeability* — the model never sees a node order (unlike GraphRNN); conditioning by graph (inpainting): freeze a skeleton and generate the rest — "target molecule" conditional generation. 3D cousin: EDM/EDT (equivariant positions — M2, ch. 8). The team's **NGG** paper (ch. 11) transposes this recipe *into latent space* to condition on graph features.
+[9.5 — Discrete diffusion: DiGress (Vignac et al., 2023)]{.tag} The molecular state of the art 2023-2026 transposes the diffusion of the Multimodal GenAI module to *categories* (atom types, bond types). Forward process (noising): at each step, each node and edge type is re-drawn
+$$
+q(X_t \mid X_{t-1}) = \mathrm{Cat}\big(X_t;\ X_{t-1} Q^X_t\big), \qquad q(E_t \mid E_{t-1}) = \mathrm{Cat}\big(E_t;\ E_{t-1} Q^E_t\big),
+$$
+where $Q^X_t, Q^E_t$ are transition matrices (one row = law of the new type given the old one); after $T$ steps, the stationary law is the marginal of the datasets (distribution of the atoms/bonds).
+
+Backward process (denoising): a GNN $\theta_\phi$ (MPNN + attention) predicts $X_0$ and $E_0$ *clean* from $(X_t, E_t)$, then a Bayesian denoising step $q(X_{t-1} \mid X_t, \hat X_0)$ is derived in closed form; *perturbations*: edges are also added/removed during noising (discrete topology).
+
+Three winning choices: extra input features recomputed at each step (cycle counts, spectral features, and valency for molecules), which compensate for the limited expressivity of message passing; guaranteed *exchangeability* — the model never sees a node order (unlike GraphRNN); conditioning by graph (inpainting): freeze a skeleton and generate the rest — "target molecule" conditional generation.
+
+3D cousin: EDM/EDT (equivariant positions — M2, ch. 8). The team's **NGG** paper (ch. 11) transposes this recipe *into latent space* to condition on graph features.
 :::
 
 ::: note
 [9.6 — Evaluating generated graphs: distributional fidelity]{.tag} A generator is not graded image by image but *distribution against distribution*:
 
 -   **validity / uniqueness / novelty** (chemistry): % of syntactically valid, distinct molecules, absent from training — a model that memorizes has a novelty of 0;
--   **structural MMDs**: maximum mean discrepancy $\mathrm{MMD}^2 = \big\| \mathbb{E}_{G \sim p}[\phi(G)] - \mathbb{E}_{G \sim q}[\phi(G)] \big\|^2$ with $\phi$ = degree histograms, clustering coefficients, motif/orbit counts (the triangles of ch. 0!) — the remark: these features are exactly what 1-WL does *not* always capture (M2, ch. 2);
+-   **structural MMDs**: maximum mean discrepancy
+    $$
+    \mathrm{MMD}^2 = \big\| \mathbb{E}_{G \sim p}[\phi(G)] - \mathbb{E}_{G \sim q}[\phi(G)] \big\|^2
+    $$
+    with $\phi$ = degree histograms, clustering coefficients, motif/orbit counts (the triangles of ch. 0!) — the remark: these features are exactly what 1-WL does *not* always capture (M2, ch. 2);
 -   **FCD** (Fréchet ChemNet Distance): Fréchet distance between the Gaussians of the ChemNet embeddings of the generated vs real molecules — the exact analogue of the FID of images (Multimodal GenAI module);
 -   **OT distances**: comparing *graphs* without node correspondence = Gromov-Wasserstein optimal transport (Optimal Transport module); the MMDs above are kernel special cases of them.
 :::
 
 ::: note
-[9.7 — Conditional generation: the real industrial product]{.tag} Rank by target property (solubility, docking), condition on text ("an antibiotic against X"), on a skeleton (R-group optimization), on a partial graph (inpainting); three mechanisms: (i) input conditioning (concat of the descriptor — NGG); (ii) gradient guidance through a property predictor during sampling (the classifier guidance of images); (iii) search in latent space (Bayesian optimization — the classic QSAR pipeline). This is where the GNN × LLM encounter is most fertile (ch. 10): the LLM proposes, the GNN evaluates, the loop optimizes.
+[9.7 — Conditional generation: the real industrial product]{.tag} Rank by target property (solubility, docking), condition on text ("an antibiotic against X"), on a skeleton (R-group optimization), on a partial graph (inpainting).
+
+Three mechanisms: (i) input conditioning (concat of the descriptor — NGG); (ii) gradient guidance through a property predictor during sampling (the classifier guidance of images); (iii) search in latent space (Bayesian optimization — the classic QSAR pipeline).
+
+This is where the GNN × LLM encounter is most fertile (ch. 10): the LLM proposes, the GNN evaluates, the loop optimizes.
 :::
 
 ## 10. Graphs × LLMs: GraphRAG and the hybrid {#ch10}
@@ -1169,7 +1484,14 @@ LLGA reading: each stage is an object of the course — clustering (ch. 0), link
 -   **Agents on graphs**: the plan of a multi-agent system *is* a graph (orchestration DAG); "graph engineering" (2026) = programming the topology of the agents — the master loop: *the graph in the model (attention), the graph for the model (RAG), the graph between the models (agents)*.
 
 ::: ex
-[Final lab]{.tag} Build a mini-GraphRAG: 1) extract an entity graph from an enterprise corpus (reports, simulated e-mails) with an LLM; 2) detect the communities (Leiden) and summarize with an LLM; 3) answer relational questions ("who works with whom on X?") by graph traversal vs. by vector RAG vs. by pseudo-code prompting (10.2); 4) compare fidelity, token cost and latency. Deliverable: report + reproducible notebook.
+[Final lab]{.tag} Build a mini-GraphRAG: 
+
+1.  extract an entity graph from an enterprise corpus (reports, simulated e-mails) with an LLM;
+2.  detect the communities (Leiden) and summarize with an LLM;
+3.  answer relational questions ("who works with whom on X?") by graph traversal vs. by vector RAG vs. by pseudo-code prompting (10.2);
+4.  compare fidelity, token cost and latency.
+
+Deliverable: report + reproducible notebook.
 :::
 
 ## 11. Research at DaSciM (Lutzeyer, Vazirgiannis) {#ch11}
@@ -1187,7 +1509,18 @@ Positioning: this is the *symmetric twin* of ch. 3 — DeepWalk applies word2vec
 :::
 
 ::: thm
-[11.2 — Path Neural Networks (Michel, Nikolentzos, Lutzeyer & Vazirgiannis, ICML 2023)]{.tag} **Idea**: the GNN layer of ch. 5 aggregates *walks* of length 1 (the neighbors); paths of length $\ell$ carry more structural information. The **path operator**: for each node $v$, consider the set $\mathcal{P}_v^{(\ell)}$ of *simple* paths of length $\ell$ starting from $v$; each path $p = (v, u_1, \dots, u_\ell)$ is encoded by an RNN (GRU): $$m_p = \mathrm{GRU}\big(h_{u_\ell}^{(\ell)}, \mathrm{GRU}(\dots \mathrm{GRU}(h_{u_1}^{(0)}, h_v^{(0)})\dots)\big), \qquad h_v^{(\ell)} = \mathrm{AGG}\big(\{m_p : p \in \mathcal{P}_v^{(\ell)}\}\big).$$ Three variants depending on $\mathcal{P}_v$: shortest paths (*PathNN-s*), random walks (*PathNN-r*), paths sampled in the neighborhood (*PathNN-n*) — sampling bounds the cost, since the number of simple paths grows exponentially. **Results**: accuracies greater than or equal to the canonical GNNs on the classification benchmarks (nodes and graphs, including ZINC for molecules), with controlled complexity; the expressivity analysis (what the paths see that the walks miss — cycles, distances) is developed in M2, ch. 2 and 9. Positioning in the course: the "natural" generalization of ch. 3 (DeepWalk walks) and of ch. 5 (1-hop neighborhoods).
+[11.2 — Path Neural Networks (Michel, Nikolentzos, Lutzeyer & Vazirgiannis, ICML 2023)]{.tag} **Idea**: the GNN layer of ch. 5 aggregates *walks* of length 1 (the neighbors); paths of length $\ell$ carry more structural information.
+
+The **path operator**: for each node $v$, consider the set $\mathcal{P}_v^{(\ell)}$ of *simple* paths of length $\ell$ starting from $v$; each path $p = (v, u_1, \dots, u_\ell)$ is encoded by an RNN (GRU):
+$$
+m_p = \mathrm{GRU}\big(h_{u_\ell}^{(\ell)}, \mathrm{GRU}(\dots \mathrm{GRU}(h_{u_1}^{(0)}, h_v^{(0)})\dots)\big), \qquad h_v^{(\ell)} = \mathrm{AGG}\big(\{m_p : p \in \mathcal{P}_v^{(\ell)}\}\big).
+$$
+
+Three variants depending on $\mathcal{P}_v$: shortest paths (*PathNN-s*), random walks (*PathNN-r*), paths sampled in the neighborhood (*PathNN-n*) — sampling bounds the cost, since the number of simple paths grows exponentially.
+
+**Results**: accuracies greater than or equal to the canonical GNNs on the classification benchmarks (nodes and graphs, including ZINC for molecules), with controlled complexity; the expressivity analysis (what the paths see that the walks miss — cycles, distances) is developed in M2, ch. 2 and 9.
+
+Positioning in the course: the "natural" generalization of ch. 3 (DeepWalk walks) and of ch. 5 (1-hop neighborhoods).
 :::
 
 ::: thm
@@ -1211,11 +1544,31 @@ These four directions (text↔graph, paths, order, generation/diffusion, LLM) co
 
 ## Exercises {#ex}
 
-1.  **★ Triangles by the trace.** From $\mathrm{tr}(A^3)$, count the triangles of the "two $K_4$s sharing an edge" graph. Generalize: what does $\mathrm{tr}(A^4)$ count? *Solution*: each $K_4$ contains $\binom{4}{3} = 4$ triangles, and no triangle belongs to both (it would need a third common vertex); total 8, hence $\mathrm{tr}(A^3) = 48$. $\mathrm{tr}(A^4)$ counts the closed walks of length 4 (squares, back-and-forths…) — not only the squares; one must subtract the degree contributions (formula with $\sum_v d_v^2$ for the back-and-forths).
+1.  **★ Triangles by the trace.** From $\mathrm{tr}(A^3)$, count the triangles of the "two $K_4$s sharing an edge" graph. Generalize: what does $\mathrm{tr}(A^4)$ count?
 
-2.  **★ node2vec.** Simulate walks with $(p, q) = (1, 1)$, $(0.25, 4)$, $(4, 0.25)$ on the karate club graph (code 3.4); project the embeddings in 2D (t-SNE) and relate $p, q$ to the BFS/DFS strategies. *Expected solution*: $(p,q) = (0.25, 4)$ — strong return, weak exploration → BFS, embeddings grouped by *role* (the two hubs "Mr. Hi" and "Officer" move closer); $(4, 0.25)$ → DFS, clustering by *factions* (homophily), higher NMI for the split task; $(1,1)$ intermediate.
+    *Solution*: each $K_4$ contains $\binom{4}{3} = 4$ triangles, and no triangle belongs to both (it would need a third common vertex); total 8, hence $\mathrm{tr}(A^3) = 48$.
 
-3.  **★ NetMF by hand.** For the triangle $K_3$, compute $M = \log\big(\frac{\mathrm{vol}}{bT}(\sum_{r=1}^T P^r) D^{-1}\big)$ with $T = 2$, $b = 1$, and interpret the signs. *Solution*: the adjacency is $J - I$ ($J$ = all-ones matrix) and every degree is 2, so $P = \frac12 (J - I)$ and, using $J^2 = 3J$, $P^2 = \frac14 (J + I)$; hence $\sum_{r \leq 2} P^r = \frac14 (3J - I)$, with $\frac12$ on the diagonal and $\frac34$ off it. With $\mathrm{vol} = 6$ and $D^{-1} = \frac12 I$: $M = \log\big(\frac{6}{2} \cdot \frac14 (3J - I) \cdot \frac12\big) = \log\big(\frac38 (3J - I)\big)$ entrywise, i.e. $\log\frac98 > 0$ off the diagonal and $\log\frac34 < 0$ on it. Reading: two distinct vertices co-occur in the walks a little more than the degree baseline predicts, a vertex with itself less; all the off-diagonal entries are equal because the triangle has no structure to reveal — DeepWalk on a structureless graph can only reflect the degrees; conclusion: the target matrix *is* the signal.
+    $\mathrm{tr}(A^4)$ counts the closed walks of length 4 (squares, back-and-forths…) — not only the squares; one must subtract the degree contributions (formula with $\sum_v d_v^2$ for the back-and-forths).
+
+2.  **★ node2vec.** Simulate walks with $(p, q) = (1, 1)$, $(0.25, 4)$, $(4, 0.25)$ on the karate club graph (code 3.4); project the embeddings in 2D (t-SNE) and relate $p, q$ to the BFS/DFS strategies.
+
+    *Expected solution*: $(p,q) = (0.25, 4)$ — strong return, weak exploration → BFS, embeddings grouped by *role* (the two hubs "Mr. Hi" and "Officer" move closer); $(4, 0.25)$ → DFS, clustering by *factions* (homophily), higher NMI for the split task; $(1,1)$ intermediate.
+
+3.  **★ NetMF by hand.** For the triangle $K_3$, compute
+    $$
+    M = \log\big(\frac{\mathrm{vol}}{bT}(\sum_{r=1}^T P^r) D^{-1}\big)
+    $$
+    with $T = 2$, $b = 1$, and interpret the signs.
+
+    *Solution*: the adjacency is $J - I$ ($J$ = all-ones matrix) and every degree is 2, so $P = \frac12 (J - I)$ and, using $J^2 = 3J$, $P^2 = \frac14 (J + I)$.
+
+    Hence $\sum_{r \leq 2} P^r = \frac14 (3J - I)$, with $\frac12$ on the diagonal and $\frac34$ off it. With $\mathrm{vol} = 6$ and $D^{-1} = \frac12 I$:
+    $$
+    M = \log\big(\frac{6}{2} \cdot \frac14 (3J - I) \cdot \frac12\big) = \log\big(\frac38 (3J - I)\big) \quad \text{entrywise},
+    $$
+    i.e. $\log\frac98 > 0$ off the diagonal and $\log\frac34 < 0$ on it.
+
+    Reading: two distinct vertices co-occur in the walks a little more than the degree baseline predicts, a vertex with itself less; all the off-diagonal entries are equal because the triangle has no structure to reveal — DeepWalk on a structureless graph can only reflect the degrees; conclusion: the target matrix *is* the signal.
 
 4.  **★ GCN by hand.** Implement a GCN layer *without* PyG (compute $\tilde A$, $\tilde D$), check the equality of the outputs with `GCNConv` at fixed weights, then measure the over-smoothing: mean cosine similarity of the embeddings as a function of the number of layers (1 to 10). *Solution (PyG-guided)*:
 
@@ -1238,7 +1591,13 @@ These four directions (text↔graph, paths, order, generation/diffusion, LLM) co
         print(L, (cos.sum() - 2708) / (2708 * 2707))  # -> converges to 1
     ```
 
-5.  **★ Spectral clustering.** Apply algorithm 4.4 (k = 2) to the "two $K_5$s + bridge" graph, validating the Fiedler vector of example 4.3; compare Ncut and RatioCut for the found partition. *Solution*: signs of the vector $(1,1,1,1,0.70,-0.70,-1,-1,-1,-1)$ → exact partition; $\mathrm{cut} = 1$, RatioCut $= \frac{1}{5} + \frac{1}{5} = 0.4$; Ncut $= \frac{1}{21} + \frac{1}{21} \approx 0.095$ (each side has volume $4 \times 4 + 5 = 21$); a cut isolating a single node removes at least 4 edges, hence a RatioCut of at least $\frac{4}{1} + \frac{4}{9} \approx 4.4$ — the weighting by size does the job.
+5.  **★ Spectral clustering.** Apply algorithm 4.4 (k = 2) to the "two $K_5$s + bridge" graph, validating the Fiedler vector of example 4.3; compare Ncut and RatioCut for the found partition.
+
+    *Solution*: signs of the vector $(1,1,1,1,0.70,-0.70,-1,-1,-1,-1)$ → exact partition.
+
+    $\mathrm{cut} = 1$, RatioCut $= \frac{1}{5} + \frac{1}{5} = 0.4$; Ncut $= \frac{1}{21} + \frac{1}{21} \approx 0.095$ (each side has volume $4 \times 4 + 5 = 21$).
+
+    A cut isolating a single node removes at least 4 edges, hence a RatioCut of at least $\frac{4}{1} + \frac{4}{9} \approx 4.4$ — the weighting by size does the job.
 
 6.  **★ Link prediction.** On Cora: mask 10% of the edges, encode with a GAE (ch. 6), score the pairs by $\sigma(z_u^\top z_v)$; evaluate the AUC against sampled negatives; compare GAE vs VGAE vs DeepWalk embeddings (ch. 3). *Solution (PyG-guided)*:
 
@@ -1271,9 +1630,25 @@ These four directions (text↔graph, paths, order, generation/diffusion, LLM) co
 
     Expected: AUC $\approx 0.90$–0.92.
 
-7.  **★★ Laplacian.** Show $x^\top L x = \sum_{(u,v) \in E}(x_u - x_v)^2$, then that $\lambda_2 > 0 \iff$ connected. Compute the spectrum of the path and of the cycle. *Solution (sketch)*: expand $x^\top D x - x^\top A x = \sum_v d_v x_v^2 - 2\sum_{(u,v)} x_u x_v$ and group by edges; $\lambda_2 = 0$ is equivalent to the existence of a non-zero $x \perp \mathbf{1}$ constant per component (the multiplicity computation of Definition 0.4), hence $\lambda_2 > 0$ $\iff$ a single component. Path: $2(1 - \cos\frac{k\pi}{n})$; cycle: $2(1 - \cos\frac{2k\pi}{n})$.
+7.  **★★ Laplacian.** Show $x^\top L x = \sum_{(u,v) \in E}(x_u - x_v)^2$, then that $\lambda_2 > 0 \iff$ connected. Compute the spectrum of the path and of the cycle.
 
-8.  **★★ Permutation equivariance.** Check that the GCN layer satisfies $f(PX, PAP^\top) = P f(X, A)$ and interpret; show that a classic dense layer (MLP over concatenated features) does not satisfy it. *Solution (sketch)*: $\tilde D_{PAP^\top} = P \tilde D P^\top$ (the degrees follow the permutation), hence $\tilde D_{PAP^\top}^{-1/2} (P\tilde A P^\top) \tilde D_{PAP^\top}^{-1/2} P X = P \tilde D^{-1/2} \tilde A \tilde D^{-1/2} X$; a dense MLP over the concatenation $[x_1 \| \dots \| x_n]$ applies *different* weights to each position — permuting the nodes changes the output other than through $P$.
+    *Solution (sketch)*: expand
+    $$
+    x^\top D x - x^\top A x = \sum_v d_v x_v^2 - 2\sum_{(u,v)} x_u x_v
+    $$
+    and group by edges.
+
+    $\lambda_2 = 0$ is equivalent to the existence of a non-zero $x \perp \mathbf{1}$ constant per component (the multiplicity computation of Definition 0.4), hence $\lambda_2 > 0$ $\iff$ a single component.
+
+    Path: $2(1 - \cos\frac{k\pi}{n})$; cycle: $2(1 - \cos\frac{2k\pi}{n})$.
+
+8.  **★★ Permutation equivariance.** Check that the GCN layer satisfies $f(PX, PAP^\top) = P f(X, A)$ and interpret; show that a classic dense layer (MLP over concatenated features) does not satisfy it.
+
+    *Solution (sketch)*: $\tilde D_{PAP^\top} = P \tilde D P^\top$ (the degrees follow the permutation), hence
+    $$
+    \tilde D_{PAP^\top}^{-1/2} (P\tilde A P^\top) \tilde D_{PAP^\top}^{-1/2} P X = P \tilde D^{-1/2} \tilde A \tilde D^{-1/2} X;
+    $$
+    a dense MLP over the concatenation $[x_1 \| \dots \| x_n]$ applies *different* weights to each position — permuting the nodes changes the output other than through $P$.
 
 9.  **★★ GAT.** Show that the memory complexity of the $T$-head attention is $\mathcal{O}(T |E| F')$, and that with self-loops GCN is obtained as a special case of uniform attention. How does GAT handle the irregular graphs that GCN normalizes poorly?
 
@@ -1283,7 +1658,11 @@ These four directions (text↔graph, paths, order, generation/diffusion, LLM) co
 
 12. **★★ WL kernel and its blind spot.** (a) Run two iterations of Algorithm 2.5 on the kite of Example 0.10 and on the 5-cycle, starting from constant labels, and compute the normalized kernel between them. (b) Show that two disjoint triangles and the 6-cycle receive identical WL feature vectors at every iteration, and name a graph statistic of Definition 0.9 that tells them apart. *Solution (b)*: both graphs are 2-regular, so every node keeps the same label at every iteration; the number of triangles ($\mathrm{tr}(A^3)/6 = 2$ versus $0$) or the transitivity ($1$ versus $0$) separates them.
 
-13. **★★ Heterophily and time.** (a) For the bipartite example of Proposition 5.5 with $d = 4$, compute the output after one and two GCN propagations, then with ego/neighbor separation. (b) For the event stream of Example 5.8 extended by $(b, d, 8)$, list the temporal neighbors of $d$ admissible for a query at $t = 9$, with their elapsed times. *Solution*: (a) $-0.6\,x_v$, then $0.36\,x_v$; with separation the pair $(x_v, -x_v)$ is kept intact. (b) $c$ ($\Delta t = 2$) and $b$ ($\Delta t = 1$).
+13. **★★ Heterophily and time.** (a) For the bipartite example of Proposition 5.5 with $d = 4$, compute the output after one and two GCN propagations, then with ego/neighbor separation. (b) For the event stream of Example 5.8 extended by $(b, d, 8)$, list the temporal neighbors of $d$ admissible for a query at $t = 9$, with their elapsed times.
+
+    *Solution*: (a) $-0.6\,x_v$, then $0.36\,x_v$; with separation the pair $(x_v, -x_v)$ is kept intact.
+
+    \(b\) $c$ ($\Delta t = 2$) and $b$ ($\Delta t = 1$).
 
 14. **★★ Equivariance check.** Implement one EGNN layer (Proposition 8.3) in NumPy with random small MLPs, apply it to a random 3D point cloud, then to the same cloud rotated by a random orthogonal matrix and translated; verify numerically that the features are unchanged and the coordinates transformed, and that a layer fed raw coordinates as features fails the test.
 
