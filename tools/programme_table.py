@@ -99,12 +99,12 @@ def module_row(slug: str) -> str:
     volume, ours, self_h = "—", "—", "—"
     if len(plan) == 2:
         p = plan[1].split("\n### ", 1)[0]
-        tot = re.search(r"\*\*(\d+(?:\.\d+)?) h (in class|of guided self-study)( \(assumed\))?", p)
+        tot = re.search(r"\*\*(\d+(?:\.\d+)?) h (in class|of guided self-study)(?: \((assumed|announced)\))?", p)
         rows = len(re.findall(r"^\|\s*\d+\s*\|", p, re.M))
         if tot:
             hours = tot.group(1)
             if tot.group(2) == "in class":
-                volume = f"{hours} h" + (" (assumed)" if tot.group(3) else "")
+                volume = f"{hours} h" + (f" ({tot.group(3)})" if tot.group(3) else "")
                 ours = f"{rows} sessions"
             else:
                 volume = "— (self-study)"
