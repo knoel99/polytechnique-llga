@@ -110,7 +110,7 @@ format:
 -   [7. Self-supervision I: contrast (SimCLR and its lineage)](#ch7)
 -   [8. Self-supervision II: masking (MAE, BEiT, DINOv2)](#ch8)
 -   [9. Training at scale: recipes and scaling laws](#ch9)
--   [10. Multimodal and generative: cross-references](#ch10)
+-   [10. Beyond recognition: neural fields, inference, sampling and physics](#ch10)
 -   [11. Course research notes (Kalogeiton, Lutzeyer, Zhu)](#ch11)
 -   [Exercises](#ex)
 -   [References](#refs)
@@ -385,6 +385,50 @@ Touvron et al. (2021) obtain competitive ViTs on ImageNet-1k **alone** (1.3 M im
 
 To curb the quadratic growth of attention with the number of patches, the **Swin Transformer** (Liu et al., ICCV 2021): (i) attention computed within local **windows** of $M \times M$ patches (cost linear in the number of windows); (ii) each subsequent layer **shifts** the windows by $M/2$ — cross-window connections arise from the shift; (iii) **progressive patch merging** like a convolutional encoder — Swin serves as a dense backbone (detection, segmentation) where ViT was 1 token = 1 class. ViT (global, data-dependent, quadratic) and Swin (hierarchical, local, linear) embody the two poles that all subsequent architectures negotiate.
 
+### 4.4. Symmetry in deep learning representations
+
+The three architectures of this chapter differ above all in the symmetries they build in. A convolution commutes with translations; attention, as shown below, commutes with *permutations* of its tokens, which is why ViT must learn the geometry of the image from its positional embeddings. Symmetry also lives on the weight side: many different parameter vectors compute the same function, and any comparison of learned representations must account for it.
+
+::: def
+[Definition 4.3 — Equivariance and invariance]{.tag} Let a group $G$ act on inputs by $x \mapsto g \cdot x$ and on outputs by $y \mapsto g \star y$. A map $f$ is **$G$-equivariant** if $f(g \cdot x) = g \star f(x)$ for all $g$ and $x$, and **$G$-invariant** if $f(g \cdot x) = f(x)$. Convolutions are equivariant to translations (up to borders), graph neural networks and self-attention without positions to permutations of the nodes or tokens, group-equivariant CNNs to rotations; a global pooling turns an equivariant feature map into an invariant prediction.
+:::
+
+:::: prop
+[Proposition 4.4 — Self-attention without positions is permutation-equivariant (proved)]{.tag} Let $X \in \mathbb{R}^{n \times d}$ hold $n$ tokens, $\mathrm{SA}(X) = \mathrm{softmax}\big(XW_Q (XW_K)^\top/\sqrt{d_k}\big)\,XW_V$ with the softmax applied row by row, and let $P$ be an $n \times n$ permutation matrix. Then $\mathrm{SA}(PX) = P\,\mathrm{SA}(X)$. The MLP and the LayerNorm act token by token and are equivariant too, so a ViT without positional embeddings sees its image as an unordered *bag of patches*.
+
+::: proof
+With $Q = XW_Q$, $K = XW_K$, $V = XW_V$, replacing $X$ by $PX$ replaces $Q, K, V$ by $PQ, PK, PV$, and the score matrix $QK^\top$ by $PQK^\top P^\top$: its rows and columns are permuted in the same way. A row-wise softmax commutes with permuting the rows, and permuting the entries inside each row permutes the softmax outputs in the same way, so $\mathrm{softmax}(PSP^\top) = P\,\mathrm{softmax}(S)\,P^\top$. Hence $\mathrm{SA}(PX) = P\,\mathrm{softmax}(S)\,P^\top P V = P\,\mathrm{SA}(X)$, since $P^\top P = I$. [∎]{.qed}
+:::
+::::
+
+::: ex
+[Example 4.5 — Weight-space symmetries, and comparing representations]{.tag} A one-hidden-layer ReLU network $f(x) = W_2\,\mathrm{ReLU}(W_1 x)$ of width $h$ computes exactly the same function with the weights $(PW_1, W_2P^\top)$ for any $h \times h$ permutation $P$ (the hidden units are relabelled), and with $(DW_1, W_2D^{-1})$ for any diagonal $D$ with positive entries, because $\mathrm{ReLU}(dz) = d\,\mathrm{ReLU}(z)$ for $d > 0$. A width of $h = 1\,000$ thus gives $1000! \approx 10^{2568}$ equivalent labelings of the same network. Two consequences for research practice: neurons of two independently trained networks cannot be compared index by index, so representations are compared with similarity indices that are invariant to such transformations — linear CKA is invariant to orthogonal transformations and isotropic scaling of the features (Kornblith et al. 2019); and averaging the weights of two models only makes sense after aligning their hidden units (Ainsworth et al., "Git Re-Basin", 2023). Building the right input symmetry into an architecture — the subject of J. Lutzeyer's graph work (ch. 11.2) — is the other side of the same question.
+:::
+
+### 4.5. Robustness in deep learning
+
+An accuracy measured on an i.i.d. test split says nothing about two failures that matter in deployment: small worst-case perturbations of the input, and natural shifts of the input distribution. Robustness claims about architectures — "transformers are more robust than CNNs" — are a favourite place for the protocol flaws of chapter 1.
+
+::: def
+[Definition 4.6 — Threat model, adversarial and robust accuracy]{.tag} A **threat model** fixes the allowed perturbations, typically $\|\delta\|_\infty \leq \epsilon$ with $\epsilon = 4/255$ or $8/255$ on images. The **fast gradient sign method** (FGSM, Goodfellow et al. 2015) takes the single step $\delta = \epsilon\,\mathrm{sign}\big(\nabla_x\ell(h_\theta(x), y)\big)$; **projected gradient descent** (PGD, Madry et al. 2018) iterates $\delta \leftarrow \Pi_{\|\delta\|_\infty \leq \epsilon}\big(\delta + \alpha\,\mathrm{sign}\,\nabla_\delta\ell(h_\theta(x + \delta), y)\big)$. **Robust accuracy** is the accuracy under the strongest attack tried; **adversarial training** minimizes $\mathbb{E}\max_{\|\delta\| \leq \epsilon}\ell(h_\theta(x + \delta), y)$, the inner maximum being approximated by PGD.
+:::
+
+:::: prop
+[Proposition 4.7 — A certificate from the margin and the Lipschitz constant (proved)]{.tag} Let $z(x) \in \mathbb{R}^K$ be the logits, $L$-Lipschitz in $\ell_2$ (each logit difference is then $\sqrt{2}L$-Lipschitz), and let $m(x) = z_y(x) - \max_{k \neq y} z_k(x) > 0$ be the margin of the correct class $y$. Every perturbation with $\|\delta\|_2 < m(x)/(\sqrt{2}L)$ leaves the prediction unchanged.
+
+::: proof
+For $k \neq y$, the map $u \mapsto z_y(u) - z_k(u)$ is the composition of $z$ with the linear form $e_y - e_k$, of norm $\sqrt 2$, so it is $\sqrt{2}L$-Lipschitz. Hence $z_y(x + \delta) - z_k(x + \delta) \geq z_y(x) - z_k(x) - \sqrt{2}L\|\delta\|_2 \geq m(x) - \sqrt{2}L\|\delta\|_2 > 0$: class $y$ stays the largest logit. [∎]{.qed}
+:::
+::::
+
+::: ex
+[Example 4.8 — Why tiny perturbations suffice in high dimension]{.tag} For a linear logit difference $w^\top x$, the $\ell_\infty$ perturbation $\delta = -\epsilon\,\mathrm{sign}(w)$ lowers it by exactly $\epsilon\|w\|_1$. For a $224 \times 224 \times 3$ input ($d = 150\,528$) with weights of typical size $|w_i| \approx 10^{-3}$ and $\epsilon = 1/255$, the shift is $150\,528 \times 10^{-3}/255 \approx 0.59$ — a change of one grey level per pixel moves the score by more than half a unit, because $d$ small contributions add up coherently. In $\ell_2$ the same perturbation has norm $\epsilon\sqrt{d} \approx 1.5$, while proposition 4.7 only certifies radii of order $m/L$: with the loose product-of-norms bound on $L$ for a deep network, the certified radius is usually far below this, which is why certified and empirical robustness are reported separately.
+:::
+
+::: note
+[Reading robustness papers with the chapter 1 grid]{.tag} (1) **Attack strength**: a defence evaluated only with FGSM, or with PGD at few steps, often breaks under a stronger or adaptive attack; standardized suites such as AutoAttack (Croce & Hein 2020) are the minimum. (2) **Natural shifts**: corruptions (ImageNet-C, Hendrycks & Dietterich 2019), renditions, new test sets collected the same way (ImageNet-V2) measure out-of-distribution robustness, which adversarial accuracy does not predict. (3) **Equal recipes**: Bai et al. (NeurIPS 2021) found that once CNNs are trained with transformer-style recipes, they are about as robust as transformers to adversarial attacks, while transformers keep an advantage on several out-of-distribution benchmarks — the DeiT and ConvNeXt lesson again (sections 4.2 and ch. 5).
+:::
+
 ## 5. Modern convnets: the ConvNeXt lesson {#ch5}
 
 After a decade of "transformers win everywhere", the **ConvNeXt** paper (Liu et al., CVPR 2022) asks the reverse question: *what are modernized convnets worth under an equal training recipe?* Method: start from a ResNet and align it **step by step** with the ViT choices — each step is ablated and measured:
@@ -577,9 +621,77 @@ The practical problem: the scaling law applies to losses, but every model size r
 [Note — Reading a recipe]{.tag} A serious training paper publishes: the exact configuration (lr, schedule, wd, batch, precision), seeds and variances, the FLOPs budget, hardware and duration, and the ablation justifying every ingredient. It is this level of detail that enables replication — the subject of the next chapter.
 :::
 
-## 10. Multimodal and generative: cross-references {#ch10}
+## 10. Beyond recognition: neural fields, inference, sampling and physics {#ch10}
 
-This chapter consolidates the bridges (the detail lives in the corresponding modules):
+The previous chapters trained networks to recognize. The second half of the official programme turns to networks that *represent* signals and scenes, that are *inverted* to explain observations, that *sample*, and that meet *physics*. This chapter gives the founding objects of each theme, with one worked example each; the instructors' own research on them is in chapter 11, and section 10.6 points to the modules where they are developed.
+
+### 10.1. Neural fields
+
+::: def
+[Definition 10.1 — Neural field]{.tag} A **neural field** is a network $f_\theta\colon \mathbb{R}^k \to \mathbb{R}^m$ that maps *coordinates* to *values*: pixel position to colour ($k = 2$, $m = 3$), 3D point to signed distance to a surface ($k = 3$, $m = 1$), 3D point and viewing direction to density and colour (NeRF). The signal is stored in the weights rather than on a grid: the representation is continuous, can be queried at any resolution, and is differentiable with respect to both the coordinates and the parameters. Fitting a field to one signal minimizes $\sum_j \|f_\theta(x_j) - s_j\|^2$ over samples $(x_j, s_j)$ of that signal.
+:::
+
+A plain MLP on raw coordinates learns the low frequencies of a signal first and fits fine detail very slowly (the *spectral bias* of networks). Two remedies are standard: map the coordinates through sinusoids before the MLP (**Fourier features**, Tancik et al. 2020; the positional encoding of NeRF, Mildenhall et al. 2020), or use sine activations throughout (SIREN, Sitzmann et al. 2020).
+
+::: ex
+[Example 10.2 — The NeRF positional encoding, counted]{.tag} NeRF encodes each coordinate $p \in [-1, 1]$ as $\gamma(p) = \big(\sin(2^0\pi p), \cos(2^0\pi p), \dots, \sin(2^{L-1}\pi p), \cos(2^{L-1}\pi p)\big)$ with $L = 10$ for positions. The highest band $\sin(2^9\pi p)$ has period $2/2^9 = 1/256$, so the encoded input can vary at the scale of about $1/512$ of the unit interval, the detail of a $1\,000$-pixel image across the scene. A 3D point becomes $3 + 3 \times 2 \times 10 = 63$ numbers (the raw coordinates are kept). The image of a ray is then produced by the volume rendering sum $\hat C = \sum_i T_i\,(1 - e^{-\sigma_i\delta_i})\,c_i$ with $T_i = \exp(-\sum_{j<i}\sigma_j\delta_j)$, where $(\sigma_i, c_i)$ are the density and colour predicted at the samples along the ray and $\delta_i$ their spacing — a differentiable function of $\theta$, which is what makes the next section possible. The Image Synthesis module (ch. 10) derives this formula from the physics of light transport.
+:::
+
+### 10.2. Differentiability in deep learning and analysis-by-synthesis
+
+**Analysis-by-synthesis** explains an observation $y$ by searching for the parameters $z$ of a generative process $R$ (a renderer, a simulator, a decoder) that reproduce it: $\min_z \|R(z) - y\|^2 + \lambda\,\Omega(z)$. When $R$ is differentiable, this is solved by gradient descent through $R$: fitting a NeRF to photographs (ch. 10.1) is analysis-by-synthesis with $z = \theta$; recovering the pose, shape or lighting of an object by differentiable rendering is another instance. The difficulty is that many useful operations are not differentiable, or have zero gradient almost everywhere.
+
+::: prop
+[Proposition 10.3 — Hard decisions have no useful gradient; relaxations restore one]{.tag} Let a pixel be covered by a shape whose edge sits at signed distance $t$ from the pixel centre, with coverage $c(t) = \mathbb{1}[t > 0]$. Then $c'(t) = 0$ for every $t \neq 0$: gradient descent on the edge position receives no signal, whatever the image error. The smoothed coverage $c_s(t) = 1/(1 + e^{-t/s})$ has derivative $c_s'(0) = 1/(4s)$ and non-zero derivatives everywhere, at the price of a bias of order $s$; this is the principle of soft rasterizers (Liu et al. 2019). The same reasoning applies to $\arg\max$ (replaced by a softmax at temperature $s$) and to discrete sampling (replaced by the Gumbel-softmax relaxation). The **straight-through estimator** keeps the hard operation in the forward pass and uses the gradient of a smooth surrogate in the backward pass.
+:::
+
+::: ex
+[Example 10.4 — Two gradient estimators for an expectation]{.tag} When the quantity to optimize is an expectation $J(\mu) = \mathbb{E}_{z \sim \mathcal{N}(\mu, 1)}[g(z)]$ — a stochastic renderer, a sampled latent — there are two unbiased estimators of $J'(\mu)$. **Reparameterization**: write $z = \mu + \varepsilon$ with $\varepsilon \sim \mathcal{N}(0, 1)$ and differentiate inside, $g'(\mu + \varepsilon)$; it needs $g$ differentiable. **Score function** (REINFORCE): $g(z)\,\partial_\mu\log p_\mu(z) = g(z)(z - \mu)$; it only needs to evaluate $g$. For $g(z) = z^2$, $J(\mu) = \mu^2 + 1$ and $J'(\mu) = 2\mu$. Both estimators have mean $2\mu$: $\mathbb{E}[2(\mu + \varepsilon)] = 2\mu$, and $\mathbb{E}[(\mu + \varepsilon)^2\varepsilon] = \mathbb{E}[\mu^2\varepsilon + 2\mu\varepsilon^2 + \varepsilon^3] = 2\mu$. At $\mu = 1$ their variances are $4$ for the reparameterized one and $\mathbb{E}[(1 + \varepsilon)^4\varepsilon^2] - 4 = 1 + 18 + 15 - 4 = 30$ for the score function: when the process is differentiable, differentiating through it is far more sample-efficient.
+:::
+
+### 10.3. Amortized inference
+
+Analysis-by-synthesis solves one optimization problem per observation. When the same kind of inference is needed for millions of observations, it pays to *learn* the map from observation to answer once, and then answer with a single forward pass: this is **amortized inference**.
+
+::: def
+[Definition 10.5 — Amortized inference and the amortization gap]{.tag} For a latent-variable model $p(x, z)$, per-instance variational inference fits, for each $x$, the distribution $q_x^\star$ that maximizes the ELBO of $x$ within a family $\mathcal{Q}$. Amortized inference trains one encoder $x \mapsto q_{\phi(x)} \in \mathcal{Q}$ on the whole dataset, as in the VAE. The gap $\log p(x) - \mathrm{ELBO}(q_{\phi(x)})$ splits into an **approximation gap** $\log p(x) - \mathrm{ELBO}(q_x^\star)$, due to the family $\mathcal{Q}$, and an **amortization gap** $\mathrm{ELBO}(q_x^\star) - \mathrm{ELBO}(q_{\phi(x)}) \geq 0$, due to sharing one encoder across all $x$ (Cremer, Li & Duvenaud 2018). Beyond VAEs, the same idea gives neural posterior estimation for simulators in science and feed-forward 3D reconstruction, which predicts a scene in one pass instead of fitting a field per scene.
+:::
+
+::: ex
+[Example 10.6 — A linear Gaussian model, where amortization is exact]{.tag} Let $z \sim \mathcal{N}(0, 1)$ and $x = az + \eta$ with $\eta \sim \mathcal{N}(0, s^2)$. The posterior is Gaussian: its precision is $1 + a^2/s^2$, so its variance is $v = s^2/(a^2 + s^2)$, and its mean is $v \cdot ax/s^2 = \frac{a}{a^2 + s^2}\,x$. For $a = 2$, $s = 1$: $p(z \mid x) = \mathcal{N}(0.4x, 0.2)$. A linear encoder $\mu_\phi(x) = \phi x$ with constant variance contains the exact posterior for every $x$ ($\phi = 0.4$, variance $0.2$), so the amortization gap is zero once it is trained: one multiplication replaces one optimization per observation. With a non-linear decoder, the optimal posterior parameters are a complicated function of $x$, the encoder only approximates it, and the gap becomes positive — which motivates *semi-amortized* schemes that refine the encoder's output with a few per-instance gradient steps (Kim et al. 2018).
+:::
+
+### 10.4. Rethinking the role of sampling in modern deep learning
+
+Sampling enters deep learning at three levels, and each has become a design choice rather than a default: which *training data* are sampled (mini-batches, hard negatives in contrastive learning, curated corpora such as LVD-142M in ch. 8.2); how a generative model is *sampled* (temperature, guidance, number of diffusion steps); and how many samples are drawn and selected at *test time*. The first level has a clean optimization answer.
+
+:::: prop
+[Proposition 10.7 — Importance sampling of training examples (proved)]{.tag} Let $F = \frac1n\sum_{i=1}^{n} f_i$. Drawing an index $i$ with probability $q_i > 0$ and using $g = \nabla f_i/(nq_i)$ gives an unbiased gradient, $\mathbb{E}[g] = \nabla F$, whose second moment $\mathbb{E}\|g\|^2 = \frac{1}{n^2}\sum_i \|\nabla f_i\|^2/q_i$ is minimized by $q_i \propto \|\nabla f_i\|$, with minimum $\big(\frac1n\sum_i\|\nabla f_i\|\big)^2$.
+
+::: proof
+$\mathbb{E}[g] = \sum_i q_i\,\nabla f_i/(nq_i) = \nabla F$, and $\mathbb{E}\|g\|^2 = \sum_i q_i\|\nabla f_i\|^2/(n^2q_i^2)$. By Cauchy–Schwarz, $\big(\sum_i\|\nabla f_i\|\big)^2 = \big(\sum_i \frac{\|\nabla f_i\|}{\sqrt{q_i}}\sqrt{q_i}\big)^2 \leq \sum_i\frac{\|\nabla f_i\|^2}{q_i}\sum_i q_i$, and $\sum_i q_i = 1$; equality holds when $\sqrt{q_i}$ is proportional to $\|\nabla f_i\|/\sqrt{q_i}$, i.e. $q_i \propto \|\nabla f_i\|$. [∎]{.qed}
+:::
+::::
+
+::: ex
+[Example 10.8 — Sampling in data and in generation]{.tag} *Data.* Two examples with scalar gradients $1$ and $9$, so $\nabla F = 5$. Uniform sampling ($q_i = \tfrac12$, so $nq_i = 1$) gives the values $1$ and $9$, of variance $\tfrac12(1 - 5)^2 + \tfrac12(9 - 5)^2 = 16$; sampling with $q = (0.1, 0.9)$ gives $1/(2 \times 0.1) = 5$ and $9/(2 \times 0.9) = 5$, of variance $0$. Gradient norms are unknown before computing them, so practical schemes use cheap proxies (the loss, a stale norm) and must reweight to stay unbiased (Katharopoulos & Fleuret 2018). *Generation.* For a diffusion model (Multimodal GenAI module), **classifier-free guidance** samples with $\tilde\varepsilon = (1 + w)\,\varepsilon_\theta(x_t, c) - w\,\varepsilon_\theta(x_t, \varnothing)$ (Ho & Salimans 2022): $w > 0$ trades diversity for fidelity to the condition $c$, so the distribution actually sampled is no longer the learned one. The deterministic **DDIM** sampler (Song, Meng & Ermon 2021) reuses the same trained network with $10$ to $50$ steps instead of $1\,000$, $x_{t-1} = \sqrt{\bar\alpha_{t-1}}\,\hat x_0 + \sqrt{1 - \bar\alpha_{t-1}}\,\varepsilon_\theta(x_t, t)$ with $\hat x_0 = \big(x_t - \sqrt{1 - \bar\alpha_t}\,\varepsilon_\theta(x_t, t)\big)/\sqrt{\bar\alpha_t}$: the sampler, not only the model, decides the cost and the quality.
+:::
+
+### 10.5. Deep learning and physics
+
+Physics and deep learning meet in both directions. Networks are used to *solve* physical problems: emulators trained on simulations (weather models such as GraphCast or FourCastNet produce global forecasts in seconds), and physics-informed networks that are trained to satisfy an equation. And physics supplies *ideas* to deep learning: diffusion models come from non-equilibrium thermodynamics (Sohl-Dickstein et al. 2015) and sample with Langevin-type dynamics; conservation laws and symmetries become equivariances (section 4.4).
+
+::: def
+[Definition 10.9 — Physics-informed neural network (Raissi, Perdikaris & Karniadakis 2019)]{.tag} To solve a differential equation $\mathcal{N}[u] = 0$ on a domain, with boundary or initial condition $\mathcal{B}[u] = 0$, a network $u_\theta$ is trained on the loss $$\mathcal{L}(\theta) = \frac{1}{N_r}\sum_{j}\big|\mathcal{N}[u_\theta](t_j)\big|^2 + \frac{\lambda}{N_b}\sum_{j}\big|\mathcal{B}[u_\theta](t_j^b)\big|^2 \;\big(+\ \text{a data misfit when measurements exist}\big),$$ where the derivatives in $\mathcal{N}[u_\theta]$ are computed exactly by automatic differentiation with respect to the input coordinates, at collocation points $t_j$ that need no labels. With measurements, unknown physical coefficients can be fitted at the same time (an inverse problem, analysis-by-synthesis again).
+:::
+
+::: ex
+[Example 10.10 — The residual identifies the solution]{.tag} Take the decay equation $u' + ku = 0$ on $[0, 1]$ with $u(0) = 1$, whose solution is $e^{-kt}$, and, to see the mechanism, the one-parameter family $u_a(t) = e^{-at}$, which satisfies the initial condition for every $a$. The residual is $u_a' + ku_a = (k - a)e^{-at}$, so the physics loss $\frac{1}{N_r}\sum_j (k - a)^2e^{-2at_j}$ is zero if and only if $a = k$: the equation alone, with no labelled data, singles out the solution. A real PINN replaces $u_a$ by an MLP; the loss is then non-convex and can be hard to optimize, notably for stiff or high-frequency solutions, which is the main practical limitation of the method. Machine-learning forecasts of the El Niño–Southern Oscillation by diffusion models (Y. Zhu, ch. 11.3) illustrate the other route, where a generative model learns the dynamics from data and produces ensembles of plausible futures.
+:::
+
+### 10.6. Cross-references to the other modules
+
+The detail of the generative and multimodal themes lives in the corresponding modules:
 
 -   **CLIP and vision-language alignment**: image-text NT-Xent (ch. 7), zero-shot, the FLIP/SigLIP family — **Multimodal GenAI module, chapter 5**;
 -   **diffusion**: DDPM, score matching, LDM — **Multimodal GenAI module, chapters 3–4**; *discrete* and cross-conditional diffusion is a research area of the team (Ye Zhu, ch. 11);
