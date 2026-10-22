@@ -104,9 +104,9 @@ format:
 -   [1. Object detection: the two paradigms](#ch1)
 -   [2. Evaluation (mAP) and modern detectors](#ch2)
 -   [3. Segmentation: semantic, instance, panoptic, SAM](#ch3)
--   [4. Multi-object tracking](#ch4)
--   [5. Applied 3D vision: stereo and LiDAR](#ch5)
--   [6. Data, benchmarks and annotation](#ch6)
+-   [4. Data, benchmarks and annotation](#ch4)
+-   [5. Multi-object tracking](#ch5)
+-   [6. Applied 3D vision: stereo and LiDAR](#ch6)
 -   [7. Industrial case studies](#ch7)
 -   [8. Deployment: ONNX, quantization, edge](#ch8)
 -   [9. Ethics, robustness and limits](#ch9)
@@ -164,13 +164,34 @@ Module of period 2 of M1 (36 h, 4.5 ECTS), **mandatory according to the MSc&T b
 -   **Object detection: the two paradigms** — one-stage and two-stage detectors, and their speed-accuracy trade-offs.
 -   **Evaluation (mAP) and modern detectors** — measuring honestly first, then the panorama of recent architectures.
 -   **Segmentation: semantic, instance, panoptic, SAM** — the three granularities of segmentation and the era of foundation models.
+-   **Data, benchmarks and annotation** — building the dataset and the protocol before chasing the model.
 -   **Multi-object tracking** — following targets across a video, identities included.
 -   **Applied 3D vision: stereo and LiDAR** — recovering depth for embedded applications.
--   **Data, benchmarks and annotation** — building the dataset and the protocol before chasing the model.
 -   **Industrial case studies** — real deployments, with their constraints and lessons learned.
 -   **Deployment: ONNX, quantization, edge** — fitting a model into an embedded compute budget.
 -   **Ethics, robustness and limits** — biases, attacks and failure cases: what a deployed system must own up to.
 -   **Exercises** and **References** — systematic training and sources to go further.
+
+### Session plan {#sessions}
+
+**36 h in class = 12 sessions of 3 h.** The volume is the 36 h announced for this module by the MSc&T brochure — an announced volume, with no SynapseS sheet yet (the module has no catalogue code of its own); no session-by-session programme is published, so the split below is our proposal for covering these notes in that time. Level 1 = foundations (reviews, definitions, first worked examples), 2 = core methods and systems; the level never goes down from one session to the next.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Review: convolution, CNNs, bounding boxes and IoU | Ex. 1 |
+| 2 | 3 h | 1 | ch. 1.1–1.2 Two-stage and single-stage detectors, anchors, focal loss | Ex. 4 |
+| 3 | 3 h | 2 | ch. 1.3 Non-maximum suppression; ch. 2.1 Precision, recall, AP and mAP | Ex. 2, 3 |
+| 4 | 3 h | 2 | ch. 2.2–2.4 Anchor-free detectors, DETR, the YOLO ecosystem | lab: fine-tune a small detector and compute its mAP |
+| 5 | 3 h | 2 | ch. 3 Segmentation: FCN, U-Net, DeepLab, Mask R-CNN, panoptic quality, SAM | Ex. 7 |
+| 6 | 3 h | 2 | ch. 4 Data, benchmarks and annotation; evaluation pitfalls | Ex. 11 |
+| 7 | 3 h | 2 | ch. 5 Multi-object tracking: SORT and the Kalman filter, DeepSORT, ByteTrack, MOTA and IDF1 | Ex. 5 |
+| 8 | 3 h | 2 | ch. 6.1–6.2 Pinhole model, stereo and depth from disparity | Ex. 6 |
+| 9 | 3 h | 2 | ch. 6.3–6.4 LiDAR point clouds, PointNet, fusion in bird's eye view | Ex. 9 |
+| 10 | 3 h | 2 | ch. 7 Industrial case studies: inspection, driving, medical imaging | Example 7.1; start the project (Ex. 12) |
+| 11 | 3 h | 2 | ch. 8 Deployment: ONNX export, INT8 quantization, compression, latency budgets | Ex. 8, 10 |
+| 12 | 3 h | 2 | ch. 9 Ethics, robustness and limits | project presentations (Ex. 12) |
+
+**Self-study, outside the 36 h**: none — every chapter is covered in class; the project (Ex. 12) is the personal work expected alongside.
 
 ### How to study this module
 
@@ -187,13 +208,15 @@ Module of period 2 of M1 (36 h, 4.5 ECTS), **mandatory according to the MSc&T b
 
 ## 0. Review: convolution, CNNs, boxes {#ch0}
 
+Every task of this module — detecting, segmenting, tracking — outputs regions of an image and must compare them with annotated regions. This chapter recalls the deep-learning background assumed and defines the one tool used everywhere afterwards: the bounding box and its overlap measure, the IoU.
+
 :::: recap
 ::: recap-title
 L3 review — what is assumed known
 :::
 
 -   **Digital image**: an $H \times W$ grid of pixels with $C$ channels (3 in RGB), a tensor $x \in \mathbb{R}^{C \times H \times W}$; grayscale, resolution, sampling (cf. Signal Processing module, chapter 2).
--   **2D convolution**: $(I \* k)(u, v) = \sum_{i,j} I(u-i, v-j)\,k(i, j)$; properties (commutativity, association with the product), Sobel / low-pass counterparts, correlation vs convolution (cf. Signal Processing module, chapter 3).
+-   **2D convolution**: $(I * k)(u, v) = \sum_{i,j} I(u-i, v-j)\,k(i, j)$; properties (commutativity, association with the product), Sobel / low-pass counterparts, correlation vs convolution (cf. Signal Processing module, chapter 3).
 -   **Convolutional networks**: receptive fields, weight sharing, pooling, the ResNet architecture (residual connections) — cf. Deep Learning module, chapter 4; attention and transformers — cf. Deep Learning module, chapter 6.
 -   **Supervised learning**: gradient descent, SGD/Adam, overfitting, regularization, transfer learning and fine-tuning — cf. Deep Learning module, chapters 3 and 8; cross-validation, ROC curves — cf. the Machine Learning module.
 ::::
@@ -201,14 +224,14 @@ L3 review — what is assumed known
 The P1 course "Image Analysis and Computer Vision" (CSC_51073_EP) laid the foundations: filtering, local features, projective geometry, reconstruction. The present module takes the **systems and applications** orientation: we build the complete pipeline of a vision product — from annotated data to a model deployed on constrained hardware — and study the building blocks industry actually uses (detectors, segmenters, trackers, 3D sensors, inference runtimes).
 
 ::: def
-[Definition 0.1 — Bounding box and IoU]{.tag} A **bounding box** is an axis-aligned rectangle $b = (x_1, y_1, x_2, y_2)$ with $x_1 < x_2$, $y_1 < y_2$, encoding the top-left and bottom-right corners. For two boxes $a$ and $b$, let $A(a)$ denote the area of the rectangle. The **intersection-over-union** is $$\mathrm{IoU}(a, b) \;=\; \frac{\|a \cap b\|}{\|a \cup b\|} \;=\; \frac{\|a \cap b\|}{A(a) + A(b) - \|a \cap b\|},$$ where $\|\cdot\|$ denotes area. The intersection box has corners $(\max(x_1^a, x_1^b), \max(y_1^a, y_1^b))$ and $(\min(x_2^a, x_2^b), \min(y_2^a, y_2^b))$ if these coordinates are consistent, otherwise the intersection is empty and $\mathrm{IoU} = 0$.
+[Definition 0.1 — Bounding box and IoU]{.tag} A **bounding box** is an axis-aligned rectangle $b = (x_1, y_1, x_2, y_2)$ with $x_1 < x_2$, $y_1 < y_2$, encoding the top-left and bottom-right corners. For two boxes $a$ and $b$, let $A(a)$ denote the area of the rectangle. The **intersection-over-union** is $$\mathrm{IoU}(a, b) \;=\; \frac{|a \cap b|}{|a \cup b|} \;=\; \frac{|a \cap b|}{A(a) + A(b) - |a \cap b|},$$ where $|\cdot|$ denotes area. The intersection box has corners $(\max(x_1^a, x_1^b), \max(y_1^a, y_1^b))$ and $(\min(x_2^a, x_2^b), \min(y_2^a, y_2^b))$ if these coordinates are consistent, otherwise the intersection is empty and $\mathrm{IoU} = 0$.
 :::
 
 :::: prop
 [Proposition 0.2 — Properties of IoU]{.tag} For all axis-aligned boxes $a, b$: (i) $\mathrm{IoU}(a,b) \in [0, 1]$; (ii) $\mathrm{IoU}(a,b) = \mathrm{IoU}(b,a)$; (iii) $\mathrm{IoU}(a,b) = 1$ if and only if $a = b$ (up to equality of pixel sets); (iv) $\mathrm{IoU}(a,b) = 0$ if and only if the interiors of the two rectangles are disjoint.
 
 ::: proof
-\(i\) The intersection area is a rectangle area, positive and bounded by each of the areas, so $0 \leq \|a \cap b\| \leq \min(A(a), A(b)) \leq \|a \cup b\|$. (ii) The intersection and union operations are symmetric. (iii) If $\mathrm{IoU} = 1$ then $\|a \cap b\| = \|a \cup b\|$, so $\|a \setminus b\| = \|b \setminus a\| = 0$ and the rectangles coincide; the converse is immediate. (iv) If the intersection is empty, the numerator is zero; conversely a non-empty intersection rectangle has strictly positive area, hence $\mathrm{IoU} > 0$. [∎]{.qed}
+\(i\) The intersection area is a rectangle area, positive and bounded by each of the areas, so $0 \leq |a \cap b| \leq \min(A(a), A(b)) \leq |a \cup b|$. (ii) The intersection and union operations are symmetric. (iii) If $\mathrm{IoU} = 1$ then $|a \cap b| = |a \cup b|$, so $|a \setminus b| = |b \setminus a| = 0$ and the rectangles coincide; the converse is immediate. (iv) If the intersection is empty, the numerator is zero; conversely a non-empty intersection rectangle has strictly positive area, hence $\mathrm{IoU} > 0$. [∎]{.qed}
 :::
 ::::
 
@@ -222,7 +245,7 @@ The P1 course "Image Analysis and Computer Vision" (CSC_51073_EP) laid the found
 
 ## 1. Object detection: the two paradigms {#ch1}
 
-Concrete scene: an embedded detector that misses small objects for lack of multi-scale. This chapter sets the detection task.
+Concrete scene: an embedded detector misses small objects because it looks at a single scale. This chapter defines the detection task — finding an unknown number of objects and their boxes — and the two families of networks that solve it.
 
 ::: note
 [What breaks]{.tag} mAP alone without latency cost; too aggressive NMS; dataset without night / weather domain.
@@ -246,10 +269,10 @@ Concrete scene: an embedded detector that misses small objects for lack of multi
 :::
 
 :::: prop
-[Proposition 1.3 — Why the logarithm for sizes]{.tag} The logarithmic parameterization makes the regression **scale invariant**: the same offset $t_w$ corresponds to the same size ratio. An error $\|t_w\| = \varepsilon$ means $w = w_a e^{\pm\varepsilon}$, i.e. a constant relative error rate; with a linear parameterization, the same absolute error would be negligible for a truck (600 px) and fatal for a distant pedestrian (10 px).
+[Proposition 1.3 — Why the logarithm for sizes]{.tag} The logarithmic parameterization makes the regression **scale invariant**: the same offset $t_w$ corresponds to the same size ratio. An error $|t_w| = \varepsilon$ means $w = w_a e^{\pm\varepsilon}$, i.e. a constant relative error rate; with a linear parameterization, the same absolute error would be negligible for a truck (600 px) and fatal for a distant pedestrian (10 px).
 
 ::: proof
-With $t_w = \log(w / w_a)$, we have $w = w_a e^{t_w}$, so the relative error equals $\|e^{t_w} - 1\| \approx \|t_w\|$ at first order — independent of $w_a$. With a direct parameterization $\tilde t_w = w - w_a$, the relative error $\|\tilde t_w\| / w_a$ depends on $w_a$; fixing a homogeneous noise scale for all object sizes would require weighting by size class, and the loss would be dominated by large objects. [∎]{.qed}
+With $t_w = \log(w / w_a)$, we have $w = w_a e^{t_w}$, so the relative error equals $|e^{t_w} - 1| \approx |t_w|$ at first order — independent of $w_a$. With a direct parameterization $\tilde t_w = w - w_a$, the relative error $|\tilde t_w| / w_a$ depends on $w_a$; fixing a homogeneous noise scale for all object sizes would require weighting by size class, and the loss would be dominated by large objects. [∎]{.qed}
 :::
 ::::
 
@@ -262,10 +285,10 @@ With $t_w = \log(w / w_a)$, we have $w = w_a e^{t_w}$, so the relative error equ
 -   **RetinaNet** (2017): introduced the **focal loss** to correct the foreground/background imbalance (hundreds of thousands of easy anchors against a few objects), reconciling single-stage and two-stage accuracy.
 
 ::: def
-[Definition 1.4 — Focal loss]{.tag} For per-anchor binary classification with logit $z$, predicted probability $p = \sigma(z)$ and label $y \in \{0, 1\}$: $$\mathrm{FL}(p) \;=\; -\alpha\,(1 - p_t)^{\gamma}\,\log(p_t), \qquad p_t = y\,p + (1 - y)(1 - p),$$ with balancing factor $\alpha \in [0,1]$ and **focusing** $\gamma > 0$ (typically $\gamma = 2$). When $\gamma = 0$ and $\alpha = 0.5$, one recovers cross-entropy.
+[Definition 1.4 — Focal loss]{.tag} For per-anchor binary classification with logit $z$, predicted probability $p = \sigma(z)$ and label $y \in \{0, 1\}$: $$\mathrm{FL}(p) \;=\; -\alpha\,(1 - p_t)^{\gamma}\,\log(p_t), \qquad p_t = y\,p + (1 - y)(1 - p),$$ with balancing factor $\alpha \in [0,1]$ and **focusing** $\gamma > 0$ (typically $\gamma = 2$). When $\gamma = 0$ and $\alpha = 1$, one recovers the cross-entropy.
 :::
 
-The effect of the factor $(1 - p_t)^{\gamma}$ is to **divide the contribution of easy examples**: a background anchor classified at $p_t = 0.9$ has its loss reduced by a factor $0.1^2 = 0.01$; the rare hard examples (small $p_t$) keep an almost intact gradient. The gradient becomes $\frac{\partial \mathrm{FL}}{\partial z} = -\alpha\,(1-p_t)^{\gamma}\big(\gamma\, p_t \log p_t + 1 - p_t\big)\,\frac{\partial p_t}{\partial z}$: the magnitude concentrates on the decision boundary.
+The effect of the factor $(1 - p_t)^{\gamma}$ is to **divide the contribution of easy examples**: a background anchor classified at $p_t = 0.9$ has its loss reduced by a factor $0.1^2 = 0.01$; the rare hard examples (small $p_t$) keep an almost intact gradient. For a positive anchor ($y = 1$, so $p_t = p$ and $\partial p_t / \partial z = p_t(1 - p_t)$), the gradient is $\frac{\partial \mathrm{FL}}{\partial z} = -\alpha\,(1-p_t)^{\gamma}\big(1 - p_t - \gamma\, p_t \log p_t\big)$, which reduces to the cross-entropy gradient $-(1 - p_t)$ for $\gamma = 0$, $\alpha = 1$: the extra factor $(1-p_t)^\gamma$ makes it vanish on well-classified anchors, so the magnitude concentrates on the hard ones.
 
   Criterion             Two-stage (Faster R-CNN + FPN)          Single-stage (YOLO/SSD/RetinaNet)
   --------------------- --------------------------------------- ---------------------------------------------
@@ -312,10 +335,12 @@ def nms(boxes, scores, tau=0.5):
 
 ## 2. Evaluation (mAP) and modern detectors {#ch2}
 
+Two detectors can only be compared with a single number that accounts for misses, false alarms, localization quality and score ranking at once. This chapter builds that number, the mAP, by hand, then reviews the detectors that improved it since 2017 — without anchors, without NMS, and the industrial YOLO line.
+
 ### 2.1. Precision, recall and AP — computed on an example
 
 ::: def
-[Definition 2.1 — Precision, recall, AP and mAP]{.tag} For a given class, a detection is a **true positive** (TP) if $\mathrm{IoU}(\text{prediction}, \text{ground truth}) \geq \tau$ (*and* if that ground truth is not already matched); otherwise it is a false positive (FP); an undetected ground truth is a false negative (FN). Then $$\text{precision} = \frac{TP}{TP + FP}, \qquad \text{recall} = \frac{TP}{TP + FN} = \frac{TP}{\|\text{ground truths}\|}.$$ The **average precision** (AP) is the area under the precision-recall curve obtained by sweeping the score threshold; the COCO **mAP** averages the APs over 80 classes and over 10 IoU thresholds $\tau \in \{0.5,\, 0.55,\, \dots,\, 0.95\}$ — denoted $\mathrm{mAP}@[0.5{:}0.95]$.
+[Definition 2.1 — Precision, recall, AP and mAP]{.tag} For a given class, a detection is a **true positive** (TP) if $\mathrm{IoU}(\text{prediction}, \text{ground truth}) \geq \tau$ (*and* if that ground truth is not already matched); otherwise it is a false positive (FP); an undetected ground truth is a false negative (FN). Then $$\text{precision} = \frac{TP}{TP + FP}, \qquad \text{recall} = \frac{TP}{TP + FN} = \frac{TP}{|\text{ground truths}|}.$$ The **average precision** (AP) is the area under the precision-recall curve obtained by sweeping the score threshold; the COCO **mAP** averages the APs over 80 classes and over 10 IoU thresholds $\tau \in \{0.5,\, 0.55,\, \dots,\, 0.95\}$ — denoted $\mathrm{mAP}@[0.5{:}0.95]$.
 :::
 
 ::: ex
@@ -363,6 +388,8 @@ The important point for the engineer: these versions are less scientific revolut
 
 ## 3. Segmentation: semantic, instance, panoptic, SAM {#ch3}
 
+A box is a coarse answer when the application needs the exact outline of an object — a tumor, a road, a defect. Segmentation assigns a label to every pixel; this chapter distinguishes its three variants, the architectures and metrics of each, and the promptable foundation model SAM.
+
 ### 3.1. Three granularities
 
   Task       Output                           Question answered                      Examples
@@ -378,7 +405,7 @@ The important point for the engineer: these versions are less scientific revolut
 -   **DeepLab** (v1→v3+): **dilated** (atrous) convolutions: a $3 \times 3$ kernel with dilation $d$ sees a neighborhood of size $2d+1$, enlarging the receptive field without losing resolution; the ASPP module (Atrous Spatial Pyramid Pooling) combines several dilations in parallel to capture several scales; v3+ adds a light decoder.
 
 ::: ex
-[Example 3.1 — Dice and IoU of masks]{.tag} For a predicted binary mask $p$ and a ground truth $g$ (sets of pixels), the IoU is $\|p \cap g\| / \|p \cup g\|$ and the **Dice** $2\|p \cap g\| / (\|p\| + \|g\|)$. With $\|p\| = 1200$, $\|g\| = 1000$ and $\|p \cap g\| = 900$: IoU $= 900/1300 \approx 0.69$ and Dice $= 1800/2200 \approx 0.82$. One checks the identity $\mathrm{Dice} = 2\,\mathrm{IoU} / (1 + \mathrm{IoU})$: $2 \times 0.692 / 1.692 = 0.818$ — the two metrics are interchangeable as a ranking, but Dice looks "kinder": always specify the metric in a report.
+[Example 3.1 — Dice and IoU of masks]{.tag} For a predicted binary mask $p$ and a ground truth $g$ (sets of pixels), the IoU is $|p \cap g| / |p \cup g|$ and the **Dice** $2|p \cap g| / (|p| + |g|)$. With $|p| = 1200$, $|g| = 1000$ and $|p \cap g| = 900$: IoU $= 900/1300 \approx 0.69$ and Dice $= 1800/2200 \approx 0.82$. One checks the identity $\mathrm{Dice} = 2\,\mathrm{IoU} / (1 + \mathrm{IoU})$: $2 \times 0.692 / 1.692 = 0.818$ — the two metrics are interchangeable as a ranking, but Dice looks "kinder": always specify the metric in a report.
 :::
 
 ### 3.3. Instance segmentation: Mask R-CNN
@@ -388,7 +415,7 @@ The important point for the engineer: these versions are less scientific revolut
 ### 3.4. Panoptic: a single metric
 
 ::: def
-[Definition 3.2 — Panoptic Quality (PQ)]{.tag} Predicted segments and ground truths are matched per class with $\mathrm{IoU} > 0.5$ (at-most-one-to-one coupling). With TP the set of matches, FP the unmatched predictions and FN the unmatched ground truths: $$\mathrm{PQ} \;=\; \underbrace{\frac{1}{\|\mathrm{TP}\|}\sum_{(p,g) \in \mathrm{TP}} \mathrm{IoU}(p, g)}_{\text{segmentation quality (SQ)}} \;\times\; \underbrace{\frac{\|\mathrm{TP}\|}{\|\mathrm{TP}\| + \tfrac12\|\mathrm{FP}\| + \tfrac12\|\mathrm{FN}\|}}_{\text{recognition quality (RQ = F1 score)}},$$ then averaged over the classes. PQ cleanly decouples "are the boundaries right?" (SQ) and "did I find the right objects?" (RQ).
+[Definition 3.2 — Panoptic Quality (PQ)]{.tag} Predicted segments and ground truths are matched per class with $\mathrm{IoU} > 0.5$ (at-most-one-to-one coupling). With TP the set of matches, FP the unmatched predictions and FN the unmatched ground truths: $$\mathrm{PQ} \;=\; \underbrace{\frac{1}{|\mathrm{TP}|}\sum_{(p,g) \in \mathrm{TP}} \mathrm{IoU}(p, g)}_{\text{segmentation quality (SQ)}} \;\times\; \underbrace{\frac{|\mathrm{TP}|}{|\mathrm{TP}| + \tfrac12|\mathrm{FP}| + \tfrac12|\mathrm{FN}|}}_{\text{recognition quality (RQ = F1 score)}},$$ then averaged over the classes. PQ cleanly decouples "are the boundaries right?" (SQ) and "did I find the right objects?" (RQ).
 :::
 
 ### 3.5. SAM: promptable segmentation
@@ -399,13 +426,44 @@ The **Segment Anything Model** (Meta, 2023) changes paradigm: instead of trainin
 -   **data engine**: an assisted-annotation loop (model suggests, human corrects) at first, then semi-automatic then automatic annotation — culminating in SA-1B: 11 million licensed images, **1.1 billion masks**, 99 % automatic;
 -   **usage**: zero-shot mask extraction, serving as a base for fine-tuning (medical, satellite), or as an annotation assistant — SAM closes the loop there: the model manufactures its own data.
 
-## 4. Multi-object tracking {#ch4}
+## 4. Data, benchmarks and annotation {#ch4}
 
-::: def
-[Definition 4.1 — Multi-object tracking (MOT)]{.tag} Given a video stream, associate across frames the detections of the *same* physical object under a stable **track identifier**, while managing appearances, disappearances, occlusions and crossings. The dominant paradigm is **tracking-by-detection**: a detector (chapters 1–2) runs at every frame; the tracker reduces to the **association** problem between current detections and existing tracks.
+The quality of a deployed vision system is bounded by its data long before its architecture. This chapter reviews the reference datasets, what annotation costs and how to reduce that cost, and the three evaluation pitfalls that make a model look better than it is.
+
+### 4.1. The reference datasets
+
+  Dataset      Year    Content                                                  Annotations              Use
+  ------------ ------- -------------------------------------------------------- ------------------------ ---------------------------------------
+  ImageNet     2009–   14M images, 22k classes                                  labels                   pretraining (DL reminder ch. 8)
+  COCO         2014–   330k images, 80 classes                                  boxes, masks, captions   detection, segmentation, standard mAP
+  KITTI        2012    urban scenes (camera + LiDAR)                            3D boxes, disparity      stereo, embedded 3D detection
+  nuScenes     2019    1000 scenes, 1.4M images, 6 cameras + 1 LiDAR + radars   3D boxes, tracks         complete autonomous driving
+  Waymo Open   2019–   \~2000 scenes, 5 LiDAR + 5 cameras                       3D boxes, tracking       large-scale 3D benchmark
+  MVTec AD     2019    5k industrial images, 15 categories                      anomaly masks            inspection (chapter 7)
+
+### 4.2. The cost of annotation
+
+A COCO box costs from a few seconds to a minute; a polygon mask, much more; a 3D LiDAR box at 25 Hz over 20 objects, several minutes with dedicated tooling. Three industrial levers:
+
+-   **assisted annotation**: a pretrained model proposes, the human corrects — the SA-1B loop of chapter 3 is its large-scale version; a complementary lever is **active learning**, which sends to annotation only the examples on which the model is uncertain;
+-   **synthetic data**: procedural 3D rendering with *domain randomization* (random textures, lighting to force invariance); the P2 module "Image Synthesis" (announced) covers rendering; sim2real remains the hard part;
+-   **augmentation**: geometric (cropping, rotation, mosaic) and photometric (color, blur, noise); caution: geometric transformations must transform the boxes/masks *and* the metadata (rotation → bounding boxes of the rotated masks).
+
+### 4.3. Evaluation pitfalls
+
+::: note
+[Note — The three classic pitfalls]{.tag} **(1) Data leakage**: near-duplicate images between train and test (video sequences); always split by video/scene, not by image. **(2) Long-tail imbalance**: the global mAP masks rare classes — look at the per-class APs; the training data must be resampled or reweighted (cf. focal loss, chapter 1). **(3) Domain shift**: a COCO model collapses on your production cameras (angle, compression, weather); plan from the protocol stage for a "shadow" set of unseen real data, and drift monitoring in operation (chapter 8).
 :::
 
-### 4.1. SORT: Kalman + Hungarian matching
+## 5. Multi-object tracking {#ch5}
+
+A detector run frame by frame does not know that the pedestrian of frame 12 is the one of frame 11. Tracking adds this identity across time; this chapter presents the association methods that dominate in practice and the metrics that evaluate them.
+
+::: def
+[Definition 5.1 — Multi-object tracking (MOT)]{.tag} Given a video stream, associate across frames the detections of the *same* physical object under a stable **track identifier**, while managing appearances, disappearances, occlusions and crossings. The dominant paradigm is **tracking-by-detection**: a detector (chapters 1–2) runs at every frame; the tracker reduces to the **association** problem between current detections and existing tracks.
+:::
+
+### 5.1. SORT: Kalman + Hungarian matching
 
 **SORT** (2016) is the minimal tracker:
 
@@ -419,14 +477,14 @@ The **Segment Anything Model** (Meta, 2023) changes paradigm: instead of trainin
 Reminder — the Kalman filter in two equations
 :::
 
-Linear-Gaussian state model $x_t = F x_{t-1} + w$, observation model $z_t = H x_t + v$, white noises with covariances $Q, R$: $$\hat x_{t\|t-1} = F \hat x_{t-1\|t-1}, \quad P_{t\|t-1} = F P_{t-1\|t-1} F^\top + Q \quad (\text{prediction}),$$ $$K_t = P_{t\|t-1} H^\top (H P_{t\|t-1} H^\top + R)^{-1}, \quad \hat x_{t\|t} = \hat x_{t\|t-1} + K_t (z_t - H \hat x_{t\|t-1}) \quad (\text{correction}).$$ The gain $K_t$ weighs the prediction (motion) and the observation (detection) according to their uncertainties — cf. the Signal Processing module for the Bayesian interpretation.
+Linear-Gaussian state model $x_t = F x_{t-1} + w$, observation model $z_t = H x_t + v$, white noises with covariances $Q, R$: $$\hat x_{t|t-1} = F \hat x_{t-1|t-1}, \quad P_{t|t-1} = F P_{t-1|t-1} F^\top + Q \quad (\text{prediction}),$$ $$K_t = P_{t|t-1} H^\top (H P_{t|t-1} H^\top + R)^{-1}, \quad \hat x_{t|t} = \hat x_{t|t-1} + K_t (z_t - H \hat x_{t|t-1}) \quad (\text{correction}).$$ The gain $K_t$ weighs the prediction (motion) and the observation (detection) according to their uncertainties — cf. the Signal Processing module for the Bayesian interpretation.
 ::::
 
-### 4.2. DeepSORT: adding appearance
+### 5.2. DeepSORT: adding appearance
 
 In a crowd, two pedestrians who cross paths swap their boxes: IoU alone re-associates poorly. **DeepSORT** (2017) associates in two stages: (i) **cascade matching** favoring recently seen tracks, with a cost combining IoU *and* an **appearance embedding** distance — a small ReID (re-identification) network learns a descriptor $e_i \in \mathbb{R}^{128}$ invariant to pose/scale; (ii) IoU matching (as in SORT) for the rest. The "appearance memory" (a gallery of the last descriptors per track) resists long occlusions.
 
-### 4.3. ByteTrack: don't throw away low-score detections
+### 5.3. ByteTrack: don't throw away low-score detections
 
 **ByteTrack** (2022) starts from a simple observation: during a partial occlusion, the detector often emits a *correct but low-confidence* detection — which classical pipelines discard at the threshold. The algorithm sketch:
 
@@ -437,36 +495,38 @@ In a crowd, two pedestrians who cross paths swap their boxes: IoU alone re-assoc
 
 Result: notable MOTA/IDF1 gains *without any new detector* — association is a lever as profitable as perception.
 
-### 4.4. Measuring a tracker
+### 5.4. Measuring a tracker
 
 ::: def
-[Definition 4.2 — MOTA and IDF1]{.tag} $$\mathrm{MOTA} = 1 - \frac{\|\mathrm{FN}\| + \|\mathrm{FP}\| + \|\mathrm{ID\ switches}\|} {\sum_t \|\text{ground truths}_t\|}, \qquad \mathrm{IDF1} = \frac{2\,\mathrm{IDTP}}{2\,\mathrm{IDTP} + \mathrm{IDFP} + \mathrm{IDFN}},$$ where ID switches count identity flips (a tracker that "swaps" two people loses IDF1 even if its MOTA is good). MOTA mostly measures *detection*; IDF1 mostly measures *identity*; HOTA (2020) rebalances detection and association.
+[Definition 5.2 — MOTA and IDF1]{.tag} $$\mathrm{MOTA} = 1 - \frac{|\mathrm{FN}| + |\mathrm{FP}| + |\mathrm{ID\ switches}|} {\sum_t |\text{ground truths}_t|}, \qquad \mathrm{IDF1} = \frac{2\,\mathrm{IDTP}}{2\,\mathrm{IDTP} + \mathrm{IDFP} + \mathrm{IDFN}},$$ where ID switches count identity flips (a tracker that "swaps" two people loses IDF1 even if its MOTA is good). MOTA mostly measures *detection*; IDF1 mostly measures *identity*; HOTA (2020) rebalances detection and association.
 :::
 
 ::: note
 [Note — In production]{.tag} Tracking imposes strong system constraints: per-frame latency (the tracker must fit in the budget, cf. chapter 8); robustness to detector dropouts (a missed frame); re-identification after leaving the field of view; and, in multi-camera settings, cross-camera association (pure ReID, with no IoU available). The two key building blocks — Hungarian coupling and the Kalman filter — are L3 classics; the modernity lies in the learned descriptors.
 :::
 
-## 5. Applied 3D vision: stereo and LiDAR {#ch5}
+## 6. Applied 3D vision: stereo and LiDAR {#ch6}
 
-### 5.1. The pinhole model (reminder)
+A robot or a vehicle needs to know how far objects are, which a single image does not tell. This chapter shows how depth is recovered from two cameras (stereo) or measured directly (LiDAR), how networks process the resulting point clouds, and how sensors are fused.
+
+### 6.1. The pinhole model (reminder)
 
 :::: recap
 ::: recap-title
 L3 reminder — perspective projection
 :::
 
-A pinhole camera projects a 3D point $X = (X, Y, Z)$ (camera frame, $Z$ pointing forward) to $(u, v)$ in the image: $$\lambda \begin{pmatrix} u \\ v \\ 1 \end{pmatrix} = K \,[\,R \mid t\,] \begin{pmatrix} X \\ Y \\ Z \\ 1 \end{pmatrix}, \qquad K = \begin{pmatrix} f_x & 0 & c_x \\ 0 & f_y & c_y \\ 0 & 0 & 1 \end{pmatrix},$$ with $K$ the **intrinsics** (focal lengths in pixels, optical center), $[R\|t]$ the **extrinsics** (camera pose); $\lambda = Z$. Calibration (OpenCV) estimates $K$ and the distortion (radial-tangential model) — cf. the P1 course for the complete geometry (Hartley & Zisserman).
+A pinhole camera projects a 3D point $X = (X, Y, Z)$ (camera frame, $Z$ pointing forward) to $(u, v)$ in the image: $$\lambda \begin{pmatrix} u \\ v \\ 1 \end{pmatrix} = K \,[\,R \mid t\,] \begin{pmatrix} X \\ Y \\ Z \\ 1 \end{pmatrix}, \qquad K = \begin{pmatrix} f_x & 0 & c_x \\ 0 & f_y & c_y \\ 0 & 0 & 1 \end{pmatrix},$$ with $K$ the **intrinsics** (focal lengths in pixels, optical center), $[R \mid t]$ the **extrinsics** (camera pose); $\lambda = Z$. Calibration (OpenCV) estimates $K$ and the distortion (radial-tangential model) — cf. the P1 course for the complete geometry (Hartley & Zisserman).
 ::::
 
-### 5.2. Stereo: disparity as a depth measurement
+### 6.2. Stereo: disparity as a depth measurement
 
 ::: def
-[Definition 5.1 — Disparity]{.tag} For a rectified stereo pair (coplanar images, horizontal epipolar lines, common focal length $f$, baseline $B$), a 3D point projects to $(u_L, v)$ on the left and $(u_R, v)$ on the right; the **disparity** is $d = u_L - u_R \geq 0$, measured in pixels.
+[Definition 6.1 — Disparity]{.tag} For a rectified stereo pair (coplanar images, horizontal epipolar lines, common focal length $f$, baseline $B$), a 3D point projects to $(u_L, v)$ on the left and $(u_R, v)$ on the right; the **disparity** is $d = u_L - u_R \geq 0$, measured in pixels.
 :::
 
 :::: prop
-[Proposition 5.2 — Depth from disparity]{.tag} In the rectified setting, the depth of the point is $$Z = \frac{f \, B}{d}.$$
+[Proposition 6.2 — Depth from disparity]{.tag} In the rectified setting, the depth of the point is $$Z = \frac{f \, B}{d}.$$
 
 ::: proof
 The 3D point $(X, Y, Z)$ projects on the left to $u_L = fX/Z$ and on the right (optical center shifted by $B$ along $x$) to $u_R = f(X - B)/Z$. Taking the difference, $u_L - u_R = fB/Z$, i.e. $d = fB / Z$ and hence $Z = fB / d$. [∎]{.qed}
@@ -477,7 +537,7 @@ Practical consequence: the depth uncertainty $\partial Z / \partial d = -fB/d^2 
 
 The classical stereo pipeline: (i) rectification; (ii) **cost volume** — for every left pixel and every candidate disparity $d$, a matching cost (census, SSD of descriptors) — this is an $H \times W \times D_{\max}$ volume; (iii) aggregation and regularization: **SGM** (Hirschmüller, 2008) aggregates costs along several directions (per-path dynamic programming) with discontinuity penalties — the industrial standard (baked into GPUs!); (iv) disparity map. Deep methods (**PSM-Net** and successors) learn the cost volume: 3D convolutions on descriptors stacked by disparity — exactly the same volume construction that the Multimodal GenAI module, chapter 3, exploits for other data.
 
-### 5.3. LiDAR: point clouds
+### 6.3. LiDAR: point clouds
 
 LiDAR emits pulses and measures time of flight: the output is a 3D point cloud ($x, y, z$, reflectivity), \~100k–2M points/s, accurate in distance (\~2 cm), sparse and irregular — *unstructured*: grid convolutions do not apply directly. Families of methods:
 
@@ -486,14 +546,14 @@ LiDAR emits pulses and measures time of flight: the output is a 3D point cloud (
 -   **Center detection**: CenterPoint projects everything into bird's eye view (BEV) and detects objects by their center (heatmap + size/rotation regression) — the anchor-free formulation of chapter 2, transposed to a 2D "top-down view".
 
 :::: prop
-[Proposition 5.3 — The global max is permutation invariant]{.tag} Let $h(X) = \mathrm{max}_{i=1..n} \mathrm{MLP}(x_i)$ be PointNet's global descriptor. For every permutation $\pi$ of $\{1, \dots, n\}$: $h(x_{\pi(1)}, \dots, x_{\pi(n)}) = h(x_1, \dots, x_n)$.
+[Proposition 6.3 — The global max is permutation invariant]{.tag} Let $h(X) = \mathrm{max}_{i=1..n} \mathrm{MLP}(x_i)$ be PointNet's global descriptor. For every permutation $\pi$ of $\{1, \dots, n\}$: $h(x_{\pi(1)}, \dots, x_{\pi(n)}) = h(x_1, \dots, x_n)$.
 
 ::: proof
 The MLP is applied pointwise: the set $\{\mathrm{MLP}(x_i)\}$ is unchanged by permutation (only the enumeration order changes). The per-coordinate maximum of a set does not depend on the enumeration order, hence the equality. Note that a sum or an average would have the same property; the max is preferred because it selects one "witness" per coordinate and avoids the information smoothing of averages. [∎]{.qed}
 :::
 ::::
 
-### 5.4. Multi-sensor fusion in bird's eye view
+### 6.4. Multi-sensor fusion in bird's eye view
 
 Cameras provide semantics (classes, traffic lights, signs) but only indirect depth; LiDAR provides geometry but poor semantics. Modern architectures fuse **in BEV**: every sensor is brought into a common top-down frame where detection, tracking and trajectory prediction combine. **BEVFormer** (2022): image features are "queried" in BEV space by spatial cross-attention (every BEV cell queries the pixels along its view pillar), with temporal attention toward the previous BEV map — tracking becomes implicit. The following table summarizes the sensor trade-offs:
 
@@ -503,34 +563,9 @@ Cameras provide semantics (classes, traffic lights, signs) but only indirect dep
   LiDAR        3D cloud             medium, sparse   robust          high     geometry
   Radar (4D)   targets + velocity   low              very robust     medium   motion, bad weather
 
-## 6. Data, benchmarks and annotation {#ch6}
-
-### 6.1. The reference datasets
-
-  Dataset      Year    Content                                                  Annotations              Use
-  ------------ ------- -------------------------------------------------------- ------------------------ ---------------------------------------
-  ImageNet     2009–   14M images, 22k classes                                  labels                   pretraining (DL reminder ch. 8)
-  COCO         2014–   330k images, 80 classes                                  boxes, masks, captions   detection, segmentation, standard mAP
-  KITTI        2012    urban scenes (camera + LiDAR)                            3D boxes, disparity      stereo, embedded 3D detection
-  nuScenes     2019    1000 scenes, 1.4M images, 6 cameras + 1 LiDAR + radars   3D boxes, tracks         complete autonomous driving
-  Waymo Open   2019–   \~2000 scenes, 5 LiDAR + 5 cameras                       3D boxes, tracking       large-scale 3D benchmark
-  MVTec AD     2019    5k industrial images, 15 categories                      anomaly masks            inspection (chapter 7)
-
-### 6.2. The cost of annotation
-
-A COCO box costs from a few seconds to a minute; a polygon mask, much more; a 3D LiDAR box at 25 Hz over 20 objects, several minutes with dedicated tooling. Three industrial levers:
-
--   **assisted annotation**: a pretrained model proposes, the human corrects — the SA-1B loop of chapter 3 is its large-scale version; an additional benefit: **active learning** only has annotated the examples where the model is uncertain;
--   **synthetic data**: procedural 3D rendering with *domain randomization* (random textures, lighting to force invariance); the P2 module "Image Synthesis" (announced) covers rendering; sim2real remains the hard part;
--   **augmentation**: geometric (cropping, rotation, mosaic) and photometric (color, blur, noise); caution: geometric transformations must transform the boxes/masks *and* the metadata (rotation → bounding boxes of the rotated masks).
-
-### 6.3. Evaluation pitfalls
-
-::: note
-[Note — The three classic pitfalls]{.tag} **(1) Data leakage**: near-duplicate images between train and test (video sequences); always split by video/scene, not by image. **(2) Long-tail imbalance**: the global mAP masks rare classes — look at the per-class APs; the training data must be resampled or reweighted (cf. focal loss, chapter 1). **(3) Domain shift**: a COCO model collapses on your production cameras (angle, compression, weather); plan from the protocol stage for a "shadow" set of unseen real data, and drift monitoring in operation (chapter 8).
-:::
-
 ## 7. Industrial case studies {#ch7}
+
+The previous chapters provide building blocks; a product combines them under constraints of cost, cadence and regulation. This chapter walks through four application domains and, for each, the constraint that changes the engineering choices.
 
 ### 7.1. Industrial inspection (quality control)
 
@@ -545,8 +580,8 @@ Inspecting parts (scratches, cracks, contamination) on a production line: contro
 The typical perception pipeline of a SAE level 2+ to 4 vehicle:
 
 1.  multi-camera **detection/segmentation** (chapters 1–3);
-2.  camera/LiDAR/radar **fusion** in BEV (chapter 5);
-3.  **tracking and prediction** of agents (chapter 4 + trajectory models);
+2.  camera/LiDAR/radar **fusion** in BEV (chapter 6);
+3.  **tracking and prediction** of agents (chapter 5 + trajectory models);
 4.  **planning** (out of scope — cf. the Reinforcement Learning module for the MDP formalization);
 5.  **system monitoring**: redundancy, diagnostics, degraded mode.
 
@@ -560,10 +595,12 @@ Organ/lesion segmentation (U-Net is still the backbone, chapter 3), cell countin
 
 -   **retail**: planograms (products on shelves), customer flows (anonymous counting);
 -   **agriculture**: weed detection for targeted spraying (drone, embedded);
--   **sports**: player/ball tracking (chapter 4 at scale), tactical statistics;
+-   **sports**: player/ball tracking (chapter 5 at scale), tactical statistics;
 -   **satellite**: building/road detection, deforestation masks — with domain randomization and multispectral imaging as a bonus.
 
 ## 8. Deployment: ONNX, quantization, edge {#ch8}
+
+A model trained on a workstation GPU must run within a few milliseconds on an embedded board with little memory. This chapter covers the steps that get it there — export, quantization, compression — and how to check a latency budget.
 
 ### 8.1. The deployment pipeline
 
@@ -613,16 +650,18 @@ boxes, scores, labels = sess.run(None, {"image": dummy.numpy()})
 ### 8.4. Latency budgets and profiling
 
 ::: ex
-[Example 8.2 — Budget of a "real-time detection" application]{.tag} 30 fps camera → 33.3 ms per-frame budget. Typical breakdown on an embedded module (Jetson Orin class): acquisition + decoding 3 ms; preprocessing (resizing, normalization, NV12→RGB) 4 ms; INT8 inference 18 ms; post-processing (NMS + rendering) 3 ms; margin 5 ms. Three lessons: (i) pre/post-processing is not negligible — keep it on the GPU (DALI/TensorRT-PLUGIN pipeline) if possible; (ii) target P99 latency (worst frame, with numerous detection batches), not the average; (iii) if the budget bursts, the levers in industrial order: input resolution ↓, smaller model (distillation), INT8, skip-frame + interpolation (detection at 15 Hz, tracking at 30 Hz — chapter 4 exists precisely for that).
+[Example 8.2 — Budget of a "real-time detection" application]{.tag} 30 fps camera → 33.3 ms per-frame budget. Typical breakdown on an embedded module (Jetson Orin class): acquisition + decoding 3 ms; preprocessing (resizing, normalization, NV12→RGB) 4 ms; INT8 inference 18 ms; post-processing (NMS + rendering) 3 ms; margin 5 ms. Three lessons: (i) pre/post-processing is not negligible — keep it on the GPU (DALI/TensorRT-PLUGIN pipeline) if possible; (ii) target P99 latency (worst frame, with numerous detection batches), not the average; (iii) if the budget bursts, the levers in industrial order: input resolution ↓, smaller model (distillation), INT8, skip-frame + interpolation (detection at 15 Hz, tracking at 30 Hz — chapter 5 exists precisely for that).
 :::
 
 ### 8.5. Operations, drift and privacy
 
--   **monitoring**: log score distributions, detection rates, "world" alerts (dirty camera, night); detect domain drift and plan retraining (the data loop of chapter 6);
+-   **monitoring**: log score distributions, detection rates, "world" alerts (dirty camera, night); detect domain drift and plan retraining (the data loop of chapter 4);
 -   **privacy**: process *on-device* as much as possible (no image leaves the sensor); if a stream is sent: blurring/anonymization of faces and plates (…detected by… the models of chapter 3!), minimal retention;
 -   **versioning**: model + code + data + thresholds = a reproducible artifact — the methodology of the Advanced Deep Learning module (P2), chapter 8 applies mutatis mutandis.
 
 ## 9. Ethics, robustness and limits {#ch9}
+
+A deployed vision system can be fooled on purpose, can work worse for some groups of people, and can be used for surveillance. This chapter reviews these three risks and the limits that no current model overcomes.
 
 ### 9.1. Adversarial examples
 
@@ -642,18 +681,18 @@ Small imperceptible perturbations change the prediction. The simplest attack —
 
 ## Exercises {#ex}
 
-1.  **IoU and thresholds.** Compute the IoU between $g = (10, 10, 40, 60)$ and $p = (20, 5, 55, 50)$; determine the maximum offset $\delta$ in $x$ of a prediction identical to $g$ to stay above $\tau = 0.75$.
-2.  **NMS by hand.** Five detections of the same class, scores 0.9; 0.85; 0.8; 0.75; 0.7, box 2 overlapping box 1 (IoU 0.6), box 3 overlapping box 1 (IoU 0.3) and box 4 overlapping box 3 (IoU 0.8). Give the boxes kept at $\tau = 0.5$ then at $\tau = 0.7$ with linear Soft-NMS ($s \leftarrow s(1 - \mathrm{IoU})$); comment on the "two objects stuck together" case.
-3.  **AP.** With 4 ground truths and the sorted detections (TP, TP, FP, FP, TP, TP): draw the precision-recall curve, compute the all-points interpolated AP, then verify that moving the two FPs to the head of the list (FP, FP, TP, …) makes AP drop — why does the order of the scores matter?
-4.  **Focal loss.** Show that for $\gamma = 2$, an easy anchor ($p_t = 0.95$) receives a weight $361$ times smaller than a hard anchor ($p_t = 0.3$); compute the ratio for plain cross-entropy and conclude.
-5.  **Hungarian coupling.** Three tracks $T_1, T_2, T_3$, three detections $D_1, D_2, D_3$, costs $1-\mathrm{IoU}$: $T_1\!: (0.1,\ 0.8,\ 0.9)$, $T_2\!: (0.9,\ 0.2,\ 0.7)$, $T_3\!: (0.8,\ 0.9,\ 0.3)$. Solve the minimum-cost assignment by hand and compare with the greedy assignment — in which case do they differ?
-6.  **Stereo depth.** Camera $f = 700$ px, baseline $B = 0.5$ m; compute the disparity of an object at 10 m, then the depth uncertainty if disparity is measured to ±0.25 px; at what distance does the uncertainty exceed 1 m?
-7.  **PointNet.** Replace the max by an average in proposition 5.3: does the invariance hold; build two clouds with the same average but very different contents and conclude on the "selectivity" of the max.
-8.  **PQ.** One image: 4 ground-truth segments, 3 predicted with matched IoUs 0.9; 0.8; 0.6 plus one FP; one FN. Compute SQ, RQ then PQ; redo with IoU 0.7 everywhere and comment on the decomposition.
-9.  **Quantization.** A weight tensor has min −0.82 and max 0.55; give the scale and zero point (asymmetric 8-bit min-max scheme), quantize −0.1 and 0.3, dequantize, compute the relative error — why can a 99.9th percentile help?
-10. **Real-time budget.** An application must detect at 25 fps on hardware where FP32 inference takes 58 ms and INT8 21 ms; preprocessing 5 ms, post-processing 4 ms. Does a single inference per frame fit? Propose two strategies (skip-frame + tracking; resolution reduction ÷1.4 with cost in $s^2$) and quantify their trade-offs.
-11. **Data choice.** For a vehicle-counting system on a European road (day/night, rain), propose: a starting training set, a splitting protocol, an augmentation plan, a subgroup evaluation method, and two monitoring metrics in production.
-12. **Project.** Complete pipeline on a free set (a COCO subset or public drone images): fine-tuning of a modern YOLO, ONNX export, INT8 quantization, latency/mAP measurement before/after, then a one-page report in "industrial datasheet" format (error costs included, cf. example 7.1).
+1.  **★ IoU and thresholds.** Compute the IoU between $g = (10, 10, 40, 60)$ and $p = (20, 5, 55, 50)$; determine the maximum offset $\delta$ in $x$ of a prediction identical to $g$ to stay above $\tau = 0.75$.
+2.  **★ NMS by hand.** Five detections of the same class, scores 0.9; 0.85; 0.8; 0.75; 0.7, box 2 overlapping box 1 (IoU 0.6), box 3 overlapping box 1 (IoU 0.3) and box 5 overlapping box 3 (IoU 0.8). Give the boxes kept at $\tau = 0.5$ then at $\tau = 0.7$ with linear Soft-NMS ($s \leftarrow s(1 - \mathrm{IoU})$); comment on the "two objects stuck together" case.
+3.  **★ AP.** With 4 ground truths and the sorted detections (TP, TP, FP, FP, TP, TP): draw the precision-recall curve, compute the all-points interpolated AP, then verify that moving the two FPs to the head of the list (FP, FP, TP, …) makes AP drop — why does the order of the scores matter?
+4.  **★ Focal loss.** Show that for $\gamma = 2$, an easy anchor ($p_t = 0.95$) receives a modulating weight $(1-p_t)^\gamma$ that is $196$ times smaller than that of a hard anchor ($p_t = 0.3$); compute the ratio for plain cross-entropy and conclude.
+5.  **★ Hungarian coupling.** Three tracks $T_1, T_2, T_3$, three detections $D_1, D_2, D_3$, costs $1-\mathrm{IoU}$: $T_1\!: (0.1,\ 0.8,\ 0.9)$, $T_2\!: (0.9,\ 0.2,\ 0.7)$, $T_3\!: (0.8,\ 0.9,\ 0.3)$. Solve the minimum-cost assignment by hand and compare with the greedy assignment — in which case do they differ?
+6.  **★ Stereo depth.** Camera $f = 700$ px, baseline $B = 0.5$ m; compute the disparity of an object at 10 m, then the depth uncertainty if disparity is measured to ±0.25 px; at what distance does the uncertainty exceed 1 m?
+7.  **★ PQ.** One image: 4 ground-truth segments, 3 predicted with matched IoUs 0.9; 0.8; 0.6 plus one FP; one FN. Compute SQ, RQ then PQ; redo with IoU 0.7 everywhere and comment on the decomposition.
+8.  **★ Quantization.** A weight tensor has min −0.82 and max 0.55; give the scale and zero point (asymmetric 8-bit min-max scheme), quantize −0.1 and 0.3, dequantize, compute the relative error — why can a 99.9th percentile help?
+9.  **★★ PointNet.** Replace the max by an average in proposition 6.3: does the invariance hold? Build two clouds with the same average but very different contents and conclude on the "selectivity" of the max.
+10. **★★ Real-time budget.** An application must detect at 25 fps on hardware where FP32 inference takes 58 ms and INT8 21 ms; preprocessing 5 ms, post-processing 4 ms. Does a single inference per frame fit? Propose two strategies (skip-frame + tracking; resolution reduction ÷1.4 with cost in $s^2$) and quantify their trade-offs.
+11. **★★ Data choice.** For a vehicle-counting system on a European road (day/night, rain), propose: a starting training set, a splitting protocol, an augmentation plan, a subgroup evaluation method, and two monitoring metrics in production.
+12. **★★★ Project.** Complete pipeline on a free set (a COCO subset or public drone images): fine-tuning of a modern YOLO, ONNX export, INT8 quantization, latency/mAP measurement before/after, then a one-page report in "industrial datasheet" format (error costs included, cf. example 7.1).
 
 ## References {#refs}
 

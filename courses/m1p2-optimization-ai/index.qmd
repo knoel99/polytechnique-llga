@@ -125,9 +125,9 @@ format:
   Status in the program                 [P2 Option]{.badge .option}[Outside recommended track]{.badge .position}
   ------------------------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-**Audience**: an engineer who already runs Adam / SGD and wants to know *why* it converges (or not). **Empirical first**: a loss that oscillates because the step is too large; a plateau on an ill-conditioned problem — then we name convexity, Nesterov, proximal, rates.
+**Audience**: an engineer who already runs Adam or SGD and wants to know *why* it converges (or not). **Empirical first**: each topic starts from a symptom — a loss that oscillates because the step is too large, a plateau on an ill-conditioned problem — and only then names the concepts that explain it: convexity, conditioning, acceleration, proximal operators, convergence rates.
 
-Theoretical backbone reused wherever we train a model in the program.
+The module is the theoretical backbone reused wherever a model is trained in the program.
 
 ### What you will be able to do
 
@@ -178,6 +178,27 @@ An option of period 2 of M1, outside the recommended track. Official prerequisit
 -   **Exercises** — proofs and implementations for each family of algorithms.
 -   **References** — the theoretical sources of each chapter.
 
+### Session plan {#sessions}
+
+**36 h in class = 12 sessions of 3 h.** The SynapseS 2026–2027 sheet publishes no teaching hours; the 36 h are the volume given for this course by the programme brochure (the usual volume of a 4.5-ECTS M1 course), and since no session-by-session programme is published, the split below is our proposal for covering these notes in that time. Level 1 = foundations (reviews, definitions, first worked examples), 2 = core theorems and algorithms, 3 = advanced or open questions; the level never goes down from one session to the next.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Convexity, smoothness, duality; ch. 1 Training problems, subdifferential, one-dimensional LASSO | Ex. 5 (soft thresholding) |
+| 2 | 3 h | 2 | ch. 2 Descent lemma, the $O(1/k)$ rate | Ex. 1 |
+| 3 | 3 h | 2 | ch. 2 Linear convergence and the condition number | Ex. 4 |
+| 4 | 3 h | 2 | ch. 3 Lower bound, Nesterov acceleration, momentum in practice | lab: GD vs Nesterov on the valley |
+| 5 | 3 h | 2 | ch. 4 Proximal operator, ISTA (proved) and FISTA | Ex. 2, Ex. 5 (projections) |
+| 6 | 3 h | 2 | ch. 5 SGD: assumptions, constant-step plateau, minibatching | Ex. 6 |
+| 7 | 3 h | 2 | ch. 6 Variance reduction: SAGA and SVRG | Ex. 7 |
+| 8 | 3 h | 2 | ch. 7 Newton, BFGS and L-BFGS | Ex. 8 |
+| 9 | 3 h | 2 | ch. 8 Constraints: penalties, projections, multipliers | Ex. 9 |
+| 10 | 3 h | 2 | ch. 9 Hyperparameter optimization: random search, GP-EI, Hyperband | Ex. 3 |
+| 11 | 3 h | 2 | ch. 10 Adam and AdamW read with the module's tools; schedules and large batches | lab: diagnosing a diverging run |
+| 12 | 3 h | 3 | ch. 10 Why non-convex training works anyway: overparameterization, local PL, SGD noise | review of the proofs |
+
+**Self-study, outside the 36 h** (about 3 h in total): ch. 11 Course research notes — CMAP (Chamon, Dieuleveut) (≈ 3 h, with the two cross-cutting readings it proposes).
+
 ### How to study this module
 
 -   Redo every proof on the board, without the notes: convergence rates are the heart of the exam as of the module.
@@ -213,7 +234,7 @@ For feasible $x$, $g_i(x) \leq 0$ and $\lambda_i \geq 0$ give $\mathcal{L}(x, \l
 ::::
 
 ::: thm
-[Theorem 0.2 — Strong duality (Slater)]{.tag} If the problem is convex (functions $f, g_i$ convex) and there exists a *strictly* feasible point ($g_i(x_0) < 0$ for all active constraints), then the optimal dual value equals the primal value and the minimum of the dual is attained. The **duality gap** (the difference between the two) is zero: this is the key that allows, in chapter 8, replacing a constrained problem with a sequence of unconstrained problems playing on $\lambda$.
+[Theorem 0.2 — Strong duality (Slater)]{.tag} If the problem is convex (functions $f, g_i$ convex) and there exists a *strictly* feasible point ($g_i(x_0) < 0$ for all active constraints), then the optimal dual value equals the primal value and the maximum of the dual problem is attained. The **duality gap** (the difference between the two) is zero: this is the key that allows, in chapter 8, replacing a constrained problem with a sequence of unconstrained problems playing on $\lambda$.
 :::
 
 ::: note
@@ -222,13 +243,13 @@ For feasible $x$, $g_i(x) \leq 0$ and $\lambda_i \geq 0$ give $\mathcal{L}(x, \l
 
 ## 1. Optimization inside the AI loop {#ch1}
 
-Concrete scene: a fine-tune that "stops descending" while the gradient is not zero — conditioning. This chapter sets the frame.
+A fine-tuning run that "stops descending" while the gradient is not zero is usually a problem of conditioning, not a bug. Before any algorithm, this chapter writes training as an optimization problem, fixes the vocabulary, and collects the examples on which every later method is tested.
 
 ::: note
-[What breaks]{.tag} Ignoring conditioning; confusing expected rates with practice; forgetting proximal on constraint / regularization.
+[What breaks]{.tag} Three mistakes recur in practice: ignoring the conditioning of the problem, reading a convergence rate proved in expectation as a promise about one run, and differentiating a non-smooth regularizer instead of handling it with a proximal step (ch. 4).
 :::
 
-Before the algorithms, the **framework**. Public enemy number one of the practitioner: *conditioning*; main ally: *structure* (convexity, separability, sparsity). This chapter fixes the vocabulary and the examples that will serve the whole module.
+The practitioner's main enemy is *conditioning*; the main ally is *structure* (convexity, separability, sparsity).
 
 ::: def
 [Definition 1.1 — Training problem]{.tag} Given data $(x_i, y_i)_{i \leq n}$, a parametric model $h_\theta$ and a loss $\ell$, training solves $$\min_{\theta \in \mathbb{R}^d}\; F(\theta) = \frac{1}{n}\sum_{i=1}^n \ell(h_\theta(x_i), y_i) \;+\; \Omega(\theta),$$ where $\Omega$ (penalty) encodes a prior — sparsity $\Omega = \lambda\|\theta\|_1$, stability $\Omega = \tfrac{\lambda}{2}\|\theta\|_2^2$. Let $f$ denote the differentiable part (the empirical risk) and $g = \Omega$ the possibly non-differentiable part: this decomposition $F = f + g$ structures chapters 4 and 8.
@@ -251,11 +272,11 @@ Before the algorithms, the **framework**. Public enemy number one of the practit
 ::::
 
 ::: def
-[Definition 1.3 — Subdifferential, reference examples]{.tag} $\partial F(\theta) = \{v : F(\theta') \geq F(\theta) + \langle v, \theta'-\theta\rangle \;\forall \theta'\}$. Examples: $\partial \|\theta\| = \{\mathrm{sign}(\theta)\}$ if $\theta \neq 0$, $=[-1,1]$ if $\theta = 0$; $\partial (\tfrac{1}{2}\|\theta\|^2) = \{\theta\}$; $\partial \max(\theta_1,\theta_2) = \{e_{i^\star}\}$ if a unique argmax, a segment otherwise. Summation rule: if one of the two terms is continuous, $\partial(F_1+F_2) = \partial F_1 + \partial F_2$.
+[Definition 1.3 — Subdifferential, reference examples]{.tag} $\partial F(\theta) = \{v : F(\theta') \geq F(\theta) + \langle v, \theta'-\theta\rangle \;\forall \theta'\}$. Examples: for $\theta \in \mathbb{R}$, $\partial |\theta| = \{\mathrm{sign}(\theta)\}$ if $\theta \neq 0$, $=[-1,1]$ if $\theta = 0$; $\partial (\tfrac{1}{2}\|\theta\|^2) = \{\theta\}$; $\partial \max(\theta_1,\theta_2) = \{e_{i^\star}\}$ if a unique argmax, a segment otherwise. Summation rule: if one of the two terms is continuous, $\partial(F_1+F_2) = \partial F_1 + \partial F_2$.
 :::
 
 ::: ex
-[Example 1.4 — One-dimensional LASSO, by hand]{.tag} Minimize $\frac{1}{2}(z - \theta)^2 + \lambda\|\theta\|$ with $z \in \mathbb{R}$. Optimality conditions: either $\theta \neq 0$ and $\theta - z + \lambda\,\mathrm{sign}(\theta) = 0$, hence $\theta = z - \lambda\mathrm{sign}(\theta)$; or $\theta = 0$ and $-z \in [-\lambda, \lambda]$. We recover **soft thresholding** $$\theta^\star = \mathrm{sign}(z)\,\max(\|z\|-\lambda,\,0) = S_\lambda(z),$$ the central operation of chapter 4: sparsity comes from the fact that the optimum "sticks" to zero for all $\|z\| \leq \lambda$ — which the $\ell_2$ penalty never does.
+[Example 1.4 — One-dimensional LASSO, by hand]{.tag} Minimize $\frac{1}{2}(z - \theta)^2 + \lambda|\theta|$ over $\theta \in \mathbb{R}$, with $z \in \mathbb{R}$ and $\lambda > 0$. Optimality conditions: either $\theta \neq 0$ and $\theta - z + \lambda\,\mathrm{sign}(\theta) = 0$, hence $\theta = z - \lambda\mathrm{sign}(\theta)$; or $\theta = 0$ and $-z \in [-\lambda, \lambda]$. We recover **soft thresholding** $$\theta^\star = \mathrm{sign}(z)\,\max(|z|-\lambda,\,0) = S_\lambda(z),$$ the central operation of chapter 4: sparsity comes from the fact that the optimum "sticks" to zero for all $|z| \leq \lambda$ — which the $\ell_2$ penalty never does.
 :::
 
 ::: note
@@ -264,9 +285,13 @@ Before the algorithms, the **framework**. Public enemy number one of the practit
 
 ## 2. Gradient descent: convergence proved {#ch2}
 
-The most widely used algorithm in the world — each step of the following descent being executed somewhere right now:
+This chapter answers the first question of the module: under which assumptions does gradient descent converge, and how fast? The algorithm is the most widely used one in machine learning:
 
 $$x_{k+1} = x_k - t\, \nabla f(x_k), \qquad t > 0 \text{ the step.}$$
+
+::: note
+[Intuition first: the step on a one-dimensional quadratic]{.tag} Take $f(x) = \tfrac{L}{2}x^2$, whose gradient $Lx$ is exactly $L$-Lipschitz. One step gives $x_{k+1} = (1 - tL)\,x_k$. If $0 < t < 2/L$, then $|1 - tL| < 1$ and the iterates go to $0$; the choice $t = 1/L$ reaches $0$ in a single step; if $t > 2/L$, then $|1 - tL| > 1$ and the iterates oscillate with growing amplitude. This is the oscillating loss of the introduction, explained: a step larger than $2/L$ along the steepest direction makes descent diverge, whatever happens elsewhere. All the results below assume $t \leq 1/L$, which leaves a safety factor of two.
+:::
 
 :::: prop
 [Lemma 2.1 — Guaranteed descent (descent lemma)]{.tag} If $f$ is $L$-smooth and $0 < t \leq 1/L$: $$f(x_{k+1}) \;\leq\; f(x_k) - \tfrac{t}{2}\,\|\nabla f(x_k)\|^2.$$
@@ -280,7 +305,7 @@ By the quadratic upper bound at $y = x_{k+1} = x_k - t\nabla f(x_k)$: $f(x_{k+1}
 [Theorem 2.2 — $O(1/k)$ convergence (smooth convex case, proved)]{.tag} Let $f$ be convex and $L$-smooth, $x^\star$ a minimizer, $R = \|x_0 - x^\star\|$, $t = 1/L$. Then $$f(x_{k+1}) - f(x^\star) \;\leq\; \frac{L R^2}{2\,(k+1)}.$$
 
 ::: proof
-**Step 1 (three-point inequality).** For every $y$ — quadratic upper bound of $f$ at $x_k$ evaluated at $x_{k+1}$, combined with convexity $f(x_k) \leq f(y) + \langle\nabla f(x_k), x_k - y\rangle$ —: $$f(x_{k+1}) \;\leq\; f(y) + \langle\nabla f(x_k), x_{k+1} - y\rangle + \frac{L}{2}\|x_{k+1} - x_k\|^2.$$ **Step 2 (y = x\^\\star and polarization).** With $\nabla f(x_k) = L\,(x_k - x_{k+1})$ and $y = x^\star$, then the identity $\langle a, b\rangle = \tfrac12(\|a+b\|^2 - \|a\|^2 - \|b\|^2)$ applied to $a = x_k - x_{k+1}$, $b = x_{k+1} - x^\star$ (so that $\|a+b\| = \|x_k - x^\star\| = R_k$): $$f(x_{k+1}) - f^\star \;\leq\; L\langle x_k - x_{k+1},\, x_{k+1} - x^\star\rangle + \frac{L}{2}\|x_{k+1}-x_k\|^2 \;=\; \frac{L}{2}\big(R_k^2 - R_{k+1}^2\big).$$ **Step 3 (telescoping).** Summing from $0$ to $T-1$ and using $\|x_T - x^\star\|^2 \geq 0$: $\sum_{k=0}^{T-1} (f(x_{k+1}) - f^\star) \leq \tfrac{L}{2}R_0^2$. Since the sequence $f(x_k)$ is decreasing (lemma 2.1), each term is bounded by the average: $f(x_T) - f^\star \leq \tfrac{L R^2}{2T}$. [∎]{.qed}
+**Step 1 (three-point inequality).** For every $y$ — quadratic upper bound of $f$ at $x_k$ evaluated at $x_{k+1}$, combined with convexity $f(x_k) \leq f(y) + \langle\nabla f(x_k), x_k - y\rangle$ —: $$f(x_{k+1}) \;\leq\; f(y) + \langle\nabla f(x_k), x_{k+1} - y\rangle + \frac{L}{2}\|x_{k+1} - x_k\|^2.$$ **Step 2 ($y = x^\star$ and polarization).** With $\nabla f(x_k) = L\,(x_k - x_{k+1})$ and $y = x^\star$, then the identity $\langle a, b\rangle = \tfrac12(\|a+b\|^2 - \|a\|^2 - \|b\|^2)$ applied to $a = x_k - x_{k+1}$, $b = x_{k+1} - x^\star$ (so that $\|a+b\| = \|x_k - x^\star\| = R_k$): $$f(x_{k+1}) - f^\star \;\leq\; L\langle x_k - x_{k+1},\, x_{k+1} - x^\star\rangle + \frac{L}{2}\|x_{k+1}-x_k\|^2 \;=\; \frac{L}{2}\big(R_k^2 - R_{k+1}^2\big).$$ **Step 3 (telescoping).** Summing from $0$ to $T-1$ and using $\|x_T - x^\star\|^2 \geq 0$: $\sum_{k=0}^{T-1} (f(x_{k+1}) - f^\star) \leq \tfrac{L}{2}R_0^2$. Since the sequence $f(x_k)$ is decreasing (lemma 2.1), each term is bounded by the average: $f(x_T) - f^\star \leq \tfrac{L R^2}{2T}$. [∎]{.qed}
 :::
 ::::
 
@@ -293,11 +318,15 @@ Strong convexity implies (by minimizing the quadratic lower bound $f(x_k) + \lan
 ::::
 
 ::: note
-[Reading the two rates — what $\kappa$ tells us]{.tag} Merely convex: error in $1/k$ — to divide the error by 100, 100 more iterations. Strongly convex: error in $(1-1/\kappa)^k \approx e^{-k/\kappa}$ — to gain a factor $e$, $\kappa$ iterations. With $\kappa = 10^4$ (ill-conditioned regression, next chapter), it is night: the "basic" descent is *exponentially* penalized by the condition number. Not optimal: for a quadratic, $t = 2/(\mu+L)$ yields the factor $\big(\tfrac{\kappa-1}{\kappa+1}\big)^2$ on the values (exercise 2): better, but still $O(\kappa)$. Breaking this barrier is the subject of chapter 3.
+[Reading the two rates — what $\kappa$ tells us]{.tag} Merely convex: error in $1/k$ — to divide the error by 100, 100 more iterations. Strongly convex: error in $(1-1/\kappa)^k \approx e^{-k/\kappa}$ — to gain a factor $e$, $\kappa$ iterations. With $\kappa = 10^4$ (ill-conditioned regression, next chapter), it is night: the "basic" descent is *exponentially* penalized by the condition number. Not optimal: for a quadratic, $t = 2/(\mu+L)$ yields the factor $\big(\tfrac{\kappa-1}{\kappa+1}\big)^2$ on the values (exercise 4): better, but still $O(\kappa)$. Breaking this barrier is the subject of chapter 3.
 :::
 
 ::: ex
-[Example 2.4 — Seeing the condition number in two dimensions]{.tag} $f(u,v) = \tfrac{1}{2}(u^2 + \kappa v^2)$: $\kappa = L/\mu$ exactly, with $\nabla f = (u, \kappa v)$. At step $1/L = 1/\kappa$, the *steep* direction $v$ is canceled in one iteration ($v_1 = v_0 - \tfrac{1}{\kappa}\kappa v_0 = 0$), but the *flat* direction $u$ decreases only by $(1-1/\kappa)$ per step: it — the elongated valley — sets the pace ($\kappa$ iterations). As soon as the quadratic is rotated (axes not aligned), the trajectory zigzags across the valley. This is *the* plot to remember from the module: all the "loss landscape" figures of networks (see the Deep Learning module, ch. 3) show these valleys — hence momentum.
+[Example 2.4 — Counting iterations before running them]{.tag} A ridge regression has $L = 10$ and $\mu = 0.1$, so $\kappa = 100$. To divide the initial error $f(x_0) - f^\star$ by $10^6$, theorem 2.3 asks for $e^{-k/\kappa} \leq 10^{-6}$, i.e. $k \geq \kappa \ln 10^6 \approx 1\,382$ iterations. Without the strong convexity (or ignoring it), theorem 2.2 only guarantees an error $LR^2/(2k)$: with $L = 10$, $R = 1$ and a target $10^{-6}$, it asks for $k \geq 5 \times 10^6$ iterations. The two bounds differ by more than three orders of magnitude on the same problem, which is why identifying $\mu$ — for instance through an explicit $\ell_2$ penalty — is worth the effort.
+:::
+
+::: ex
+[Example 2.5 — Seeing the condition number in two dimensions]{.tag} $f(u,v) = \tfrac{1}{2}(u^2 + \kappa v^2)$: $\kappa = L/\mu$ exactly, with $\nabla f = (u, \kappa v)$. At step $1/L = 1/\kappa$, the *steep* direction $v$ is canceled in one iteration ($v_1 = v_0 - \tfrac{1}{\kappa}\kappa v_0 = 0$), but the *flat* direction $u$ decreases only by $(1-1/\kappa)$ per step: it — the elongated valley — sets the pace ($\kappa$ iterations). As soon as the quadratic is rotated (axes not aligned), the trajectory zigzags across the valley. This is *the* plot to remember from the module: all the "loss landscape" figures of networks (see the Deep Learning module, ch. 3) show these valleys — hence momentum.
 :::
 
 ```python
@@ -324,7 +353,7 @@ print(err_opt[-1] / err_opt[0])    # ~ ((kappa-1)/(kappa+1))**400 ~ 0.02: better
 
 ## 3. Conditioning and Nesterov acceleration {#ch3}
 
-Can we go faster *without second-order information* (no Hessian)? Nesterov's answer (1983): yes, by a factor $\sqrt{\kappa}$ — and this is **optimal**: no first-order algorithm can do better on the class of smooth convex functions. This is one of the rare results of the discipline where optimality is known *and* achieved by a usable algorithm.
+Gradient descent pays a factor $\kappa$ in iterations; this chapter asks whether another first-order method can pay less. Can we go faster *without second-order information* (no Hessian)? Nesterov's answer (1983): yes, by a factor $\sqrt{\kappa}$ — and this is **optimal**: no first-order algorithm can do better on the class of smooth convex functions. This is one of the rare results of the discipline where optimality is known *and* achieved by a usable algorithm.
 
 ::: thm
 [Theorem 3.1 — First-order lower bound (Nesterov 1983; Nemirovski–Yudin 1983)]{.tag} For any first-order method (having access only to gradients at the visited points), there exists a $\mu$-strongly convex and $L$-smooth function such that, after $T$ iterations, $$f(x_T) - f(x^\star) \;\geq\; \Big(1 - \frac{1}{\sqrt{\kappa}}\Big)^{2T}\,\big(f(x_0)-f(x^\star)\big) \quad\text{(up to constants).}$$ In other words: $\Omega\!\big(\sqrt{\kappa}\,\log(1/\varepsilon)\big)$ iterations are necessary, versus $\Omega(\kappa \log(1/\varepsilon))$ for gradient descent; and $\Omega(1/\sqrt{\varepsilon})$ iterations in the general smooth convex case (vs $\Omega(1/\varepsilon)$). The proofs construct a blockwise quadratic "trap function" whose information propagates only one coordinate per iteration: they can be found in Nesterov (2004, §2.1) and Bubeck (2015, §3.5).
@@ -334,8 +363,12 @@ Can we go faster *without second-order information* (no Hessian)? Nesterov's ans
 [Definition 3.2 — Accelerated scheme (Nesterov, strongly convex case)]{.tag} With $\gamma = \frac{1 - \sqrt{\mu/L}}{1 + \sqrt{\mu/L}}$ and step $t = 1/L$: $$y_k = x_k + \gamma\,(x_k - x_{k-1}), \qquad x_{k+1} = y_k - t\,\nabla f(y_k),$$ and the initialization $y_0 = x_0$. Convergence is linear with factor $1 - \sqrt{\mu/L} = 1 - 1/\sqrt{\kappa}$ — the promised $\sqrt{\kappa}$ factor. "Smooth convex" variant: $\gamma_k = \frac{k-1}{k+2}$ (growing momentum), rate $f(x_k) - f^\star \leq \frac{2L\|x_0-x^\star\|^2}{(k+1)^2}$.
 :::
 
+::: ex
+[Example 3.3 — What the factor $\sqrt{\kappa}$ buys]{.tag} On an ill-conditioned least-squares problem with $\kappa = 10^4$, dividing the error by $10^6$ costs gradient descent about $\kappa \ln 10^6 \approx 1.4 \times 10^5$ iterations (theorem 2.3), and the accelerated scheme about $\sqrt{\kappa}\,\ln 10^6 \approx 1.4 \times 10^3$: a hundred times fewer, for the same cost per iteration (one gradient and one extra vector addition). The gain grows with $\kappa$, which is exactly when it is needed. The momentum coefficient $\gamma = \frac{1 - 1/\sqrt{\kappa}}{1 + 1/\sqrt{\kappa}} \approx 0.98$ here: almost all of the previous displacement is kept, which is what lets the iterates build up speed along the flat direction of the valley.
+:::
+
 ::: thm
-[Theorem 3.3 — Intuition of the proof: estimate sequences]{.tag} The idea (detailed in Nesterov 2004, §2.2): build a family of quadratics $\phi_k(x) = \ell_k + \frac{\gamma_k}{2}\|x - v_k\|^2$ that (i) lower bound $f$ everywhere, (ii) approach $f(x_k)$ from above via the recursion $$\phi_{k+1}(x) = (1-\alpha_k)\,\phi_k(x) + \alpha_k\Big(f(y_k) + \langle\nabla f(y_k), x - y_k\rangle\Big),$$ where the "look-ahead" point $y_k$ minimizes $\phi_k$ shifted by the latest linearization. Two recurrences fight each other: the mass $\gamma_k$ grows (at best quadratically, $\gamma_{k+1} = (1-\alpha_k)\gamma_k$, $\alpha_k^2/\gamma_{k+1} \leq 2L$), while the gap $\phi_k^\star \leq f(x_k)$ closes at the pace of the $\alpha_k \sim 2/k$. Result: $f(x_k) - \phi_k^\star = O(L R^2/k^2)$. In continuous time ($t = \varepsilon k$), the scheme converges to the ODE $\ddot{x} + \tfrac{3}{t}\dot{x} + \nabla f(x) = 0$ — a ball in the valley with vanishing friction: the energy decreases like $1/t^2$, the signature of acceleration.
+[Theorem 3.4 — Intuition of the proof: estimate sequences]{.tag} The idea (detailed in Nesterov 2004, §2.2): build a family of quadratics $\phi_k(x) = \ell_k + \frac{\gamma_k}{2}\|x - v_k\|^2$ that (i) lower bound $f$ everywhere, (ii) approach $f(x_k)$ from above via the recursion $$\phi_{k+1}(x) = (1-\alpha_k)\,\phi_k(x) + \alpha_k\Big(f(y_k) + \langle\nabla f(y_k), x - y_k\rangle\Big),$$ where the "look-ahead" point $y_k$ minimizes $\phi_k$ shifted by the latest linearization. Two recurrences fight each other: the mass $\gamma_k$ grows (at best quadratically, $\gamma_{k+1} = (1-\alpha_k)\gamma_k$, $\alpha_k^2/\gamma_{k+1} \leq 2L$), while the gap $\phi_k^\star \leq f(x_k)$ closes at the pace of the $\alpha_k \sim 2/k$. Result: $f(x_k) - \phi_k^\star = O(L R^2/k^2)$. In continuous time ($t = \varepsilon k$), the scheme converges to the ODE $\ddot{x} + \tfrac{3}{t}\dot{x} + \nabla f(x) = 0$ — a ball in the valley with vanishing friction: the energy decreases like $1/t^2$, the signature of acceleration.
 :::
 
 ::: note
@@ -352,7 +385,7 @@ In the Deep Learning module (ch. 3), momentum appears as a recipe; here we know 
 
 ## 4. Proximal methods: ISTA and FISTA {#ch4}
 
-Gradient descent requires a gradient — impossible for $F = f + \lambda\|\theta\|_1$. The proximal trick: handle the smooth part with a gradient step, the non-smooth part with an *explicit operation*.
+This chapter extends gradient descent to objectives with a non-differentiable part. Gradient descent requires a gradient — impossible for $F = f + \lambda\|\theta\|_1$ at the points where a coordinate is zero. The proximal trick: handle the smooth part with a gradient step, the non-smooth part with an *explicit operation*.
 
 ::: def
 [Definition 4.1 — Proximal operator]{.tag} For $g\colon \mathbb{R}^d \to \mathbb{R} \cup \{+\infty\}$ convex lower semi-continuous: $$\mathrm{prox}_{t g}(v) = \arg\min_x \;\Big\{ g(x) + \frac{1}{2t}\|x - v\|^2 \Big\}.$$ Special cases: $g = 0$ gives $v$ (gradient descent); $g = \iota_C$ (indicator of a closed convex set $C$) gives the projection $\Pi_C(v)$; $g = \lambda\|\cdot\|_1$ gives componentwise soft thresholding (example 1.4).
@@ -371,10 +404,10 @@ Write $p = \mathrm{prox}_{tg}(v)$, $q = \mathrm{prox}_{tg}(w)$. The optimality c
 :::
 
 :::: thm
-[Theorem 4.4 — Rates of ISTA (proved) and FISTA (admitted here)]{.tag} Let $F = f + g$ with $f$ convex $L$-smooth and $g$ convex, and let $R = \|x_0 - x^\star\|$. ISTA at step $1/L$ satisfies $$F(x_k) - F(x^\star) \;\leq\; \frac{L R^2}{2k} \qquad\text{(and } F(x_{k+1}) \leq F(x^\star) + \tfrac{L}{2}\|x_{k+1}-x^\star\|^2 \text{ propagates as in ch. 2).}$$ FISTA achieves $F(x_k) - F(x^\star) \leq \frac{2L R^2}{(k+1)^2}$ — the $\sqrt{\cdot}$ factor gained on the iteration count, exactly as in chapter 3.
+[Theorem 4.4 — Rates of ISTA (proved) and FISTA (admitted here)]{.tag} Let $F = f + g$ with $f$ convex $L$-smooth and $g$ convex, and let $R = \|x_0 - x^\star\|$. ISTA at step $1/L$ satisfies $$F(x_k) - F(x^\star) \;\leq\; \frac{L R^2}{2k}.$$ FISTA achieves $F(x_k) - F(x^\star) \leq \frac{2L R^2}{(k+1)^2}$ — the $\sqrt{\cdot}$ factor gained on the iteration count, exactly as in chapter 3.
 
 ::: proof
-Set $u_k = x_k - t\nabla f(x_k)$, $x_{k+1} = \mathrm{prox}_{tg}(u_k)$. **(i) Proximal optimality.** Writing 1.2 for the proximal problem at $x_{k+1}$ against an arbitrary competitor $y$ gives, after expanding the squares: $$g(x_{k+1}) \;\leq\; g(y) + \frac{1}{2t}\Big(\|y - x_k\|^2 - \|x_{k+1} - x_k\|^2\Big) + \langle \nabla f(x_k),\, y - x_{k+1}\rangle.$$ **(ii) Smoothness of $f$.** $f(x_{k+1}) \leq f(x_k) + \langle\nabla f(x_k), x_{k+1}-x_k\rangle + \tfrac{L}{2}\|x_{k+1}-x_k\|^2$. **(iii) Sum with $y = x^\star$, $t = 1/L$.** The cross terms cancel and there remains $F(x_{k+1}) - F(x^\star) \leq \tfrac{L}{2}\big(\|x^\star - x_k\|^2 - \|x_{k+1}-x_k\|^2\big) - \tfrac{1}{2L}\dots$ then the same telescoping as in theorem 2.2 (the distances to $x^\star$ decrease by convexity of $F$ and the proximal inequality) gives the sum in $O(LR^2)$, hence the $1/k$. The FISTA proof (Beck–Teboulle 2009, th. 4.4) propagates the estimate sequence of ch. 3 through the same pair (i)+(ii). [∎]{.qed}
+Take $t = 1/L$, set $u_k = x_k - \tfrac{1}{L}\nabla f(x_k)$ and $x_{k+1} = \mathrm{prox}_{g/L}(u_k)$, the minimizer of $\phi(x) = g(x) + \tfrac{L}{2}\|x - u_k\|^2$. **(i) Proximal inequality.** The function $\phi$ is $L$-strongly convex and minimized at $x_{k+1}$, so for every $y$: $\phi(y) \geq \phi(x_{k+1}) + \tfrac{L}{2}\|y - x_{k+1}\|^2$. Expanding $\|y - u_k\|^2 = \|y - x_k\|^2 + \tfrac{2}{L}\langle \nabla f(x_k), y - x_k\rangle + \tfrac{1}{L^2}\|\nabla f(x_k)\|^2$, and the same for $x_{k+1}$, the gradient-norm terms cancel and we get $$g(x_{k+1}) \;\leq\; g(y) + \langle \nabla f(x_k),\, y - x_{k+1}\rangle + \frac{L}{2}\Big(\|y - x_k\|^2 - \|y - x_{k+1}\|^2 - \|x_{k+1} - x_k\|^2\Big).$$ **(ii) Smoothness, then convexity of $f$.** $f(x_{k+1}) \leq f(x_k) + \langle\nabla f(x_k), x_{k+1}-x_k\rangle + \tfrac{L}{2}\|x_{k+1}-x_k\|^2$ and $f(x_k) \leq f(y) + \langle \nabla f(x_k), x_k - y\rangle$, whose sum is $f(x_{k+1}) \leq f(y) + \langle\nabla f(x_k), x_{k+1} - y\rangle + \tfrac{L}{2}\|x_{k+1}-x_k\|^2$. **(iii) Sum of (i) and (ii).** The inner products and the terms $\|x_{k+1}-x_k\|^2$ cancel: $$F(x_{k+1}) \;\leq\; F(y) + \frac{L}{2}\Big(\|y - x_k\|^2 - \|y - x_{k+1}\|^2\Big) \qquad \text{for every } y.$$ With $y = x_k$ this shows that $F(x_k)$ is non-increasing. With $y = x^\star$ and summing from $0$ to $k-1$, the right-hand side telescopes: $\sum_{j=1}^{k} \big(F(x_j) - F^\star\big) \leq \tfrac{L}{2}\|x_0 - x^\star\|^2$. Since the terms decrease, the last one is at most their average: $F(x_k) - F^\star \leq \frac{LR^2}{2k}$ — the same telescoping as in theorem 2.2. The FISTA proof (Beck–Teboulle 2009, th. 4.4) applies the inequality of (iii) at the extrapolated point $y_k$ and combines it with the estimate-sequence argument of ch. 3. [∎]{.qed}
 :::
 ::::
 
@@ -424,7 +457,7 @@ The $1/k^2$ vs $1/k$ factor is literally visible: same computations per iteratio
 
 ## 5. Stochastic gradient descent {#ch5}
 
-When $n = 10^9$, computing $\nabla f$ costs $10^9$ evaluations — per iteration. The founding gesture of modern learning (Robbins–Monro, 1951): accept a *noisy but cheap* gradient.
+This chapter analyses what happens when the gradient is replaced by a cheap, noisy estimate. When $n = 10^9$, computing $\nabla f$ costs $10^9$ evaluations — per iteration. The founding gesture of modern learning (Robbins–Monro, 1951): accept a *noisy but cheap* gradient.
 
 ::: def
 [Definition 5.1 — SGD and assumptions]{.tag} Draw $i_k$ uniformly from $\{1,\dots,n\}$ (or from the batch): $$x_{k+1} = x_k - \eta_k\, g_k, \qquad g_k = \nabla \ell(h_{x_k}(x_{i_k}), y_{i_k}) + \nabla\Omega\text{ (when applicable).}$$ Assumptions: (H1) unbiasedness $\mathbb{E}[g_k \mid x_k] = \nabla f(x_k)$; (H2) bounded variance $\mathbb{E}\|g_k - \nabla f(x_k)\|^2 \leq \sigma^2$; (H3) Robbins–Monro $\sum \eta_k = \infty$, $\sum \eta_k^2 < \infty$ for decreasing steps.
@@ -445,12 +478,16 @@ Conditionally on $x_k$, the mean step equals $-\eta\nabla f(x_k)$ (unbiasedness)
   constant $\eta$                         practice (deep learning)                linear until the plateau           neighborhood $O(\eta\sigma^2)$
   constant + averaging (Polyak–Ruppert)    $\bar{x}_k = \frac{1}{k}\sum x_j$   statistically optimal              converges
 
+::: ex
+[Example 5.3 — The plateau computed exactly in one dimension]{.tag} Take $f(x) = \tfrac12 x^2$ (so $L = \mu = 1$) and a stochastic gradient $g_k = x_k + \xi_k$, where the noises $\xi_k$ are independent, centred, of variance $\sigma^2$. Constant-step SGD reads $x_{k+1} = (1 - \eta)\,x_k - \eta\,\xi_k$. Taking the expectation of the square, and using that $\xi_k$ is independent of $x_k$: $$\mathbb{E}[x_{k+1}^2] = (1-\eta)^2\,\mathbb{E}[x_k^2] + \eta^2\sigma^2.$$ For $0 < \eta < 2$ this linear recursion converges to its fixed point $s = \eta^2\sigma^2/(1 - (1-\eta)^2) = \eta\sigma^2/(2 - \eta)$. Hence $\mathbb{E}[f(x_k)] \to \frac{\eta\sigma^2}{2(2-\eta)} \approx \frac{\eta\sigma^2}{4}$ for small $\eta$: the plateau is proportional to the step, as theorem 5.2 announced (exercise 6 gives the general bound $\frac{\eta L\sigma^2}{2\mu}$, here $\frac{\eta\sigma^2}{2}$, larger by a factor of two only). The transient, on the other hand, decays like $(1-\eta)^{2k}$: halving the step halves the plateau but doubles the number of iterations needed to reach it. Decreasing step schedules are the systematic way out of this trade-off.
+:::
+
 ::: note
 [Minibatching: buying variance with compute]{.tag} A mini-batch $B$ of size $b$ replaces $g_k$ with the average over $B$: the variance drops to $\sigma^2/b$ (independent draws), the cost rises to $b$ gradients. At a fixed compute budget, large $b$ = less noise but fewer steps — the optimal trade-off depends on the regime: in the convex case, steps of modest size $b$ often dominate (Bottou–Curtis–Nocedal 2018, §5.3); in deep learning, very large batches require correcting the step (LARS, ch. 10). Hence the question of the next chapter: can we kill the variance *without* paying $b$ or $n$ at every step?
 :::
 
 ::: prop
-[Proposition 5.3 — Noise is not (only) an evil]{.tag} The stationary regime $O(\eta\sigma^2)$ of theorem 5.2 has a positive side: the fluctuations around the minimum sweep the "passes" of the landscape and experience (see the Deep Learning module, ch. 3) shows that the "flat" minima found by SGD often generalize better than the narrow valleys reached by deterministic methods. The very sigma² that sets the stationary error acts as an implicit regularizer — an active research theme (see ch. 11, A. Dieuleveut's work on constant-step SGD).
+[Proposition 5.4 — Noise is not (only) an evil]{.tag} The stationary regime $O(\eta\sigma^2)$ of theorem 5.2 has a positive side: the fluctuations around the minimum sweep the "passes" of the landscape and experience (see the Deep Learning module, ch. 3) shows that the "flat" minima found by SGD often generalize better than the narrow valleys reached by deterministic methods. The very sigma² that sets the stationary error acts as an implicit regularizer — an active research theme (see ch. 11, A. Dieuleveut's work on constant-step SGD).
 :::
 
 ```python
@@ -480,7 +517,7 @@ for eta in (0.01, 0.1, 1.0):
 
 ## 6. Variance reduction: SAGA and SVRG {#ch6}
 
-Between the "complete but expensive" and the "stochastic but noisy" gradient, a third way: keep **memory** of past gradients to build an unbiased estimator whose variance vanishes by itself.
+This chapter removes the plateau of constant-step SGD without paying a full gradient at every step. Between the "complete but expensive" and the "stochastic but noisy" gradient, a third way: keep **memory** of past gradients to build an unbiased estimator whose variance vanishes by itself.
 
 ::: def
 [Definition 6.1 — SAGA (Defazio, Bach, Lacoste-Julien, 2014)]{.tag} One maintains a table $\phi_i \approx \nabla f_i(x)$ of the latest gradient computed for each term, and $\bar\phi = \frac{1}{n}\sum_i \phi_i$. At each iteration, draw $i$, update the table, then: $$x_{k+1} = x_k - \eta\Big(\nabla f_i(x_k) - \phi_i + \bar\phi\Big).$$ The estimator is unbiased (the table does not depend on the current draw); its variance is $\frac{1}{n}\sum_i \|\nabla f_i(x_k) - \phi_i\|^2 \to 0$ at convergence — instead of SGD's permanent $\sigma^2$.
@@ -491,7 +528,7 @@ Between the "complete but expensive" and the "stochastic but noisy" gradient, a 
 :::
 
 ::: thm
-[Theorem 6.3 — Linear convergence (statement, sketch)]{.tag} For $f = \frac{1}{n}\sum f_i$ $\mu$-strongly convex, each $f_i$ $L$-smooth, SAGA and SVRG with step $\eta \asymp 1/L$ converge *linearly*: $$\mathbb{E}\big[F(x_k) - F(x^\star)\big] \;\leq\; \Big(1 - c\,\min\Big(\frac{1}{n}, \frac{\mu}{L}\Big)\Big)^{k}\,\big(F(x_0)-F(x^\star)\big),$$ that is $O\big((n + \kappa)\log\frac{1}{\varepsilon}\big)$ evaluations of individual gradients — versus $O(n\kappa\log\frac{1}{\varepsilon})$ for deterministic descent. *Sketch.* The proof couples two recurrences: the decrease in function value (as in ch. 2, via unbiasedness) and the decrease of the estimator's variance (extra contraction provided by the table/snapshot); the variance becoming multiplicative, it converts SGD's $O(\eta\sigma^2)$ plateau into a geometric contraction. [∎]{.qed}
+[Theorem 6.3 — Linear convergence (statement, sketch)]{.tag} For $f = \frac{1}{n}\sum f_i$ $\mu$-strongly convex, each $f_i$ $L$-smooth, SAGA and SVRG with step $\eta \asymp 1/L$ converge *linearly*: $$\mathbb{E}\big[F(x_k) - F(x^\star)\big] \;\leq\; \Big(1 - c\,\min\Big(\frac{1}{n}, \frac{\mu}{L}\Big)\Big)^{k}\,\big(F(x_0)-F(x^\star)\big),$$ that is $O\big((n + \kappa)\log\frac{1}{\varepsilon}\big)$ evaluations of individual gradients — versus $O(n\kappa\log\frac{1}{\varepsilon})$ for deterministic descent. For $n = 10^5$ examples and $\kappa = 10^3$, this is $1.01 \times 10^5$ against $10^8$ gradient evaluations per factor $e$ of accuracy: about a thousand times fewer. *Sketch.* The proof couples two recurrences: the decrease in function value (as in ch. 2, via unbiasedness) and the decrease of the estimator's variance (extra contraction provided by the table/snapshot); the variance becoming multiplicative, it converts SGD's $O(\eta\sigma^2)$ plateau into a geometric contraction. [∎]{.qed}
 :::
 
   Method                   Gradient/iteration   Memory             Evaluations for $\varepsilon$ (strongly convex)
@@ -503,18 +540,18 @@ Between the "complete but expensive" and the "stochastic but noisy" gradient, a 
   SVRG + acceleration      1                    $O(d)$             $O\big(n + \sqrt{n\kappa}\big)\log 1/\varepsilon$ — optimal
 
 ::: note
-[Where theory stops (and deep learning begins)]{.tag} In deep learning, $f_i$ is not convex, the SAGA table explodes ($n$ gradient-sized models), and SGD noise is an ally (prop. 5.3): strict variance reduction is little used there. But the *structure* of the trade-off — variance vs cost per iteration — governs the batch choices, step schedules and Adam variants (ch. 10). Convex theory is the compass, not the territory.
+[Where theory stops (and deep learning begins)]{.tag} In deep learning, $f_i$ is not convex, the SAGA table explodes ($n$ gradient-sized models), and SGD noise is an ally (prop. 5.4): strict variance reduction is little used there. But the *structure* of the trade-off — variance vs cost per iteration — governs the batch choices, step schedules and Adam variants (ch. 10). Convex theory is the compass, not the territory.
 :::
 
 ## 7. Newton and quasi-Newton {#ch7}
 
-Changing markets: pay for second-order information (Hessian) in exchange for *quadratic* local convergence — the number of correct digits *doubles* at every iteration.
+First-order methods pay for the condition number $\kappa$; this chapter buys second-order information (the Hessian) to remove it. The reward is *quadratic* local convergence — the number of correct digits *doubles* at every iteration — and the price is the cost of each iteration.
 
 :::: thm
 [Theorem 7.1 — Local quadratic convergence (proved)]{.tag} Let $f$ be twice differentiable, $\mu I \preceq \nabla^2 f(x) \preceq LI$ everywhere ($f$ therefore strongly convex), Hessian $M$-Lipschitz. Newton's method $x_{k+1} = x_k - \nabla^2 f(x_k)^{-1} \nabla f(x_k)$ satisfies, as soon as $\|x_0 - x^\star\| \leq \mu/M$: $$\|x_{k+1} - x^\star\| \;\leq\; \frac{M}{2\mu}\,\|x_k - x^\star\|^2.$$
 
 ::: proof
-Write $e_k = x_k - x^\star$ and expand $\nabla f$ at $x_k$ around $x^\star$ (where $\nabla f(x^\star) = 0$): $$0 = \nabla f(x^\star) = \nabla f(x_k) - \int_0^1 \nabla^2 f(x^\star + s e_k)\, e_k \, ds \;\Rightarrow\; \nabla f(x_k) = H_k e_k - \rho_k,\quad \|\rho_k\| \leq \frac{M}{2}\|e_k\|^2,$$ where $H_k = \nabla^2 f(x_k)$ and $\rho_k = \int_0^1 (H_k - \nabla^2 f(x^\star+se_k))e_k\,ds$ collects the Hessian gap ($\leq M \|e_k\|$ in operator norm, hence the $\tfrac{M}{2}\|e_k\|^2$ after integration). Then $$e_{k+1} = e_k - H_k^{-1}\nabla f(x_k) = H_k^{-1}\rho_k \;\Rightarrow\; \|e_{k+1}\| \leq \|H_k^{-1}\| \,\frac{M}{2}\|e_k\|^2 \leq \frac{M}{2\mu}\|e_k\|^2. \;\blacksquare$$ If $\|e_0\| \leq \mu/M$, the error at least halves at every step — and then decreases quadratically once below 1. [∎]{.qed}
+Write $e_k = x_k - x^\star$ and expand $\nabla f$ at $x_k$ around $x^\star$ (where $\nabla f(x^\star) = 0$): $$0 = \nabla f(x^\star) = \nabla f(x_k) - \int_0^1 \nabla^2 f(x^\star + s e_k)\, e_k \, ds \;\Rightarrow\; \nabla f(x_k) = H_k e_k - \rho_k,\quad \|\rho_k\| \leq \frac{M}{2}\|e_k\|^2,$$ where $H_k = \nabla^2 f(x_k)$ and $\rho_k = \int_0^1 (H_k - \nabla^2 f(x^\star+se_k))e_k\,ds$ collects the Hessian gap ($\leq M \|e_k\|$ in operator norm, hence the $\tfrac{M}{2}\|e_k\|^2$ after integration). Then $$e_{k+1} = e_k - H_k^{-1}\nabla f(x_k) = H_k^{-1}\rho_k \;\Rightarrow\; \|e_{k+1}\| \leq \|H_k^{-1}\| \,\frac{M}{2}\|e_k\|^2 \leq \frac{M}{2\mu}\|e_k\|^2.$$ If $\|e_0\| \leq \mu/M$, the error at least halves at every step — and then decreases quadratically once below 1. [∎]{.qed}
 :::
 ::::
 
@@ -536,12 +573,16 @@ Newton is not global: far from the minimum, the direction can be bad — hence *
 :::
 
 ::: ex
-[Example 7.3 — Quadratic speed, experienced]{.tag} Minimize $f(x) = \frac{x^2}{2} + e^{-x}$... hmm let us take $f(x)=x\log x$ ($x>0$, convex): Newton is exactly second-order there: $f''(x) = 1/x$ and the iterate $x_{k+1} = x_k - f'(x_k)/f''(x_k)$ can be computed by hand. Exercise 7: show that for $f(x) = x^4$, starting from $x_0 = 2$, Newton gives $x_k = 2^{(1-(-1/3)^k \cdot \ldots)}$... — the simplest is to observe it numerically: count the correct digits at each iteration, watch them double, then compare L-BFGS via SciPy on the smoothed LASSO of ch. 4 (in dimension $d = 200$).
+[Example 7.3 — Quadratic speed, experienced]{.tag} Minimize $f(x) = x\log x$ on $x > 0$, a convex function with $f'(x) = \log x + 1$ and $f''(x) = 1/x$; the minimizer is $x^\star = 1/e \approx 0.367879$. The Newton step simplifies to $x_{k+1} = x_k - f'(x_k)/f''(x_k) = -x_k \log x_k$. From $x_0 = 0.5$ the errors $|x_k - x^\star|$ are $1.3 \times 10^{-1}$, $2.1 \times 10^{-2}$, $6.3 \times 10^{-4}$, $5.4 \times 10^{-7}$, $3.9 \times 10^{-13}$: the exponent roughly doubles at each step. The ratio $|e_{k+1}|/e_k^2$ settles at about $1.36$, which is the constant $|f^{(3)}(x^\star)|/(2f''(x^\star)) = e/2$ predicted by a second-order expansion — the one-dimensional version of the constant $M/(2\mu)$ of theorem 7.1. Exercise 8 shows the counter-example: when $f''(x^\star) = 0$, as for $x^4$, the convergence is only linear.
+:::
+
+::: note
+[Common mistakes with Newton's method]{.tag} (i) Inverting the Hessian explicitly: one solves the linear system $\nabla^2 f(x_k)\, d = -\nabla f(x_k)$ by a Cholesky factorization, which is cheaper and more stable. (ii) Using the full step far from the minimum: without a line search, Newton can diverge even on a strictly convex function (try $f(x) = \sqrt{1 + x^2}$ from $x_0 = 2$: the iterates are $x_{k+1} = -x_k^3$). (iii) Applying it to a non-convex function without safeguard: where the Hessian has negative eigenvalues, the Newton direction can point uphill.
 :::
 
 ## 8. Constraints in machine learning {#ch8}
 
-Real life: "error rate $\leq 5\,\%$ *and* demographic disparity $\leq \delta$ *and* latency $\leq 100$ ms". The average loss alone cannot express **requirements**; constraints are needed — and hence the duality of ch. 0, applied.
+This chapter shows how to train a model that must satisfy requirements, not only minimize an average loss. A real specification reads "error rate $\leq 5\,\%$ *and* demographic disparity $\leq \delta$ *and* latency $\leq 100$ ms". The average loss alone cannot express such **requirements**; constraints are needed — and hence the duality of ch. 0, applied.
 
 ::: def
 [Definition 8.1 — Learning under constraints]{.tag} $$\min_{\theta}\; \frac{1}{n}\sum_i \ell(h_\theta(x_i), y_i) \quad\text{subject to}\quad \frac{1}{n}\sum_i c_j(h_\theta(x_i), x_i) \leq 0, \quad j = 1, \dots, m.$$ Examples: demographic parity (gap of positive rates between groups), memory/latency budget at inference, false-negative rate in health. The empirical Lagrangian $\mathcal{L}(\theta,\lambda)$ and the dual $\max_{\lambda \geq 0} d(\lambda)$ are formed as in ch. 0.
@@ -566,7 +607,11 @@ Real life: "error rate $\leq 5\,\%$ *and* demographic disparity $\leq \delta$ *a
 ::::
 
 ::: ex
-[Example 8.4 — SVM: the constraint that becomes a penalty, that becomes a dual]{.tag} Hard-margin SVM (see the Machine Learning module, ch. 3): $\min \tfrac12\|w\|^2$ subject to $y_i w^\top x_i \geq 1$. (i) The Wolfe dual gives the box problem $\max_\alpha -\tfrac12\|X^\top(\alpha\odot y)\|^2 + \mathbf{1}^\top\alpha$ subject to $\alpha \geq 0$, $\alpha \perp y$ — a projection onto a simplex: projected descent of theorem 8.3. (ii) The regularized primal (hinge): $\min \tfrac1n\sum \max(0, 1 - y_i w^\top x_i) + \lambda\|w\|^2$ is a special case of the $f + g$ form of ch. 4 — this time with a non-smooth $f$, solved by subgradient or by duality (SVRG shines there too). Three chapters of the module, a single problem.
+[Example 8.4 — Penalty and multiplier on the simplest constrained problem]{.tag} Minimize $\tfrac12 x^2$ subject to $x \geq 1$, i.e. $g(x) = 1 - x \leq 0$; the solution is $x^\star = 1$. *Penalty.* Minimizing $\tfrac12 x^2 + \tfrac{\rho}{2}(1 - x)_+^2$ gives $x_\rho = \frac{\rho}{1+\rho}$: the constraint is violated by $\frac{1}{1+\rho}$, which vanishes only as $\rho \to \infty$ — and the curvature $1 + \rho$ of the penalized function grows at the same time, so the problem becomes ill-conditioned. *Multiplier (Uzawa).* The Lagrangian $\tfrac12 x^2 + \lambda(1 - x)$ is minimized at $x(\lambda) = \lambda$, so the dual function is $d(\lambda) = \lambda - \tfrac12\lambda^2$, maximized at $\lambda^\star = 1$ with $d(\lambda^\star) = \tfrac12 = f(x^\star)$: no duality gap, as theorem 0.2 predicts. The Uzawa update $\lambda_{k+1} = [\lambda_k + \rho\,(1 - x(\lambda_k))]_+ = [(1-\rho)\lambda_k + \rho]_+$ converges to $\lambda^\star = 1$ for any $0 < \rho < 2$, the error being multiplied by $|1 - \rho|$ at each step; at the limit the constraint holds *exactly*. The multiplier $\lambda^\star = 1$ is also the price of the constraint: tightening it to $x \geq 1 + \delta$ raises the optimal value by about $\lambda^\star\delta = \delta$.
+:::
+
+::: ex
+[Example 8.5 — SVM: the constraint that becomes a penalty, that becomes a dual]{.tag} Hard-margin SVM (see the Machine Learning module, ch. 3): $\min \tfrac12\|w\|^2$ subject to $y_i w^\top x_i \geq 1$. (i) The Wolfe dual gives the box problem $\max_\alpha -\tfrac12\|X^\top(\alpha\odot y)\|^2 + \mathbf{1}^\top\alpha$ subject to $\alpha \geq 0$, $\alpha \perp y$ — a projection onto a simplex: projected descent of theorem 8.3. (ii) The regularized primal (hinge): $\min \tfrac1n\sum \max(0, 1 - y_i w^\top x_i) + \lambda\|w\|^2$ is a special case of the $f + g$ form of ch. 4 — this time with a non-smooth $f$, solved by subgradient or by duality (SVRG shines there too). Three chapters of the module, a single problem.
 :::
 
 ::: note
@@ -575,7 +620,7 @@ Real life: "error rate $\leq 5\,\%$ *and* demographic disparity $\leq \delta$ *a
 
 ## 9. Hyperparameter optimization {#ch9}
 
-The step $t$, the penalty $\lambda$, the batch size, the learning rate schedule: so many hyperparameters that the module has so far treated as given. Yet experience shows they are often worth more performance points than the choice of algorithm itself. Optimizing *the optimizer*.
+This chapter optimizes the quantities that the previous chapters took as given. The step $t$, the penalty $\lambda$, the batch size, the learning rate schedule: so many hyperparameters that the module has so far treated as given. Yet experience shows they are often worth more performance points than the choice of algorithm itself. The task is to optimize *the optimizer* itself.
 
 ::: def
 [Definition 9.1 — The problem (and why it is hard)]{.tag} $$\max_{h \in \mathcal{H}}\; v(h), \qquad v(h) = \text{validation score of a model trained with } h,$$ an *expensive* function (each evaluation = one training run), *noisy*, *non-convex*, with no gradient available. Typically 5 to 50 dimensions, a budget of 10 to 1,000 evaluations. This is the territory of Bayesian *derivative-free* optimization.
@@ -589,8 +634,12 @@ Model: a cell is "good" if its coordinates on the $p$ useful axes are good, prob
 :::
 ::::
 
+::: ex
+[Example 9.3 — The numbers for 64 trials]{.tag} Two hyperparameters, of which only the learning rate matters, and good values occupying $5\%$ of its range ($q = 0.05$). A grid of $8 \times 8 = 64$ trials tests only $8$ distinct learning rates; even with a random offset, a grid of $8$ equally spaced points hits an interval of length $0.05$ with probability $8 \times 0.05 = 0.4$, so it misses the good region with probability $0.6$. Sixty-four random trials test $64$ distinct learning rates and miss with probability $0.95^{64} \approx 0.04$. Same budget, fifteen times fewer failures.
+:::
+
 ::: def
-[Definition 9.3 — Bayesian optimization (GP-EI)]{.tag} (1) Model: $v \sim \mathrm{GP}(0, k)$ over $\mathcal{H}$; after $k$ evaluations, Gaussian predictions $(\mu_k(h), \sigma_k(h))$ at every point. (2) *Expected improvement* acquisition: with $v_k^\star = \max_j v(h_j)$, $$\mathrm{EI}_k(h) = \mathbb{E}\big[(v(h) - v_k^\star)_+\big] = (\mu_k(h) - v_k^\star)\,\Phi(z_k(h)) + \sigma_k(h)\,\varphi(z_k(h)), \quad z_k = \frac{\mu_k - v_k^\star}{\sigma_k}.$$ (3) Loop: evaluate $h_{k+1} = \arg\max_h \mathrm{EI}_k(h)$, update the GP. The closed-form formula shows the exploitation/exploration mechanics: $\mathrm{EI}$ grows when $\mu$ exceeds the record (*exploit*) and when $\sigma$ is large (*explore*).
+[Definition 9.4 — Bayesian optimization (GP-EI)]{.tag} (1) Model: $v \sim \mathrm{GP}(0, k)$ over $\mathcal{H}$; after $k$ evaluations, Gaussian predictions $(\mu_k(h), \sigma_k(h))$ at every point. (2) *Expected improvement* acquisition: with $v_k^\star = \max_j v(h_j)$, $$\mathrm{EI}_k(h) = \mathbb{E}\big[(v(h) - v_k^\star)_+\big] = (\mu_k(h) - v_k^\star)\,\Phi(z_k(h)) + \sigma_k(h)\,\varphi(z_k(h)), \quad z_k = \frac{\mu_k - v_k^\star}{\sigma_k}.$$ (3) Loop: evaluate $h_{k+1} = \arg\max_h \mathrm{EI}_k(h)$, update the GP. The closed-form formula shows the exploitation/exploration mechanics: $\mathrm{EI}$ grows when $\mu$ exceeds the record (*exploit*) and when $\sigma$ is large (*explore*).
 :::
 
 ::: note
@@ -615,7 +664,7 @@ print("grid:", round(best_grid, 4), "random:", round(best_rand, 4))
 
 ## 10. Optimizing the training of networks {#ch10}
 
-The splits: this whole module is convex, training a network is not. Yet the recipes of deep learning are literally the objects of the previous chapters, transplanted — with adaptations that non-convexity demands.
+This chapter confronts the module with its main application. Almost everything so far assumed convexity, and training a network is not convex. Yet the recipes of deep learning are literally the objects of the previous chapters, transplanted — with adaptations that non-convexity demands.
 
 ::: note
 [What survives, what breaks]{.tag}
@@ -643,7 +692,7 @@ The splits: this whole module is convex, training a network is not. Yet the reci
 :::
 
 ::: prop
-[Proposition 10.2 — Why it works anyway (overview)]{.tag} Three shock absorbers explain why non-convexity is not prohibitive: (i) *overparameterization*: with more parameters than constraints, local minima become rare — all connected and of similar value; (ii) *local PL inequality*: along trajectories, an analogue of the Polyak–Łojasiewicz condition (ch. 2) often holds empirically, which restores local linear convergence "as if"; (iii) *SGD noise*: the stationary regime (prop. 5.3) sweeps narrow passes and selects flat minima that generalize better. None of the three is a general theorem — this is precisely the research frontier of the field (and the angle of attack of the Deep Learning P2 module for the efficiency part, see Deep Learning P2 module, ch. 2).
+[Proposition 10.2 — Why it works anyway (overview)]{.tag} Three shock absorbers explain why non-convexity is not prohibitive: (i) *overparameterization*: with more parameters than constraints, local minima become rare — all connected and of similar value; (ii) *local PL inequality*: along trajectories, an analogue of the Polyak–Łojasiewicz condition (ch. 2) often holds empirically, which restores local linear convergence "as if"; (iii) *SGD noise*: the stationary regime (prop. 5.4) sweeps narrow passes and selects flat minima that generalize better. None of the three is a general theorem — this is precisely the research frontier of the field (and the angle of attack of the Deep Learning P2 module for the efficiency part, see Deep Learning P2 module, ch. 2).
 :::
 
 ::: note
@@ -659,31 +708,31 @@ The module's two instructors are among the players in optimization theory for le
 
 -   L. F. O. Chamon, A. Ribeiro, [Probably Approximately Correct Constrained Learning](https://arxiv.org/abs/2006.05487), NeurIPS 2020 — the paper that founds the generalization theory of the constrained learning of ch. 8: under representativeness conditions, every PAC-learnable class remains so under constraints, with a dual that "learns" as well as the primal.
 -   L. F. O. Chamon, S. Paternain, M. Calvo-Fullana, A. Ribeiro, [The empirical duality gap of constrained statistical learning](https://arxiv.org/abs/2002.05183), 2020 — quantifies when the empirical dual approaches the population dual: the key for multipliers learned on the training set to remain valid in test (see note of ch. 8).
--   S. Paternain, L. Chamon, M. Calvo-Fullana, A. Ribeiro, [Constrained Reinforcement Learning Has Zero Duality Gap](https://papers.nips.cc/paper/8973-constrained-reinforcement-learning-has-zero-duality-gap), NeurIPS 2019 — extension of the "zero gap" to constrained control: the bridge toward the Reinforcement Learning module (ch. 3–4 of this module).
+-   S. Paternain, L. Chamon, M. Calvo-Fullana, A. Ribeiro, [Constrained Reinforcement Learning Has Zero Duality Gap](https://papers.nips.cc/paper/8973-constrained-reinforcement-learning-has-zero-duality-gap), NeurIPS 2019 — extension of the "zero gap" to constrained control: the bridge toward the Reinforcement Learning module (ch. 3–4 of that module).
 
-Proposed cross-cutting reading: apply ch. 8 to a fairness problem (Emerging ML module, ch. 6) while measuring the empirical duality gap of exercise 8.
+Proposed cross-cutting reading: apply ch. 8 to a fairness problem (Emerging ML module, ch. 6) while measuring the empirical duality gap of exercise 9.
 :::
 
 ::: note
 [Aymeric Dieuleveut (CMAP, X) — optimal speed and constant-step SGD]{.tag}
 
 -   A. Dieuleveut, N. Flammarion, F. Bach, [Harder, Better, Faster, Stronger Convergence Rates for Least-Squares Regression](https://arxiv.org/abs/1602.05419), ICML 2017 — averaged SGD (Polyak–Ruppert) achieves the optimal *minimax* rates in regression, without knowing the regularity level: the statistical version of the "optimal rate" of ch. 3.
--   A. Dieuleveut, A. Durmus, F. Bach, [Bridging the Gap between Constant Step Size Stochastic Gradient Descent and Markov Chains](https://arxiv.org/abs/1707.06386), Annals of Statistics 2020 — constant-step SGD (th. 5.2) converges to a stationary *law*; the paper gives its exact geometry and explains why the residual noise can be beneficial (prop. 5.3) — the analysis of the "constant learning rate + final decay" practice for networks.
+-   A. Dieuleveut, A. Durmus, F. Bach, [Bridging the Gap between Constant Step Size Stochastic Gradient Descent and Markov Chains](https://arxiv.org/abs/1707.06386), Annals of Statistics 2020 — constant-step SGD (th. 5.2) converges to a stationary *law*; the paper gives its exact geometry and explains why the residual noise can be beneficial (prop. 5.4) — the analysis of the "constant learning rate + final decay" practice for networks.
 
 Proposed cross-cutting reading: connect ch. 5 to the Emerging ML module (ch. 0, SGD reminders) and to the Machine Learning module (ch. 9, massive data).
 :::
 
 ## Exercises {#ex}
 
-1.  **Valley.** For $f(u,v)=\tfrac12(u^2+\kappa v^2)$, $\kappa = 100$, $x_0 = (10, 1)$: compute the first three iterates of descent at step $1/L$, plot the trajectory, and verify that the steep direction is canceled in one step while the flat direction decreases by $1 - 1/\kappa$ per step. *Solution*: $\nabla f = (u, \kappa v)$, hence $(10, 1) \to (9.9,\, 0) \to (9.801,\, 0) \to (9.703,\, 0)$ — $v_1 = 0$ but $u_k = 10\,(1-1/\kappa)^k$; to compare with Nesterov ($\gamma = \tfrac{1-1/\sqrt\kappa}{1+1/\sqrt\kappa}$) which reaches the target accuracy in $\sqrt\kappa$ steps.
-2.  **Optimal step on a quadratic.** Show that for $f(x) = \tfrac12 x^\top A x$ with eigenvalues in $[\mu, L]$, the constant step minimizing the contraction factor $\rho(t) = \max_i \|1 - t\lambda_i\|$ equals $t = 2/(\mu+L)$ and gives $\rho = \frac{\kappa-1}{\kappa+1}$ — in $x$, hence $\big(\tfrac{\kappa-1}{\kappa+1}\big)^2$ on the values of $f$. Verify that this factor remains $\geq 1 - \frac{2}{\kappa+1}$ and conclude that descent cannot beat $O(\kappa)$ on this class.
-3.  **Soft thresholding.** Prove the formula $\mathrm{prox}_{\lambda\|\cdot\|}(z) = \mathrm{sign}(z)\max(\|z\|-\lambda, 0)$ (use example 1.4), then compute the $\mathrm{prox}$ of the indicator of $[a,b]$, of the $\ell_2$ ball, and of the probability simplex (algorithm of Duchi et al., 2008).
-4.  **ISTA/FISTA in practice.** Take up the code of ch. 4: plot $F(x_k)-F(x^\star)$ (reference: 5,000 ISTA iterations) on a log scale for ISTA, FISTA and FISTA+adaptive restart (reset the momentum to zero when $F(x_{k+1}) > F(x_k)$). Measure the experimental slopes and compare with $1/k$ and $1/k^2$. *Expected*: FISTA+restart beats FISTA as soon as the solution is sparse (local strong convexity).
-5.  **SGD neighborhood.** Prove claim (ii) of theorem 5.2: at constant step $\eta$, under strong convexity, $\limsup \mathbb{E}[f(x_k)] - f^\star \leq \frac{\eta L\sigma^2}{2\mu}$. *Hint*: combine the PL inequality $f - f^\star \geq \frac{1}{2L}\|\nabla f\|^2$ and $f - f^\star \leq \frac{1}{2\mu}\|\nabla f\|^2$ with theorem 5.2, in the stationary regime. Simulate with the code of ch. 5 for $\eta \in \{0.01; 0.1; 1\}$.
-6.  **Minimum viable SAGA.** Implement SAGA (table of $n$ gradients) for $\ell_2$-regularized logistic regression, $n = 1\,000$, $d = 50$, $\mu$ chosen so that $\kappa = 100$. Plot the variance of the estimator $\|g_k - \nabla f(x_k)\|^2$ along the iterations and compare it with that of SGD; verify the linear convergence of theorem 6.3 (slope in log). *Pitfall*: the average $\bar\phi$ must be maintained incrementally, not recomputed.
-7.  **Quadratic Newton.** For $f(x) = \frac{x^4}{4}$ (convex, Hessian $3x^2$, Lipschitz $M=6$ locally, local $\mu$): show that $x_{k+1} = x_k - \tfrac{x_k}{3} = \tfrac23 x_k$ (linear convergence, not quadratic: why?) and then that for $f(x)=\frac{x^2}{2}+e^{-x}$ convergence is quadratic from the start. Compare `scipy.optimize.minimize` (Newton-CG, BFGS, L-BFGS-B) on the smoothed LASSO of ch. 4 in $d = 200$: iteration count, time, final accuracy.
-8.  **Constraints: penalty vs duality.** Solve $\min \tfrac12\|x\|^2$ subject to $Ax = b$ in two ways: (a) quadratic penalty $\tfrac{\rho}{2}\|Ax-b\|^2$, $\rho \to \infty$; (b) Uzawa $\lambda_{k+1} = \lambda_k + \rho(Ax_{k+1}-b)$ with $x_{k+1}$ minimizing the Lagrangian. Show that the dual is smooth with constant $\rho\|A\|^2 + 1$... and measure the conditioning of the two approaches; conclude on the superiority of the multiplier (which "remembers" the constraint) over the penalty (which forgets it).
-9.  **Random search.** Reproduce proposition 9.2: build a dummy function in $d = 6$ dimensions of which only $p = 2$ matter, compare a truncated exhaustive $8^6$ grid at equal budget vs random draws, over 20 repetitions; plot the distribution of the best score. Then test `skopt.gp_minimize` (GP-EI) at small budget: when does it beat random?
+1.  **★ Valley.** For $f(u,v)=\tfrac12(u^2+\kappa v^2)$, $\kappa = 100$, $x_0 = (10, 1)$: compute the first three iterates of descent at step $1/L$, plot the trajectory, and verify that the steep direction is canceled in one step while the flat direction decreases by $1 - 1/\kappa$ per step. *Solution*: $\nabla f = (u, \kappa v)$, hence $(10, 1) \to (9.9,\, 0) \to (9.801,\, 0) \to (9.703,\, 0)$ — $v_1 = 0$ but $u_k = 10\,(1-1/\kappa)^k$; to compare with Nesterov ($\gamma = \tfrac{1-1/\sqrt\kappa}{1+1/\sqrt\kappa}$) which reaches the target accuracy in $\sqrt\kappa$ steps.
+2.  **★ ISTA/FISTA in practice.** Take up the code of ch. 4: plot $F(x_k)-F(x^\star)$ (reference: 5,000 ISTA iterations) on a log scale for ISTA, FISTA and FISTA+adaptive restart (reset the momentum to zero when $F(x_{k+1}) > F(x_k)$). Measure the experimental slopes and compare with $1/k$ and $1/k^2$. *Expected*: FISTA+restart beats FISTA as soon as the solution is sparse (local strong convexity).
+3.  **★ Random search.** Reproduce proposition 9.2: build a dummy function in $d = 6$ dimensions of which only $p = 2$ matter, compare a truncated exhaustive $8^6$ grid at equal budget vs random draws, over 20 repetitions; plot the distribution of the best score. Then test `skopt.gp_minimize` (GP-EI) at small budget: when does it beat random?
+4.  **★★ Optimal step on a quadratic.** Show that for $f(x) = \tfrac12 x^\top A x$ with eigenvalues in $[\mu, L]$, the constant step minimizing the contraction factor $\rho(t) = \max_i |1 - t\lambda_i|$ equals $t = 2/(\mu+L)$ and gives $\rho = \frac{\kappa-1}{\kappa+1}$ — in $x$, hence $\big(\tfrac{\kappa-1}{\kappa+1}\big)^2$ on the values of $f$. Verify that this factor equals $1 - \frac{2}{\kappa+1}$ and conclude that descent cannot beat $O(\kappa)$ on this class.
+5.  **★★ Soft thresholding.** Prove the formula $\mathrm{prox}_{\lambda|\cdot|}(z) = \mathrm{sign}(z)\max(|z|-\lambda, 0)$ (use example 1.4), then compute the $\mathrm{prox}$ of the indicator of $[a,b]$, of the $\ell_2$ ball, and of the probability simplex (algorithm of Duchi et al., 2008).
+6.  **★★ SGD neighborhood.** Prove claim (ii) of theorem 5.2: at constant step $\eta$, under strong convexity, $\limsup \mathbb{E}[f(x_k)] - f^\star \leq \frac{\eta L\sigma^2}{2\mu}$. *Hint*: combine theorem 5.2 with the Polyak–Łojasiewicz inequality $f - f^\star \leq \frac{1}{2\mu}\|\nabla f\|^2$ to get $\mathbb{E}[f(x_{k+1})] - f^\star \leq (1 - \eta\mu)\big(\mathbb{E}[f(x_k)] - f^\star\big) + \frac{\eta^2 L\sigma^2}{2}$, then take the fixed point of this recursion. Check the bound against the exact computation of example 5.3. Simulate with the code of ch. 5 for $\eta \in \{0.01; 0.1; 1\}$.
+7.  **★★ Minimum viable SAGA.** Implement SAGA (table of $n$ gradients) for $\ell_2$-regularized logistic regression, $n = 1\,000$, $d = 50$, $\mu$ chosen so that $\kappa = 100$. Plot the variance of the estimator $\|g_k - \nabla f(x_k)\|^2$ along the iterations and compare it with that of SGD; verify the linear convergence of theorem 6.3 (slope in log). *Pitfall*: the average $\bar\phi$ must be maintained incrementally, not recomputed.
+8.  **★★ Quadratic Newton.** For $f(x) = \frac{x^4}{4}$ (convex, $f'(x) = x^3$, $f''(x) = 3x^2$): show that $x_{k+1} = x_k - \tfrac{x_k}{3} = \tfrac23 x_k$, a linear convergence, not a quadratic one — which assumption of theorem 7.1 fails at $x^\star = 0$? Then show that for $f(x)=\frac{x^2}{2}+e^{-x}$ (minimizer $x^\star \approx 0.567$, the solution of $x = e^{-x}$) the convergence is quadratic once the iterate is close to $x^\star$. Compare `scipy.optimize.minimize` (Newton-CG, BFGS, L-BFGS-B) on the smoothed LASSO of ch. 4 in $d = 200$: iteration count, time, final accuracy.
+9.  **★★ Constraints: penalty vs duality.** Solve $\min \tfrac12\|x\|^2$ subject to $Ax = b$ in two ways: (a) quadratic penalty $\tfrac{\rho}{2}\|Ax-b\|^2$, $\rho \to \infty$; (b) Uzawa $\lambda_{k+1} = \lambda_k + \rho(Ax_{k+1}-b)$ with $x_{k+1}$ minimizing the Lagrangian. (c) Show that the penalized problem has Hessian $I + \rho A^\top A$, whose condition number is $1 + \rho\|A\|^2$ when $A$ has more columns than rows, while its violation $\|Ax_\rho - b\|$ only decreases like $O(1/\rho)$. (d) Show that the dual function is concave with a $\|A\|^2$-Lipschitz gradient, so that Uzawa converges for $0 < \rho < 2/\|A\|^2$ (example 8.4 is essentially the case $A = 1$, $b = 1$). Conclude on the superiority of the multiplier (which "remembers" the constraint) over the penalty (which forgets it).
 
 ## References {#refs}
 
@@ -705,4 +754,4 @@ Proposed cross-cutting reading: connect ch. 5 to the Emerging ML module (ch. 0, 
 -   B. Shahriari et al., [Taking the Human Out of the Loop: A Review of Bayesian Optimization](https://ieeexplore.ieee.org/document/7352306), Proceedings of the IEEE, 2016.
 -   K. Li et al., [Hyperband: A Novel Bandit-Based Approach to Hyperparameter Optimization](https://arxiv.org/abs/1603.06560), ICLR 2017.
 -   **Research group (CMAP, École Polytechnique)**: L. F. O. Chamon, A. Ribeiro, [Probably Approximately Correct Constrained Learning](https://arxiv.org/abs/2006.05487), NeurIPS 2020; L. F. O. Chamon, S. Paternain, M. Calvo-Fullana, A. Ribeiro, [The empirical duality gap of constrained statistical learning](https://arxiv.org/abs/2002.05183), 2020; S. Paternain, L. Chamon, M. Calvo-Fullana, A. Ribeiro, [Constrained Reinforcement Learning Has Zero Duality Gap](https://papers.nips.cc/paper/8973-constrained-reinforcement-learning-has-zero-duality-gap), NeurIPS 2019; A. Dieuleveut, N. Flammarion, F. Bach, [Harder, Better, Faster, Stronger Convergence Rates for Least-Squares Regression](https://arxiv.org/abs/1602.05419), ICML 2017; A. Dieuleveut, A. Durmus, F. Bach, [Bridging the Gap between Constant Step Size Stochastic Gradient Descent and Markov Chains](https://arxiv.org/abs/1707.06386), Annals of Statistics, 2020.
--   [SciPy](https://www.scipy.org/) (L-BFGS, Newton-CG) and [scikit-optimize](https://scikit-optimize.github.io) (GP-EI) — the TME tools.
+-   [SciPy](https://www.scipy.org/) (L-BFGS, Newton-CG) and [scikit-optimize](https://scikit-optimize.github.io) (GP-EI) — the tools of the labs.

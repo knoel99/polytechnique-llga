@@ -123,9 +123,9 @@ format:
   Status in the program   [M2]{.badge .m2}[Outside the recommended track]{.badge .position} · M2 program being finalized
   ----------------------- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-**Audience**: an LLM-in-prod engineer who must answer why / how to break / what leaks. **Empirical first**: a linear "explanatory" probe that does not generalize; a jailbreak that passes the filter; membership inference on customer data — then we name probing, SAE, SHAP, defenses, DP.
+**Audience**: an engineer running an LLM in production who must answer three questions: why did the model produce this output, how can it be broken, and what does it leak? **Empirical first**: each part starts from a concrete failure — a linear "explanatory" probe that does not generalize, a jailbreak that passes the filter, a membership inference on customer data — and only then names the tools (probing, sparse autoencoders, SHAP, defenses, differential privacy).
 
-Three fronts on the same black box: interpretability, security, privacy.
+The module works on three fronts of the same black box: interpretability, security and privacy.
 
 ### What you will be able to do
 
@@ -155,7 +155,7 @@ Three fronts on the same black box: interpretability, security, privacy.
   Up to the regulatory framework (red teaming, AI Act)                                              ch. 10
   Going beyond the syllabus — output explainability (SHAP, LIME, gradients)                         ch. 4
   Going beyond the syllabus — recap: the black box and its three questions                          ch. 0
-  Going beyond the syllabus — labs (probing, attack/defense of a small LLM, membership inference)   [Exercises / Labs](#)
+  Going beyond the syllabus — labs (probing, attack/defense of a small LLM, membership inference)   [Exercises / Labs](#ex)
 
 ### Where this course fits in the program
 
@@ -179,6 +179,23 @@ An M2 module offered in period 2, outside the recommended track: it is the conve
 -   **Exercises / Labs** — probing, attacking and defending a small LLM, membership inference attack.
 -   **References** — the interpretability, security and privacy papers that set the state of the art.
 
+### Session plan {#sessions}
+
+**24 h in class (announced) = 8 sessions of 3 h.** The SynapseS 2026–2027 sheet publishes no volume for this module; 24 h is the indicative volume quoted with the brochure programme in the fiche above, and also the M2 volume published for the Large Language Models course (CSC_53432_EP: 24 h, 2 ECTS); the session split below is our proposal for covering these notes in that time. Level 1 = foundations (reviews, definitions, first worked examples), 2 = core methods; the level never goes down from one session to the next. Each of the three parts (interpretability, security, privacy) is taught at the core level once the first session has set the vocabulary.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Recap: the black box and its three questions; ch. 1 Probing and control tasks | Ex. 1 |
+| 2 | 3 h | 2 | ch. 2 Reading the layers: logit lens, tuned lens, attention and its limits | Ex. 5, 6 |
+| 3 | 3 h | 2 | ch. 3 Superposition and sparse autoencoders | Ex. 7 |
+| 4 | 3 h | 2 | ch. 4 Explaining an output: Shapley values, integrated gradients | Ex. 3 |
+| 5 | 3 h | 2 | ch. 5 Security: taxonomy of attacks, jailbreaks, prompt injections | Ex. 8 (attack part) |
+| 6 | 3 h | 2 | ch. 6 Defenses in depth; ch. 7 Privacy I: memorization and extraction | Ex. 8 (hardening), Ex. 2 |
+| 7 | 3 h | 2 | ch. 8 Privacy II: membership inference and DP; ch. 9 Anonymization and watermarking | Ex. 9, 10 |
+| 8 | 3 h | 2 | ch. 10 Evaluating safety: red teaming, AI Act | Ex. 4, 11 |
+
+**Self-study, outside the 24 h**: no chapter — every chapter is covered in class; the central lab (Ex. 8) and the red-team protocol (Ex. 11) each need about 3 h of personal work.
+
 ### How to study this module
 
 -   Open a small open-weight model yourself from the first week (small transformer, accessible layers): all the interpretability chapters are understood by handling, not by reading.
@@ -192,6 +209,8 @@ An M2 module offered in period 2, outside the recommended track: it is the conve
 :::
 
 ## 0. Recap: the black box and its three questions {#ch0}
+
+Before opening, attacking or protecting a trained LLM, one must agree on what the object is and on what an attacker is assumed to be able to do. This chapter recalls the prerequisites, states the three questions of the module and defines the threat model used throughout.
 
 :::: recap
 ::: recap-title
@@ -216,15 +235,15 @@ This module asks three questions about one and the same object — the trained L
 :::
 
 ::: note
-[Module method]{.tag} Three through-lines: (i) a "toy" RAG on the master's documents, which we will attack by indirect injection (lab 5) then harden (ch. 6); (ii) an open GPT-2, the playground of interpretability (ch. 1-3) and extraction (ch. 7); (iii) a common reading grid: each technique is evaluated by *what it guarantees*, *what it costs*, and *how it breaks*.
+[Module method]{.tag} Three through-lines: (i) a "toy" RAG on the master's documents, which we will attack by indirect injection (lab of exercise 8) then harden (ch. 6); (ii) an open GPT-2, the playground of interpretability (ch. 1-3) and extraction (ch. 7); (iii) a common reading grid: each technique is evaluated by *what it guarantees*, *what it costs*, and *how it breaks*.
 :::
 
 ## 1. Internal interpretability: probing and control {#ch1}
 
-Concrete scene: a SHAP "explanation" shown to the business… on a locally unfaithful model. This chapter sets probes.
+A linear probe reads "sentiment" from layer 6 with 95% accuracy, and a slide concludes that the model "uses" sentiment there. This chapter shows how to probe the representations of a model and, above all, what a probe does and does not prove.
 
 ::: note
-[What breaks]{.tag} Probe ≠ causal mechanism; low ASR ≠ security; forgetting memorization at equal data.
+[What breaks]{.tag} Three confusions recur in this module: a probe that decodes a property is not a causal mechanism (this chapter); a low attack success rate on known attacks is not security (ch. 6); and a model that looks harmless on average can still give back rare training sequences verbatim (ch. 7).
 :::
 
 ::: def
@@ -247,7 +266,7 @@ def states(texts, layer=6):                          # residual stream activatio
 X = states(phrases)                                  # (n, d=768)
 Xtr, Xte, ytr, yte = train_test_split(X, pos_tags, test_size=.2)
 probe = LogisticRegression(max_iter=2000).fit(Xtr, ytr)
-print("acc sonde :", probe.score(Xte, yte))          # ~0.9 on POS in layer 6-8
+print("probe accuracy:", probe.score(Xte, yte))          # ~0.9 on POS in layer 6-8
 ```
 
 ### 1.1. What probes have revealed
@@ -266,6 +285,8 @@ Alain & Bengio (2016) launched the method: the loss of a linear probe per layer 
 
 ## 2. Reading the layers: logit lens, attention and its limits {#ch2}
 
+Probes test one property at a time; one would also like to watch the prediction form as it travels through the layers, and to know whether attention weights say which tokens mattered. This chapter gives a tool for the first question and a warning for the second.
+
 ### 2.1. Logit lens and tuned lens
 
 ::: def
@@ -274,7 +295,7 @@ Alain & Bengio (2016) launched the method: the loss of a linear probe per layer 
 
 The logit lens is approximate — the intermediate representations are not in the basis of the final decoder. The **tuned lens** (Belrose et al., 2023) learns, for each layer, an affine transformation that "reframes" the intermediate prediction toward the final distribution; the trajectories become sharp and quantifiable (Jensen-Shannon distance between layers, anticipation of future tokens). Concrete uses: locating *where* a hallucination forms, where a factual answer is decided, where a model that contradicts its context is cheating.
 
-### 2.2. Attention: precious tool, misleading explanation
+### 2.2. Attention: useful tool, misleading explanation
 
 ::: thm
 [Key results — "Attention is not Explanation"]{.tag} Jain & Wallace (2019): (i) the attention weights $\alpha_{i,j}$ correlate only weakly with gradient-based importances; (ii) one can construct *adversarial attention distributions* — very different — that produce the same prediction; (iii) the sum of weights per head invites a causal narrative that nothing justifies. Wiegreffe & Pinter (2019) reply "attention is not *not* explanation": the evaluation method of Jain & Wallace is itself fragile (the weight is not the only causal path; multi-head effects). Course takeaway: attention is a *source of hypotheses*, not a proof — attention weights correlate only weakly with causal importances.
@@ -293,6 +314,8 @@ The logit lens is approximate — the intermediate representations are not in th
   SAE features (ch. 3)   in which concepts?               high (SAE training)   correlation + steering (soft causation)
 
 ## 3. Superposition and sparse autoencoders {#ch3}
+
+If each neuron stood for one concept, interpreting a network would amount to labelling its neurons; in practice a single neuron responds to unrelated concepts. This chapter explains why, and how sparse autoencoders recover interpretable directions from the activations.
 
 ### 3.1. The problem: more concepts than dimensions
 
@@ -332,6 +355,8 @@ def sae_loss(h):                       # h: batch of activations (frozen)
 
 ## 4. Explaining an output: SHAP, LIME, gradients {#ch4}
 
+Chapters 1–3 look inside the model; a user or an auditor more often asks why the model gave *this* answer to *this* prompt. This chapter attributes an output to the input tokens, with the guarantees and the pitfalls of each method.
+
 :::: recap
 ::: recap-title
 M1 recap — feature attributions
@@ -341,7 +366,7 @@ M1 recap — feature attributions
 ::::
 
 ::: thm
-[Theorem 4.1 — Shapley: existence and uniqueness]{.tag} There exists a unique family of attributions satisfying the four axioms (efficiency $\sum_i \phi_i = F(x) - F(\emptyset)$, symmetry, null player, additivity), given by: $$\phi_i \;=\; \sum_{S \subseteq N \setminus \{i\}} \frac{\|S\|!\,(n - \|S\| - 1)!}{n!}\, \bigl[F(S \cup \{i\}) - F(S)\bigr].$$ For an LLM, $F(S)$ = the model's output when only the tokens $S$ of the prompt are kept (the others replaced by a baseline) — each evaluation of $F$ costs one forward pass: exact SHAP is out of reach, one samples the coalitions.
+[Theorem 4.1 — Shapley: existence and uniqueness]{.tag} There exists a unique family of attributions satisfying the four axioms (efficiency $\sum_i \phi_i = F(x) - F(\emptyset)$, symmetry, null player, additivity), given by: $$\phi_i \;=\; \sum_{S \subseteq N \setminus \{i\}} \frac{|S|!\,(n - |S| - 1)!}{n!}\, \bigl[F(S \cup \{i\}) - F(S)\bigr].$$ For an LLM, $F(S)$ = the model's output when only the tokens $S$ of the prompt are kept (the others replaced by a baseline) — each evaluation of $F$ costs one forward pass: exact SHAP is out of reach, one samples the coalitions.
 :::
 
 ### 4.1. The king method for LLMs: integrated gradients
@@ -383,6 +408,8 @@ for tok, a in zip(prompt_tokens, attributions.sum(-1).squeeze()):
 
 ## 5. Security: taxonomy of attacks {#ch5}
 
+An LLM application can be attacked through its prompt, through the documents it reads, through its training data or through its API. This chapter maps these attacks with the threat model of chapter 0, then details the two that matter most in practice: jailbreaks and prompt injections.
+
 ### 5.1. The attack matrix
 
   Attack                        Channel                             Goal                     Pivot example
@@ -390,7 +417,7 @@ for tok, a in zip(prompt_tokens, attributions.sum(-1).squeeze()):
   Jailbreak                     user prompt                         bypass alignment         GCG (Zou et al. 2023); Jailbroken (Wei et al. 2023)
   Direct injection              user prompt                         hijack the application   "ignore the previous instructions…" (Perez & Ribeiro 2022)
   Indirect injection            read data (web, mail, RAG corpus)   take over the agent      Greshake et al. 2023
-  Poisoning / backdoor          training or fine-tuning data        triggered behavior       Shu et al. 2023; BadNets (Gu et al. 2017)
+  Poisoning / backdoor          training or fine-tuning data        triggered behavior       Wan et al. 2023; BadNets (Gu et al. 2017)
   Model stealing (extraction)   prediction API                      duplicate the model      Tramèr et al. 2016
   Side channels                 time, exposed logits, length        infer data               API logprobs; streaming timing
   Data extraction               model outputs                       recover the corpus       Carlini et al. 2021 (ch. 7)
@@ -400,7 +427,7 @@ for tok, a in zip(prompt_tokens, attributions.sum(-1).squeeze()):
 Alignment defenses (refusals learned by RLHF/DPO — LLMs module ch. 5) are *statistical behaviors*, not logical barriers. Wei et al. (2023) bring them down by analyzing the **competing objectives**: competence (follow any instruction) *vs* safety (refuse some) — any formulation that maximizes the competence objective (role-play, fictional context, question nested inside code, under-represented languages) can disable the refusal without any "forbidden word" appearing. The classic families: *personas* (DAN), encode/decode (base64, morse...), multi-turn (gradually building up the context), "end of conversation" via special tokens (cf. LLMs module ch. 1).
 
 ::: def
-[Attack 5.1 — GCG: universal suffixes (Zou et al., 2023)]{.tag} **Greedy Coordinate Gradient**: continuously optimize an adversarial suffix $s$ appended to the forbidden request, by gradient on the embeddings, projecting at each step onto the most promising token (guided discrete search): $$s^{\star} \;\approx\; \arg\max_s\; \log p_{\theta}\bigl(\,\text{"Sure, here is how…"} \mid \text{request} \oplus s\,\bigr).$$ The suffix is *transferable*: learned on an open-weight model, it often jailbreaks production models (alignments share blind spots). We do not reproduce suffixes — one builds them on one's own open models in lab 4.
+[Attack 5.1 — GCG: universal suffixes (Zou et al., 2023)]{.tag} **Greedy Coordinate Gradient**: continuously optimize an adversarial suffix $s$ appended to the forbidden request, by gradient on the embeddings, projecting at each step onto the most promising token (guided discrete search): $$s^{\star} \;\approx\; \arg\max_s\; \log p_{\theta}\bigl(\,\text{"Sure, here is how…"} \mid \text{request} \oplus s\,\bigr).$$ The suffix is *transferable*: learned on an open-weight model, it often jailbreaks production models (alignments share blind spots). We do not reproduce suffixes here — one builds them only against one's own open models, as in the red-teaming lab (exercise 11).
 :::
 
 ### 5.3. Prompt injections: the Trojan horse of applications
@@ -415,11 +442,13 @@ Alignment defenses (refusals learned by RLHF/DPO — LLMs module ch. 5) are *sta
 
 ### 5.4. Poisoning, stealing, side channels
 
--   **Fine-tuning poisoning** (Shu et al., 2023): a few hundred booby-trapped examples in an instruction set suffice to install trigger-based *backdoors* ("Donald Trump" → systematically positive answer, in the original experiment); legacy of BadNets (Gu et al., 2017). Ops: the provenance of training data is a security control (cf. ML Ops module ch. 9);
+-   **Fine-tuning poisoning** (Wan et al., 2023): about a hundred booby-trapped examples in an instruction set suffice to install trigger-based *backdoors* (a chosen trigger phrase → a systematically wrong polarity, in the original experiment); legacy of BadNets (Gu et al., 2017). Ops: the provenance of training data is a security control (cf. ML Ops module ch. 9);
 -   **Model extraction** (Tramèr et al., 2016): by equations (solving the parameters from the returned probabilities) or by distillation (re-training a clone from queries) — APIs that expose the top-k logprobs facilitate the first; watermarking (ch. 9) is the forensic answer;
 -   **Side channels**: token-by-token streaming (inter-token time) and the length of responses leak information about the internal logits; *timing attacks* and *keystroke inference* show that an assistant "writes" while you type. A surface typically forgotten by threat models.
 
 ## 6. Defenses in depth {#ch6}
+
+Chapter 5 showed that no filter can recognize every attack. This chapter therefore designs the system so that attacks are rarer and, above all, so that a successful attack can do little damage.
 
 ::: def
 [Definition 6.1 — Defense in depth (LLM)]{.tag} No barrier is watertight; one stacks layers with decreasing returns but independent failure modes, and one designs *the system* so that a *successful* injection remains cheap. Two indicators: the **attack success rate** (ASR, fraction of attacks that get through) and the **blast radius** (what the attacker gains when it goes through).
@@ -445,6 +474,8 @@ Alignment defenses (refusals learned by RLHF/DPO — LLMs module ch. 5) are *sta
 
 ## 7. Privacy I: memorization and extraction {#ch7}
 
+A language model trained on private documents may give some of them back word for word. This chapter defines memorization in operational terms, measures it with planted canaries, and shows how an attacker extracts memorized text.
+
 ::: def
 [Definition 7.1 — Memorization]{.tag} A model *memorizes* a sequence $s$ of the corpus if $s$ can be extracted from its outputs with a reasonable query budget — the operational definition (Carlini et al.) is in *attack terms*, not perplexity. *Unintentional* memorization (canaries inserted deliberately to measure it) is distinguished from legitimate learning: retaining "Paris is the capital of France" is not a leak; giving back a social security number is.
 :::
@@ -452,7 +483,7 @@ Alignment defenses (refusals learned by RLHF/DPO — LLMs module ch. 5) are *sta
 ### 7.1. Measuring: the canary and exposure
 
 ::: prop
-[Metric 7.2 — Exposure (Carlini & Mitzhenko, 2018)]{.tag} Insert a canary $c$ ("My card number is 4132…", random) $k$ times in the corpus. After training, if $\mathrm{ppl}(c)$ is the model's perplexity for $c$ and $\mathrm{ppl}(r)$ that of a random variant $r$: $$\mathrm{exposure}(c) \;=\; \log_2 \frac{2^{\mathrm{ppl}(c)}} {2^{\mathrm{ppl}(r)}} \;=\; \mathrm{ppl}(r) - \mathrm{ppl}(c) \;\;\text{(in log2)}.$$ Exposure measures the *search shortcut* offered to the attacker: +20 bits ≈ the search space reduced by a factor of one million. It grows with $k$ (repetitions), with model size and with overfitting.
+[Metric 7.2 — Exposure (Carlini et al., 2019, "The Secret Sharer")]{.tag} Insert a canary $c$ ("My card number is 4132…", with random digits) $k$ times in the corpus. After training, fill the same template with every possible value $r \in \mathcal R$ (all digit strings of the same length), sort the candidates by the model's perplexity, and let $\mathrm{rank}(c)$ be the position of the true canary (1 = the most likely). Then $$\mathrm{exposure}(c) \;=\; \log_2 |\mathcal R| \;-\; \log_2 \mathrm{rank}(c).$$ For a 9-digit number, $|\mathcal R| = 10^9 \approx 2^{30}$: an exposure of 30 bits means that the canary is the model's first guess, an exposure near 0 that it is no more likely than a random value. Exposure measures the *search shortcut* offered to the attacker: +20 bits ≈ the search space reduced by a factor of one million. It grows with $k$ (repetitions), with model size and with overfitting.
 :::
 
 ### 7.2. Attacking: the GPT-2 extraction
@@ -462,11 +493,11 @@ Alignment defenses (refusals learned by RLHF/DPO — LLMs module ch. 5) are *sta
 :::
 
 ::: prop
-[Proposition 7.4 — Bigger ⇒ more memorization (at equal data)]{.tag} Carlini et al. (ICLR 2023) quantify on models from 160M to 12B trained on the same corpus: the rate of recoverable sequences grows with model size, and explodes with the number of duplicates of the sequence (tens of occurrences ⇒ near-systematic recovery). Engineer's reading: (i) deduplicate (train *and* eval); (ii) scrub PII at the source; (iii) the bigger and more specialized a model (fine-tuning on a restricted private corpus), the higher the privacy risk — corporate fine-tuning is the most exposed use case.
+[Proposition 7.4 — Bigger ⇒ more memorization (at equal data)]{.tag} Carlini et al. (ICLR 2023) quantify on models from 125M to 6B parameters (the GPT-Neo family) trained on the same corpus: the rate of recoverable sequences grows with model size, and explodes with the number of duplicates of the sequence (tens of occurrences ⇒ near-systematic recovery). Engineer's reading: (i) deduplicate (train *and* eval); (ii) scrub PII at the source; (iii) the bigger and more specialized a model (fine-tuning on a restricted private corpus), the higher the privacy risk — corporate fine-tuning is the most exposed use case.
 :::
 
 ```python
-# Mini-extraction: recover the canaries planted in a small LM (lab 6)
+# Mini-extraction: recover the canaries planted in a small LM (exercise 2)
 def extract(model, prompt, n=500, temp=1.2):
     cands = [model.generate(prompt, do_sample=True, temperature=temp,
                             max_new_tokens=48) for _ in range(n)]
@@ -477,6 +508,8 @@ def extract(model, prompt, n=500, temp=1.2):
 ```
 
 ## 8. Privacy II: membership inference and DP {#ch8}
+
+Even when nothing is given back verbatim, an attacker may learn whether a given person's record was in the training set. This chapter measures that risk with membership inference attacks and answers it with differential privacy.
 
 ### 8.1. Membership inference: "was this point in the corpus?"
 
@@ -509,7 +542,7 @@ $$ where the middle inequality is exactly the DP of $M$ applied to the event $g^
 :::
 
 ::: def
-[Definition 8.4 — DP-SGD (Abadi et al., 2016)]{.tag} At each step: (1) compute the gradient *per example*; (2) **clip** each gradient to norm $C$ (bounded sensitivity $\Delta_2 \leq C$); (3) aggregate and noise: $$\tilde g \;=\; \frac{1}{B}\Bigl(\sum_{i \in B} \mathrm{clip}(\nabla \ell_i, C) + \mathcal{N}(0, \sigma^2 C^2 I)\Bigr).$$ Accounting (moment accountant / RDP) aggregates the budget over the steps: total $\varepsilon$ grows with $T/B$. For an LLM: DP-SGD on the *fine-tuning* (public pre-training is deemed non-sensitive).
+[Definition 8.4 — DP-SGD (Abadi et al., 2016)]{.tag} At each step: (1) compute the gradient *per example*; (2) **clip** each gradient to norm $C$ (bounded sensitivity $\Delta_2 \leq C$); (3) aggregate and noise: $$\tilde g \;=\; \frac{1}{|B|}\Bigl(\sum_{i \in B} \mathrm{clip}(\nabla \ell_i, C) + \mathcal{N}(0, \sigma^2 C^2 I)\Bigr),$$ where $B$ is the mini-batch drawn from the $N$ training examples. Accounting (moments accountant / RDP) aggregates the budget over the $T$ steps: the total $\varepsilon$ grows with $T$ and with the sampling rate $|B|/N$ (roughly as $(|B|/N)\sqrt{T}/\sigma$ for small sampling rates). For an LLM: DP-SGD on the *fine-tuning* (public pre-training is deemed non-sensitive).
 :::
 
 ::: ex
@@ -525,6 +558,8 @@ $$ where the middle inequality is exactly the DP of $M$ applied to the event $g^
 
 ## 9. Anonymization and watermarking {#ch9}
 
+Two last privacy and provenance tools act on the data rather than on the training: anonymizing the corpus before it is used, and marking the generated text so that its origin can be proved later. This chapter shows why the first is harder than it looks and how the second is tested.
+
 ### 9.1. Anonymization: harder than it looks
 
 The classic pipeline: entity detection (NER — NLP module ch. 6) → masking/replacement (pseudonymization) → re-training. Three traps: (i) quasi-identifiers (postal code + date + occupation) re-identify without any named "entity" — absolute anonymization does not exist, one reduces a *risk*; (ii) *synthetic* data generated by an LLM is not safe by construction: the generator also memorizes (ch. 7); (iii) blind replacement breaks utility (names carry syntactic and semantic information). Regulatory position: "definitive" anonymization takes the data out of the GDPR; pseudonymization does not — and the AI Act (ch. 10) requires reports on the training data, not their disappearance.
@@ -536,11 +571,11 @@ The classic pipeline: entity detection (NER — NLP module ch. 6) → masking/re
 :::
 
 ::: thm
-[Proposition 9.2 — Detection test (z-test)]{.tag} On a suspect text $s = (s_1, \dots, s_T)$ (marked or not), one counts $\|s\|_G$ = number of green tokens (lists recomputed step by step): $$z(s) \;=\; \frac{\|s\|_G - \gamma\, T}{\sqrt{T\, \gamma\, (1 - \gamma)}}.$$ Under $H_0$ (unmarked text), the green indicators are (approximately) i.i.d. Bernoulli($\gamma$), hence $z \approx \mathcal{N}(0, 1)$ by the central limit theorem; under $H_1$, $z$ grows like $\sqrt{T}$ (bias $\delta$). At the threshold $z > 4$ and $T = 200$: false positive $\approx \Phi(-4) \approx 3\times 10^{-5}$, and high power for moderate $\delta$.
+[Proposition 9.2 — Detection test (z-test)]{.tag} On a suspect text $s = (s_1, \dots, s_T)$ (marked or not), one counts $|s|_G$ = number of green tokens (lists recomputed step by step): $$z(s) \;=\; \frac{|s|_G - \gamma\, T}{\sqrt{T\, \gamma\, (1 - \gamma)}}.$$ Under $H_0$ (unmarked text), the green indicators are (approximately) i.i.d. Bernoulli($\gamma$), hence $z \approx \mathcal{N}(0, 1)$ by the central limit theorem; under $H_1$, $z$ grows like $\sqrt{T}$ (bias $\delta$). At the threshold $z > 4$ and $T = 200$: false positive $\approx \Phi(-4) \approx 3\times 10^{-5}$, and high power for moderate $\delta$.
 :::
 
 ::: proof
-Under $H_0$, $\|s\|_G = \sum_t \mathbf{1}[s_t \in G_t]$ with $\mathbb{E} = \gamma T$ and $\mathrm{Var} = T\gamma(1-\gamma)$ (sum of independent Bernoullis — the independence assumption is heuristic: the tokens of a natural text are correlated; empirically the calibration holds). The CLT gives $(\|s\|_G - \gamma T)/\sqrt{T\gamma(1-\gamma)} \Rightarrow \mathcal{N}(0,1)$, hence the threshold by Gaussian quantile. Under $H_1$, the logit bias increases the green probability by $\Delta \approx \gamma(1-\gamma)\delta$ (first-order expansion of the softmax); then $\mathbb{E}[z] \approx \delta\sqrt{T\gamma(1-\gamma)} \to \infty$ — the power tends to 1 with the length. [∎]{.qed}
+Under $H_0$, $|s|_G = \sum_t \mathbf{1}[s_t \in G_t]$ with $\mathbb{E} = \gamma T$ and $\mathrm{Var} = T\gamma(1-\gamma)$ (sum of independent Bernoullis — the independence assumption is heuristic: the tokens of a natural text are correlated; empirically the calibration holds). The CLT gives $(|s|_G - \gamma T)/\sqrt{T\gamma(1-\gamma)} \Rightarrow \mathcal{N}(0,1)$, hence the threshold by Gaussian quantile. Under $H_1$, the logit bias increases the green probability by $\Delta \approx \gamma(1-\gamma)\delta$ (first-order expansion of the softmax); then $\mathbb{E}[z] \approx \delta\sqrt{T\gamma(1-\gamma)} \to \infty$ — the power tends to 1 with the length. [∎]{.qed}
 :::
 
 ::: note
@@ -548,6 +583,8 @@ Under $H_0$, $\|s\|_G = \sum_t \mathbf{1}[s_t \in G_t]$ with $\mathbb{E} = \gamm
 :::
 
 ## 10. Evaluating safety: red teaming, AI Act {#ch10}
+
+The previous chapters give attacks and defenses one by one; a deployed system must be evaluated as a whole and documented for the regulator. This chapter organizes the attack on one's own system and maps the result onto the AI Act.
 
 ### 10.1. Red teaming: attacking one's own system, methodically
 
@@ -558,7 +595,7 @@ Under $H_0$, $\|s\|_G = \sum_t \mathbf{1}[s_t \in G_t]$ with $\mathbb{E} = \gamm
 Two pivotal results: Ganguli et al. (2022) describe the Anthropic program — human red team from the design stage, targeted automated attacks, finding novel "jailbreaks"; Perez et al. (2022) have the model attacked *by another model* (RL: the attacker is rewarded when the target produces forbidden content) — scaling: larger attackers find more attacks, transferable. Red teaming becomes a **training loop**: failures feed the preference data to harden the alignment (ch. 6), which is re-red-teamed — the cycle never stops, it stabilizes.
 
 ::: note
-[Measuring without lying to oneself]{.tag} Reporting "ASR = 0% on 50 attacks" is a confidence interval of ±[0-7]% (rule of three): without volume, the absence of failure is not an absence of vulnerability. Report the *adaptive* attacks (ch. 6, prop. 6.2), the worst-case severity, and the blast radius allowed by the permissions — three numbers more honest than a single ASR.
+[Measuring without lying to oneself]{.tag} Reporting "ASR = 0% on 50 attacks" still leaves a 95% confidence interval of about $[0, 6\%]$ for the true ASR (rule of three: $3/50$): without volume, the absence of failure is not an absence of vulnerability. Report the *adaptive* attacks (ch. 6, prop. 6.2), the worst-case severity, and the blast radius allowed by the permissions — three numbers more honest than a single ASR.
 :::
 
 ### 10.2. The regulatory framework: the AI Act
@@ -566,7 +603,7 @@ Two pivotal results: Ganguli et al. (2022) describe the Anthropic program — hu
 The **Regulation (EU) 2024/1689** ("AI Act") organizes AI by levels of risk: *unacceptable* (prohibited: social scoring, subliminal manipulation...), *high risk* (heavy requirements: risk management, data, documentation, human oversight), *limited risk* (transparency), *minimal*. Key points for an LLM:
 
 -   **General-purpose AI models (GPAI)**: technical transparency obligations (documentation, copyright compliance policy, *summary* of the training data); for models presenting a *systemic risk* (capability threshold): evaluations, mitigation, incident reporting;
--   **Content transparency**: interaction with an AI to be disclosed; generated contents (deep, "deepfakes") to be marked machine-readably — watermarking (ch. 9) becomes a compliance tool;
+-   **Content transparency**: interaction with an AI to be disclosed; generated or manipulated contents ("deepfakes") to be marked machine-readably — watermarking (ch. 9) becomes a compliance tool;
 -   **Timeline**: entry into force August 2024, progressive ramp-up of obligations until 2026-2027 (prohibitions and GPAI first, high risk next);
 -   **Complementary**: NIST AI RMF (govern / map / measure / manage) — the operational grid; ISO/IEC 42001 (management); GDPR for data processing; sectoral codes of conduct.
 
@@ -580,24 +617,24 @@ The **Regulation (EU) 2024/1689** ("AI Act") organizes AI by levels of risk: *un
 
 ## Exercises / Labs {#ex}
 
-1.  **Probes and selectivity (ch. 1).** Train linear probes (language, sentiment, POS category) on every layer of a GPT-2; plot the accuracy per layer; add the control tasks of Hewitt & Liang and report the selectivity; conclusion on "is the information *linearly* encoded?".
-2.  **Home-grown tuned lens (ch. 2).** Implement the logit lens on GPT-2 (final LayerNorm + unembedding at every layer); train the affine transformations of the tuned lens per layer (regression toward the final distribution); visualize the trajectory of the top token on 50 examples — identify the "late switches".
-3.  **Attention under control (ch. 2).** Reproduce the experiment of Jain & Wallace on a small model: show that an adversarial (permuted) attention distribution preserves the prediction; then show with patching that an identified induction head is *causally* necessary for pattern completion. Two conclusions, one method.
-4.  **SAE on a toy model (ch. 3).** Train the toy autoencoder with 5 features in 2 dimensions (variable rarities); observe the phase transitions; then train an SAE ($m = 8d$) on the activations of a layer of a small LM; annotate the 20 most active features and attempt a *steering* (amplify a feature during generation).
-5.  **Indirect injection on a toy RAG (ch. 5-6 — central lab).** Build the "master's documents" RAG; slip in a booby-trapped page (instruction hidden in white-on-white); demonstrate the exfiltration to a simulated "mail tool"; harden by layers (delimiters, injection classifier, permissions, human confirmation); report the ASR before/after *for paraphrased attacks* (adaptive!).
-6.  **Canaries and extraction (ch. 7).** Place canaries (random phone numbers) in a fine-tuning corpus with $k = 1, 10, 100$ repetitions; measure the exposure (prop. 7.2); launch the extraction attack by compression ratio; repeat after deduplication — conclude.
-7.  **MIA on fine-tuning (ch. 8).** Fine-tune a small LM on a restricted corpus (members) with a disjoint corpus (non-members); plot the ROC of the MIA by perplexity; repeat with DP-SGD (Opacus) at $\varepsilon \in \{3, 8\}$; plot utility vs attack advantage — the trade-off curve of Result 8.5.
-8.  **End-to-end watermark (ch. 9).** Implement the green-list scheme (hashing of the previous token, $\gamma = 0.5$, $\delta = 2$) on an open LM; verify the calibration of the z-test on unmarked texts (Q-Q plot); measure the power at $T \in \{50, 200, 500\}$; attack with light then heavy paraphrase; discuss the detectability/quality trade-off (perplexity before/after).
-9.  **Attributions (ch. 4).** Compute the IG of a RAG answer with respect to its context tokens; verify the completeness (thm. 4.3) numerically (sum of the attributions vs logit gap); compare two baselines (pad vs empty sentence) and comment on the stability.
-10. **Red team (ch. 10).** Write a red teaming protocol for the application of lab 5: policy, attack taxonomy, 30 attacks (including 10 adaptive), severity grid; execute, report ASR per family + blast radius; turn the 5 most effective attacks into CI tests.
-11. **Regulatory framework (ch. 10).** Classify three scenarios (internal HR assistant, public health chatbot, journalistic content generation) in the AI Act risk pyramid; list for each the concrete obligations *and* the ML Ops artifact that attests to them (registry? eval? monitoring?) — prop. 10.2 in practice.
+1.  **★ Probes and selectivity (ch. 1).** Train linear probes (language, sentiment, POS category) on every layer of a GPT-2; plot the accuracy per layer; add the control tasks of Hewitt & Liang and report the selectivity; conclusion on "is the information *linearly* encoded?".
+2.  **★ Canaries and extraction (ch. 7).** Place canaries (random phone numbers) in a fine-tuning corpus with $k = 1, 10, 100$ repetitions; measure the exposure (prop. 7.2); launch the extraction attack by compression ratio; repeat after deduplication — conclude.
+3.  **★ Attributions (ch. 4).** Compute the IG of a RAG answer with respect to its context tokens; verify the completeness (thm. 4.3) numerically (sum of the attributions vs logit gap); compare two baselines (pad vs empty sentence) and comment on the stability.
+4.  **★ Regulatory framework (ch. 10).** Classify three scenarios (internal HR assistant, public health chatbot, journalistic content generation) in the AI Act risk pyramid; list for each the concrete obligations *and* the ML Ops artifact that attests to them (registry? eval? monitoring?) — prop. 10.2 in practice.
+5.  **★★ Home-grown tuned lens (ch. 2).** Implement the logit lens on GPT-2 (final LayerNorm + unembedding at every layer); train the affine transformations of the tuned lens per layer (regression toward the final distribution); visualize the trajectory of the top token on 50 examples — identify the "late switches".
+6.  **★★ Attention under control (ch. 2).** Reproduce the experiment of Jain & Wallace on a small model: show that an adversarial (permuted) attention distribution preserves the prediction; then show with patching that an identified induction head is *causally* necessary for pattern completion. Two conclusions, one method.
+7.  **★★ SAE on a toy model (ch. 3).** Train the toy autoencoder with 5 features in 2 dimensions (variable rarities); observe the phase transitions; then train an SAE ($m = 8d$) on the activations of a layer of a small LM; annotate the 20 most active features and attempt a *steering* (amplify a feature during generation).
+8.  **★★ Indirect injection on a toy RAG (ch. 5-6 — central lab).** Build the "master's documents" RAG; slip in a booby-trapped page (instruction hidden in white-on-white); demonstrate the exfiltration to a simulated "mail tool"; harden by layers (delimiters, injection classifier, permissions, human confirmation); report the ASR before/after *for paraphrased attacks* (adaptive!).
+9.  **★★ MIA on fine-tuning (ch. 8).** Fine-tune a small LM on a restricted corpus (members) with a disjoint corpus (non-members); plot the ROC of the MIA by perplexity; repeat with DP-SGD (Opacus) at $\varepsilon \in \{3, 8\}$; plot utility vs attack advantage — the trade-off curve of Result 8.5.
+10. **★★ End-to-end watermark (ch. 9).** Implement the green-list scheme (hashing of the previous token, $\gamma = 0.5$, $\delta = 2$) on an open LM; verify the calibration of the z-test on unmarked texts (Q-Q plot); measure the power at $T \in \{50, 200, 500\}$; attack with light then heavy paraphrase; discuss the detectability/quality trade-off (perplexity before/after).
+11. **★★★ Red team (ch. 10).** Write a red teaming protocol for the application of exercise 8: policy, attack taxonomy, 30 attacks (including 10 adaptive), severity grid; execute, report ASR per family + blast radius; turn the 5 most effective attacks into CI tests.
 
 ## References {#refs}
 
--   **Interpretability.** G. Alain & Y. Bengio, [Understanding Intermediate Layers Using Linear Classifier Probes](https://arxiv.org/abs/1610.01644), 2016; J. Hewitt & P. Liang, [Designing and Interpreting Probes with Control Tasks](https://arxiv.org/abs/1909.03368), EMNLP 2019; S. Belinkov, [Probing Classifiers: Promises, Shortcomings, and Advances](https://direct.mit.edu/coli/article/8/1/251/98453), Computational Linguistics 2022; nostalgebraist, "Interpreting GPT: the logit lens", blog post, 2019; N. Belrose et al., [Eliciting Latent Predictions from Transformers with the Tuned Lens](https://arxiv.org/abs/2303.08112), 2023; S. Jain & B. Wallace, [Attention is not Explanation](https://arxiv.org/abs/1902.10186), NAACL 2019; S. Wiegreffe & Y. Pinter, [Attention is not not Explanation](https://arxiv.org/abs/1908.04626), EMNLP-IJCNLP 2019; C. Olsson et al., [In-context Learning and Induction Heads](https://arxiv.org/abs/2209.11895), Transformer Circuits 2022.
+-   **Interpretability.** G. Alain & Y. Bengio, [Understanding Intermediate Layers Using Linear Classifier Probes](https://arxiv.org/abs/1610.01644), 2016; J. Hewitt & P. Liang, [Designing and Interpreting Probes with Control Tasks](https://arxiv.org/abs/1909.03368), EMNLP 2019; Y. Belinkov, [Probing Classifiers: Promises, Shortcomings, and Advances](https://direct.mit.edu/coli/article/8/1/251/98453), Computational Linguistics 2022; nostalgebraist, "Interpreting GPT: the logit lens", blog post, 2019; N. Belrose et al., [Eliciting Latent Predictions from Transformers with the Tuned Lens](https://arxiv.org/abs/2303.08112), 2023; S. Jain & B. Wallace, [Attention is not Explanation](https://arxiv.org/abs/1902.10186), NAACL 2019; S. Wiegreffe & Y. Pinter, [Attention is not not Explanation](https://arxiv.org/abs/1908.04626), EMNLP-IJCNLP 2019; C. Olsson et al., [In-context Learning and Induction Heads](https://arxiv.org/abs/2209.11895), Transformer Circuits 2022.
 -   **Superposition / SAE.** N. Elhage, T. Hume, C. Olsson et al., [Toy Models of Superposition](https://transformer-circuits.pub/2022/toy-model/index.html), Transformer Circuits 2022; T. Bricken et al., [Towards Monosemanticity: Decomposing Language Models With Dictionary Learning](https://transformer-circuits.pub/2023/monosemantic-features/index.html), 2023; T. Templeton et al., [Scaling Monosemanticity: Extracting Interpretable Features from Claude 3 Sonnet](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html), 2024.
 -   **Post-hoc explainability.** S. Lundberg & S.-I. Lee, [A Unified Approach to Interpreting Model Predictions](https://arxiv.org/abs/1705.07874) (SHAP), NeurIPS 2017; M. Ribeiro, S. Singh, C. Guestrin, ["Why Should I Trust You?": Explaining the Predictions of Any Classifier](https://arxiv.org/abs/1602.04938) (LIME), KDD 2016; M. Sundararajan, A. Taly, Q. Yan, [Axiomatic Attribution for Deep Networks](https://arxiv.org/abs/1703.01365) (Integrated Gradients), ICML 2017.
--   **Security.** A. Zou, Z. Wang, N. Carlini, et al., [Universal and Transferable Adversarial Attacks on Aligned Language Models](https://arxiv.org/abs/2307.15043) (GCG), 2023; A. Wei, N. Haghtalab, J. Steinhardt, [Jailbroken: How Does LLM Safety Training Fail?](https://arxiv.org/abs/2307.02475), NeurIPS 2023; K. Greshake, S. Abdelnabi, S. Mishra, et al., [Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection](https://arxiv.org/abs/2302.12173), ACM AISec 2023; F. Perez & I. Ribeiro, [Ignore Previous Prompt: Attack Techniques For Language Models](https://arxiv.org/abs/2211.09527), 2022; M. Shu, A. Zhu, S. Dobriban et al., [Poisoning Language Models During Instruction Tuning](https://arxiv.org/abs/2305.00944), ICML 2023; T. Gu, B. Dolan-Gavitt, S. Garg, [BadNets](https://arxiv.org/abs/1708.06733), 2017; F. Tramèr, F. Zhang, A. Juels, et al., [Stealing Machine Learning Models via Prediction APIs](https://arxiv.org/abs/1609.02943), USENIX Security 2016.
+-   **Security.** A. Zou, Z. Wang, N. Carlini, et al., [Universal and Transferable Adversarial Attacks on Aligned Language Models](https://arxiv.org/abs/2307.15043) (GCG), 2023; A. Wei, N. Haghtalab, J. Steinhardt, [Jailbroken: How Does LLM Safety Training Fail?](https://arxiv.org/abs/2307.02475), NeurIPS 2023; K. Greshake, S. Abdelnabi, S. Mishra, et al., [Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection](https://arxiv.org/abs/2302.12173), ACM AISec 2023; F. Perez & I. Ribeiro, [Ignore Previous Prompt: Attack Techniques For Language Models](https://arxiv.org/abs/2211.09527), 2022; A. Wan, E. Wallace, S. Shen, D. Klein, [Poisoning Language Models During Instruction Tuning](https://arxiv.org/abs/2305.00944), ICML 2023; T. Gu, B. Dolan-Gavitt, S. Garg, [BadNets](https://arxiv.org/abs/1708.06733), 2017; F. Tramèr, F. Zhang, A. Juels, et al., [Stealing Machine Learning Models via Prediction APIs](https://arxiv.org/abs/1609.02943), USENIX Security 2016.
 -   **Privacy.** N. Carlini, C. Liu, Ú. Erlingsson, et al., [The Secret Sharer: Evaluating and Testing Unintended Memorization in Neural Networks](https://arxiv.org/abs/1812.00910), USENIX Security 2019; N. Carlini, F. Tramèr, E. Wallace, et al., [Extracting Training Data from Large Language Models](https://arxiv.org/abs/2012.07805), USENIX Security 2021; N. Carlini, S. Chien, M. Nasr, et al., [Quantifying Memorization Across Neural Language Models](https://arxiv.org/abs/2202.07646), ICLR 2023; R. Shokri, M. Stronati, C. Song, V. Shmatikov, [Membership Inference Attacks Against Machine Learning Models](https://arxiv.org/abs/1610.05820), IEEE S&P 2017; M. Abadi, A. Chu, I. Goodfellow, et al., [Deep Learning with Differential Privacy](https://arxiv.org/abs/1607.00133), CCS 2016; D. Yu, S. Naik, A. Backurs, et al., [Differentially Private Fine-tuning of Language Models](https://arxiv.org/abs/2110.06500), ICLR 2022; C. Dwork & A. Roth, [The Algorithmic Foundations of Differential Privacy](https://www.cis.upenn.edu/~aaroth/Papers/privacybook.pdf), Foundations and Trends in TCS 2014 (recap from the Emerging ML module ch. 5).
 -   **Watermarking.** J. Kirchenbauer, J. Geiping, Y. Wen, et al., [A Watermark for Large Language Models](https://arxiv.org/abs/2301.10226), ICML 2023; M. Christ, S. Gunn, O. Zamir, [Undetectable Watermarks for Language Models](https://arxiv.org/abs/2306.09194), COLT 2024.
 -   **Red teaming / compliance.** E. Perez, S. Huang, H. Song, et al., [Red Teaming Language Models with Language Models](https://arxiv.org/abs/2212.08094), 2022; D. Ganguli, L. Lovitt, J. Kernion, et al., [Red Teaming Language Models to Reduce Harms](https://arxiv.org/abs/2209.07858), 2022; [Regulation (EU) 2024/1689 — AI Act](https://eur-lex.europa.eu/eli/reg/2024/1689/oj); [NIST AI Risk Management Framework 1.0](https://www.nist.gov/itl/ai-risk-management-framework), 2023; [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/).

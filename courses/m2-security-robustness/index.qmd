@@ -123,9 +123,9 @@ format:
   Status in the program   [M2]{.badge .m2}[Outside the recommended track]{.badge .position} · M2 program being finalized
   ----------------------- ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-**Audience**: an engineer shipping a model who must anticipate attacks. **Empirical first**: clean accuracy 94% → 11% under PGD ε=8/255; an ad-hoc defense that dies under an adaptive attack — then we name threat model, adversarial training, certification.
+**Audience**: an engineer shipping a model who must anticipate attacks on it. **Empirical first**: the module starts from concrete failures — a classifier whose clean accuracy of 94% falls to 11% under a PGD attack with budget ε = 8/255, an ad-hoc defense that collapses under an adaptive attack — and only then names the concepts (threat model, adversarial training, certification).
 
-Adversarial examples, poisoning, extraction, RobustBench — defensive foundations.
+It covers the defensive foundations of machine-learning security: adversarial examples, poisoning, extraction and membership inference, and standardized evaluation (RobustBench).
 
 ### What you will be able to do
 
@@ -155,7 +155,7 @@ Adversarial examples, poisoning, extraction, RobustBench — defensive foundatio
   Evaluation protocols (RobustBench) and defensive deployment                       ch. 10
   Going beyond the syllabus — carrying the foundation over to LLMs and graphs       ch. 9 (adversarial prompts, structure attacks)
   Going beyond the syllabus — recap: attacker, surface, guarantee                   ch. 0
-  Going beyond the syllabus — labs (FGSM/PGD, adversarial training, graph attack)   [Exercises / Labs](#)
+  Going beyond the syllabus — labs (FGSM/PGD, adversarial training, graph attack)   [Exercises / Labs](#ex)
 
 ### Where this course fits in the program
 
@@ -179,6 +179,23 @@ An M2 module offered in period 2, outside the recommended track: it is the "secu
 -   **Exercises / Labs** — implement FGSM/PGD, adversarial training and a graph attack.
 -   **References** — the founding papers of each family of attacks and defenses.
 
+### Session plan {#sessions}
+
+**24 h in class (announced) = 8 sessions of 3 h.** The SynapseS 2026–2027 sheet publishes no volume for this module; 24 h is the indicative volume quoted with the brochure programme in the fiche above, and also the M2 volume published for the Large Language Models course (CSC_53432_EP: 24 h, 2 ECTS); the session split below is our proposal for covering these notes in that time. Level 1 = foundations (reviews, definitions, first worked examples), 2 = core methods and their main theorems; the level never goes down from one session to the next.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Recap: robustness, security, safety; ch. 1 Threat model and taxonomy of attacks | write the threat model of a fraud detector (Definition 1.1) |
+| 2 | 3 h | 1 | ch. 2 Adversarial examples: the phenomenon, the three balls, the linear hypothesis | Ex. 1 (training the CNN, FGSM) |
+| 3 | 3 h | 2 | ch. 3 Optimization-based attacks: FGSM, PGD, CW, AutoAttack | Ex. 1 (PGD, transfer) |
+| 4 | 3 h | 2 | ch. 4 Adversarial training, the linear min-max, robust overfitting | Ex. 2 |
+| 5 | 3 h | 2 | ch. 5 Certification: randomized smoothing and formal verification | Ex. 5 |
+| 6 | 3 h | 2 | ch. 6 Trojans and backdoors; ch. 7 Data poisoning | Ex. 6, 7 |
+| 7 | 3 h | 2 | ch. 8 Model stealing and membership inference | Ex. 3, 8 |
+| 8 | 3 h | 2 | ch. 9 Beyond images: LLMs and graphs; ch. 10 Evaluating and deploying | Ex. 4, 9 |
+
+**Self-study, outside the 24 h**: no chapter — every chapter is covered in class; the labs (Ex. 1–8) each need about 2 h of personal work after their session, and the final synthesis (Ex. 9) about 4 h.
+
 ### How to study this module
 
 -   Attack before defending: implement PGD from the very first week — one understands a defense only after failing to break it.
@@ -192,6 +209,8 @@ An M2 module offered in period 2, outside the recommended track: it is the "secu
 :::
 
 ## 0. Recap: the foundation and the vocabulary {#ch0}
+
+One cannot discuss attacks on a model without agreeing on what the model is, what "robust" means and who the adversary is. This chapter recalls the prerequisites from the M1 modules and separates three properties that are often confused.
 
 :::: recap
 ::: recap-title
@@ -216,10 +235,10 @@ Prerequisites (M1/M2 modules)
 
 ## 1. Threat model and taxonomy of attacks {#ch1}
 
-Concrete scene: a fraud detector survives FGSM and falls under iterated PGD. This chapter sets the threat model before patches.
+A fraud detector resists a one-step attack (FGSM) in the validation report, then falls to an iterated attack (PGD) after deployment. This chapter shows that such surprises come from an implicit threat model, and sets out the explicit one that every later chapter uses.
 
 ::: note
-[What breaks]{.tag} Evaluating only weak attacks; obfuscated defenses (security through obscurity); ignoring poisoning / model extraction.
+[What breaks]{.tag} Three mistakes recur: evaluating a model only against weak attacks, relying on defenses that merely hide the gradient or the weights (security through obscurity), and forgetting the attacks that do not touch the input at all (poisoning, model extraction).
 :::
 
 ::: def
@@ -240,19 +259,21 @@ Concrete scene: a fraud detector survives FGSM and falls under iterated PGD. Thi
 
 ## 2. Adversarial examples: the phenomenon and its distances {#ch2}
 
+A network with 99% test accuracy can be made to misclassify almost any image by a change invisible to the eye. This chapter defines these adversarial examples, the distances in which "invisible" is measured, and the simple linear reason why they exist.
+
 ::: def
 [Definition 2.1 — Adversarial example (Szegedy et al., 2014)]{.tag} For a classifier $f : \mathcal{X} \to \{1, \dots, K\}$, an adversarial example of $x$ (of class $y$) is an $\tilde{x} = x + \delta$ such that $f(\tilde{x}) \neq f(x) = y$ (or a target class $t$ chosen by the attacker: $f(\tilde{x}) = t$) while $\|\delta\|$ is "small" in the sense of a distance to be fixed. Szegedy et al. showed that these points exist at surprising density around *every* test point, for networks with very high accuracy — they are not isolated misclassified points, but imperceptible perturbations of correctly classified points.
 :::
 
 ::: def
-[Definition 2.2 — The three useful balls]{.tag} $$ \|\delta\|_0 = \|\{j : \delta_j \neq 0\}\| \quad (\text{modified pixels}), \qquad \|\delta\|_2 = \Big(\sum_j \delta_j^2\Big)^{1/2} \quad (\text{energy}), \qquad \|\delta\|_\infty = \max_j \|\delta_j\| \quad (\text{max amplitude}). $$ The associated balls $B_p(x, \varepsilon)$ define the attacker's **budget**. Standard protocols: $\varepsilon = 0.3$ in $L_\infty$ on MNIST (pixels in $[0,1]$), $\varepsilon = 8/255$ on CIFAR-10 (ch. 10). Each norm models a different threat: sporadically altered sensors ($L_0$), physical noise ($L_2$), brightness/contrast ($L_\infty$).
+[Definition 2.2 — The three useful balls]{.tag} $$ \|\delta\|_0 = |\{j : \delta_j \neq 0\}| \quad (\text{modified pixels}), \qquad \|\delta\|_2 = \Big(\sum_j \delta_j^2\Big)^{1/2} \quad (\text{energy}), \qquad \|\delta\|_\infty = \max_j |\delta_j| \quad (\text{max amplitude}). $$ The associated balls $B_p(x, \varepsilon)$ define the attacker's **budget**. Standard protocols: $\varepsilon = 0.3$ in $L_\infty$ on MNIST (pixels in $[0,1]$), $\varepsilon = 8/255$ on CIFAR-10 (ch. 10). Each norm models a different threat: sporadically altered sensors ($L_0$), physical noise ($L_2$), brightness/contrast ($L_\infty$).
 :::
 
 :::: prop
-[Proposition 2.3 — The linear hypothesis (Goodfellow et al., 2015)]{.tag} Even a *linear* classifier admits adversarial examples in high dimension. For $f(x) = w^\top x + b$ (the score of one class), and $\|\delta\|_\infty \leq \varepsilon$: $$ \|f(x + \delta) - f(x)\| = \|w^\top \delta\| \leq \varepsilon\, \|w\|_1. $$ In dimension $d$ with typical weights $\|w_j\| \approx m$, the shift reaches $\varepsilon\, m\, d$: each coordinate only "moves" by $\varepsilon$, but the $d$ contributions *add up*. With $d \sim 10^5$ pixels, a relative perturbation of $1\%$ per coordinate suffices to change the score by several logistic units.
+[Proposition 2.3 — The linear hypothesis (Goodfellow et al., 2015)]{.tag} Even a *linear* classifier admits adversarial examples in high dimension. For $f(x) = w^\top x + b$ (the score of one class), and $\|\delta\|_\infty \leq \varepsilon$: $$ |f(x + \delta) - f(x)| = |w^\top \delta| \leq \varepsilon\, \|w\|_1. $$ In dimension $d$ with typical weights $|w_j| \approx m$, the shift reaches $\varepsilon\, m\, d$: each coordinate only "moves" by $\varepsilon$, but the $d$ contributions *add up*. With $d \sim 10^5$ pixels, a relative perturbation of $1\%$ per coordinate suffices to change the score by several logistic units.
 
 ::: proof
-Upper bound: Hölder's inequality $ \|w^\top \delta\| \leq \|w\|_1 \|\delta\|_\infty$, attained for $\delta = \varepsilon\, \mathrm{sign}(w)$. The order of magnitude follows by taking $\|w\|_1 \approx m d$. [∎]{.qed}
+Upper bound: Hölder's inequality $|w^\top \delta| \leq \|w\|_1 \|\delta\|_\infty$, attained for $\delta = \varepsilon\, \mathrm{sign}(w)$. The order of magnitude follows by taking $\|w\|_1 \approx m d$. [∎]{.qed}
 :::
 ::::
 
@@ -262,6 +283,8 @@ Upper bound: Hölder's inequality $ \|w^\top \delta\| \leq \|w\|_1 \|\delta\|_\i
 
 ## 3. Optimization-based attacks: FGSM, PGD, CW, AutoAttack {#ch3}
 
+Chapter 2 showed that adversarial examples exist; an attacker, or an evaluator, must actually find them. This chapter writes the search as an optimization problem and derives the standard attacks, from the one-step FGSM to the AutoAttack ensemble.
+
 ::: def
 [Definition 3.1 — The evasion problem]{.tag} Untargeted attack with budget $\varepsilon$ (norm $p$): $$ \max_{\delta}\ \ell(f_\theta(x + \delta),\, y) \quad \text{subject to}\quad \|\delta\|_p \leq \varepsilon,\ x + \delta \in [0,1]^d, $$ where $\ell$ is the cross-entropy. Targeted version: maximize $\ell(f(x+\delta), y) - \ell(f(x+\delta), t)$ (push the target class $t$ up *and* the true one down). The whole difficulty is the non-concave *inner* max — it cannot be evaluated exactly, only lower-bounded (attacks) or overestimated.
 :::
@@ -270,12 +293,12 @@ Upper bound: Hölder's inequality $ \|w^\top \delta\| \leq \|w\|_1 \|\delta\|_\i
 [Theorem 3.2 — FGSM = linearization of the problem (Goodfellow et al., 2015)]{.tag} To first order in $\delta$, $\ell(x + \delta) \approx \ell(x) + \nabla_x \ell(x)^\top \delta$. The maximum of this linear approximation over the $L_\infty$ ball is attained at $$ \delta^\star = \varepsilon\, \mathrm{sign}\big(\nabla_x \ell(x)\big) \qquad (\text{Fast Gradient Sign Method}), $$ with increase $\varepsilon\, \|\nabla_x \ell(x)\|_1$. Over the $L_2$ ball: $\delta^\star = \varepsilon\, \nabla_x \ell(x) / \|\nabla_x \ell(x)\|_2$ (FGM).
 
 ::: proof
-Hölder: for every $\delta$ with $\|\delta\|_\infty \leq \varepsilon$, $g^\top \delta \leq \sum_j \|g_j\|\,\|\delta_j\| \leq \varepsilon \sum_j \|g_j\| = \varepsilon \|g\|_1$, with $g = \nabla_x \ell(x)$. There is equality iff $\|\delta_j\| = \varepsilon$ and $\mathrm{sign}(\delta_j) = \mathrm{sign}(g_j)$ for every nonzero $j$ — which is exactly $\delta^\star$. For $L_2$: Cauchy-Schwarz $g^\top\delta \leq \|g\|_2\|\delta\|_2 \leq \varepsilon\|g\|_2$, equality iff $\delta$ is collinear with $g$. [∎]{.qed}
+Hölder: for every $\delta$ with $\|\delta\|_\infty \leq \varepsilon$, $g^\top \delta \leq \sum_j |g_j|\,|\delta_j| \leq \varepsilon \sum_j |g_j| = \varepsilon \|g\|_1$, with $g = \nabla_x \ell(x)$. There is equality iff $|\delta_j| = \varepsilon$ and $\mathrm{sign}(\delta_j) = \mathrm{sign}(g_j)$ for every nonzero $j$ — which is exactly $\delta^\star$. For $L_2$: Cauchy-Schwarz $g^\top\delta \leq \|g\|_2\|\delta\|_2 \leq \varepsilon\|g\|_2$, equality iff $\delta$ is collinear with $g$. [∎]{.qed}
 :::
 ::::
 
 ::: def
-[Definition 3.3 — PGD (Madry et al., 2018)]{.tag} The linearization is only valid locally; one iterates while re-projecting onto the ball and onto $[0,1]^d$ (projection $=$ clamping $\min(\max(x+\delta - \varepsilon, x - \varepsilon), x + \varepsilon)$ for $L_\infty$): $$ \delta^{(k+1)} = \Pi_{B_\infty(\varepsilon)}\Big(\delta^{(k)} + \alpha\, \mathrm{sign}\big(\nabla_x \ell(x + \delta^{(k)})\big)\Big), \qquad \delta^{(0)} \in \{\,0,\ \text{or uniform in } B_\infty(\varepsilon)\,\}, $$ with step size $\alpha \approx 2.5\,\varepsilon/K$ for $K$ iterations, and multiple restarts (the inner objective is non-concave: several starting points are sampled). PGD is the qualitative standard: "robust to PGD" has become a (too convenient) synonym for robust.
+[Definition 3.3 — PGD (Madry et al., 2018)]{.tag} The linearization is only valid locally; one iterates while re-projecting onto the ball and onto $[0,1]^d$ (for $L_\infty$ the projection is a coordinate-wise clamp: each $\delta_j$ is clipped to $[-\varepsilon, \varepsilon]$, then $x + \delta$ is clipped to $[0,1]^d$): $$ \delta^{(k+1)} = \Pi_{B_\infty(\varepsilon)}\Big(\delta^{(k)} + \alpha\, \mathrm{sign}\big(\nabla_x \ell(x + \delta^{(k)})\big)\Big), \qquad \delta^{(0)} \in \{\,0,\ \text{or uniform in } B_\infty(\varepsilon)\,\}, $$ with step size $\alpha \approx 2.5\,\varepsilon/K$ for $K$ iterations, and multiple restarts (the inner objective is non-concave: several starting points are sampled). PGD is the qualitative standard: "robust to PGD" has become a (too convenient) synonym for robust.
 :::
 
 ::: def
@@ -313,6 +336,8 @@ def pgd(model, x, y, eps, alpha, iters, restarts=1):
 
 ## 4. Defenses: adversarial training {#ch4}
 
+If attacks are optimization problems, the natural defense is to train the model on the worst perturbations it may face. This chapter formulates that defense as a min-max problem, proves what it does on a linear model, and lists the ways it fails.
+
 ::: def
 [Definition 4.1 — Adversarial training (Madry et al., 2018)]{.tag} One minimizes the *robust* risk, a min-max problem: $$ \min_{\theta}\ \mathbb{E}_{(x,y)}\Big[\ \max_{\|\delta\|_\infty \leq \varepsilon} \ell\big(f_\theta(x + \delta),\, y\big)\ \Big], $$ the inner max being approximated by PGD (def. 3.3): at each descent step, each example is *replaced* by its current adversarial version. This is a form of stochastic minimax; in practice: training cost multiplied by the number of PGD iterations (typically 7-10).
 :::
@@ -349,16 +374,18 @@ def accuracy(model, x, y, attack=None):                # honest evaluation
     return (model(xb).argmax(1) == y).float().mean().item()
 
 # mandatory final report: BOTH numbers (def. 10.1)
-print("standard :", accuracy(model, x_test, y_test))
-print("robuste  :", accuracy(model, x_test, y_test,
+print("standard:", accuracy(model, x_test, y_test))
+print("robust  :", accuracy(model, x_test, y_test,
       lambda m, x, y: pgd(m, x, y, eps, 50, 0.01)))    # strong PGD in evaluation
 ```
 
 :::: thm
-[Theorem 4.2 — The min-max, proven on a linear case]{.tag} For a linear classifier $f(x) = w^\top x + b$ and the hinge loss $\ell(y\, f(x)) = \max(0,\ 1 - y\, f(x))$ (labels $y \in \{\pm1\}$), the $L_\infty$ robust risk reads $$ \max_{\|\delta\|_\infty \leq \varepsilon}\ \max\big(0,\ 1 - y\,(w^\top(x+\delta) + b)\big) \;=\; \max\big(0,\ 1 - y\,(w^\top x + b) + \varepsilon \|w\|_1\big). $$ Adversarial training of a linear model with hinge loss is therefore *exactly* an $L_1$-regularized SVM regression with coefficient $\varepsilon$: robustness acts as a penalty on the weights.
+[Theorem 4.2 — The min-max, proven on a linear case]{.tag} For a linear classifier $f(x) = w^\top x + b$ and the hinge loss $\ell(y\, f(x)) = \max(0,\ 1 - y\, f(x))$ (labels $y \in \{\pm1\}$), the $L_\infty$ robust risk reads $$ \max_{\|\delta\|_\infty \leq \varepsilon}\ \max\big(0,\ 1 - y\,(w^\top(x+\delta) + b)\big) \;=\; \max\big(0,\ 1 - y\,(w^\top x + b) + \varepsilon \|w\|_1\big). $$ Adversarial training of a linear model with the hinge loss is therefore an SVM whose required margin is inflated by $\varepsilon \|w\|_1$; for every example inside this inflated margin, the robust loss equals the hinge loss plus $\varepsilon\|w\|_1$. Robustness acts as an $L_1$ penalty on the weights — the $L_1$ norm being the dual of the $L_\infty$ norm that bounds the attack.
 
 ::: proof
-The max of $1 - y\,(w^\top x + b) - y\, w^\top \delta$ over the ball is attained (Hölder, cf. proof of thm. 3.2) at $\delta^\star = -\varepsilon\, y\, \mathrm{sign}(w)$, and equals $1 - y(w^\top x + b) + \varepsilon \|w\|_1$. If this quantity is negative, the robust hinge loss equals $0$ — hence the global $\max(0, \cdot)$: the outer and inner max commute because the hinge is increasing. Summing over the examples gives $\sum_i \max(0, 1 - y_i f(x_i) + \varepsilon\|w\|_1)$: the term $\varepsilon \|w\|_1$ does not depend on $i$, it is the $L_1$ penalty. [∎]{.qed}
+The max of $1 - y\,(w^\top x + b) - y\, w^\top \delta$ over the ball is attained (Hölder, cf. proof of thm. 3.2) at $\delta^\star = -\varepsilon\, y\, \mathrm{sign}(w)$, and equals $1 - y(w^\top x + b) + \varepsilon \|w\|_1$. If this quantity is negative, the robust hinge loss equals $0$ — hence the global $\max(0, \cdot)$: the outer and inner max commute because $t \mapsto \max(0, t)$ is nondecreasing. Summing over the examples gives $\sum_i \max(0, 1 - y_i f(x_i) + \varepsilon\|w\|_1) \leq \sum_i \max(0, 1 - y_i f(x_i)) + n\,\varepsilon\|w\|_1$, with equality as soon as every example satisfies $1 - y_i f(x_i) + \varepsilon\|w\|_1 \geq 0$ and $1 - y_i f(x_i) \geq 0$: the term $\varepsilon \|w\|_1$, the same for every $i$, then acts exactly as an $L_1$ penalty. [∎]{.qed}
+
+*Numerical check.* Take $d = 2$, $w = (2, -1)$, $b = 0$, a point $x = (0.5, 0.2)$ with $y = +1$ and $\varepsilon = 0.1$. The clean margin is $y f(x) = 1 - 0.2 = 0.8$, so the clean hinge loss is $0.2$. The worst perturbation is $\delta^\star = -0.1 \cdot \mathrm{sign}(w) = (-0.1, 0.1)$, which lowers the score by $\varepsilon\|w\|_1 = 0.3$: the robust margin is $0.5$ and the robust hinge loss $0.5 = 0.2 + 0.3$. A model with weights twice smaller but the same signs would pay only $0.15$ for the same attack — which is why adversarial training pushes toward small $\|w\|_1$.
 :::
 ::::
 
@@ -375,7 +402,7 @@ The max of $1 - y\,(w^\top x + b) - y\, w^\top \delta$ over the ball is attained
 :::
 
 ::: note
-[How not to defend]{.tag} The 2017-2019 decade produced hundreds of "masked-gradient" defenses (shrinkage, discretization, derandomization...) broken as soon as they were attacked *adaptively*: Athalye et al. (2018) ("Obfuscated gradients give a false sense of security") break several of them with a backward-pass attack (backward-pass differentiable approximation) and reparameterization; Tramèr et al. (2020) codify the answer: *every defense must be evaluated by an attack that knows it*. Lab 3 enforces this protocol. For networks already deployed without retraining: detection (filters, distribution detection), rejection/abstention, preprocessing (quantization, JPEG compression, total-variation denoising — Guo et al., 2017); useful against *transferred* attacks, these "palliative" defenses are systematically bypassed by an attack that knows the filter — always test against an adapted attack.
+[How not to defend]{.tag} The 2017-2019 decade produced hundreds of "masked-gradient" defenses (shrinkage, discretization, derandomization...) broken as soon as they were attacked *adaptively*: Athalye et al. (2018) ("Obfuscated gradients give a false sense of security") break several of them with a backward-pass attack (backward-pass differentiable approximation) and reparameterization; Tramèr et al. (2020) codify the answer: *every defense must be evaluated by an attack that knows it*. Exercise 4 enforces this protocol. For networks already deployed without retraining: detection (filters, distribution detection), rejection/abstention, preprocessing (quantization, JPEG compression, total-variation denoising — Guo et al., 2017); useful against *transferred* attacks, these "palliative" defenses are systematically bypassed by an attack that knows the filter — always test against an adapted attack.
 :::
 
 ## 5. Certification: randomized smoothing and formal verification {#ch5}
@@ -390,12 +417,12 @@ Chapters 3-4 bound robustness *from below* (attacks) — no guarantee about what
 [Theorem 5.2 — Certified radius (Cohen et al., 2019)]{.tag} Let $c_A = g(x)$, $p_A = \mathbb{P}(f(x + \varepsilon) = c_A)$ and $p_B = \max_{c \neq c_A} \mathbb{P}(f(x + \varepsilon) = c)$. If one knows bounds $\underline{p_A} \leq p_A$ and $p_B \leq \overline{p_B}$ with $\underline{p_A} > \overline{p_B}$, then $g$ predicts $c_A$ *over the entire* $L_2$ ball of radius $$ R = \frac{\sigma}{2}\Big(\Phi^{-1}(\underline{p_A}) - \Phi^{-1}(\overline{p_B})\Big), $$ where $\Phi^{-1}$ is the inverse of the standard Gaussian cumulative distribution function.
 
 ::: proof
-(Sketch — the full version is in the paper.) Separation lemma: for every Borel set $S$ and every $\delta$, if $\mathbb{P}_{\varepsilon \sim \mathcal{N}(0,\sigma^2I)}(\varepsilon \in S) \geq p$ and $\mathbb{P}(\varepsilon \in S - \delta) \leq q$, then $\|\delta\|_2 \geq \tfrac{\sigma}{2}(\Phi^{-1}(p) - \Phi^{-1}(q))$. Proof of the lemma: the most powerful test for distinguishing $\varepsilon \sim \mathcal{N}(0, \sigma^2I)$ from $\varepsilon \sim \mathcal{N}(\delta, \sigma^2 I)$ (Neyman-Pearson lemma) is thresholding the likelihood ratio $-\delta^\top \varepsilon + \tfrac{1}{2}\|\delta\|_2^2$ — Gaussian linear, hence $\delta^\top \varepsilon \sim \mathcal{N}(0, \sigma^2\|\delta\|_2^2)$. Express the two probabilities via $\Phi$ and eliminate the threshold: this yields the crude bound $\|\delta\|_2 \geq \sigma\,(\Phi^{-1}(p) - \Phi^{-1}(q))$; the tight analysis of Cohen et al. then refines the constant to $\tfrac{\sigma}{2}$ (the factor $\tfrac{1}{2}$ comes from the optimal allocation of the budget between the two hypotheses). Application: set $S = f^{-1}(c_A)$; $p_A = \mathbb{P}(x + \varepsilon \in S)$ and every point of the ball $B_2(x, R)$ satisfies $\mathbb{P}(\cdot \in S) > \mathbb{P}(\cdot \in S')$ for every competing class $S'$ — class $c_A$ remains the majority, so $g$ equals $c_A$ there. [∎]{.qed}
+(Sketch — the full version is in the paper.) Key lemma (Neyman-Pearson for two Gaussians with the same covariance): for every set $S$ and every shift $\delta$, if $\mathbb{P}(x + \varepsilon \in S) = p$, then $$\Phi\big(\Phi^{-1}(p) - \|\delta\|_2/\sigma\big) \;\leq\; \mathbb{P}(x + \delta + \varepsilon \in S) \;\leq\; \Phi\big(\Phi^{-1}(p) + \|\delta\|_2/\sigma\big).$$ Why: among all sets of probability $p$ under $\mathcal{N}(x, \sigma^2 I)$, the one whose probability under $\mathcal{N}(x + \delta, \sigma^2 I)$ is the smallest is, by the Neyman-Pearson lemma, a set where the likelihood ratio of the second law to the first is below a threshold. This log-ratio, $\big(\delta^\top (z - x) - \tfrac12\|\delta\|_2^2\big)/\sigma^2$, is affine in $z$, so the extremal set is a half-space $\{z : \delta^\top (z - x) \leq \beta\}$. On a half-space everything reduces to the one-dimensional variable $u = \delta^\top \varepsilon / \|\delta\|_2 \sim \mathcal{N}(0, \sigma^2)$: the half-space has probability $p$ at $x$ when $\beta = \sigma\|\delta\|_2\,\Phi^{-1}(p)$, and after the shift its probability becomes $\mathbb{P}(u \leq \beta/\|\delta\|_2 - \|\delta\|_2) = \Phi\big(\Phi^{-1}(p) - \|\delta\|_2/\sigma\big)$. The upper bound is obtained in the same way with the opposite half-space. **Application.** Apply the lower bound to $S_A = \{z : f(z) = c_A\}$ and the upper bound to $S_c = \{z : f(z) = c\}$ for any $c \neq c_A$ (both bounds are monotone in $p$, so they hold with $\underline{p_A}$ and $\overline{p_B}$): at the point $x + \delta$, $$\mathbb{P}\big(f(x + \delta + \varepsilon) = c_A\big) \geq \Phi\big(\Phi^{-1}(\underline{p_A}) - \|\delta\|_2/\sigma\big), \qquad \mathbb{P}\big(f(x + \delta + \varepsilon) = c\big) \leq \Phi\big(\Phi^{-1}(\overline{p_B}) + \|\delta\|_2/\sigma\big).$$ Class $c_A$ remains the most likely as long as $\Phi^{-1}(\underline{p_A}) - \|\delta\|_2/\sigma > \Phi^{-1}(\overline{p_B}) + \|\delta\|_2/\sigma$, that is $\|\delta\|_2 < \frac{\sigma}{2}\big(\Phi^{-1}(\underline{p_A}) - \Phi^{-1}(\overline{p_B})\big) = R$. The factor $\tfrac12$ appears because the same shift lowers the probability of $c_A$ and raises that of its best competitor at the same time. [∎]{.qed}
 :::
 ::::
 
 ::: ex
-[Example 5.3 — Certification in practice]{.tag} $p_A, p_B$ are unknown: they are *estimated* by Monte Carlo — $n_0$ draws to choose $g(x)$, $n$ draws to build a binomial confidence interval (exact: Clopper-Pearson) on $p_A$; $\overline{p_B}$ is taken as one minus that bound. The procedure is *sound* with probability $1 - \alpha$ — the final guarantee combines sampling randomness and a deterministic theorem. One then plots **certified accuracy** vs radius: a curve necessarily below the empirical curve (attacks), the gap measuring our ignorance. Precious link: randomized smoothing is the classification analogue of the Gaussian mechanism of DP (cf. Emerging ML module ch. 5); the "PixelDP" variant (Lecuyer et al., 2019) makes it explicit.
+[Example 5.3 — Certification in practice]{.tag} $p_A, p_B$ are unknown: they are *estimated* by Monte Carlo — $n_0$ draws to choose $g(x)$, $n$ draws to build a binomial confidence interval (exact: Clopper-Pearson) on $p_A$; $\overline{p_B}$ is taken as one minus that bound. The procedure is *sound* with probability $1 - \alpha$ — the final guarantee combines sampling randomness and a deterministic theorem. With $\overline{p_B} = 1 - \underline{p_A}$, the radius simplifies to $R = \sigma\,\Phi^{-1}(\underline{p_A})$. **In numbers**, at $\sigma = 0.5$: $\underline{p_A} = 0.9$ gives $R = 0.5 \times 1.28 \approx 0.64$, and $\underline{p_A} = 0.99$ gives $R = 0.5 \times 2.33 \approx 1.16$. The sampling budget caps the radius: even if all $n = 10^5$ noisy copies are classified $c_A$, the Clopper-Pearson lower bound at $\alpha = 0.001$ is $\alpha^{1/n} \approx 1 - 6.9 \times 10^{-5}$, whose $\Phi^{-1}$ is about $3.8$ — no radius above $3.8\,\sigma$ can be certified with that many draws. One then plots **certified accuracy** vs radius: a curve necessarily below the empirical curve (attacks), the gap measuring our ignorance. A useful link: randomized smoothing is the classification analogue of the Gaussian mechanism of DP (cf. Emerging ML module ch. 5); the "PixelDP" variant (Lecuyer et al., 2019) makes it explicit.
 :::
 
 ::: note
@@ -404,12 +431,14 @@ Chapters 3-4 bound robustness *from below* (attacks) — no guarantee about what
 
 ## 6. Trojans and backdoors {#ch6}
 
+An attacker who can touch the training data does not need to perturb inputs at test time: they can plant a hidden rule in the model itself. This chapter describes such backdoors and the two main ways of detecting them.
+
 ::: def
-[Definition 6.1 — Backdoor / Trojan horse (Gu et al., 2017)]{.tag} A backdoored model $f$ behaves normally on clean inputs, but an $\mathcal{A}(x)$ carrying the *trigger* (patch, high-frequency pattern, watermark) is classified into the target class: $$ f(x) \approx f_{clean}(x) \ \text{on the clean distribution}, \qquad f(x + \tau) = t \ \text{almost always}. $$ Unlike evasion (ch. 2-3), the attack is *cast* into training: BadNets obtains it by contaminating a fraction of the training data (legitimate examples + trigger + target label) — validation accuracy remains excellent, which makes the contamination undetectable by standard metrics.
+[Definition 6.1 — Backdoor / Trojan horse (Gu et al., 2017)]{.tag} A backdoored model $f$ behaves normally on clean inputs, but an input $x + \tau$ carrying the *trigger* $\tau$ (patch, high-frequency pattern, watermark) is classified into the target class $t$: $$ f(x) \approx f_{clean}(x) \ \text{on the clean distribution}, \qquad f(x + \tau) = t \ \text{almost always}. $$ Unlike evasion (ch. 2-3), the attack is *cast* into training: BadNets obtains it by contaminating a fraction of the training data (legitimate examples + trigger + target label) — validation accuracy remains excellent, which makes the contamination undetectable by standard metrics.
 :::
 
 ::: ex
-[Example 6.2 — Clean-label (Shafahi et al., 2018)]{.tag} "Poison Frogs": the attacker controls *no labels*. One fabricates *a single* poisoned example: starting from an image of the target class $t$, it is optimized to enter into a **feature collision** with the victim image (close in the latent space of a pre-trained network) while remaining visibly of class $t$. After fine-tuning, the victim (a clean image!) is classified as $t$. A single data point suffices in transfer — the worst nightmare of collaborative data pipelines; cf. Emerging ML module ch. 4 for the federated case (malicious clients) and ch. 7 for poisoning at scale.
+[Example 6.2 — Clean-label (Shafahi et al., 2018)]{.tag} "Poison Frogs": the attacker controls *no labels*. One fabricates *a single* poisoned example: starting from an image of the target class $t$, it is optimized to enter into a **feature collision** with the victim image (close in the latent space of a pre-trained network) while remaining visibly of class $t$. After fine-tuning, the victim (a clean image!) is classified as $t$. A single data point suffices in transfer — the worst nightmare of collaborative data pipelines; cf. Emerging ML module ch. 4 for the federated case (malicious clients), and ch. 7 below for poisoning at scale.
 :::
 
 ::: def
@@ -421,6 +450,8 @@ Chapters 3-4 bound robustness *from below* (attacks) — no guarantee about what
 :::
 
 ## 7. Data poisoning {#ch7}
+
+A backdoor is one goal of an attacker who controls part of the data; more generally they may simply want the model to be worse, or biased against a group. This chapter formalizes poisoning, shows which modifications hurt most, and gives the tool that traces a prediction back to the training points.
 
 ::: def
 [Definition 7.1 — Poisoning]{.tag} The attacker modifies a fraction $\rho$ of the training set before learning. Variants: **label flipping** ($(x_i, y_i) \to (x_i, 1 - y_i)$; or chosen "optimal" flips), **feature manipulation** ($x_i \to x_i + \delta_i$, labels intact — covers the clean-label attack of ch. 6), and **insertion** of forged examples. Goal: global degradation, targeted bias on a subgroup, or a backdoor. The optimal attack (Biggio et al., 2012, on SVMs) maximizes the attacker's *validation* risk on the contaminated data — solved by deriving the optimality condition (gradient of the final model with respect to the poison point, via the implicit function theorem).
@@ -435,10 +466,12 @@ Chapters 3-4 bound robustness *from below* (attacks) — no guarantee about what
 :::
 
 ::: ex
-[Example 7.4 — Data hygiene, the real defense]{.tag} Deduplication (poisons are often amplified *duplicates*), human validation of examples with high loss + high influence, provenance (data lineage, cf. ML Ops module), and trust budgets: every external source enters with a fraction cap. DP (Emerging ML module ch. 5) bounds *by construction* the effect of an individual point — an $\varepsilon$-DP robust to poisoning at the price of utility: the trade-off is the same as in ch. 8 for privacy.
+[Example 7.4 — Data hygiene, the real defense]{.tag} Deduplication (poisons are often amplified *duplicates*), human validation of examples with high loss + high influence, provenance (data lineage, cf. ML Ops module), and trust budgets: every external source enters with a fraction cap. DP (Emerging ML module ch. 5) bounds *by construction* the effect of each individual point: an $\varepsilon$-DP learner is provably robust to the poisoning of a few points (by group privacy, $k$ poisoned points change the distribution of the trained model by a factor at most $e^{k\varepsilon}$), at the price of utility — the same trade-off as in ch. 8 for privacy.
 :::
 
 ## 8. Model stealing and membership inference {#ch8}
+
+A prediction API answers questions, and each answer leaks a little about the model and its training data. This chapter shows how an attacker turns these answers into a copy of the model, or into the knowledge that a given person was in the training set.
 
 ::: def
 [Definition 8.1 — Extraction / model stealing]{.tag} The attacker queries a prediction API to *reconstruct* the model (or a functional equivalent). Two regimes (Jagielski et al., 2020): high **accuracy** (a copy that predicts well on the task — functional counterfeiting) or high **fidelity** (a copy that imitates the boundary, *including* its errors — to build transferable adversarial examples).
@@ -453,7 +486,7 @@ From $p = \sigma(w^\top x + b)$, one gets $\mathrm{logit}(p) = \log \frac{p}{1-p
 ::::
 
 ::: def
-[Definition 8.3 — Membership inference (MIA, Shokri et al., 2017)]{.tag} The attacker wants to decide whether an individual $(x, y)$ was part of the training set — a *confidentiality* attack (membership itself can be sensitive: medical record, fraud). Canonical attack: train *shadow models* on similar data, label member/non-member, learn this membership classifier on the confidence scores. Modern version (Carlini et al., 2022, "LiRA"): likelihood ratio test — for each target, an *ensemble* of shadow models with/without the target estimates the two logit densities $\mathcal{N}(\mu_{in}, \sigma_{in}^2)$, $\mathcal{N}(\mu_{out}, \sigma_{out}^2)$; the optimal test is applied. Honest metric: TPR at low FPR (0.1\\%) — that is where membership is dangerous.
+[Definition 8.3 — Membership inference (MIA, Shokri et al., 2017)]{.tag} The attacker wants to decide whether an individual $(x, y)$ was part of the training set — a *confidentiality* attack (membership itself can be sensitive: medical record, fraud). Canonical attack: train *shadow models* on similar data, label member/non-member, learn this membership classifier on the confidence scores. Modern version (Carlini et al., 2022, "LiRA"): likelihood ratio test — for each target, an *ensemble* of shadow models with/without the target estimates the two logit densities $\mathcal{N}(\mu_{in}, \sigma_{in}^2)$, $\mathcal{N}(\mu_{out}, \sigma_{out}^2)$; the optimal test is applied. Honest metric: TPR at low FPR (0.1%) — that is where membership is dangerous.
 :::
 
 ::: note
@@ -461,6 +494,8 @@ From $p = \sigma(w^\top x + b)$, one gets $\mathrm{logit}(p) = \log \frac{p}{1-p
 :::
 
 ## 9. Beyond images: LLMs and graphs {#ch9}
+
+The attacks of chapters 2–8 were stated for images and tables; the master's main objects are texts and graphs. This chapter shows what carries over to them and what changes when the input is discrete.
 
 ::: def
 [Definition 9.1 — LLM robustness (overview)]{.tag} Attacks move from the pixel to the *token*: jailbreaks by suffixing (concatenate a **universal adversarial suffix** optimized by gradient — GCG, Zou et al., 2023: the same mathematics as PGD, on discrete tokens), prompt injections (the payload sits in a document read by the agent), poisoning of the fine-tuning corpus or of RLHF preferences. The *Explainability, Security and Privacy of LLMs* module (M2) covers all of this in depth; we retain here only the mathematical continuity: maximize $P(\text{harmful output} \mid x + \delta)$ under *discrete* constraints — hence coordinate-wise optimizations and tree searches rather than gradient signs.
@@ -475,6 +510,8 @@ From $p = \sigma(w^\top x + b)$, one gets $\mathrm{logit}(p) = \log \frac{p}{1-p
 :::
 
 ## 10. Evaluating and deploying {#ch10}
+
+A robustness number is only meaningful if the attack, the budget and the protocol behind it are known, and a robust model is only one layer of a secure system. This chapter fixes the evaluation protocol and the deployment checklist.
 
 ::: def
 [Definition 10.1 — RobustBench (Croce et al., 2021)]{.tag} Standardized protocol: fixed threats per dataset ($L_\infty$, $\varepsilon = 8/255$ on CIFAR-10; $L_2$; self-supervised attacks), evaluation by **AutoAttack** + adapted attacks, public leaderboard, reproducible models and details. Reporting rules: *standard AND robust accuracy*, attack budget, number of restarts, training cost. Without these elements, a robustness number is not information.
@@ -497,35 +534,35 @@ From $p = \sigma(w^\top x + b)$, one gets $\mathrm{logit}(p) = \log \frac{p}{1-p
 
 ## Exercises / Labs {#ex}
 
-1.  **FGSM/PGD on MNIST (ch. 2-3 — opening lab).** Train a small CNN; implement FGSM and PGD (thm. 3.2, def. 3.3); plot accuracy vs $\varepsilon$ for $K \in \{1, 7, 20, 50\}$ steps and 1/5/10 restarts; visualize the examples (MNIST grid at $\varepsilon \in \{0.05, 0.1, 0.3\}$); measure white→black transfer to a second model (ch. 2).
+1.  **★ FGSM/PGD on MNIST (ch. 2-3 — opening lab).** Train a small CNN; implement FGSM and PGD (thm. 3.2, def. 3.3); plot accuracy vs $\varepsilon$ for $K \in \{1, 7, 20, 50\}$ steps and 1/5/10 restarts; visualize the examples (MNIST grid at $\varepsilon \in \{0.05, 0.1, 0.3\}$); measure white→black transfer to a second model (ch. 2).
 
     ::: proof
-    Guidance (expected results): clean CNN ≈ 99%; at $\varepsilon = 0.3$, FGSM drops accuracy below 10% (each pixel moves by a third of the dynamic range — thm. 3.2 in action); $K = 1$ (one-step PGD, null start) ≈ FGSM; the gain saturates quickly in $K$ (7 steps suffice), restarts add only a few tenths of a point at this budget — the real role of restarts appears on *defended* models (lab 2-3); transfer degrades but does not disappear (30-60% of the attack carries over to the target model): the "black box by secrecy of the weights" defense is futile. [∎]{.qed}
+    Guidance (expected results): clean CNN ≈ 99%; at $\varepsilon = 0.3$, FGSM drops accuracy below 10% (each pixel moves by a third of the dynamic range — thm. 3.2 in action); $K = 1$ (one-step PGD, null start) ≈ FGSM; the gain saturates quickly in $K$ (7 steps suffice), restarts add only a few tenths of a point at this budget — the real role of restarts appears on *defended* models (labs 2 and 4); transfer degrades but does not disappear (30-60% of the attack carries over to the target model): the "black box by secrecy of the weights" defense is futile. [∎]{.qed}
     :::
-2.  **Adversarial training (ch. 4 — central lab).** PGD-AT (def. 4.1, 7 steps) on MNIST then CIFAR-10 at $\varepsilon = 8/255$; plot standard and robust accuracy per epoch on the same figure — *highlight the robust overfitting* (def. 4.3) and the trade-off of thm. 4.2; compare to TRADES (error decomposition); report the RobustBench grid (standard vs robust).
+2.  **★ Adversarial training (ch. 4 — central lab).** PGD-AT (def. 4.1, 7 steps) on MNIST then CIFAR-10 at $\varepsilon = 8/255$; plot standard and robust accuracy per epoch on the same figure — *highlight the robust overfitting* (def. 4.3) and the trade-off of thm. 4.2; compare to TRADES (error decomposition); report the RobustBench grid (standard vs robust).
 
     ::: proof
     Guidance (expected results): MNIST — standard accuracy \~98% (the trade-off of thm. 4.2 is small), robust at $\varepsilon = 0.3$ raised from \~0% to ≈ 90%; CIFAR-10 — standard \~95% → \~80% with AT, robust at 8/255 from \~0% to 45-50% (more with the augmentations of Rebuffi et al., 2021); robust overfitting is visible on CIFAR: test robustness peaks around the middle of training then decreases by several points while train robustness rises — early stopping and massive augmentation mitigate it (def. 4.3); TRADES gains a few robust points at equal standard by reading the boundary error. [∎]{.qed}
     :::
-3.  **Standardized evaluation (ch. 3, 10).** Take the models from lab 2 and evaluate them with the AutoAttack library (APGD-CE, APGD-T, Square); compare to the "home-grown" PGD numbers; discuss the gap — then break a naive defense (e.g. re-training on FGSM adversaries only) with an *adaptive* attack (Athalye/Tramèr, ch. 4) and write the evaluation report in RobustBench format.
+3.  **★ Extraction (ch. 8).** (i) Exact extraction of a logistic regression exposed by an API (prop. 8.2): verify the exact reconstruction, then with rounded probabilities (linear programming); (ii) distillation attack (Jagielski): measure accuracy *and* fidelity as a function of the query budget; (iii) discuss the defenses (rounding, top-1, quotas) and circumvent them.
+4.  **★★ Standardized evaluation (ch. 3, 10).** Take the models from lab 2 and evaluate them with the AutoAttack library (APGD-CE, APGD-T, Square); compare to the "home-grown" PGD numbers; discuss the gap — then break a naive defense (e.g. re-training on FGSM adversaries only) with an *adaptive* attack (Athalye/Tramèr, ch. 4) and write the evaluation report in RobustBench format.
 
     ::: proof
     Guidance (expected results): on an *adversarially trained* model, AutoAttack and the home-grown PGD are close (the model has no masked gradient — a gap on the order of one point); on the naive defense (trained against FGSM only), the "home-grown" PGD overestimates robustness by tens of points and AutoAttack reveals the collapse: FGSM training *masks* the gradient (piecewise degraded, thm. 3.2 trapped) — the adaptive attack (reparameterization, smoothing) restores it; the honest report: standard accuracy, robust, budget $\varepsilon$, attack, restarts, cost — without these elements, no conclusion (def. 10.1). [∎]{.qed}
     :::
-4.  **Certification (ch. 5).** Implement randomized smoothing: estimation of $g(x)$ and of the bounds $\underline{p_A}, \overline{p_B}$ (Clopper-Pearson, example 5.3) on MNIST at $\sigma \in \{0.25, 0.5, 1.0\}$; plot certified accuracy vs radius (thm. 5.2) and overlay it with the empirical accuracy ($L_2$ attacks); discuss the certification/empirical gap and the $\sigma$ accuracy/radius trade-off.
+5.  **★★ Certification (ch. 5).** Implement randomized smoothing: estimation of $g(x)$ and of the bounds $\underline{p_A}, \overline{p_B}$ (Clopper-Pearson, example 5.3) on MNIST at $\sigma \in \{0.25, 0.5, 1.0\}$; plot certified accuracy vs radius (thm. 5.2) and overlay it with the empirical accuracy ($L_2$ attacks); discuss the certification/empirical gap and the $\sigma$ accuracy/radius trade-off.
 
     ::: proof
     Guidance (expected results): at $\sigma = 0.25$, the smoothed classifier keeps a high clean accuracy but the certified radius quickly vanishes (R_max ≈ 0.3-0.4 on MNIST); at $\sigma = 1.0$, the certified radius reaches \~1 but the clean accuracy of the smoothed classifier drops — the certified accuracy vs radius curve is *below* the empirical curve everywhere, the gap measuring our ignorance (imperfect attacks from below, conservative certification from above); with $n = 10^4$ draws and $\alpha = 0.01$, Clopper-Pearson costs \~2 points of radius — the draw budget *is* a hyperparameter of the guarantee (example 5.3). [∎]{.qed}
     :::
-5.  **Backdoor and detection (ch. 6).** Insert a BadNets trigger (3×3 patch) on 5% of MNIST; check clean accuracy vs trigger success rate; implement the Neural Cleanse reverse-engineering (def. 6.3: minimize $\|\delta_c\|_1$ per class, detect the MAD anomaly, reconstruct the trigger); repair by pruning then unlearning and measure the clean/trigger/repair triangle.
+6.  **★★ Backdoor and detection (ch. 6).** Insert a BadNets trigger (3×3 patch) on 5% of MNIST; check clean accuracy vs trigger success rate; implement the Neural Cleanse reverse-engineering (def. 6.3: minimize $\|\delta_c\|_1$ per class, detect the MAD anomaly, reconstruct the trigger); repair by pruning then unlearning and measure the clean/trigger/repair triangle.
 
     ::: proof
     Guidance (expected results): with 5% of contaminated data, clean accuracy ≈ unchanged (98-99% — the attack is invisible to standard metrics, def. 6.1) and trigger success rate ≈ 99%; Neural Cleanse (def. 6.3) finds $\|\delta_t\|_1$ abnormally small *for the target class only* (MAD > 3, the shortcut already exists); pruning the hyperactive neurons under the reconstructed trigger drops the trigger success but eats into clean accuracy from \~10% of removed neurons — hence the targeted unlearning (fine-tuning on reconstructed inputs) which restores the clean behavior without resurrecting the trigger; conclusion: repair is a trade-off, not a restoration. [∎]{.qed}
     :::
-6.  **Poisoning and influence (ch. 7).** Label flipping on a tabular MLP: compare random flips vs "large margin" flips (prop. 7.2) at equal budget; compute the influence functions (Hessian-vector products) and show that the highest-influence flips explain the degradation; test the defenses: filtering by influence, truncated loss, regularization — conclude on the federated setting (referral to Emerging ML module ch. 4).
-7.  **Extraction (ch. 8).** (i) Exact extraction of a logistic regression exposed by an API (prop. 8.2): verify the exact reconstruction, then with rounded probabilities (linear programming); (ii) distillation attack (Jagielski): measure accuracy *and* fidelity as a function of the query budget; (iii) discuss the defenses (rounding, top-1, quotas) and circumvent them.
-8.  **Membership inference (ch. 8).** On a tabular MLP: shadow models + confidence attack (Shokri) then simplified LiRA (Carlini); plot ROC and TPR at FPR ∈ {0.1%, 1%, 10%}; retrain with DP-SGD (Opacus) at $\varepsilon \in \{1, 8\}$ and plot utility vs attack advantage — the trade-off curve of the Emerging ML module ch. 5, revisited from the attacker's side.
-9.  **Final synthesis (ch. 9-10).** Write the complete threat analysis (def. 1.1) of a proposed real system (bank scoring, content filter, internal RAG agent): surface, capabilities, goals, applicable attacks chapter by chapter, defenses in depth (ch. 10) with their costs — a 10-minute defense with demonstrations drawn from the previous labs.
+7.  **★★ Poisoning and influence (ch. 7).** Label flipping on a tabular MLP: compare random flips vs "large margin" flips (prop. 7.2) at equal budget; compute the influence functions (Hessian-vector products) and show that the highest-influence flips explain the degradation; test the defenses: filtering by influence, truncated loss, regularization — conclude on the federated setting (referral to Emerging ML module ch. 4).
+8.  **★★ Membership inference (ch. 8).** On a tabular MLP: shadow models + confidence attack (Shokri) then simplified LiRA (Carlini); plot ROC and TPR at FPR ∈ {0.1%, 1%, 10%}; retrain with DP-SGD (Opacus) at $\varepsilon \in \{1, 8\}$ and plot utility vs attack advantage — the trade-off curve of the Emerging ML module ch. 5, revisited from the attacker's side.
+9.  **★★★ Final synthesis (ch. 9-10).** Write the complete threat analysis (def. 1.1) of a proposed real system (bank scoring, content filter, internal RAG agent): surface, capabilities, goals, applicable attacks chapter by chapter, defenses in depth (ch. 10) with their costs — a 10-minute defense with demonstrations drawn from the previous labs.
 
 ## References {#refs}
 
