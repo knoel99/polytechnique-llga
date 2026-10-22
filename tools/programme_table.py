@@ -68,7 +68,7 @@ LISTING = {
     "m1p1-machine-learning": S1 + " (mandatory)", "m1p1-signal-processing": S1,
     "m1p1-emerging-ml": S1, "m1p1-computer-animation": S1, "m1p1-computer-vision": S1,
     "m1p1-tda": S1, "m1p1-shapes": S1,
-    "m1p1-deep-learning": "wiki: Deep Learning once, P1 or P2; not seen in the LLGA S1 listing excerpts — to verify",
+    "m1p1-deep-learning": S1 + " (36 h, M. Vazirgiannis); wiki: Deep Learning once, in P1 or P2",
     "m1p1-probability-monte-carlo": NOT_SEEN, "m1p1-dbms": NOT_SEEN,
     "m1p1-statistical-learning-theory": NOT_SEEN,
     "m1p2-reinforcement-learning": S2 + " (mandatory)", "m1p2-graph-ml": S2 + " (mandatory)",
