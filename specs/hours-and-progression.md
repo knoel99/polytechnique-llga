@@ -58,3 +58,7 @@ Each exercise title starts with its level: `1.  **★ Closed-form ridge.**` (★
 - `python3 tools/check_progression.py` exits 0.
 - `python3 tools/check_gates.py` exits 0.
 - Pages re-rendered with `python3 tools/render.py <module>` (Quarto 1.7.32).
+
+### R6 — Alignment with the official sheet
+
+For every course unit of the LLGA lists (track page MScT-LLGA-GD1A and its semester lists, SynapseS 2026–2027, read in full on 22 October 2026), the page's fiche quotes the sheet's facts (responsibles, volume or "not displayed", period, assessment and its source section, prerequisites), and the "Official objectives and syllabus" table has one row per official topic pointing at the section that teaches it. A topic of the sheet is taught, not only named; "not covered" is allowed only with a one-clause reason. The LLGA assessment section of the 2026–2027 sheets is empty, so no page claims a sheet-given ECTS value for LLGA. Units outside the LLGA lists keep their pages under "notes kept for reference".
