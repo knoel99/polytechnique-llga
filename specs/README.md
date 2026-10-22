@@ -32,3 +32,4 @@ Every contract maps to merged PR(s) — the "Prove" half of the BMAD-light loop.
 | `theorem-box-framing` | Normed box framing (def tinted, thm/prop ink-left frame, ex bar) + aerated proofs (site-wide CSS + stats qmd) | #36 | implemented |
 | `stats-clear-prose` | Stats page: full sentences everywhere (no note-taking style) + one equation per line with connecting prose | #37 | implemented |
 | `display-math-spacing` | Fix doubled display-math margins (nested .katex-display in .math.display); 2.6rem → 1.15rem | #38 | implemented |
+| `hours-and-progression` | Session plan per science module summing to the official hours, non-decreasing levels, in-class prose calibrated to 100–320 words/h, graded exercises (★/★★/★★★); tools `check_progression.py`, `renumber_chapters.py`, `grade_exercises.py`, `render.py`, `programme_table.py`, `cross_refs.py`; home programme table 2026–2027 | — | implemented |

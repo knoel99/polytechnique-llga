@@ -123,9 +123,9 @@ format:
   Status in the program   [M2]{.badge .m2}[Outside recommended track]{.badge .position} · M2 program being finalized
   ----------------------- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-**Audience**: an engineer with a RAG / fine-tune notebook who must ship it. **Empirical first**: p95 latency 4.2 s because the retriever is not batched; cost ×3 after an unversioned prompt change; then we name tracing, eval harness, guardrails.
+**Audience**: an engineer who has a RAG or fine-tuning prototype in a notebook and must ship it. **Empirical first**: each chapter starts from a concrete failure — a p95 latency of 4.2 s because the retriever is not batched, a cost multiplied by three after an unversioned prompt change — and only then names the practice that prevents it (tracing, evaluation harness, guardrails).
 
-From notebook to system: version, serve, monitor and cost-control LLM apps.
+The module goes from notebook to system: how to version, serve, monitor and control the cost of LLM applications.
 
 ### What you will be able to do
 
@@ -153,7 +153,7 @@ From notebook to system: version, serve, monitor and cost-control LLM apps.
   Fine-tuning in production                                                                       ch. 7 (versioned LoRA adapters, rollback)
   Agents and operational guardrails                                                               ch. 8 (agent tracing) and ch. 9 (operational security: secrets, sandbox, supply chain)
   Going beyond the syllabus — case study of a complete architecture and green ops (carbon cost)   ch. 10
-  Going beyond the syllabus — instrumentation labs (versioning, CI, serving, drift monitoring)    [Exercises / Labs](#)
+  Going beyond the syllabus — instrumentation labs (versioning, CI, serving, drift monitoring)    [Exercises / Labs](#ex)
 
 ### Where this course fits in the program
 
@@ -177,6 +177,23 @@ M2 module offered in period 2, outside the recommended track: it is the master's
 -   **Exercises / Labs** — instrumenting a mini-system: versioning, CI, serving, drift monitoring.
 -   **References** — documented tools and reference texts of ML Ops.
 
+### Session plan {#sessions}
+
+**24 h in class (announced) = 8 sessions of 3 h.** The SynapseS 2026–2027 sheet publishes no volume for this module; 24 h is the indicative volume quoted with the brochure programme in the fiche above, and also the M2 volume published for the Large Language Models course (CSC_53432_EP: 24 h, 2 ECTS); the session split below is our proposal for covering these notes in that time. Level 1 = foundations (reviews, definitions, first worked examples), 2 = core methods; the level never goes down from one session to the next.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Reminders: from notebook to system; ch. 1 Lifecycle and versioning | Ex. 1 |
+| 2 | 3 h | 2 | ch. 2 CI/CD for ML: data contracts, statistical gates, canary and shadow | Ex. 2, 6 |
+| 3 | 3 h | 2 | ch. 3.1–3.2 Continuous batching, KV cache and PagedAttention | Ex. 3 |
+| 4 | 3 h | 2 | ch. 3.3–3.4 Latency SLOs, Little's law, autoscaling; ch. 4 Costs per million tokens | Ex. 7, 4 |
+| 5 | 3 h | 2 | ch. 5 Evaluation in production: drift, monitoring, LLM judge | Ex. 8 |
+| 6 | 3 h | 2 | ch. 6 RAG Ops; ch. 7 Fine-tuning Ops | Ex. 9, 10 |
+| 7 | 3 h | 2 | ch. 8 Agents in production; ch. 9 Operational security | Ex. 11, 5 |
+| 8 | 3 h | 2 | ch. 10 Case study and green ops | Ex. 12 |
+
+**Self-study, outside the 24 h**: no chapter — every chapter is covered in class; the labs each need 1–3 h of personal work after their session, and the common-thread lab (Ex. 12) about 6 h spread over the module.
+
 ### How to study this module
 
 -   Treat each chapter as a code review more than a course: what matters is the operational detail (alert thresholds, budgets, naming conventions), not the grand principles.
@@ -191,6 +208,8 @@ M2 module offered in period 2, outside the recommended track: it is the master's
 
 ## 0. Reminders: from notebook to system {#ch0}
 
+A model that works in a notebook is not yet a service: it must be rebuilt, tested, served, watched and paid for. This chapter recalls what the earlier modules provide and explains what changes when a model becomes a component of a system.
+
 :::: recap
 ::: recap-title
 Prerequisites (M1/M2 modules)
@@ -199,7 +218,7 @@ Prerequisites (M1/M2 modules)
 -   **LLMs** (LLMs M2 module): architecture and training (ch. 2-3), SFT/RLHF/DPO post-training (ch. 4-5), *inference and serving with vLLM* (ch. 6), RAG (ch. 7), agents (ch. 8), evaluation and safety (ch. 9) — this module extends ch. 6 into engineering;
 -   **Deep Learning** (M1): PyTorch training loops, GPU, checkpoints — the foundation of what must be industrialized;
 -   **ML** (M1): generalization theory, concentration (Hoeffding) — used in ch. 2 to bound non-regression tests;
--   **RL** (M1): bandits (ch. 6) for A/B tests and model routing;
+-   **RL** (M1): bandits (ch. 4) for A/B tests and model routing;
 -   **Refresher CS** (M1): containers, queues, complexity — the system vocabulary of serving (ch. 3).
 ::::
 
@@ -218,15 +237,15 @@ Prerequisites (M1/M2 modules)
   External dependency   Few                      Batch data               Third-party API, vector index, agent tools
 
 ::: note
-[Module thread]{.tag} Each chapter contributes one building block of the same application: an enterprise assistant over internal documents (Confluence/SharePoint), with RAG, guardrails, and a budget. Lab 12 assembles it. The references "LLMs module ch. N" point to the M2 module *Large Language Models*; "Graph ML ch. 11" to the GraphRAG of the M1 module *Graph Machine and Deep Learning*.
+[Module thread]{.tag} Each chapter contributes one building block of the same application: an enterprise assistant over internal documents (Confluence/SharePoint), with RAG, guardrails, and a budget. Lab 12 assembles it. The references "LLMs module ch. N" point to the M2 module *Large Language Models*; "Graph ML ch. 10" to the GraphRAG of the M1 module *Graph Machine and Deep Learning*.
 :::
 
 ## 1. Lifecycle: versioning data, features, models {#ch1}
 
-Concrete scene: a business RAG passes demos and fails in prod on 12% of queries (chunks too large, no golden set). This chapter fixes measurement loops.
+A business RAG assistant passes every demo, then fails on 12% of real queries in production; nobody can say which version of the chunking, the prompt or the index produced the demo results. This chapter makes every element of the system identifiable and replayable, so that such failures can be traced and measured.
 
 ::: note
-[What breaks]{.tag} Unversioned prompts; no regression eval; serving without token budgets / timeouts; confusing mean latency with p95.
+[What breaks]{.tag} Four mistakes recur across the module: prompts that are not versioned, no regression evaluation before a release (ch. 2), serving without token budgets or timeouts (ch. 3), and judging latency by its mean instead of its tail percentiles (ch. 3).
 :::
 
 The ML lifecycle extends well beyond training: **collection → labeling → features → training → evaluation → registry → deployment → monitoring → (re)training**. Every arrow in this cycle is an artifact that must be *identified immutably*; failing that, no metric is reproducible — neither for debugging, nor for audits, nor in front of a client.
@@ -315,11 +334,11 @@ def validate(df: pd.DataFrame) -> pd.DataFrame:
 :::
 
 ::: thm
-[Proposition 2.2 — Decision threshold by concentration (Hoeffding)]{.tag} Let $\ell$ be a loss bounded in $[0,1]$, measured on $n$ i.i.d. examples. With probability $\geq 1-\delta$ (on both sides): $$\bigl\|\;\mathbb{E}[\ell] - \widehat{\ell}_n\;\bigr\| \;\leq\; \sqrt{\frac{\log(2/\delta)}{2n}}.$$ To decide a rollback at $\delta = 0.05$ on $n = 1000$ examples, two models whose losses differ by less than $\sqrt{\log 40 / 2000} \approx 0.027$ are not *distinguishable*: the observed gap may be sampling noise.
+[Proposition 2.2 — Decision threshold by concentration (Hoeffding)]{.tag} Let $\ell$ be a loss bounded in $[0,1]$, measured on $n$ i.i.d. examples. With probability $\geq 1-\delta$ (on both sides): $$\bigl|\;\mathbb{E}[\ell] - \widehat{\ell}_n\;\bigr| \;\leq\; \sqrt{\frac{\log(2/\delta)}{2n}}.$$ To decide a rollback at $\delta = 0.05$ on $n = 1000$ examples: the mean loss of one model is known to within $\sqrt{\log 40 / 2000} \approx 0.043$, and for the per-example difference of two models, which lies in $[-1, 1]$, the bound doubles to $\approx 0.086$. Two models whose mean losses differ by less than that are not *distinguishable* by this test: the observed gap may be sampling noise. Hoeffding's bound uses only the range of the loss; a paired test that uses the observed variance of the differences is usually much tighter.
 :::
 
 ::: proof
-The Hoeffding bound (proved in the ML module) applies to the $n$ i.i.d. variables $\ell_i \in [0,1]$: $\mathbb{P}\bigl(\|\overline{\ell} - \mathbb{E}\ell\| \geq t\bigr) \leq 2e^{-2nt^2}$. Setting the right-hand side to $\delta$ yields $t = \sqrt{\log(2/\delta)/(2n)}$. To compare two models one applies it to the variable $\ell_{\text{new}} - \ell_{\text{prod}}$ (bounded in $[-1,1]$, a factor 2 over the range — hence a factor 2 under the root). With $n=1000$, $\delta = 0.05$ and the signed version: $t \approx 2.8\,‰$. [∎]{.qed}
+The Hoeffding bound (proved in the ML module) applies to the $n$ i.i.d. variables $\ell_i \in [0,1]$: $\mathbb{P}\bigl(|\overline{\ell} - \mathbb{E}\ell| \geq t\bigr) \leq 2e^{-2nt^2}$. Setting the right-hand side to $\delta$ yields $t = \sqrt{\log(2/\delta)/(2n)}$. To compare two models one applies it to the variable $\ell_{\text{new}} - \ell_{\text{prod}}$, bounded in $[-1,1]$: for a variable of range $r$, Hoeffding's bound reads $2e^{-2nt^2/r^2}$, so a range twice as large doubles $t$. With $n=1000$ and $\delta = 0.05$: $t \approx 0.043$ for one model, $t \approx 0.086$ for the difference. [∎]{.qed}
 :::
 
 ::: note
@@ -349,6 +368,8 @@ jobs:
 The deployment of an ML component is *progressive*: **shadow** (the new model receives duplicated traffic, its output is logged but not served — zero risk, double cost), **canary** (5% of traffic, automatic rollback if the guard metrics — latency, error rate, negative feedback — degrade), then full rollout. Rollback must be *a single button*: the previous version (weights + prompt + index) stays deployable in one command, thanks to the registry of ch. 1.
 
 ## 3. LLM serving: continuous batching, P99 latency {#ch3}
+
+A served LLM must answer many users at once, fast enough and at an acceptable cost per token. This chapter explains how a server batches requests, why the memory of the KV cache is the real limit, and how latency is specified and measured.
 
 :::: recap
 ::: recap-title
@@ -385,11 +406,11 @@ def step():
 ### 3.2. Memory: the KV cache and PagedAttention
 
 ::: prop
-[Proposition 3.2 — KV cache size]{.tag} For a transformer with $L$ layers, $h\_{\\text{kv}}$ key/value heads (GQA) of dimension $d_h$, in precision $b$ bytes, the cache of a sequence of $T$ tokens occupies: $$M_{\text{KV}} \;=\; 2 \cdot L \cdot h_{\text{kv}} \cdot d_h \cdot b \cdot T \;\text{bytes}.$$ *Example* (Llama-3-8B: $L=32$, $h\_{\\text{kv}}=8$, $d_h=128$, fp16 $b=2$): $2\\times32\\times8\\times128\\times2 = 131,072$ bytes ≈ 128 KiB **per token**, i.e. 1 GiB for 8,192 tokens — more than some models weigh in significant bits.
+[Proposition 3.2 — KV cache size]{.tag} For a transformer with $L$ layers, $h_{\text{kv}}$ key/value heads (GQA) of dimension $d_h$, in precision $b$ bytes, the cache of a sequence of $T$ tokens occupies: $$M_{\text{KV}} \;=\; 2 \cdot L \cdot h_{\text{kv}} \cdot d_h \cdot b \cdot T \;\text{bytes}.$$ *Example* (Llama-3-8B: $L=32$, $h_{\text{kv}}=8$, $d_h=128$, fp16 $b=2$): $2\times32\times8\times128\times2 = 131,072$ bytes ≈ 128 KiB **per token**, i.e. 1 GiB for 8,192 tokens — as much memory as the weights of a small quantized model.
 :::
 
 ::: proof
-Direct counting. Each layer $l$ stores, for each token $t$, a key $k_t\^{(l)}$ and a value $v_t\^{(l)}$, each a vector of $h\_{\\text{kv}} \\cdot d_h$ coefficients (the "query" attention heads may be more numerous — GQA — but only the K/V heads are cached). Each coefficient costs $b$ bytes: per layer and per token, $2\\,h\_{\\text{kv}}d_h b$ bytes; multiplying by $L$ layers and $T$ tokens gives the formula. [∎]{.qed}
+Direct counting. Each layer $l$ stores, for each token $t$, a key $k_t^{(l)}$ and a value $v_t^{(l)}$, each a vector of $h_{\text{kv}} \cdot d_h$ coefficients (the "query" attention heads may be more numerous — GQA — but only the K/V heads are cached). Each coefficient costs $b$ bytes: per layer and per token, $2\,h_{\text{kv}}d_h b$ bytes; multiplying by $L$ layers and $T$ tokens gives the formula. [∎]{.qed}
 :::
 
 Continuous batching therefore makes memory occupancy oscillate at every iteration (sequences entering/leaving). Allocating the KV as one maximal contiguous block (maximum output length reserved in advance) wastes: vLLM (SOSP 2023) treats the KV cache like the virtual memory of an OS — **pages** of 16 tokens, allocated on demand, non-contiguous, shareable between sequences derived from the same prefix (system prompt shared by thousands of requests): waste reduced to \~4% versus more than 60% for static allocation, throughput 2-4× prior systems. Ops consequence: the *real capacity* of a server is measured in "available KV tokens", not in concurrent requests.
@@ -401,15 +422,15 @@ Continuous batching therefore makes memory occupancy oscillate at every iteratio
 :::
 
 ::: thm
-[Theorem 3.4 — Little's law]{.tag} In a stable system in steady state, with $L$ average clients present, $\\lambda$ clients arriving per second on average and $W$ mean sojourn time: $$L \;=\; \lambda\, W.$$ Serving corollary: at an imposed generation cadence ($W$ fixed by the number of tokens and the TPOT), the number of *concurrent* requests supported is $L = \\lambda W$ — the necessary concurrency grows linearly with the targeted throughput.
+[Theorem 3.4 — Little's law]{.tag} In a stable system in steady state, with $L$ average clients present, $\lambda$ clients arriving per second on average and $W$ mean sojourn time: $$L \;=\; \lambda\, W.$$ Serving corollary: at an imposed generation cadence ($W$ fixed by the number of tokens and the TPOT), the number of *concurrent* requests supported is $L = \lambda W$ — the necessary concurrency grows linearly with the targeted throughput.
 :::
 
 ::: proof
-Proof by an output argument (direct). Over an interval $[0, t]$, let $A(t)$ be the number of arrivals and $D(t)$ the number of departures. The mean number of clients present is written $L_t = \\frac{1}{t}\\int_0\^t N(u)\\,du$, where $N(u)$ = present at instant $u$. Each request contributes to this integral exactly its sojourn time: $\\int_0\^t N(u)\\,du = \\sum\_{i \\,\\text{departed by} \\leq t} W_i + $ (residuals of requests still present). Dividing by $t$ and letting $t\\to\\infty$ (stability: $A(t)/t \\to \\lambda$, bounded residuals become negligible), one obtains $L = \\lambda\\, W$ — the argument requires no independence or distribution assumption; it is purely accounting. [∎]{.qed}
+Proof by an output argument (direct). Over an interval $[0, t]$, let $A(t)$ be the number of arrivals and $D(t)$ the number of departures. The mean number of clients present is written $L_t = \frac{1}{t}\int_0^t N(u)\,du$, where $N(u)$ = present at instant $u$. Each request contributes to this integral exactly its sojourn time: $\int_0^t N(u)\,du = \sum_{i \,\text{departed by} \leq t} W_i + $ (residuals of requests still present). Dividing by $t$ and letting $t\to\infty$ (stability: $A(t)/t \to \lambda$, bounded residuals become negligible), one obtains $L = \lambda\, W$ — the argument requires no independence or distribution assumption; it is purely accounting. [∎]{.qed}
 :::
 
 ::: note
-[Throughput versus latency: the batch trade-off]{.tag} Increasing $B$ (target batch) improves throughput (amortized cost/token) but lengthens the waiting queue — hence the TTFT P99. Modern servers expose this trade-off: *max_num_seqs*, token budgets per step, and preemption policies (recompute vs swap). Rule of thumb: size the target batch so that KV occupancy stays below \~90%, and let the autoscaler (ch. 3.4) absorb spikes rather than growing the batch beyond the SLO.
+[Throughput versus latency: the batch trade-off]{.tag} Increasing $B$ (target batch) improves throughput (amortized cost/token) but lengthens the waiting queue — hence the TTFT P99. Modern servers expose this trade-off: *max_num_seqs*, token budgets per step, and preemption policies (recompute vs swap). Rule of thumb: size the target batch so that KV occupancy stays below \~90%, and let the autoscaler (section 3.4) absorb spikes rather than growing the batch beyond the SLO.
 :::
 
 ### 3.4. Autoscaling
@@ -473,9 +494,9 @@ The server produces $R$ tokens per second; each billed hour at $c$ € therefore
 ### 4.1. The saving levers
 
 -   **Prefix cache**: shared system prompt + history → the prefill is billed/consumed once; on the API side, *prompt caching* reduces the input cost of repeated prefixes (often billed at a discount); on the vLLM side, the KV is reused for free.
--   **Model routing (cascade)**: small model first, escalation to the big one if the small one "is not sure" (confidence score, agreement of two candidates, or a classifier). The sequential decision formalized as a bandit (cf. RL module ch. 6): one arbitrates cost vs quality request by request.
+-   **Model routing (cascade)**: small model first, escalation to the big one if the small one "is not sure" (confidence score, agreement of two candidates, or a classifier). The sequential decision formalized as a bandit (cf. RL module ch. 4): one arbitrates cost vs quality request by request.
 -   **Output limit**: output costs \~5-10× the input; constraining `max_tokens` and the format (answer in k points, short JSON) is the most underrated lever.
--   **Quantization** (cf. LLMs ch. 6; Advanced Topics ch. 6): 4 bits ≈ ×2-3 in throughput on the weights — and smaller GPUs.
+-   **Quantization** (cf. LLMs ch. 6; Advanced Topics ch. 7): 4 bits ≈ ×2-3 in throughput on the weights — and smaller GPUs.
 -   **Deferred batch processing**: non-interactive tasks (archive classification) go in nightly batches; some APIs bill these modes \~50% cheaper.
 
   Criterion              Managed API                                           Self-hosted (open weights)
@@ -488,10 +509,12 @@ The server produces $R$ tokens per second; each billed hour at $c$ € therefore
   Ops                    Nearly zero                                           Team + on-call + GPU supply
 
 ::: note
-[Multilingual and real costs]{.tag} The per-token bill interacts with tokenization (cf. LLMs module ch. 1): a French corpus typically costs 15-25% more tokens than an equivalent English corpus with the dominant tokenizers. The "price per word" therefore depends on the language — an argument for measuring (exercise 5) rather than trusting round conversion tables.
+[Multilingual and real costs]{.tag} The per-token bill interacts with tokenization (cf. LLMs module ch. 1): a French corpus typically costs 15-25% more tokens than an equivalent English corpus with the dominant tokenizers. The "price per word" therefore depends on the language — an argument for measuring (exercise 4) rather than trusting round conversion tables.
 :::
 
 ## 5. Evaluation in production: drift and monitoring {#ch5}
+
+A model that passed every test at release time degrades silently when the world it serves changes. This chapter defines the kinds of drift, gives the statistics that detect them, and organizes monitoring and LLM-based evaluation in production.
 
 ### 5.1. Data drift, concept drift
 
@@ -530,10 +553,14 @@ The metrics of an LLM application stack up: infra (GPU, memory); serving (ch. 3)
 def judge_pair(question, ref, ans_prod, ans_cand, judge):
     rub = "Expected answer (reference): {ref}\nA: {a}\nB: {b}\n" \
           "Which one is more faithful to the reference? Answer A, B, or EQUAL."
-    out = judge(f"Q: {question}\n" + rub.format(ref=ref, a=ans_prod, b=ans_cand))
-    out_sw = judge(f"Q: {question}\n" + rub.format(ref=ref, a=ans_cand, b=ans_prod))
-    pair = {out.strip()[:4], out_sw.strip()[:4]}      # alternated order, anti-bias
-    return "cand" if pair == {"A", "B"} else ("prod" if pair == {"B", "A"} else "equal")
+    first = judge(f"Q: {question}\n" + rub.format(ref=ref, a=ans_prod, b=ans_cand)).strip()
+    second = judge(f"Q: {question}\n" + rub.format(ref=ref, a=ans_cand, b=ans_prod)).strip()
+    # alternated order, anti-bias: the candidate wins only if it wins in both positions
+    if first.startswith("B") and second.startswith("A"):
+        return "cand"
+    if first.startswith("A") and second.startswith("B"):
+        return "prod"
+    return "equal"            # EQUAL, or inconsistent verdicts (position bias)
 
 # gate: no significant regression (cf. prop. 2.2 for the minimal margin)
 wins = sum(judge_pair(**ex) == "cand" for ex in golden)
@@ -541,6 +568,8 @@ assert wins >= 0.45 * len(golden), f"judge regression: {wins}/{len(golden)}"
 ```
 
 ## 6. RAG Ops: freshness and continuous evaluation {#ch6}
+
+A RAG system is only as good as its index, and the documents behind the index change every day. This chapter keeps the index fresh without rebuilding it, and evaluates answer quality continuously without a human in the loop.
 
 :::: recap
 ::: recap-title
@@ -588,16 +617,18 @@ report = evaluate(ds, metrics=[faithfulness, answer_relevancy,
 
 ### 6.3. The graph to the rescue of RAG
 
-Vector RAG fails on *global* questions ("what are the recurring themes of the 2025 reports?") that require aggregating the whole corpus; GraphRAG (Edge et al., 2024; cf. Graph ML module ch. 11) builds an entity graph (LLM extraction), partitions it into communities (Leiden) and summarizes each community — the global answer becomes a *map-reduce* over the summaries. The ops cost: LLM indexing is expensive (every document goes through extraction calls), hence *incremental by necessity*; communities are recomputed periodically. The arbitration (vector vs graph vs hybrid) belongs in the system's ablation table — and must be re-measured at every model migration (ch. 2).
+Vector RAG fails on *global* questions ("what are the recurring themes of the 2025 reports?") that require aggregating the whole corpus; GraphRAG (Edge et al., 2024; cf. Graph ML module ch. 10) builds an entity graph (LLM extraction), partitions it into communities (Leiden) and summarizes each community — the global answer becomes a *map-reduce* over the summaries. The ops cost: LLM indexing is expensive (every document goes through extraction calls), hence *incremental by necessity*; communities are recomputed periodically. The arbitration (vector vs graph vs hybrid) belongs in the system's ablation table — and must be re-measured at every model migration (ch. 2).
 
 ## 7. Fine-tuning Ops: versioned LoRAs {#ch7}
 
+Fine-tuning produces small adapters that are trained often and deployed on a shared base model; without strict bookkeeping, an adapter ends up running on the wrong base or with the wrong prompt. This chapter defines what must be versioned and organizes the fine-tuning cycle in production.
+
 :::: recap
 ::: recap-title
-Reminder — LLMs module ch. 4-5: SFT, LoRA, DPO
+Reminder — SFT and DPO (LLMs module, ch. 4–5), and LoRA
 :::
 
-Instruction fine-tuning (SFT) adapts the model; LoRA (Hu et al., ICLR 2022) freezes the weights $W$ and learns only $\Delta W = BA$ of rank $r \ll d$: a few tens of MB instead of GB, trainable on a single GPU. DPO/RLHF (ch. 5) then align the preferences.
+Instruction fine-tuning (SFT, LLMs module ch. 4) adapts the model. LoRA (Hu et al., ICLR 2022), which the LLMs module does not cover, makes this affordable: it freezes the weights $W$ and learns only $\Delta W = BA$ of rank $r \ll d$: a few tens of MB instead of GB, trainable on a single GPU. DPO/RLHF (LLMs module, ch. 5) then align the preferences.
 ::::
 
 ::: def
@@ -631,10 +662,12 @@ deployed:       canary 5% since 2026-03-13, SLO OK
 :::
 
 ::: prop
-[Proposition 7.2 — Size of a LoRA]{.tag} A rank-$r$ LoRA on a layer $W \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$ stores $B \in \mathbb{R}^{d_{\text{out}} \times r}$ and $A \in \mathbb{R}^{r \times d_{\text{in}}}$, i.e. $r\,(d_{\text{out}} + d_{\text{in}})$ parameters instead of $d_{\text{out}} d_{\text{in}}$. On the attention projections of an 8B ($d = 4096$, ≈ 7 targeted layers of the q/v type out of 32, $r = 16$): \~0.1% of the parameters — a few tens of MB in fp16. The storage saving is a bonus; the decisive saving is the *training cost* (no optimizer state on the frozen weights) and the *deployment cadence* (adapter hot-swap).
+[Proposition 7.2 — Size of a LoRA]{.tag} A rank-$r$ LoRA on a layer $W \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$ stores $B \in \mathbb{R}^{d_{\text{out}} \times r}$ and $A \in \mathbb{R}^{r \times d_{\text{in}}}$, i.e. $r\,(d_{\text{out}} + d_{\text{in}})$ parameters instead of $d_{\text{out}} d_{\text{in}}$. On the q and v projections of the 32 layers of an 8B model ($d = 4096$; with GQA the v projection has output dimension 1024) at $r = 16$: $16 \times (4096 + 4096) + 16 \times (4096 + 1024) \approx 2.1 \times 10^5$ parameters per layer, about 6.8 M in total — \~0.1% of the parameters, about 14 MB in fp16. The storage saving is a bonus; the decisive saving is the *training cost* (no optimizer state on the frozen weights) and the *deployment cadence* (adapter hot-swap).
 :::
 
 ## 8. Agents in production: tracing and guardrails {#ch8}
+
+An agent makes dozens of model and tool calls per request, and any of them can fail, loop or be hijacked. This chapter makes agents observable, bounds what they can spend and do, and explains how to evaluate them.
 
 :::: recap
 ::: recap-title
@@ -689,6 +722,8 @@ Agent metrics: **success rate per task** (on scripted tasks with an initial stat
 
 ## 9. Operational security: secrets, sandbox, supply chain {#ch9}
 
+An LLM application holds credentials, executes generated code and depends on weights and libraries downloaded from elsewhere; each is an entry point for an attacker. This chapter secures the system around the model.
+
 ::: note
 [Scope]{.tag} The attacks *against the model* (jailbreaks, injections, poisoning, extraction) are the subject of the M2 module *Explainability, Security, Privacy of LLMs*. Here: the security of the *system around* the model — the ops of an LLM application; the reference checklist of the field is the [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/).
 :::
@@ -720,6 +755,8 @@ When the agent executes code (notebooks, "calculator" tools, plugins), execution
 
 ## 10. Case study and green ops {#ch10}
 
+The previous chapters each solved one problem; a real service must solve them all at once, within a budget in euros and in energy. This chapter assembles the full stack of an enterprise assistant and shows how to measure and reduce its energy cost.
+
 ### 10.1. The stack of an enterprise assistant
 
 Let us assemble the bricks. Specifications: 2,000 employees, SSO, Confluence + SharePoint corpus (\~500 kB documents), questions in French, sourced answers, no data outside the perimeter, annual budget of the order of a few tens of k€ of inference.
@@ -737,7 +774,7 @@ Let us assemble the bricks. Specifications: 2,000 employees, SSO, Confluence + S
   Monitoring       Prometheus + OTel + alerting                      ch. 3, 5, 8   P99 TTFT, PSI, cost/req, refusal rate
 
 ::: note
-[Why not GraphRAG?]{.tag} If the dominant usage becomes "which teams work on topic X?" (*relational* questions), the entity graph (Graph ML module ch. 11; GraphRAG of Edge et al.) becomes profitable despite its indexing cost: the answer to the question "do we need a graph?" is a *measured trade-off* (RAGAS eval + ablation), not a fad.
+[Why not GraphRAG?]{.tag} If the dominant usage becomes "which teams work on topic X?" (*relational* questions), the entity graph (Graph ML module ch. 10; GraphRAG of Edge et al.) becomes profitable despite its indexing cost: the answer to the question "do we need a graph?" is a *measured trade-off* (RAGAS eval + ablation), not a fad.
 :::
 
 ### 10.2. Green ops: measuring energy
@@ -764,26 +801,26 @@ print(f"{tracker.total_energy_kWh * 1000:.1f} Wh for this request",
 
 ## Exercises / Labs {#ex}
 
-1.  **Reproducibility (ch. 1).** Build a mini DVC pipeline (prepare → embed → eval) over 100 documents; modify a single document and predict which stages re-execute; verify. Show that a metric without the three fingerprints is not replayable.
-2.  **Data contracts (ch. 2).** Write a Pandera schema for a FAQ set (question/answer/language/tokens) and make CI fail on: exact duplicate, empty answer, unknown language, abnormal length. Add the error report as an artifact.
-3.  **Significance of a gate (ch. 2).** Simulate two models with losses 0.30 and 0.31 on n = 500; how many times does the "no regression" test wrongly fail over 100 draws? Deduce from it a realistic minimal margin for your CI.
-4.  **Serving (ch. 3).** Deploy an 8B on vLLM; plot the TTFT P50/P99 and TPOT P99 curves for concurrency 1 → 256; locate the breaking point (KV occupancy); compare static batching (vary it) and continuous batching.
-5.  **Little's law in practice (ch. 3).** From the traces of lab 4, estimate $\lambda$, $W$ and $L$ over a 10 min window; verify $L = \lambda W$ within ±10%; explain the gap (non-stationarity, preemption).
-6.  **Accounting (ch. 4).** For a given workload (short questions, 300-token answers, 10 k req/day), quantify: API (input × in price, output × out price, prefix cache), self-hosted (proposition 4.1 with R measured in lab 4). Identify the crossover point in requests/day and its sensitivity to the utilization rate.
-7.  **Drift (ch. 5).** Generate two weeks of simulated "logs" with a topic drift on day 9; implement PSI (prop. 5.2) and KS over the lengths and topics; tune the threshold for ≤ 1 false alert per week; document the detection delay / false alerts trade-off.
-8.  **RAG Ops (ch. 6).** Take the RAG of the LLMs module ch. 7: move to incremental indexing (adding 20 documents at D+1 without full re-indexing); measure RAGAS before/after; trigger an embedding migration and run the index dual-boot.
-9.  **Versioned LoRAs (ch. 7).** Train two LoRAs (r = 8, 32) on the same set; record the quintuples; serve both in multi-LoRA; evaluate; deliberately "forget" the base version and observe the silent degradation — then add the compatibility check to the registry.
-10. **Observable agent (ch. 8).** Instrument a search + writing agent with OTel spans; inject three failures (a tool that times out, a retry loop, a too-long context); diagnose each one *only* through the traces; add budgets and caps, replay.
-11. **Ops audit (ch. 9).** Put a mini LLM application through the sieve of the OWASP Top 10 LLM: list the findings, severity, fixes; check in particular: secrets, tool permissions, output validation, log retention.
-12. **Common-thread lab (ch. 10).** Assemble the assistant: hybrid RAG + reranker + LoRA + guardrails + dashboard (latency, PSI, RAGAS, cost/req, Wh/req via CodeCarbon); present a "simulated post-mortem": a faithfulness regression is injected, the team must detect it (dashboard?) and roll back (registry) in less than 15 minutes.
+1.  **★ Reproducibility (ch. 1).** Build a mini DVC pipeline (prepare → embed → eval) over 100 documents; modify a single document and predict which stages re-execute; verify. Show that a metric without the three fingerprints is not replayable.
+2.  **★ Data contracts (ch. 2).** Write a Pandera schema for a FAQ set (question/answer/language/tokens) and make CI fail on: exact duplicate, empty answer, unknown language, abnormal length. Add the error report as an artifact.
+3.  **★ Serving (ch. 3).** Deploy an 8B on vLLM; plot the TTFT P50/P99 and TPOT P99 curves for concurrency 1 → 256; locate the breaking point (KV occupancy); compare static batching (vary it) and continuous batching.
+4.  **★ Accounting (ch. 4).** For a given workload (short questions, 300-token answers, 10 k req/day), quantify: API (input × in price, output × out price, prefix cache), self-hosted (proposition 4.1 with R measured in lab 3). Identify the crossover point in requests/day and its sensitivity to the utilization rate.
+5.  **★ Ops audit (ch. 9).** Put a mini LLM application through the sieve of the OWASP Top 10 LLM: list the findings, severity, fixes; check in particular: secrets, tool permissions, output validation, log retention.
+6.  **★★ Significance of a gate (ch. 2).** Simulate two models with losses 0.30 and 0.31 on n = 500; how many times does the "no regression" test wrongly fail over 100 draws? Deduce from it a realistic minimal margin for your CI.
+7.  **★★ Little's law in practice (ch. 3).** From the traces of lab 3, estimate $\lambda$, $W$ and $L$ over a 10 min window; verify $L = \lambda W$ within ±10%; explain the gap (non-stationarity, preemption).
+8.  **★★ Drift (ch. 5).** Generate two weeks of simulated "logs" with a topic drift on day 9; implement PSI (prop. 5.2) and KS over the lengths and topics; tune the threshold for ≤ 1 false alert per week; document the detection delay / false alerts trade-off.
+9.  **★★ RAG Ops (ch. 6).** Take the RAG of the LLMs module ch. 7: move to incremental indexing (adding 20 documents at D+1 without full re-indexing); measure RAGAS before/after; trigger an embedding migration and run the index dual-boot.
+10. **★★ Versioned LoRAs (ch. 7).** Train two LoRAs (r = 8, 32) on the same set; record the quintuples; serve both in multi-LoRA; evaluate; deliberately "forget" the base version and observe the silent degradation — then add the compatibility check to the registry.
+11. **★★ Observable agent (ch. 8).** Instrument a search + writing agent with OTel spans; inject three failures (a tool that times out, a retry loop, a too-long context); diagnose each one *only* through the traces; add budgets and caps, replay.
+12. **★★★ Common-thread lab (ch. 10).** Assemble the assistant: hybrid RAG + reranker + LoRA + guardrails + dashboard (latency, PSI, RAGAS, cost/req, Wh/req via CodeCarbon); present a "simulated post-mortem": a faithfulness regression is injected, the team must detect it (dashboard?) and roll back (registry) in less than 15 minutes.
 
 ## References {#refs}
 
 -   D. Sculley, G. Holt, D. Golovin, et al., [Hidden Technical Debt in Machine Learning Systems](https://papers.nips.cc/paper/5656-hidden-technical-debt-in-machine-learning-systems), NeurIPS 2015 — the founding act; the rest of the module unrolls its debt.
 -   G.-I. Yu, J. S. Jeong, G.-W. Kim, S. Kim, B.-G. Chun, [Orca: A Distributed Serving System for Transformer-Based Generative Models](https://arxiv.org/abs/2205.05158), OSDI 2022 — continuous batching (iteration-level scheduling); W. Kwon, Z. Li, S. Zhuang, et al., [Efficient Memory Management for Large Language Model Serving with PagedAttention](https://arxiv.org/abs/2309.06180) (vLLM), SOSP 2023 — paged KV, shared prefixes.
 -   S. Es, J. James, L. Espinosa-Anke, S. Schockaert, [RAGAS: Automated Evaluation of Retrieval Augmented Generation](https://arxiv.org/abs/2309.15217), EACL 2024 (demo) — faithfulness, answer relevancy, context precision/recall.
--   E. J. Hu, Y. Shen, P. Wallis, et al., [LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/abs/2106.09685), ICLR 2022 — the foundation of ch. 7 (reminder of the LLMs module ch. 4).
--   D. Edge, H. Trinh, N. Cheng, et al., [From Local to Global: A Graph RAG Approach to Query-Focused Summarization](https://arxiv.org/abs/2404.16130), 2024 — the graph option of ch. 6 (cf. Graph ML module ch. 11).
+-   E. J. Hu, Y. Shen, P. Wallis, et al., [LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/abs/2106.09685), ICLR 2022 — the foundation of ch. 7 (SFT itself is in the LLMs module, ch. 4).
+-   D. Edge, H. Trinh, N. Cheng, et al., [From Local to Global: A Graph RAG Approach to Query-Focused Summarization](https://arxiv.org/abs/2404.16130), 2024 — the graph option of ch. 6 (cf. Graph ML module ch. 10).
 -   L. Zheng, W.-T. Chiang, Y. Sheng, et al., [Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena](https://arxiv.org/abs/2306.05685), NeurIPS 2023 — agreement with humans, position/length/self bias.
 -   J. Gama, I. Žliobaitė, A. Bifet, M. Pechenizkiy, A. Bouchachia, [A Survey on Concept Drift Adaptation](https://dl.acm.org/doi/10.1145/2523813), ACM Computing Surveys 2014 — the vocabulary of ch. 5.
 -   D. Patterson, J. Gonzalez, Q. Le, et al., [Carbon Emissions and Large Neural Network Training](https://arxiv.org/abs/2104.10350), 2021; S. Luccioni, A. Hernandez-Garcia, A. Voznyuk, et al., [Estimating the Carbon Footprint of BLOOM](https://arxiv.org/abs/2211.02001), 2022 — the carbon accounting of ch. 10.

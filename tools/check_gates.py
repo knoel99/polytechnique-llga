@@ -286,6 +286,16 @@ branded = [str(p.relative_to(ROOT)) for p in published
            if "extrapolons" in read(p).lower()]
 check(not branded, "published pages Extrapolons-free", f"in {branded[:5]}")
 
+# --- Hours and progression (specs/hours-and-progression.md) -----------------
+import subprocess  # noqa: E402
+prog = subprocess.run([sys.executable, str(ROOT / "tools/check_progression.py")],
+                      capture_output=True, text=True)
+check(prog.returncode == 0, "check_progression: every science module passes",
+      prog.stdout.strip().splitlines()[-1] if prog.stdout.strip() else prog.stderr[-200:])
+home = read(ROOT / "index.html")
+check('id="programme"' in home and "<!-- programme:start -->" in home,
+      "home: programme 2026-2027 table present")
+
 # --- Report ------------------------------------------------------------------
 total = passed + len(failures)
 print(f"check_gates: {passed}/{total} checks passed")
