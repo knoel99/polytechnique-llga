@@ -12,6 +12,12 @@ official brochure but honest about what is official and what is Extrapolons guid
    (<https://msct.dix.polytechnique.fr/llga/wiki/doku.php?id=curriculum>), complemented by the
    official programme page (140 ECTS, two years). It is the only authority used for: mandatory
    modules, choice groups (“choose 3 of 10”), periods, internships, ECTS.
+   **Amended (October 2026, `specs/hours-and-progression.md`):** for *which course units are
+   offered in a given year*, their codes, periods and hours, the SynapseS catalogue of that year
+   (track MScT-LLGA-GD1A and its semester lists) takes precedence over the wiki snapshot. A unit
+   of the wiki that the 2026–2027 listing does not show stays on the home page under “not in the
+   2026–27 list” or with a “to verify” badge; it is never silently dropped. The choice rules
+   (mandatory / choose N) still come from the wiki.
 2. **The brochure is no longer cited as a competing structure.** Structure pages (home,
    `curriculum.html`, `catalogue.html`, coherence, exit capabilities) never mention the brochure.
    Per-module provenance sections inside course pages keep citing documents factually

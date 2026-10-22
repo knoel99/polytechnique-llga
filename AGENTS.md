@@ -10,7 +10,7 @@ We encode a **Spec Kit–compatible** and **BMAD-inspired** base (spec → plan 
 3. **No invented UE codes** — outside the official curriculum = explicit badge, no fake SynapseS codes.
 4. **EN only (until further notice)** — published site source of truth is **English at the repository root**. No FR mirror, no FR/EN language switcher. See `specs/en-only.md`.
 5. **Paper look** — `assets/paper.css` is the visual source of truth; light “LaTeX” mode must not regress.
-6. **One structural source** — the official LLGA curriculum wiki is the *only* source for track structure (mandatory modules, choice groups, periods, ECTS). The brochure is never cited as a competing structure: structure pages don’t mention it; course provenance sections may cite it factually. See `specs/competency-tree.md`.
+6. **One structural source** — the official LLGA curriculum wiki is the source for the track rules (mandatory modules, choice groups, ECTS); the SynapseS catalogue of the year decides which course units are offered, with their codes, periods and hours (`specs/competency-tree.md`, amended). The brochure is never cited as a competing structure: structure pages don’t mention it; course provenance sections may cite it factually. See `specs/competency-tree.md`.
 
 ## Mandatory gates (Definition of Done)
 
@@ -25,6 +25,7 @@ Before merging a module / CSS refactor:
 - [ ] **Smoke**: open EN pages locally (or Pages preview); KaTeX and `.def`/`.thm`/`.note` boxes readable in dark.
 - [ ] **No FR switcher**: no “Français” / lang-toggle links in published HTML.
 - [ ] **Mechanical proof**: `python3 tools/check_gates.py` passes (contract index, Quarto sources, theme, FR links, exercises, index coverage).
+- [ ] **Hours and progression**: `python3 tools/check_progression.py` passes (session plan summing to the official volume, non-decreasing levels, calibrated in-class volume, graded exercises — `specs/hours-and-progression.md`). Re-render with `python3 tools/render.py <module>` and refresh the home table with `python3 tools/programme_table.py`.
 
 ## Optional Spec Kit / BMAD tooling
 
