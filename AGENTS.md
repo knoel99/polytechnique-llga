@@ -9,7 +9,7 @@ We encode a **Spec Kit–compatible** and **BMAD-inspired** base (spec → plan 
 2. **Proofs before “done”** — a PR is “done” only if the gates below are checked in the PR description.
 3. **No invented UE codes** — outside the official curriculum = explicit badge, no fake SynapseS codes.
 4. **EN only (until further notice)** — published site source of truth is **English at the repository root**. No FR mirror, no FR/EN language switcher. See `specs/en-only.md`.
-5. **Paper look** — `assets/paper.css` is the visual source of truth; light “LaTeX” mode must not regress.
+5. **Projector-readable look** — `assets/paper.css` is the visual source of truth under `specs/front-redesign.md`: text contrast ≥ 7:1 in light and dark, colour-coded boxes, side contents always reachable, airy prose (gate `tools/check_airiness.py`).
 6. **One structural source** — the official LLGA curriculum wiki is the source for the track rules (mandatory modules, choice groups, ECTS); the SynapseS catalogue of the year decides which course units are offered, with their codes, periods and hours (`specs/competency-tree.md`, amended). The brochure is never cited as a competing structure: structure pages don’t mention it; course provenance sections may cite it factually. See `specs/competency-tree.md`.
 
 ## Mandatory gates (Definition of Done)
@@ -20,7 +20,8 @@ Before merging a module / CSS refactor:
 - [ ] **Pages**: `courses/<id>/index.qmd` (Quarto source) + rendered `courses/<id>/index.html` (English, at site root). See `specs/quarto-migration.md`.
 - [ ] **Index**: module reachable from root `index.html` — the home curriculum tree lists every module (see `specs/homepage-source-decision.md`, `specs/competency-tree.md`, `specs/path-preselection.md`); honest status.
 - [ ] **CSS**: dark (`prefers-color-scheme` / `data-theme`) + mobile (no blocking horizontal overflow; tables / code / KaTeX scrollable) checked on one course page + the index.
-- [ ] **Theme**: `assets/theme.js` loaded; toggle localStorage OK; UI strings in English.
+- [ ] **Theme**: `assets/theme.js` loaded (theme button, side contents, table wrapping); toggle localStorage OK; UI strings in English.
+- [ ] **Airy prose**: `python3 tools/check_airiness.py` passes (A1–A3 of `specs/front-redesign.md`); long or key formulas on their own line.
 - [ ] **Pedagogy**: ≥ 6 exercises on science modules (non-science pages exempt, see `specs/non-science-pages.md`); NumPy primary if NN/ML module; full sentences in English.
 - [ ] **Smoke**: open EN pages locally (or Pages preview); KaTeX and `.def`/`.thm`/`.note` boxes readable in dark.
 - [ ] **No FR switcher**: no “Français” / lang-toggle links in published HTML.
@@ -55,8 +56,8 @@ If the CLI is not installed, **this file’s gates + `specs/` contracts are enou
 
 ## Key files
 
-- `assets/paper.css` — paper style, dark, mobile
-- `assets/theme.js` — persistent theme toggle (English aria-labels)
+- `assets/paper.css` — high-contrast style, dark, mobile (`specs/front-redesign.md`)
+- `assets/theme.js` — theme toggle, side contents with scroll spy, table wrapping (English UI)
 - `specs/README.md` — contract index (with merged-PR traceability)
 - `specs/_template-module.md` — contract template
 - `specs/en-only.md` — EN-only site policy
