@@ -124,9 +124,9 @@ format:
   Status in the program   [M2]{.badge .m2}[Outside the recommended track]{.badge .position} · M2 program being finalized
   ----------------------- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-**Audience**: an NLP / signal engineer who wants the full voice loop. **Empirical first**: WER 4% in studio → 28% on noisy phone; TTS that clones a voice with no watermark — then we name Mel, CTC, Whisper, vocoders.
+**Audience**: an NLP or signal-processing engineer who wants to master the full voice loop. **Empirical first**: the module starts from concrete failures — a word error rate of 4% in the studio that becomes 28% on a noisy phone line, a TTS system that clones a voice without any watermark — and only then names the tools (Mel features, CTC, Whisper, vocoders).
 
-ASR → TTS → speech LLMs: bridge from Signal Processing (M1) to LLMs (M2).
+The course goes from recognition (ASR) to synthesis (TTS) to speech LLMs, and bridges Signal Processing (M1) and Large Language Models (M2).
 
 ### What you will be able to do
 
@@ -154,7 +154,7 @@ ASR → TTS → speech LLMs: bridge from Signal Processing (M1) to LLMs (M2).
   Voice cloning: ethics and audio watermarking                                ch. 9
   Full-duplex conversational voices                                           ch. 10 (VAD, turn-taking)
   Speech LLMs and multilingualism                                             ch. 11
-  Going beyond the syllabus — labs (CTC alignment, WER, audio watermarking)   [Exercises / Labs](#)
+  Going beyond the syllabus — labs (CTC alignment, WER, audio watermarking)   [Exercises / Labs](#ex)
 
 ### Where this course fits in the program
 
@@ -179,6 +179,23 @@ An M2 module offered in period 2, outside the recommended track: it is the maste
 -   **Exercises / Labs** — align a CTC, measure a WER, synthesize and watermark a voice clip.
 -   **References** — the founding papers of neural ASR and TTS.
 
+### Session plan {#sessions}
+
+**24 h in class (announced) = 8 sessions of 3 h.** The SynapseS 2026–2027 sheet publishes no volume for this module; 24 h is the indicative volume quoted with the brochure programme in the fiche above, and also the M2 volume published for the Large Language Models course (CSC_53432_EP: 24 h, 2 ECTS); the session split below is our proposal for covering these notes in that time. Level 1 = foundations (reviews, definitions, first worked examples), 2 = core methods, 3 = advanced material (recent research: full-duplex dialogue, speech LLMs); the level never goes down from one session to the next.
+
+| Session | Hours | Level | Content | Practice |
+|---|---|---|---|---|
+| 1 | 3 h | 1 | ch. 0 Recap: the speech signal, ASR and TTS formalized, WER; ch. 1 Classical ASR: GMM-HMM | compute a WER by hand on two sentences (Definition 0.1) |
+| 2 | 3 h | 2 | ch. 2 CTC: the loss and its forward-backward, derived | Ex. 3, 4 |
+| 3 | 3 h | 2 | ch. 3 Encoder-decoder: LAS, Conformer, RNN-T; ch. 4 Whisper | Ex. 1 |
+| 4 | 3 h | 2 | ch. 5 Streaming: latencies, chunking, VAD; ch. 6 Vocoders | Ex. 5(a)–(b) |
+| 5 | 3 h | 2 | ch. 7 Neural TTS: Tacotron 2, VITS, diffusion and flow | Ex. 2(a)–(b) |
+| 6 | 3 h | 2 | ch. 8 Expressivity; ch. 9 Voice conversion, cloning, ethics, watermarking | Ex. 2(c)–(d), 6 |
+| 7 | 3 h | 3 | ch. 10 The conversational loop: turn-taking, endpointing, full-duplex | Ex. 5(c) |
+| 8 | 3 h | 3 | ch. 11 Speech LLMs and multilingualism | lab: per-language WER with Whisper and MMS (Proposition 11.3) |
+
+**Self-study, outside the 24 h**: no chapter — every chapter is covered in class; the two labs (Ex. 1 and 2) each need about 2 h of personal work.
+
 ### How to study this module
 
 -   Listen to every example audio of the course (originals, degraded, synthesized): the ear is here a measuring instrument to train as much as the WER.
@@ -192,6 +209,8 @@ An M2 module offered in period 2, outside the recommended track: it is the maste
 :::
 
 ## 0. Recap: the speech signal and its representations {#ch0}
+
+Every model of this module reads or writes a spectrogram, so the course starts from the signal. This chapter recalls what the Signal Processing module established, then states the two problems of the module — recognition and synthesis — and how recognition is scored.
 
 :::: recap
 ::: recap-title
@@ -207,7 +226,7 @@ Prerequisites (Signal Processing M1 module) — what is assumed known
 ::::
 
 ::: def
-[Definition 0.1 — ASR and TTS, formalized]{.tag} **Recognition** (ASR): estimate the transcription $y$ (sequence of tokens — characters, phonemes, BPE) of an acoustic frame $x_{1:T}$ (Mel features, typically $T \approx 100$ frames for 10 s of speech): model $p_\theta(y \mid x_{1:T})$. **Synthesis** (TTS): the inverse, $p_\theta(x \mid y)$ — a *one-to-many* problem: a text can be said in infinitely many ways (voice, rate, emotion), which will structure all of ch. 7-8 (TTS is a *generation* problem, ASR a *decision* problem). The reference ASR error is the **WER**: $$\mathrm{WER} = \frac{S + D + I}{N},$$ substitutions/deletions/insertions obtained by word-level Levenshtein alignment between hypothesis and reference (lab 1).
+[Definition 0.1 — ASR and TTS, formalized]{.tag} **Recognition** (ASR): estimate the transcription $y$ (sequence of tokens — characters, phonemes, BPE) of an acoustic frame $x_{1:T}$ (Mel features, typically $T \approx 100$ frames per second of speech, one every 10 ms): model $p_\theta(y \mid x_{1:T})$. **Synthesis** (TTS): the inverse, $p_\theta(x \mid y)$ — a *one-to-many* problem: a text can be said in infinitely many ways (voice, rate, emotion), which will structure all of ch. 7-8 (TTS is a *generation* problem, ASR a *decision* problem). The reference ASR error is the **WER**: $$\mathrm{WER} = \frac{S + D + I}{N},$$ substitutions/deletions/insertions obtained by word-level Levenshtein alignment between hypothesis and reference (lab 1).
 :::
 
 ::: note
@@ -220,10 +239,10 @@ Prerequisites (Signal Processing M1 module) — what is assumed known
 
 ## 1. Classical ASR: the GMM-HMM pipeline {#ch1}
 
-Concrete scene: a business ASR fine-tuned on call-center audio drops as soon as the accent changes. This chapter sets signal representation and decoding objectives.
+A recognizer tuned on call-center audio collapses as soon as the accent or the microphone changes. To understand why, and what neural systems changed, this chapter presents the architecture that dominated speech recognition for thirty years: an acoustic model of sounds, a lexicon and a language model, combined by Bayesian decoding.
 
 ::: note
-[What breaks]{.tag} Ignoring acoustic domain; evaluating WER alone (no semantics); voice cloning without ethical guardrails / watermarking.
+[What breaks]{.tag} Three mistakes recur in this module: ignoring the acoustic domain (microphone, noise, accent) in which a system will be used, judging a recognizer by its WER alone, which ignores meaning, and deploying voice cloning without consent or watermarking (ch. 9).
 :::
 
 The historical pipeline (1980-2015) survives only as technical memories — but its formalism (emission model, chain of states, Bayesian decoding) reappears everywhere, up to the CTC forward-backward (ch. 2). We cover it in one structured chapter.
@@ -245,18 +264,18 @@ The historical pipeline (1980-2015) survives only as technical memories — but 
 The central problem of neural ASR: the output (sequence of tokens $y$) is shorter than the input ($T$ frames) and *unaligned* — there is no label per frame. The solution of Graves et al. (ICML 2006): marginalize over *all* possible alignments. We derive everything: this is technical chapter no. 1 of the module.
 
 ::: def
-[Definition 2.1 — Alignments and collapse]{.tag} The network emits at each frame a distribution $p_\theta(\cdot \mid x_{1:T}, t)$ over the extended alphabet $\mathcal V \cup \{\epsilon\}$ ($\epsilon$ = blank). A *path* $\pi \in (\mathcal V \cup \{\epsilon\})^T$ is a sequence of $T$ symbols, drawn independently: $p(\pi \mid x) = \prod_{t=1}^T p_\theta(\pi_t \mid x, t)$. The **collapse** map $\mathcal B$ first removes the blanks then merges consecutive repetitions: $\mathcal B(\texttt{hh ee ll ll o}) = \texttt{helo}$ (the three consecutive l's, once the blanks are removed, make only one). Conversely, doubles *separated by a blank* survive: $\mathcal B(\texttt{l}\,\epsilon\,\texttt{l}) = \texttt{ll}$ — that is the whole art of CTC. The CTC loss marginalizes: $$p_\theta(y \mid x) \;=\; \sum_{\pi \in \mathcal B^{-1}(y)} p(\pi \mid x), \qquad \mathcal L_{\mathrm{CTC}} = -\log p_\theta(y \mid x).$$ *Why the blank is indispensable*: without it, a collapsed $\texttt{ll}$ could not be distinguished from $\texttt{l}$ — impossible to write "bonne" with a double n. The blank carries the boundary information.
+[Definition 2.1 — Alignments and collapse]{.tag} The network emits at each frame a distribution $p_\theta(\cdot \mid x_{1:T}, t)$ over the extended alphabet $\mathcal V \cup \{\epsilon\}$ ($\epsilon$ = blank). A *path* $\pi \in (\mathcal V \cup \{\epsilon\})^T$ is a sequence of $T$ symbols, drawn independently: $p(\pi \mid x) = \prod_{t=1}^T p_\theta(\pi_t \mid x, t)$. The **collapse** map $\mathcal B$ first merges consecutive repetitions, then removes the blanks: $\mathcal B(\texttt{hheelllo}) = \texttt{helo}$ (each run of identical symbols counts once). Conversely, doubles *separated by a blank* survive: $\mathcal B(\texttt{l}\,\epsilon\,\texttt{l}) = \texttt{ll}$, so that $\mathcal B(\texttt{hhe}\,\epsilon\,\texttt{l}\,\epsilon\,\texttt{lo}) = \texttt{hello}$ — that is the whole art of CTC. The CTC loss marginalizes: $$p_\theta(y \mid x) \;=\; \sum_{\pi \in \mathcal B^{-1}(y)} p(\pi \mid x), \qquad \mathcal L_{\mathrm{CTC}} = -\log p_\theta(y \mid x).$$ *Why the blank is indispensable*: without it, a collapsed $\texttt{ll}$ could not be distinguished from $\texttt{l}$ — impossible to write "bonne" with a double n. The blank carries the boundary information.
 :::
 
 ::: ex
-[Example 2.2 — Counting by hand (T = 4, y = "ab")]{.tag} Extended sequence $\ell = (\epsilon, a, \epsilon, b)$ (length $S = 4$). The valid paths of length 4 are: $aa\epsilon b$? No — let us enumerate seriously: $\texttt{-a-b}$, $\texttt{-ab-}$, $\texttt{a--b}$, $\texttt{a-b-}$, $\texttt{aa-b}$, $\texttt{a-ab}$, $\texttt{-aab}$, $\texttt{ab--}$ (8 paths). Each contributes its product of 4 probabilities: $p(y\|x)$ is the sum of the 8; exercise 3 computes it for numerical values, exercise 4 checks with the implementation. The number of paths grows exponentially ($\sim \|\mathcal V\|^T$): direct summation is impossible — hence the forward-backward.
+[Example 2.2 — Counting by hand (T = 4, y = "ab")]{.tag} Extended sequence $\ell = (\epsilon, a, \epsilon, b, \epsilon)$: the label with a blank before, between and after the letters (length $S = 2|y| + 1 = 5$). A path of length 4 collapses to $\texttt{ab}$ exactly when it reads "blanks, a run of $a$, blanks, a run of $b$, blanks", each run of blanks possibly empty (writing $\texttt{-}$ for $\epsilon$). Since the runs of $a$ and $b$ take at least one frame each, the two remaining frames are distributed among five runs: $\binom{6}{2} = 15$ paths — $\texttt{--ab}$, $\texttt{-a-b}$, $\texttt{-ab-}$, $\texttt{a--b}$, $\texttt{a-b-}$, $\texttt{ab--}$ (two blanks); $\texttt{-aab}$, $\texttt{-abb}$, $\texttt{aa-b}$, $\texttt{aab-}$, $\texttt{a-bb}$, $\texttt{abb-}$ (one blank); $\texttt{aaab}$, $\texttt{aabb}$, $\texttt{abbb}$ (none). A path such as $\texttt{a-ab}$ is *not* valid: the blank separates the two $a$'s, which then both survive ($\mathcal B = \texttt{aab}$). Each path contributes its product of 4 probabilities: $p(y \mid x)$ is the sum of the 15; exercise 3 computes it for numerical values, exercise 4 checks with the implementation. The number of paths grows exponentially (up to $(|\mathcal V| + 1)^T$): direct summation is impossible — hence the forward-backward.
 :::
 
 :::: thm
 [Theorem 2.3 — CTC forward-backward (recursions and gradient, proven)]{.tag} Let $p_t(k) = p_\theta(k \mid x, t)$, and $\ell$ the extended sequence. The *forward variables* $\alpha_t(s) = p(\ell_{1:s} \text{ reached at frame } t)$ follow $$\alpha_t(s) = \Big[\alpha_{t-1}(s) + \alpha_{t-1}(s{-}1) + \mathbf 1\{\ell_s \neq \epsilon,\ \ell_s \neq \ell_{s-2}\}\, \alpha_{t-1}(s{-}2)\Big]\cdot p_t(\ell_s),$$ initialized $\alpha_1(1) = p_1(\epsilon)$, $\alpha_1(2) = p_1(\ell_2)$, the rest at 0 (one cannot "jump" ahead). Symmetrically $\beta_t(s)$ (backward, from the end). Then $$p(y \mid x) = \alpha_T(S) + \alpha_T(S{-}1), \qquad \alpha_t(s)\,\beta_t(s) = p\big(y \mid x,\ \pi_t = \ell_s\big)\cdot p_t(\ell_s),$$ and the gradient of the loss is written in closed form $$\frac{\partial \mathcal L_{\mathrm{CTC}}}{\partial p_t(k)} = -\,\frac{1}{p(y \mid x)}\ \frac{1}{p_t(k)} \sum_{s\,:\,\ell_s = k} \alpha_t(s)\, \beta_t(s).$$
 
 ::: proof
-**Step 1 (decomposition by the state at $t$).** The sum over paths partitions according to the position $s$ occupied at frame $t$: each path passing through $\ell_s$ at $t$ factorizes into "prefix reaching $\ell_s$ at $t$" $\times$ "$p_t(\ell_s)$" $\times$ "suffix from $\ell_s$ at $t{+}1$" — hence $\alpha_t(s)\beta_t(s) = p(y, \pi_t = \ell_s \mid x)$ (careful: the definition of $\beta$ includes the $p_t$ factor or not depending on the convention; with the one above, $\alpha_t(s)$ contains $p_t(\ell_s)$ and $\beta_t(s)$ does not). **Step 2 (recursion).** For the path to be at $\ell_s$ at $t$, it was at $s$, $s{-}1$ or $s{-}2$ at $t{-}1$; the jump of two positions is forbidden *except* if $\ell_s$ is a real letter different from $\ell_{s-2}$ (otherwise two identical letters would be merged by the collapse; and one never jumps *over* a letter). **Step 3 (gradient).** $p(y\|x) = \sum_{\pi} \prod_{t'} p_{t'}(\pi_{t'})$; each term using $p_t(k)$ corresponds to the paths with $\pi_t = k \in \ell$, whose total sum equals $\sum_{s:\ell_s = k}\alpha_t(s)\beta_t(s)$. Differentiating the log: $\partial \mathcal L/\partial p_t(k) = -\partial p(y\|x)/\partial p_t(k) \cdot 1/p(y\|x)$, and $\partial p(y\|x)/\partial p_t(k) = \big[\sum_s \alpha\beta\big] / p_t(k)$ (each path where $\pi_t = k$ is linear in $p_t(k)$). **Complexity**: $\mathcal O(T \cdot S)$ — two tables of $T \times (2\|y\|+1)$, versus the exponential enumeration. [∎]{.qed}
+**Step 1 (decomposition by the state at $t$).** The sum over paths partitions according to the position $s$ occupied at frame $t$: each path passing through $\ell_s$ at $t$ factorizes into "prefix reaching $\ell_s$ at $t$" $\times$ "$p_t(\ell_s)$" $\times$ "suffix from $\ell_s$ at $t{+}1$" — hence $\alpha_t(s)\beta_t(s) = p(y, \pi_t = \ell_s \mid x)$ (careful: the definition of $\beta$ includes the $p_t$ factor or not depending on the convention; with the one above, $\alpha_t(s)$ contains $p_t(\ell_s)$ and $\beta_t(s)$ does not). **Step 2 (recursion).** For the path to be at $\ell_s$ at $t$, it was at $s$, $s{-}1$ or $s{-}2$ at $t{-}1$; the jump of two positions is forbidden *except* if $\ell_s$ is a real letter different from $\ell_{s-2}$ (otherwise two identical letters would be merged by the collapse; and one never jumps *over* a letter). **Step 3 (gradient).** $p(y \mid x) = \sum_{\pi} \prod_{t'} p_{t'}(\pi_{t'})$; each term using $p_t(k)$ corresponds to the paths with $\pi_t = k \in \ell$, whose total sum equals $\sum_{s:\ell_s = k}\alpha_t(s)\beta_t(s)$. Differentiating the log: $\partial \mathcal L/\partial p_t(k) = -\partial p(y \mid x)/\partial p_t(k) \cdot 1/p(y \mid x)$, and $\partial p(y \mid x)/\partial p_t(k) = \big[\sum_s \alpha\beta\big] / p_t(k)$ (each path where $\pi_t = k$ is linear in $p_t(k)$). **Complexity**: $\mathcal O(T \cdot S)$ — two tables of $T \times (2|y|+1)$, versus the exponential enumeration. [∎]{.qed}
 :::
 ::::
 
@@ -265,10 +284,12 @@ The central problem of neural ASR: the output (sequence of tokens $y$) is shorte
 :::
 
 ::: note
-[CTC's posterity]{.tag} CTC lives everywhere in 2026: forced alignment (lab 1), the pre-training of wav2vec 2 (CTC objective), and — above all — **RNN-T** (ch. 3) is a CTC extended to real time, with a blank reinterpreted as "move forward in time". By contrast, Whisper is *not* CTC (attention encoder-decoder, ch. 4): knowing how to say "this one marginalizes alignments, that one generates them" is a classic oral-exam question.
+[CTC's posterity]{.tag} CTC lives everywhere in 2026: forced alignment (ch. 1), the pre-training of wav2vec 2 (CTC objective), and — above all — **RNN-T** (ch. 3) is a CTC extended to real time, with a blank reinterpreted as "move forward in time". By contrast, Whisper is *not* CTC (attention encoder-decoder, ch. 4): knowing how to say "this one marginalizes alignments, that one generates them" is a classic oral-exam question.
 :::
 
 ## 3. Encoder-decoder: LAS, Conformer, RNN-T {#ch3}
+
+CTC assumes that the frames are conditionally independent and has no language model of its own. This chapter presents the three architectures that lift these limits in different ways — by learning the alignment with attention (LAS), by improving the encoder (Conformer), or by adding a prediction network while keeping streaming possible (RNN-T).
 
 ::: thm
 [Theorem 3.1 — LAS: Listen, Attend and Spell (Chan et al., ICASSP 2016)]{.tag} **Listen**: a pyramidal BLSTM (then transformer) encoder compacts the frames $x_{1:T}$ into states $h_j$. **Attend**: at each output step $i$, an additive attention computes $$e_{ij} = v^\top \tanh\big(W_s s_{i-1} + W_h h_j\big), \qquad \alpha_{ij} = \frac{\exp e_{ij}}{\sum_{j'} \exp e_{ij'}}, \qquad c_i = \sum_j \alpha_{ij}\, h_j,$$ (*location-sensitive* attention in practice: the past weights $a_{i-1}$ enter $e_{ij}$ to make it monotone and avoid skipped/repeated words). **Spell**: an autoregressive decoder emits $y_i$ from $(s_{i-1}, y_{i-1}, c_i)$, trained by teacher forcing and cross-entropy. The loss is no longer a marginalization: the attention *learns* the alignment — and can reorder it (used for speech translation). Two inherited weaknesses: *exposure bias* (trained on the reference, tested on its own errors) and the impossibility of strict streaming (all of $x$ is read before the first token).
@@ -292,8 +313,10 @@ The central problem of neural ASR: the output (sequence of tokens $y$) is shorte
 
 ## 4. Whisper: robustness and multi-task {#ch4}
 
+The architectures of chapter 3 were trained on a few thousand carefully transcribed hours and broke on real-world audio. This chapter shows how Whisper obtained robustness from a plain encoder-decoder trained on a very large amount of imperfectly labelled web audio.
+
 ::: thm
-[Theorem 4.1 — Whisper (Radford et al., ICML 2023): the strength of the weak]{.tag} Trained on $\approx$ 680,000 hours of *weakly supervised* audio/text pairs collected from the web (versus a few hundred to thousand carefully curated hours before), Whisper is a simple transformer encoder-decoder (88M-1.5B parameters); the audio is cut into 30 s windows, log-Mel 80 bins. The output is a *sequence of special tokens + text*: $\langle\!\|$start$\,\|\rangle \to$ language $\to$ task (transcribe/translate into English) $\to$ timestamps $\to$ text — everything (language identifier, translation decision, time) is *learned as language*, no dedicated module. Results: unprecedented robustness to noise/reverberation/accents (trained on real, not read data), WER close to humans on clean English; best zero-shot performance on most languages at the time.
+[Theorem 4.1 — Whisper (Radford et al., ICML 2023): the strength of the weak]{.tag} Trained on $\approx$ 680,000 hours of *weakly supervised* audio/text pairs collected from the web (versus a few hundred to thousand carefully curated hours before), Whisper is a simple transformer encoder-decoder (39M-1.5B parameters); the audio is cut into 30 s windows, log-Mel 80 bins. The output is a *sequence of special tokens + text*: `<|startoftranscript|>` $\to$ language $\to$ task (transcribe/translate into English) $\to$ timestamps $\to$ text — everything (language identifier, translation decision, time) is *learned as language*, no dedicated module. Results: unprecedented robustness to noise/reverberation/accents (trained on real, not read data), WER close to humans on clean English; best zero-shot performance on most languages at the time.
 :::
 
 ::: prop
@@ -301,7 +324,7 @@ The central problem of neural ASR: the output (sequence of tokens $y$) is shorte
 :::
 
 ::: ex
-[Example 4.3 — French in the crosshairs]{.tag} On clean English, a good system reaches human WER (\~5%); the same model on spontaneous contemporary French typically does 2 to 3 times worse (accents, speaking rates, code-switching, proper names) — lab 1 measures it. Three French phenomena to know for engineering: *liaison* (les\|ami·z·arbitres: spelling is not phonetics — the ASR must relearn the graphy), *enchaînement* (final consonant tied to the next vowel: word boundaries blur in the spectrogram) and *number verbalization* (1996: "mille neuf cent quatre-vingt-seize" or "dix-neuf cent quatre-vingt-seize"? — normalization ambiguity, both are valid; cf. ch. 8 for the reverse direction in TTS).
+[Example 4.3 — French in the crosshairs]{.tag} On clean English, a good system reaches human WER (\~5%); the same model on spontaneous contemporary French typically does 2 to 3 times worse (accents, speaking rates, code-switching, proper names) — lab 1 measures it. Three French phenomena to know for engineering: *liaison* (*les amis* is pronounced [le.za.mi]: the *s* of *les* is heard at the start of the next word — spelling is not phonetics, and the ASR must recover the written form), *enchaînement* (final consonant tied to the next vowel: word boundaries blur in the spectrogram) and *number verbalization* (1996: "mille neuf cent quatre-vingt-seize" or "dix-neuf cent quatre-vingt-seize"? — normalization ambiguity, both are valid; cf. ch. 8 for the reverse direction in TTS).
 :::
 
 ## 5. Streaming: chunking, VAD, latency vs quality {#ch5}
@@ -309,19 +332,19 @@ The central problem of neural ASR: the output (sequence of tokens $y$) is shorte
 Conversing means answering fast: the ASR must produce words *while* one speaks. This chapter deals with the "offline $\to$ streaming" transformation, whose cost is measured in WER added per second gained.
 
 ::: def
-[Definition 5.1 — Latencies of a streaming ASR]{.tag} The **algorithmic latency** of a chunked encoder (*chunking*) of size $L$ frames with a lookahead of $R$ frames equals $$\lambda = (L + R)\,\Delta, \qquad \Delta = \text{frame step } (10\ \mathrm{ms}),$$ — one cannot predict before having heard the context. The **real-time factor** (RTF) measures the computational cost: computation time / audio duration (RTF $<$ 1 required, $<<$ 1 on device). The **first-word latency** adds the VAD (ch. 10) and the energy bar. A conversational voice assistant targets $\lambda \leq 300$ ms end to end (lab 5) — humans answer in \~200 ms (ch. 10): this is *the* structuring constraint of the field.
+[Definition 5.1 — Latencies of a streaming ASR]{.tag} The **algorithmic latency** of a chunked encoder (*chunking*) of size $L$ frames with a lookahead of $R$ frames equals $$\lambda = (L + R)\,\Delta, \qquad \Delta = \text{frame step } (10\ \mathrm{ms}),$$ — one cannot predict before having heard the context. The **real-time factor** (RTF) measures the computational cost: computation time / audio duration (RTF $<$ 1 required, $\ll 1$ on device). The **first-word latency** adds the VAD and the endpointing decision (ch. 10). A conversational voice assistant targets $\lambda \leq 300$ ms end to end (exercise 5) — humans answer in \~200 ms (ch. 10): this is *the* structuring constraint of the field.
 :::
 
 ::: thm
 [Theorem 5.2 — Three streaming architectures (Moritz et al., ICASSP 2020, for the first)]{.tag}
 
-1.  **Block attention**: the transformer encoder processes windows of $L$ frames with a complete left context (memory) and a bounded right lookahead $R$ — the attention is *masked* beyond; the larger $R$ grows, the more the WER drops and the latency rises (curve of ch. 5.3);
+1.  **Block attention**: the transformer encoder processes windows of $L$ frames with a complete left context (memory) and a bounded right lookahead $R$ — the attention is *masked* beyond; the larger $R$ grows, the more the WER drops and the latency rises (curve of Proposition 5.3);
 2.  **Causal RNN-T** (Theorem 3.3): pure encoder $L = 1$, $R = 0$ — emission from the frame on; the lookahead is reinjected into the *prediction* network (the right context comes from the tokens already emitted); standard on mobile;
 3.  **Asynchronous re-scoring**: a first streaming pass gives the real-time display, an offline model (Whisper) *re-corrects* the final transcription with a few hundred ms of delay — the interface shows the text "correcting itself" (the design of 2026 assistants: the truth arrives one second later, reactivity is immediate).
 :::
 
 ::: prop
-[Proposition 5.3 — The latency/quality curve, and how to read it]{.tag} For each point $(L, R)$ (or each model choice): measure WER and first-word latency on a *fixed* test corpus; plot WER($\lambda$). Typical shape: plateau up to $\lambda \approx 200$ ms (the useful context of a phoneme fits in \~200 ms), then rapid drop (one loses the transitions), then plateau (ultra-context no longer helps). Engineer's reading: choose the elbow point; scientific reading: the curve *is* a control curve (fidelity against resource) — exactly the grid of the Control in Generative AI module (M2, ch. 2 and 9), where "diversity" is replaced by "reactivity".
+[Proposition 5.3 — The latency/quality curve, and how to read it]{.tag} For each point $(L, R)$ (or each model choice): measure WER and first-word latency on a *fixed* test corpus; plot WER($\lambda$). Typical shape: the WER is high at very small latency, drops quickly as $\lambda$ grows to about 200-300 ms (the useful context of a phoneme and of its transitions fits in about 200 ms), then reaches a plateau where extra context no longer helps. Engineer's reading: choose the elbow point; scientific reading: the curve *is* a control curve (fidelity against resource) — exactly the grid of the Control in Generative AI module (M2, ch. 2 and 9), where "diversity" is replaced by "reactivity".
 :::
 
 ::: note
@@ -330,12 +353,14 @@ Conversing means answering fast: the ASR must produce words *while* one speaks. 
 
 ## 6. Vocoders: from WaveNet to HiFi-GAN {#ch6}
 
+Synthesis ends with a waveform: tens of thousands of samples per second, whose phase is not contained in the spectrogram. This chapter presents the vocoders that generate it, from the slow but faithful WaveNet to the fast HiFi-GAN used in production.
+
 ::: thm
-[Theorem 6.1 — WaveNet (van den Oord et al., 2016): autoregression over the samples]{.tag} The vocoder models the waveform directly: $$p(x) = \prod_{t=1}^{T_{\mathrm{ech}}} p(x_t \mid x_{<t},\, c),$$ with $T_{\mathrm{ech}}$ = 24,000 samples per second, $x_t$ $\mu$-law quantized over 256 levels, $c$ the conditioning (Mel, speaker). Architecture: **dilated causal convolutions** — layer $k$ looks $2^k$ samples back (dilations 1, 2, 4, ..., 512, stacked): the receptive field grows *exponentially* with depth ($\approx 2^L$ for $L$ layers), where a non-dilated convolution would require $2^L$ layers. Quality: close to human speech in subjective tests (MOS above 4, versus \~4.5 for the ground truth); fatal flaw: generating one second of speech takes 24,000 sequential steps — orders of magnitude slower than real time, unusable in production.
+[Theorem 6.1 — WaveNet (van den Oord et al., 2016): autoregression over the samples]{.tag} The vocoder models the waveform directly: $$p(x) = \prod_{t=1}^{T_{\mathrm{s}}} p(x_t \mid x_{<t},\, c),$$ with $T_{\mathrm{s}}$ the number of samples (24,000 per second of audio), $x_t$ $\mu$-law quantized over 256 levels, $c$ the conditioning (Mel, speaker). Architecture: **dilated causal convolutions** — layer $k$ looks $2^k$ samples back (dilations 1, 2, 4, ..., 512, stacked): the receptive field grows *exponentially* with depth ($\approx 2^L$ for $L$ layers), where a non-dilated convolution would require $2^L$ layers. Quality: close to human speech in subjective tests (MOS above 4, versus \~4.5 for the ground truth); fatal flaw: generating one second of speech takes 24,000 sequential steps — orders of magnitude slower than real time, unusable in production.
 :::
 
 ::: prop
-[Proposition 6.2 — HiFi-GAN (Kong et al., NeurIPS 2020): speed through the adversary]{.tag} Complete reversal: the generator is *parallel feed-forward* (upsampling by transposed convolutions from the 80-bin Mel to the waveform, then multi-receptive-field dilated convolutions for phase coherence); training is *adversarial* (GAN recap: Multimodal GenAI M1 module ch. 2) with two families of discriminators — *multi-period* (they rearrange the waveform into matrices of periods 2, 3, 5, 7, 11 to trap periodic artifacts: the "buzz") and *multi-scale* — plus an L1 loss on the reconstructed Mel to anchor the content. Result: WaveNet quality, parallel generation — orders of magnitude faster than real time on GPU, the industry's default vocoder. To remember from the chapter: the pairing of *mixing duration* (autoregressive over 24 kHz) *against parallel architecture + perceptual loss* dictates all of modern TTS.
+[Proposition 6.2 — HiFi-GAN (Kong et al., NeurIPS 2020): speed through the adversary]{.tag} Complete reversal: the generator is *parallel feed-forward* (upsampling by transposed convolutions from the 80-bin Mel to the waveform, then multi-receptive-field dilated convolutions for phase coherence); training is *adversarial* (GAN recap: Multimodal GenAI M1 module ch. 2) with two families of discriminators — *multi-period* (they rearrange the waveform into matrices of periods 2, 3, 5, 7, 11 to trap periodic artifacts: the "buzz") and *multi-scale* — plus an L1 loss on the reconstructed Mel to anchor the content. Result: WaveNet quality, parallel generation — orders of magnitude faster than real time on GPU, the industry's default vocoder. To remember from the chapter: the opposition between *sequential generation* (autoregressive over 24,000 samples per second) and *parallel architecture + perceptual losses* dictates all of modern TTS.
 :::
 
 ::: note
@@ -344,8 +369,10 @@ Conversing means answering fast: the ASR must produce words *while* one speaks. 
 
 ## 7. Neural TTS: Tacotron 2, VITS, diffusion and flow {#ch7}
 
+Given a vocoder, it remains to turn text into a spectrogram — a one-to-many problem, since a sentence can be said in many ways. This chapter follows the three generations of answers: an attention model that writes the Mel frame by frame, an end-to-end stochastic model, and iterative diffusion and flow models.
+
 ::: thm
-[Theorem 7.1 — Tacotron 2 (Shen et al., ICASSP 2018): the two-stage scheme]{.tag} Stage 1 (acrobatic): an *attentional* encoder-decoder reads the text (graphemes) and writes the Mel frame by frame — the *location-sensitive* attention learns the text→acoustic alignment there (same mechanism as LAS in ch. 3, applied in reverse); training by teacher forcing on the reference Mels. Stage 2: a WaveNet (ch. 6) turns the Mel into a wave. Historical quality: natural on read sentences. Two chronic diseases: *attention failure* (skipped or stuttered words on long or out-of-distribution sentences) and *abusive determinization* — one text, a single voice/rate (the one-to-many of Definition 0.1 denied by training toward the *average* Mel: smoothed, metallic output).
+[Theorem 7.1 — Tacotron 2 (Shen et al., ICASSP 2018): the two-stage scheme]{.tag} Stage 1: an *attentional* encoder-decoder reads the text (graphemes) and writes the Mel frame by frame — the *location-sensitive* attention learns the text→acoustic alignment there (same mechanism as LAS in ch. 3, applied in reverse); training by teacher forcing on the reference Mels. Stage 2: a WaveNet (ch. 6) turns the Mel into a wave. Historical quality: natural on read sentences. Two chronic diseases: *attention failure* (skipped or stuttered words on long or out-of-distribution sentences) and *excessive determinism* — one text, a single voice/rate (the one-to-many of Definition 0.1 denied by training toward the *average* Mel: smoothed, metallic output).
 :::
 
 ::: prop
@@ -368,6 +395,8 @@ Conversing means answering fast: the ASR must produce words *while* one speaks. 
 :::
 
 ## 8. Expressivity: prosody, style tokens, SSML {#ch8}
+
+A synthesis can be intelligible and still sound flat or say a sentence with the wrong intention. This chapter describes what expressivity is made of and the two ways of controlling it: soft control through learned style latents, hard control through markup.
 
 ::: def
 [Definition 8.1 — Prosody, three continuous sliders]{.tag} The manner of saying decomposes into $F_0$ (melody, in Hz — \~100-200 Hz for men, 160-300 for women, final fall of declarative utterances), *duration* (contrastive lengthening: a stretched "énorme"), *energy* (accents, stressed words). These sliders are *continuous and intertwined*: the TTS must predict them all, and text alone is ambiguous (one neutral sentence, ten valid readings) — it is the one-to-many of ch. 7, aesthetic version. French adds its signature: *final* group accent (not lexical as in English), interrogative rise without inversion, sustained rate that makes segmentation critical.
@@ -396,6 +425,8 @@ In production: the two columns coexist — SSML for precision (announcements, ac
 
 ## 9. Voice conversion and cloning: ethics and watermarking {#ch9}
 
+The same models that give an assistant a pleasant voice can give anyone's voice to a fraudster from a few seconds of recording. This chapter explains how conversion and cloning work, what the law and the engineer must do about them, and how generated audio is watermarked.
+
 ::: def
 [Definition 9.1 — Conversion, adaptation, zero-shot cloning]{.tag} *Voice conversion*: re-emit *what* a source voice says *with the timbre* of a target voice (content preserved, speaker changed). *Zero-shot cloning*: synthesize *any text* in a given voice from an *audio prompt* of a few seconds (VALL-E, Voicebox: conditioning by reference, ch. 7). Technically: a speaker embedding (learned by speaker verification — the GE2E loss of Wan et al., 2018, aligns the embeddings of the same voice); YourTTS (ICML 2022) adds it to VITS (the TTS of ch. 7 becomes multi-speaker in one training); VALL-E (Microsoft, 2023) treats cloning as language: AR over the EnCodec *acoustic tokens* (ch. 11), the 3 s prompt serving as prefix — TTS is absorbed by the LLM paradigm.
 :::
@@ -405,7 +436,7 @@ In production: the two columns coexist — SSML for precision (announcements, ac
 :::
 
 ::: thm
-[Theorem 9.3 — Audio watermarking: from spread spectrum to networks]{.tag} *Classical*: spread-spectrum tattooing — add a low-energy pseudo-random noise (key $k$), masked by the psychoacoustic threshold effect, in a time-frequency domain (STFT — Signal Processing M1 modules ch. 6-7: time-frequency analysis and random signals are proven there); detection by correlation with the key — the *exact* structure of the textual green/red watermark (ch. 6 of the Control module): a pseudo-random key, a hypothesis test, a strength/quality trade-off. *Neural*: **WavMark** (2023) hides \~32 bits per second of speech with a learned encoder/detector, robust to re-encodings; **AudioSeal** (Meta, ICASSP 2024) adds *localization*: a sample-level detector indicates *which* segments are synthetic (adversarial generator/detector, perceptual loss); marking *during* generation (in-generation) applies the watermark in the TTS itself — inseparable from the output. Evaluation protocol: ROC curves detection rate / false positives, under attack (mp3, re-voicing, reverberation) — the robustness budget of the Control module ch. 10, word for word.
+[Theorem 9.3 — Audio watermarking: from spread spectrum to networks]{.tag} *Classical*: spread-spectrum watermarking — add a low-energy pseudo-random noise (key $k$), masked by the psychoacoustic threshold effect, in a time-frequency domain (STFT — Signal Processing M1 modules ch. 6-7: time-frequency analysis and random signals are proven there); detection by correlation with the key — the *exact* structure of the textual green/red watermark (ch. 6 of the Control module): a pseudo-random key, a hypothesis test, a strength/quality trade-off. *Neural*: **WavMark** (2023) hides \~32 bits per second of speech with a learned encoder/detector, robust to re-encodings; **AudioSeal** (Meta, ICASSP 2024) adds *localization*: a sample-level detector indicates *which* segments are synthetic (adversarial generator/detector, perceptual loss); marking *during* generation (in-generation) applies the watermark in the TTS itself — inseparable from the output. Evaluation protocol: ROC curves detection rate / false positives, under attack (mp3, re-voicing, reverberation) — the robustness budget of the Control module ch. 10, word for word.
 :::
 
 ::: ex
@@ -414,8 +445,10 @@ In production: the two columns coexist — SSML for precision (announcements, ac
 
 ## 10. The conversational loop: VAD, turn-taking, full-duplex {#ch10}
 
+Recognition and synthesis are not yet a conversation: the system must also know when the user has finished, answer within a human delay, and cope with interruptions. This chapter measures the human speaking turn and shows how systems went from a pipeline with thresholds to full-duplex models.
+
 ::: thm
-[Theorem 10.1 — The human speaking turn, in numbers]{.tag} Human conversation alternates turns with a median delay on the order of 200 ms — measured across a dozen languages (Stivers et al., PNAS 2009); now pronouncing the first word of a turn takes \~600 ms: humans *anticipate* the end of the other's turn (prosodic, syntactic, pragmatic cues) to prepare their own. An assistant that listens to everything, waits for silence, transcribes, thinks, synthesizes, shows \~1.5-3 s of latency — *five to ten times too slow*: turn-taking is the real conversational bottleneck, not intelligence. Reference framework: the survey by Skantze (Computer Speech & Language, 2021): transition-relevance points (TRP), end-of-turn prediction (end-of-turn: classifier on a sliding window — VAD + prosody + syntax), *backchannels* ("hmm", audible nods: listening without taking the turn).
+[Theorem 10.1 — The human speaking turn, in numbers]{.tag} Human conversation alternates turns with a median delay on the order of 200 ms — measured across a dozen languages (Stivers et al., PNAS 2009); yet planning and pronouncing the first word of a turn takes \~600 ms: humans *anticipate* the end of the other's turn (prosodic, syntactic, pragmatic cues) to prepare their own. An assistant that listens to everything, waits for silence, transcribes, thinks, synthesizes, shows \~1.5-3 s of latency — *five to ten times too slow*: turn-taking is the real conversational bottleneck, not intelligence. Reference framework: the survey by Skantze (Computer Speech & Language, 2021): transition-relevance points (TRP), end-of-turn prediction (end-of-turn: classifier on a sliding window — VAD + prosody + syntax), *backchannels* ("hmm", audible nods: listening without taking the turn).
 :::
 
 ::: prop
@@ -427,10 +460,12 @@ In production: the two columns coexist — SSML for precision (announcements, ac
 :::
 
 ::: note
-[What full-duplex changes in practice]{.tag} (i) *Interruptions*: handled natively (the user stream continues to be predicted while Moshi speaks — the model "hears itself" speak); (ii) *Backchannels*: emergent, unscripted; (iii) *The voice of machines*: unique and marked vocal identity (transparency policy — AI Act ch. 9); (iv) *the risk*: human latency makes the machine socially *indistinguishable* — watermarking (ch. 9) becomes the only frontier. To be debated in session: should a 200 ms assistant announce itself?
+[What full-duplex changes in practice]{.tag} (i) *Interruptions*: handled natively (the user stream continues to be predicted while Moshi speaks — the model "hears itself" speak); (ii) *Backchannels*: emergent, unscripted; (iii) *The voice of machines*: unique and marked vocal identity (AI Act transparency obligations, ch. 9); (iv) *the risk*: human latency makes the machine socially *indistinguishable* — watermarking (ch. 9) becomes the only frontier. To be debated in session: should a 200 ms assistant announce itself?
 :::
 
 ## 11. Speech LLMs and multilingualism {#ch11}
+
+The last step removes the boundary between speech and text models: if audio can be cut into discrete tokens, a language model can read and write it directly. This chapter shows how audio is tokenized, the three ways of grafting audio onto an LLM, and what this changes for the thousands of languages with little data.
 
 ::: def
 [Definition 11.1 — Tokenizing audio: neural codecs and RVQ]{.tag} A neural *codec* (EnCodec: Défossez et al., 2022) compresses speech with a convolutional auto-encoder constrained by a **residual vector quantization** (RVQ): the continuous latent is approximated by a sum of vectors from successive codebooks — each frame (at 24 kHz: one frame $\approx$ 320 samples, \~75 Hz) becomes a stack of \~2-32 discrete indices. Result: speech becomes a *text* of tokens — consumable by a transformer. The hierarchy of **AudioLM** (Borsos et al., 2023) orders these tokens: first *semantic* (discretized units of a self-supervised model — wav2vec 2/HuBERT — that capture the content), then *coarse* then *fine acoustic* (timbre, environment): generating in this order guarantees the content before the texture. It is the architecture of dGSLM and Moshi (ch. 10).
@@ -445,7 +480,7 @@ In production: the two columns coexist — SSML for precision (announcements, ac
 :::
 
 ::: prop
-[Proposition 11.3 — Multilingualism: 7,000 languages, 100 covered]{.tag} The bottleneck of low-resource languages: labeling is expensive, writing is sometimes lacking. **MMS** (Meta, 2023 — "Scaling Speech Technology to 1000+ Languages"): a single wav2vec 2 model covers 1,107 languages in ASR *and* TTS (4,017 in language identification), learned on public religious readings (the paradox: the bible is the most translated corpus in the world) — a jump by a factor of 10-40 in coverage. **Common Voice** (Mozilla): open crowd-sourcing (including French — regional accents: lab 1 draws from it). The specificities of French return (ch. 4, ex. 4.3): number normalization (the date sub-test: "en 1996"), acronyms, loanwords. For the engineer: zero-shot (Whisper/MMS) first, light adaptation next (LoRA on the encoder — LLMs module M2 ch. 6), targeted data last; and measure *per language* — a multilingual "average" WER masks local collapses.
+[Proposition 11.3 — Multilingualism: 7,000 languages, 100 covered]{.tag} The bottleneck of low-resource languages: labeling is expensive, writing is sometimes lacking. **MMS** (Meta, 2023 — "Scaling Speech Technology to 1000+ Languages"): a single wav2vec 2 model covers 1,107 languages in ASR *and* TTS (4,017 in language identification), learned on public religious readings (the paradox: the Bible is the most translated text in the world) — a jump by a factor of 10-40 in coverage. **Common Voice** (Mozilla): open crowd-sourcing (including French — regional accents: lab 1 draws from it). The specificities of French return (ch. 4, ex. 4.3): number normalization (the date sub-test: "en 1996"), acronyms, loanwords. For the engineer: zero-shot (Whisper/MMS) first, light adaptation next (LoRA on the encoder — LLMs module M2 ch. 6), targeted data last; and measure *per language* — a multilingual "average" WER masks local collapses.
 :::
 
 ::: note
@@ -454,32 +489,32 @@ In production: the two columns coexist — SSML for precision (announcements, ac
 
 ## Exercises / Labs {#ex}
 
-1.  **Lab: Whisper transcription and WER (the module's ASR lab).** With `transformers`: (a) load `openai/whisper-tiny` as an ASR pipeline, transcribe two French excerpts from Common Voice (one read, one spontaneous); (b) implement the WER (word-level Levenshtein alignment: $S + D + I$ against the reference); (c) compare tiny/small; (d) pre-filter with Silero VAD (cut the silences) and measure the effect on the hallucinations of (a); (e) redo on English to situate French.
+1.  **★ Lab: Whisper transcription and WER (the module's ASR lab).** With `transformers`: (a) load `openai/whisper-tiny` as an ASR pipeline, transcribe two French excerpts from Common Voice (one read, one spontaneous); (b) implement the WER (word-level Levenshtein alignment: $S + D + I$ against the reference); (c) compare tiny/small; (d) pre-filter with Silero VAD (cut the silences) and measure the effect on the hallucinations of (a); (e) redo on English to situate French.
 
     ::: proof
     Guidance (expected results): tiny is 2-3× faster but clearly more fragile; the spontaneous French WER is 1.5-3× read English; the VAD massively reduces the hallucinated loops on silences (Whisper "invents" text without energy — prop. 4.2 experienced); beware of normalizations (capitalization, punctuation: normalize before aligning, otherwise the WER is artifactual). [∎]{.qed}
     :::
-2.  **Lab: TTS with transformers (the synthesis lab).** (a) synthesize a French text with a public TTS model (SpeechT5; French MMS-TTS); (b) measure the RTF (computation time / audio duration) and the first-sample latency; (c) try three trap sentences: "1 234 567 €", "le SARS-CoV-2", "à Saint-Étienne, il est 19 h58" — record the normalization failures; (d) inject a different speaker embedding and compare.
+2.  **★ Lab: TTS with transformers (the synthesis lab).** (a) synthesize a French text with a public TTS model (SpeechT5; French MMS-TTS); (b) measure the RTF (computation time / audio duration) and the first-sample latency; (c) try three trap sentences: "1 234 567 €", "le SARS-CoV-2", "à Saint-Étienne, il est 19 h58" — record the normalization failures; (d) inject a different speaker embedding and compare.
 
     ::: proof
     Guidance: RTF $<$ 1 on GPU, on the order of 1-3 on CPU; the first-sound latency is dominated by the length of the first Mel *chunk*; numbers and acronyms fail reproducibly — discuss neural vs rule-based front-end (def. 8.3); the embedding shifts the timbre but not the regional accent: perfect zero-shot cloning does not exist with a single vector (ch. 9: one needs the sequential prompt, VALL-E style). [∎]{.qed}
     :::
-3.  **CTC by hand.** Take up example 2.2 ($T = 4$, $y = \texttt{ab}$): with $p_t(\epsilon) = 0.5$, $p_t(a) = 0.3$, $p_t(b) = 0.2$ for $t = 1..4$, compute the 8 products, sum them, check that the sum equals the $\alpha_4(4) + \alpha_4(3)$ obtained by the recursions of Theorem 2.3 (fill in the $\alpha$ table row by row).
+3.  **★ CTC by hand.** Take up example 2.2 ($T = 4$, $y = \texttt{ab}$): with $p_t(\epsilon) = 0.5$, $p_t(a) = 0.3$, $p_t(b) = 0.2$ for $t = 1..4$, compute the 15 products, sum them, check that the sum equals the $\alpha_4(5) + \alpha_4(4)$ obtained by the recursions of Theorem 2.3 (fill in the $\alpha$ table row by row).
 
     ::: proof
-    Guidance: the $\alpha$ table has 4 rows $\times$ 5 columns (with structural zeros — one cannot reach $\ell_4$ before $t=2$); most probable path among the 8: the one that maximizes each column; check that the bound $T \geq \|y\|$ (here 2) is necessary and explain the jump condition $\mathbf 1\{\ell_s \neq \ell_{s-2}\}$ on a counter-example "aa". [∎]{.qed}
+    Guidance: the $\alpha$ table has 4 rows $\times$ 5 columns (with structural zeros — one cannot reach $\ell_4$ before $t=2$); its last row is $(0.0625, 0.0816, 0.171, 0.0864, 0.06)$ and $p(y \mid x) = 0.0864 + 0.06 = 0.1464$, the sum of the 15 products. Six paths tie as the most probable (two blanks, one $a$, one $b$: $0.5^2 \times 0.3 \times 0.2 = 0.015$ each), whereas the frame-by-frame argmax is $\epsilon\epsilon\epsilon\epsilon$, which collapses to the empty string — the best path is not the best labelling; check that the bound $T \geq |y|$ (here 2) is necessary and explain the jump condition $\mathbf 1\{\ell_s \neq \ell_{s-2}\}$ on a counter-example "aa". [∎]{.qed}
     :::
-4.  **CTC in code, gradient verified.** Implement $\alpha$, $\beta$ (thm. 2.3) in NumPy for a mini-vocabulary; compute $\partial \mathcal L/\partial p_t(k)$ by the closed formula; check against automatic differentiation (autograd/PyTorch of the sum of paths) to within $\varepsilon = 10^{-6}$.
+4.  **★★ CTC in code, gradient verified.** Implement $\alpha$, $\beta$ (thm. 2.3) in NumPy for a mini-vocabulary; compute $\partial \mathcal L/\partial p_t(k)$ by the closed formula; check against automatic differentiation (autograd/PyTorch of the sum of paths) to within $\varepsilon = 10^{-6}$.
 
     ::: proof
-    Guidance: the convention ($\beta$ with or without the $p_t$ factor) is the classic error — the autograd check detects it immediately; measured complexity $\mathcal O(T S)$ versus enumeration (8 paths here: explodes beyond $T = 15$); conclude on the differentiation *of the full model's objective* (softmax + recursions) — this is exactly what PyTorch does, vectorized. [∎]{.qed}
+    Guidance: the convention ($\beta$ with or without the $p_t$ factor) is the classic error — the autograd check detects it immediately; measured complexity $\mathcal O(T S)$ versus enumeration (15 paths here; enumeration explodes beyond $T \approx 15$); conclude on the differentiation *of the full model's objective* (softmax + recursions) — this is exactly what PyTorch does, vectorized. [∎]{.qed}
     :::
-5.  **Latency budget of a voice assistant.** A pipeline: VAD (30 ms window) $\to$ chunking ASR (640 ms chunk, 160 ms lookahead) $\to$ LLM (time-to-first-token 250 ms) $\to$ TTS (first Mel chunk 120 ms + vocoder 20 ms). (a) compute the first-sound latency of the response (component-by-component detail); (b) identify the two dominant terms and propose three reductions; (c) compare with Moshi's full-duplex (\~200 ms theoretical): what does it remove?
+5.  **★★ Latency budget of a voice assistant.** A pipeline: VAD (30 ms window) $\to$ chunking ASR (640 ms chunk, 160 ms lookahead) $\to$ LLM (time-to-first-token 250 ms) $\to$ TTS (first Mel chunk 120 ms + vocoder 20 ms). (a) compute the first-sound latency of the response (component-by-component detail); (b) identify the two dominant terms and propose three reductions; (c) compare with Moshi's full-duplex (\~200 ms theoretical): what does it remove?
 
     ::: proof
-    Guidance: (a) $\approx 160$ (endpointing to add: silence threshold 300-500 ms! the real cost) $+$ (640+160)$\times$1/80 Hz… take care of the units: the audio chunk counts in seconds, not frames; total typically 1-2 s of which half is endpointing; (b) reduce the threshold by end-of-turn prediction (prop. 10.2), ASR with a smaller chunk, speculative LLM (referral to LLMs M2 ch. 6); (c) Moshi removes VAD/endpointing (continuous stream prediction), ASR/TTS (native audio tokens) and the LLM queue: what remains is network time + one model step. [∎]{.qed}
+    Guidance: (a) sum the delays after the user's last word: VAD 30 ms; endpointing — absent from the list but unavoidable — a silence threshold of 300-500 ms; ASR chunking: the last word is transcribed only once its 640 ms chunk and the 160 ms lookahead have been heard, i.e. on average half a chunk plus the lookahead ($320 + 160 = 480$ ms) and up to 800 ms; LLM 250 ms; TTS $120 + 20 = 140$ ms. Total $\approx 30 + 400 + 480 + 250 + 140 \approx 1.3$ s on average (up to $\approx 1.7$ s), of which endpointing and chunking make about two thirds; (b) reduce the threshold by end-of-turn prediction (prop. 10.2), ASR with a smaller chunk, speculative LLM (referral to LLMs M2 ch. 6); (c) Moshi removes VAD/endpointing (continuous stream prediction), ASR/TTS (native audio tokens) and the LLM queue: what remains is network time + one model step. [∎]{.qed}
     :::
-6.  **Audio watermarking: ROC under attack (bonus).** Synthesize 20 sentences (lab 2); mark half of them with a public audio watermark (e.g. AudioSeal); plot the detector's ROC (true positive / false positive) on: clean audio, mp3 re-encoding at 64 kbps, light noise addition; conclude on the end-to-end provenance channel (ch. 9).
+6.  **★★ Audio watermarking: ROC under attack (bonus).** Synthesize 20 sentences (lab 2); mark half of them with a public audio watermark (e.g. AudioSeal); plot the detector's ROC (true positive / false positive) on: clean audio, mp3 re-encoding at 64 kbps, light noise addition; conclude on the end-to-end provenance channel (ch. 9).
 
     ::: proof
     Guidance: the clean curve is nearly perfect (AUC $>$ 0.99); mp3 degrades moderately (the watermark survives usual compressions — it is designed for that); strong additive noise attacks harder; relate to the robustness budget (Control module ch. 10): marking strength $\uparrow$ = imperceptibility $\downarrow$ — the same triple trade-off as in text. [∎]{.qed}
