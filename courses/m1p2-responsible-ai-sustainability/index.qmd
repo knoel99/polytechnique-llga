@@ -198,10 +198,10 @@ L3 reminders — the foundation (see Machine Learning module, ch. 0; Optimal Tra
 ::::
 
 :::: prop
-[Proposition 0.1 — The lemma that serves the whole module (proved)]{.tag} For an LP $\min\{c^\top x : Ax = b,\ x \geq 0\}$ and any feasible dual solution $(\lambda, \mu \geq 0)$ (i.e. $A^\top \lambda \leq c$ in the appropriate sense): $b^\top \lambda \leq c^\top x$ for every feasible $x$. If equality is attained, both solutions are optimal.
+[Proposition 0.1 — The lemma that serves the whole module (proved)]{.tag} Consider the LP $\min\{c^\top x : Ax = b,\ x \geq 0\}$ and its dual $\max\{b^\top \lambda : A^\top \lambda \leq c\}$. Call a vector $\lambda$ dual feasible if $A^\top\lambda \leq c$, and write $\mu = c - A^\top\lambda \geq 0$ for its reduced costs. Then $b^\top \lambda \leq c^\top x$ for every feasible $x$ and every dual feasible $\lambda$. If equality is attained, both solutions are optimal.
 
 ::: proof
-$c^\top x \geq (A^\top\lambda)^\top x = \lambda^\top A x = \lambda^\top b$, using dual feasibility first, then $Ax = b$. If $c^\top x = b^\top\lambda$, then $x$ attains a dual lower bound: $x$ and $\lambda$ are optimal (and the gap $c^\top x - b^\top\lambda$, zero, decomposes as $\mu^\top x$, whence the complementary slackness $\mu_i x_i = 0$). [∎]{.qed}
+$c^\top x \geq (A^\top\lambda)^\top x = \lambda^\top A x = \lambda^\top b$, using dual feasibility together with $x \geq 0$ first, then $Ax = b$. If $c^\top x = b^\top\lambda$, then $x$ attains a dual lower bound: $x$ and $\lambda$ are optimal (and the gap $c^\top x - b^\top\lambda$, zero, decomposes as $\mu^\top x$, whence the complementary slackness $\mu_i x_i = 0$). [∎]{.qed}
 :::
 ::::
 
@@ -211,10 +211,10 @@ $c^\top x \geq (A^\top\lambda)^\top x = \lambda^\top A x = \lambda^\top b$, usin
 
 ## 1. Multi-objective optimization and the Pareto front {#ch1}
 
-Concrete scene: an "energy + accuracy" loss that hides the real trade-off. This chapter sets Pareto.
+A loss such as "error + λ · energy" looks like a sensible way to obtain a frugal model, but the single number it returns hides the trade-off that a decision maker needs to see. This chapter replaces the single score by the Pareto front: the set of solutions that cannot be improved on one objective without being worsened on another.
 
 ::: note
-[What breaks]{.tag} Summing incommensurable objectives; omitting training scope 3; a single KPI sold as sustainable.
+[What breaks]{.tag} Three habits break the analysis: summing objectives that have no common unit, leaving part of the footprint (the discarded training runs, the hardware manufacturing) outside the accounting boundary, and selling a single KPI as a proof of sustainability.
 :::
 
 "Maximize accuracy", "minimize energy", "minimize latency": three objectives with no common unit. Adding them naively — a "magic loss" — hides the trade-offs; the Pareto formalism makes them explicit and negotiable.
@@ -250,7 +250,15 @@ $F_1$ is strictly increasing, $F_2$ strictly decreasing: every point of $[0,1]$ 
 :::
 
 ::: ex
-[Example 1.5 — Accuracy vs training energy: the module's most cited front]{.tag} On a given task (say image classification), for every energy budget $E$ (kWh measured at the wall, ch. 6), the best attainable accuracy $\mathrm{acc}(E)$ defines a point of the front. Typically: rapid growth (the under-trained model gains a lot for little energy), then an elbow, then a plateau (scaling law — see the Deep Learning P2 module, ch. 1). Typical Pareto-rational decisions: stop at the elbow, where $-d\,\mathrm{acc}/dE$ drops; the points beyond the elbow are dominated in the "carbon-cost" sense as soon as the kWh is valued at its carbon price (ch. 2).
+[Example 1.5 — The ε-constraint method recovers the hollow part of the front]{.tag} Return to prop. 1.3: $F_1(x) = x$, $F_2(x) = 1 - x^2$ on $[0,1]$. The $\varepsilon$-constraint problem reads: minimize $x$ subject to $1 - x^2 \leq \varepsilon$, that is $x \geq \sqrt{1-\varepsilon}$, for $\varepsilon \in [0, 1]$. Its solution is $x_\varepsilon = \sqrt{1-\varepsilon}$, and as $\varepsilon$ sweeps $[0,1]$ the point $x_\varepsilon$ sweeps the whole interval: every point of the front is reached, including $x = 0.5$, obtained for $\varepsilon = 0.75$. The weighted sums of theorem 1.2 found only the two endpoints. The price to pay is that each value of $\varepsilon$ is a constrained problem, usually harder to solve than an unconstrained weighted sum; the reward is that the parameter $\varepsilon$ is a budget expressed in the units of the objective ("at most $0.75$"), which a decision maker can discuss, whereas a weight has no unit.
+:::
+
+::: note
+[Common mistakes when drawing a front]{.tag} (i) Comparing points that were not measured under the same conditions — another test set, another hardware, another batch size — produces a front of artefacts. (ii) Reporting one run per configuration: if the seed-to-seed spread of accuracy is $0.5$ point, two points closer than that are not ordered, and a "dominated" model may simply be unlucky. (iii) Reading a front as a recommendation: the front lists the rational options; choosing among them requires a value judgement (a carbon price, a latency requirement) that must be stated explicitly.
+:::
+
+::: ex
+[Example 1.6 — Accuracy vs training energy: the module's most cited front]{.tag} On a given task (say image classification), for every energy budget $E$ (kWh measured at the wall, ch. 6), the best attainable accuracy $\mathrm{acc}(E)$ defines a point of the front. Typically: rapid growth (the under-trained model gains a lot for little energy), then an elbow, then a plateau (scaling law — see the Deep Learning P2 module, ch. 1). Typical Pareto-rational decisions: stop at the elbow, where $-d\,\mathrm{acc}/dE$ drops; the points beyond the elbow are dominated in the "carbon-cost" sense as soon as the kWh is valued at its carbon price (ch. 2).
 :::
 
 ```python
@@ -276,7 +284,7 @@ plt.show()
 
 ## 2. Optimizing under resource constraints {#ch2}
 
-Resources: GPU hours, watts, megabytes of memory, and — the module's signature angle — **carbon**, which depends on *when* and *where* one computes. The electric grid is not uniformly green: its carbon intensity varies by a factor of 1 to 10 depending on the hour and the region. A tremendous margin of maneuver for a scheduler.
+This chapter puts resource limits inside the optimization problem instead of checking them afterwards. The resources are GPU hours, watts, megabytes of memory and — the module's signature angle — **carbon**, which depends on *when* and *where* one computes. The electric grid is not uniformly green: its carbon intensity varies by a factor of up to 10 depending on the hour and the region, which leaves a large margin of manoeuvre to a scheduler.
 
 ::: def
 [Definition 2.1 — Carbon intensity and emissions of a computation]{.tag} The carbon intensity $c_t$ (gCO~2~eq/kWh) is the amount of CO~2~ emitted per kWh consumed on the grid, at hour $t$, in region $r$ — public hourly data (grid operators, providers such as Electricity Maps). For a power $P_t$ (kW) consumed during hour $t$: $$\text{emissions (gCO}_2\text{eq)} \;=\; \sum_t c_t \cdot P_t \cdot \Delta t,$$ to be multiplied by the PUE (ch. 6) if one counts the whole data center. Unlike the kWh, this criterion is *non-uniform in time*: this is precisely what makes scheduling profitable.
@@ -295,7 +303,7 @@ The decision variable $0 \leq x_t \leq 1$ (fraction of the job done at hour $t$)
 :::
 
 ::: ex
-[Example 2.3 — One night of training, 24 choices]{.tag} A 6-hour training run (1 GPU, 0.4 kW, PUE 1.1) can start at any time within the next 48 hours. Hourly intensities (fictitious data but of realistic shape: solar in the middle of the day, wind at night, gas at the evening peak):
+[Example 2.3 — One training run, 43 possible start times]{.tag} A 6-hour training run (1 GPU, 0.4 kW, PUE 1.1) can start at any time within the next 48 hours. Hourly intensities (fictitious data but of realistic shape: solar in the middle of the day, wind at night, gas at the evening peak):
 
 ```python
 import numpy as np
@@ -304,16 +312,29 @@ c = np.array([ 85, 72, 60, 55, 58,110,220,310,380,340,260,160,
 c = np.concatenate([c, c])            # two identical days (simplification)
 T, P, pue = 6, 0.4, 1.1
 
-best = min(range(48 - T), key=lambda s: c[s:s+T].sum())
-worst = max(range(48 - T), key=lambda s: c[s:s+T].sum())
+best = min(range(48 - T + 1), key=lambda s: c[s:s+T].sum())
+worst = max(range(48 - T + 1), key=lambda s: c[s:s+T].sum())
 emi = lambda s: P*pue*c[s:s+T].sum() / 1000               # kg CO2eq
 print(f"best slot {best}h-{best+T}h: {emi(best):.2f} kg")
 print(f"worst slot {worst}h-{worst+T}h: {emi(worst):.2f} kg")
 print(f"relative gain: {1 - emi(best)/emi(worst):.0%}")
-# expected: ~2x difference between the afternoon solar slot and the evening peak
+# expected: best 12h-18h, about 0.15 kg; worst 18h-24h, about 0.84 kg;
+# a gain of about 82% (a factor 5.6) between the solar afternoon and the evening peak
 ```
 
-Dual interpretation: if carbon is penalized at a constant price $\pi$ (€/tCO~2~), the "carbon-aware" scheduler and the "cost" scheduler coincide — otherwise, the dual of the LP (ch. 4) says exactly at what carbon price each task switches slots. This is a *shadow price*: ch. 0 kept its promise.
+Dual interpretation: if the scheduler minimizes the electricity bill $\sum_t p_t x_t$ plus a carbon price $\pi$ (€/gCO~2~eq) times the emissions $\sum_t c_t x_t$, hours are ranked by $p_t + \pi c_t$. At $\pi = 0$ the schedule follows the cheapest hours; as $\pi$ grows it moves towards the cleanest ones, and the LP (ch. 4) tells exactly at which carbon price each hour enters or leaves the schedule. This is a *shadow price*: ch. 0 kept its promise.
+:::
+
+:::: prop
+[Proposition 2.4 — A budget constraint has a price: the sensitivity of the optimum (proved for a smooth one-dimensional case)]{.tag} Let $\mathrm{err}(E)$ be the best error attainable with an energy $E$, assumed decreasing, convex and differentiable, and consider the budgeted problem $p^\star(B) = \min\{\mathrm{err}(E) : E \leq B\}$. Then $p^\star(B) = \mathrm{err}(B)$, the Lagrange multiplier of the budget constraint is $\lambda^\star = -\mathrm{err}'(B) \geq 0$, and $\lambda^\star = -\frac{d p^\star}{dB}$: the multiplier is the error saved by the last kWh of budget.
+
+::: proof
+Since $\mathrm{err}$ is decreasing, the constraint is active and $p^\star(B) = \mathrm{err}(B)$. The Lagrangian $L(E, \lambda) = \mathrm{err}(E) + \lambda (E - B)$ is stationary in $E$ at $E = B$ when $\mathrm{err}'(B) + \lambda = 0$, i.e. $\lambda^\star = -\mathrm{err}'(B)$, which is non-negative because $\mathrm{err}$ decreases; convexity makes these KKT conditions sufficient. Differentiating $p^\star(B) = \mathrm{err}(B)$ gives $\frac{dp^\star}{dB} = \mathrm{err}'(B) = -\lambda^\star$. (The same identity holds for convex problems in any dimension, wherever $p^\star$ is differentiable: Boyd and Vandenberghe, §5.6.) [∎]{.qed}
+:::
+::::
+
+::: ex
+[Example 2.5 — Where to stop: the multiplier read in numbers]{.tag} Suppose measurements fit $\mathrm{err}(E) = 30\,E^{-1/2}$ % (with $E$ in kWh), a typical power-law shape. With a budget $B = 4$ kWh, the error is $15$ % and $\lambda^\star = 15\,B^{-3/2} = 1.875$ point per kWh: one more kWh buys almost two points of error. With $B = 16$ kWh, the error is $7.5$ % but $\lambda^\star = 15 \cdot 16^{-3/2} \approx 0.23$ point per kWh: the same extra kWh now buys a quarter of a point. If the organization has decided that one point of error is worth at most $0.5$ kWh of extra consumption (an exchange rate of $2$ points per kWh), the rational budget is where $\lambda^\star = 2$, i.e. $B^{3/2} = 7.5$, $B \approx 3.8$ kWh. The multiplier turns the vague "elbow" of example 1.6 into a number that can be negotiated.
 :::
 
 ## 3. Model frugality: distillation, quantization, pruning {#ch3}
@@ -324,8 +345,12 @@ The cheapest kg CO~2~ is the one not emitted: reducing the model's cost *at equa
 [Definition 3.1 — Distillation (Hinton, Vinyals, Dean, 2015)]{.tag} Train a small **student** to reproduce the *soft* outputs of a large **teacher**: $$\mathcal{L} = \alpha\, \tau^2\, \mathrm{KL}\big(\mathrm{softmax}(z_T/\tau)\,\|\,\mathrm{softmax}(z_S/\tau)\big) + (1-\alpha)\,\ell(y, z_S),$$ where $\tau$ is the temperature: at high temperature, the teacher's logits deliver *similarities between classes* (dark knowledge) — far more information per example than the one-hot label alone. Reference: Hinton et al. 2015; for the LLM case (logit distillation), see the Deep Learning P2 module, ch. 6.
 :::
 
+::: ex
+[Example 3.2 — What the temperature reveals, in numbers]{.tag} A teacher outputs the logits $z_T = (4, 2, 0)$ for an image of a cat, the classes being (cat, dog, car). At $\tau = 1$ the softmax gives $(0.867,\ 0.117,\ 0.016)$: almost a one-hot label, and the student learns little more than "cat". At $\tau = 4$ the logits become $(1, 0.5, 0)$ and the softmax gives $(0.506,\ 0.307,\ 0.186)$: the teacher now says clearly that this cat looks much more like a dog than like a car. This ranking of the wrong classes is the "dark knowledge" that a hard label does not carry. The factor $\tau^2$ in the loss compensates for the fact that the gradient of the softened term with respect to the student's logits scales like $1/\tau^2$; without it, raising the temperature would silently reduce the weight of the teacher's term.
+:::
+
 :::: prop
-[Proposition 3.2 — Uniform quantization error (proved)]{.tag} Uniform quantization $q(x) = \mathrm{clip}\big(\mathrm{round}(x/s) + z,\, 0, 2^b-1\big)$ with $s = \frac{x_{\max}-x_{\min}}{2^b - 1}$ (step $\Delta = s$) satisfies, over $[x_{\min}, x_{\max}]$: $$\|q(x)\cdot s - x\| \;\leq\; \frac{\Delta}{2}.$$ For a network with $L$-Lipschitz layers of constants $\mathrm{Lip}_1, \dots, \mathrm{Lip}_L$ and quantizations of steps $\Delta_1, \dots, \Delta_L$: $$\|\hat f(x) - f(x)\| \;\leq\; \sum_{\ell=1}^{L} \Big(\Delta_\ell/2\Big) \prod_{m > \ell} \mathrm{Lip}_m.$$
+[Proposition 3.3 — Uniform quantization error (proved)]{.tag} Quantizing on $b$ bits a value $x \in [x_{\min}, x_{\max}]$ means storing the integer code $q(x) = \mathrm{clip}\big(\mathrm{round}((x - x_{\min})/s),\, 0, 2^b-1\big)$, with step $s = \frac{x_{\max}-x_{\min}}{2^b - 1}$ (written $\Delta$ below), and reconstructing $\hat x = x_{\min} + s\, q(x)$. Then, for every $x \in [x_{\min}, x_{\max}]$: $$|\hat x - x| \;\leq\; \frac{\Delta}{2}.$$ (Libraries usually store the offset as an integer zero point $z = \mathrm{round}(-x_{\min}/s)$, so that $\hat x = s\,(q - z)$ and the value $0$ is represented exactly; this only affects the bound at the edges of the range.) For a network of $L$ layers with Lipschitz constants $\mathrm{Lip}_1, \dots, \mathrm{Lip}_L$ and quantizations of steps $\Delta_1, \dots, \Delta_L$: $$\|\hat f(x) - f(x)\| \;\leq\; \sum_{\ell=1}^{L} \Big(\Delta_\ell/2\Big) \prod_{m > \ell} \mathrm{Lip}_m.$$
 
 ::: proof
 First inequality: nearest-neighbor rounding of a value inside a cell of width $\Delta$ moves it by at most $\Delta/2$; clipping only moves values closer to the bounds. Second: by induction on depth. Let $\varepsilon_\ell$ be the perturbation at the *output* of layer $\ell$, and assume (standard assumption) that quantizing the weights of layer $\ell$ shifts its output by at most $\Delta_\ell/2$. Layer $\ell+1$, Lipschitz, propagates $\varepsilon_\ell$ to $\mathrm{Lip}_{\ell+1}\,\varepsilon_\ell$, then its own quantization adds at most $\Delta_{\ell+1}/2$: $\varepsilon_{\ell+1} \leq \mathrm{Lip}_{\ell+1}\,\varepsilon_\ell + \Delta_{\ell+1}/2$. Unrolling from $\varepsilon_1 = \Delta_1/2$, each $\Delta_\ell/2$ is multiplied by the Lipschitz constants of the *subsequent* layers, giving the announced sum (partial products $\prod_{m>\ell}\mathrm{Lip}_m$). [∎]{.qed}
@@ -346,6 +371,18 @@ First inequality: nearest-neighbor rounding of a value inside a cell of width $\
 Foundational references: Jacob et al. 2018 (int8 PTQ/QAT, deployed); Han et al. 2016 (Deep Compression: pruning + quantization + Huffman). Caution (ch. 7): the "up to 10×" of brochures must be measured — the protocol of ch. 6 is non-negotiable.
 :::
 
+::: def
+[Definition 3.4 — Magnitude pruning]{.tag} Given trained weights $W$ and a target sparsity $\rho \in (0,1)$, magnitude pruning sets to zero the fraction $\rho$ of weights with the smallest absolute values $|W_{ij}|$, then usually fine-tunes the remaining ones. It is *unstructured* when individual weights are removed, *structured* when the score is computed per channel, head or layer (for instance the norm of a whole filter) and whole blocks are removed. Only the structured version shrinks the dense matrices that ordinary hardware multiplies, which is why it is the one that delivers measured speedups.
+:::
+
+::: ex
+[Example 3.5 — Why bits matter more than FLOPs at inference]{.tag} When a language model generates text one token at a time with a small batch, every token requires reading all the weights from memory once, and the arithmetic units mostly wait for the data: generation is *memory-bound*. A 7-billion-parameter model stored in 16-bit floats occupies $14$ GB; with a memory bandwidth of $1$ TB/s, at most $1000/14 \approx 71$ tokens per second can be produced for one sequence. In int8 the weights occupy $7$ GB (at most about $143$ tokens/s), in int4 $3.5$ GB (about $286$ tokens/s). Energy follows the same logic: in Horowitz's classic measurements (45 nm technology), reading 32 bits from DRAM costs about $640$ pJ, while a 32-bit floating-point multiplication costs about $3.7$ pJ — moving data costs two orders of magnitude more than computing on it. Halving the number of bits per weight therefore roughly halves the dominant energy term of generation, provided the kernels read the compressed weights directly.
+:::
+
+::: note
+[Common mistakes with frugality claims]{.tag} (i) Evaluating the compressed model on the benchmark used to calibrate it, instead of on the deployment distribution. (ii) Counting zeros as savings: 90% unstructured sparsity gives no speedup on hardware that multiplies dense matrices. (iii) Reporting the energy of the student's inference while forgetting the teacher's training and the distillation run itself; the saving is real only once the number of queries served pays back these one-off costs (ch. 6 gives the break-even computation).
+:::
+
 ```python
 import numpy as np
 rng = np.random.default_rng(0)
@@ -353,7 +390,7 @@ rng = np.random.default_rng(0)
 def quantize_uniform(x, bits=8):
     xmin, xmax = x.min(), x.max()
     s = (xmax - xmin) / (2**bits - 1)
-    q = np.clip(np.round((x - xmin)/s), 0, 2**bits - 1).astype(np.int8)
+    q = np.clip(np.round((x - xmin)/s), 0, 2**bits - 1).astype(np.int64)
     return q, q*s + xmin                       # codes + dequantize
 
 W = rng.normal(size=(64, 128)) * 0.03          # a trained layer (fictitious)
@@ -362,7 +399,7 @@ for bits in (16, 8, 4, 2):
     err = np.abs(Wq - W).max()
     print(f"{bits:2d} bits: max error {err:.2e} (step/2 = "
           f"{((W.max()-W.min())/(2**bits-1))/2:.2e})")
-# the error exactly follows the step/2 of proposition 3.2; at 4 bits it becomes
+# the error exactly follows the step/2 of proposition 3.3; at 4 bits it becomes
 # perceptible -> that is where QAT (simulated fine-tuning) takes over.
 ```
 
@@ -375,7 +412,7 @@ The core business of operations research: turning a complex decision into a math
 :::
 
 :::: prop
-[Proposition 4.2 — Continuous relaxation: lower bound and integrality gap (proved on an example)]{.tag} The *relaxation* (which drops $x_i \in \mathbb{Z}$) is an LP: its optimum $\rho^\star$ satisfies $\rho^\star \leq v^\star$ (every integer solution is feasible for the relaxation — immediate proof by inclusion of sets). The gap $v^\star - \rho^\star$ is the **integrality gap**. Example (fractional vs integer knapsack): capacity 10, items $(v_i, w_i) \in \{(10,7), (6,5), (5,4)\}$:
+[Proposition 4.2 — Continuous relaxation: a bound and the integrality gap (proved on an example)]{.tag} The *relaxation* (which drops $x_i \in \mathbb{Z}$) is an LP whose feasible set contains every integer solution. For a minimization problem its optimum $\rho^\star$ therefore satisfies $\rho^\star \leq v^\star$, where $v^\star$ is the integer optimum (immediate proof by inclusion of sets); for a maximization problem, such as the knapsack below, the inequality is reversed: $\rho^\star \geq v^\star$. The gap $|v^\star - \rho^\star|$ is the **integrality gap**. Example (fractional vs integer knapsack, to be maximized): capacity 10, items $(v_i, w_i) \in \{(10,7), (6,5), (5,4)\}$:
 
 ::: proof
 *Relaxation.* By decreasing value/weight ratio: $\frac{10}{7} > \frac{5}{4} > \frac{6}{5}$. Take item 1 whole (7 units), leaving 3 units of capacity for item 3 (next ratio): $\rho^\star = 10 + \frac{3}{4}\cdot 5 = 13.75$. *ILP.* The integer solutions: $\{1\}$ (10, weight 7), $\{2,3\}$ (11, weight 9), $\{1\}$ + nothing else fits — $v^\star = 11$. Integrality gap $13.75 - 11 = 2.75$, i.e. 25%: branch and bound (def. 4.3) will have to close it while proving that no integer choice exceeds 11. [∎]{.qed}
@@ -383,7 +420,7 @@ The core business of operations research: turning a complex decision into a math
 ::::
 
 :::: thm
-[Definition/Theorem 4.3 — Branch and bound: correctness (proved)]{.tag} *Algorithm.* (i) Solve the relaxation of the current problem; (ii) if the solution is integral, it is a candidate (upper bound); (iii) otherwise choose a fractional variable $x_i$ and create two subproblems $x_i \leq \lfloor \bar x_i\rfloor$, $x_i \geq \lceil \bar x_i\rceil$ (branch); (iv) *prune* a subproblem if its relaxation is infeasible, already solved, or has bound $\rho^\star \geq$ the current upper bound (bound). *Correctness.*
+[Definition/Theorem 4.3 — Branch and bound: correctness (proved)]{.tag} *Algorithm.* (written for a minimization problem) (i) Solve the relaxation of the current problem; (ii) if the solution is integral, it is a candidate (upper bound); (iii) otherwise choose a fractional variable $x_i$ and create two subproblems $x_i \leq \lfloor \bar x_i\rfloor$, $x_i \geq \lceil \bar x_i\rceil$ (branch); (iv) *prune* a subproblem if its relaxation is infeasible, already solved, or has bound $\rho^\star \geq$ the current upper bound (bound). *Correctness.*
 
 ::: proof
 Each branching partitions the set of integer solutions (the two children cover everything, without overlap); subproblems pruned "by bound" cannot contain an optimum: their relaxation lower-bounds all their integer solutions (prop. 4.2), so none improves the current upper bound; the other cases prune empty sets. At termination, the tree has covered the whole space except regions proven non-optimal: the best integer candidate found is the global optimum. (Termination is guaranteed in a finite number of branchings, the variables being bounded by the constraints.) [∎]{.qed}
@@ -404,28 +441,34 @@ prob += pulp.lpSum(w[i]*x[i] for i in v) <= C
 prob.solve(pulp.PULP_CBC_CMD(msg=0))
 print([(i, x[i].value()) for i in v], "=", pulp.value(prob.objective))
 # "sustainability" variant: two objectives (value, carbon) -> epsilon-constraint
-# prob += carbon(x) <= budget; maximize value  (see exercise 8)
+# prob += carbon(x) <= budget; maximize value  (see exercise 9)
 ```
+:::
+
+::: ex
+[Example 4.4 — Reading shadow prices on a two-variable LP]{.tag} A lab runs two kinds of jobs. A job of type 1 brings a value $3$, uses $1$ GPU hour and $2$ kWh; a job of type 2 brings $2$, uses $1$ GPU hour and $1$ kWh. This week, $4$ GPU hours and $6$ kWh are available. The LP is $\max\ 3x_1 + 2x_2$ subject to $x_1 + x_2 \leq 4$, $2x_1 + x_2 \leq 6$, $x \geq 0$. The vertices of the feasible polygon are $(0,0)$, $(3,0)$, $(2,2)$ and $(0,4)$, with values $0, 9, 10, 8$: the optimum is $x^\star = (2,2)$, value $10$, and both constraints are active. The dual is $\min\ 4y_1 + 6y_2$ subject to $y_1 + 2y_2 \geq 3$, $y_1 + y_2 \geq 2$, $y \geq 0$; complementary slackness (both $x_j^\star > 0$) makes both dual constraints active, so $y^\star = (1, 1)$, of value $4 + 6 = 10$, equal to the primal value as prop. 0.1 requires. Interpretation: one more GPU hour is worth $1$, one more kWh is worth $1$. Check on the energy side: with $7$ kWh, the active constraints $x_1 + x_2 = 4$, $2x_1 + x_2 = 7$ give $x = (3, 1)$ and value $11$, exactly one unit more. If someone proposes to buy an extra kWh of certified renewable energy at a price above $1$ unit of value, the model says no — for this week's portfolio of jobs.
 :::
 
 ## 5. Case studies: data centers and electric vehicles {#ch5}
 
+This chapter applies the LP and ILP toolbox of ch. 4 to two deployments where carbon, cost and physical capacity are traded off for real. In both cases the model fits on one page, and the dual variables carry the economic message.
+
 ::: def
-[Case study 5.1 — Data center powered by renewable energies]{.tag} **Data.** A compute site: flexible load (deferrable jobs: training runs, indexing, simulations) and rigid load (interactive services). Local energies: solar $s_t$ (daytime slots), wind $w_t$, grid complement $g_t \geq 0$ at intensity $c_t$. **Model (sliding-window LP).** $$\min \sum_t \Big(\gamma\, g_t\, c_t\Big)\;\Delta t \quad\text{subject to}\quad \begin{cases} g_t + s_t + w_t \;\geq\; \mathrm{PUE}\cdot u_t & \text{(power balance)}\\ \sum_{t \in \text{day}} u_t \;\geq\; D & \text{(total deferred work)}\\ u_t \leq U^{\max}, \quad u_t = U^{\text{rigid}}_t + f_t,\; f_t \geq 0 &\end{cases}$$ where $f_t$ is the power allocated to flexible work. **Dual reading.** The multiplier of the total work constraint equals (in €/carbon kWh) "how much it costs to delay a kWh of compute": when solar abounds it becomes zero (a period of carbon free-ness), when the evening peak arrives it explodes: this is the dynamic price signal *derived from the model*, and the same mechanism as the industrial deployment described by Radovanovic et al. (references): planning *ahead* with forecasts of $s_t, w_t, c_t$ (forecasts to which the Machine Learning module, ch. 5–6, applies directly).
+[Case study 5.1 — Data center powered by renewable energies]{.tag} **Data.** A compute site: flexible load (deferrable jobs: training runs, indexing, simulations) and rigid load (interactive services). Local energies: solar $s_t$ (daytime slots), wind $w_t$, grid complement $g_t \geq 0$ at intensity $c_t$. **Model (sliding-window LP).** $$\min \sum_t c_t\, g_t\,\Delta t \quad\text{subject to}\quad \begin{cases} g_t + s_t + w_t \;\geq\; \mathrm{PUE}\cdot u_t & \text{(power balance)}\\ \sum_{t \in \text{day}} u_t \;\geq\; D & \text{(total deferred work)}\\ u_t \leq U^{\max}, \quad u_t = U^{\text{rigid}}_t + f_t,\; f_t \geq 0 &\end{cases}$$ where $f_t$ is the power allocated to flexible work. **Dual reading.** The multiplier of the total-work constraint is the marginal emission of one more kWh of flexible work, in gCO~2~eq per kWh. It is zero as long as some hour with spare capacity has surplus solar or wind power; otherwise it equals $\mathrm{PUE}\cdot c_t$ for the cleanest hour that still has spare capacity, and it rises sharply when only the evening peak is left. This is a dynamic price signal *derived from the model*, and the same mechanism as the industrial deployment described by Radovanovic et al. (references): planning *ahead* with forecasts of $s_t, w_t, c_t$ (forecasts to which the Machine Learning module, ch. 5–6, applies directly).
 :::
 
 ::: def
-[Case study 5.2 — Coordinated charging of an electric vehicle fleet]{.tag} **Data.** $N$ vehicles, each plugged in from $a_i$ to $d_i$, need $E_i$ (kWh), max power $p_i$. Grid: hourly intensity $c_t$, tariff $p_t^\text{elec}$, local transformer capacity $K$ (the real "bottleneck" of company parking lots: without coordination, everyone plugs in at 6 pm). **Model.** $$\min_{x_{i,t} \geq 0}\; \sum_{i,t}\; c_t\, x_{i,t} \quad\text{subject to}\quad \begin{cases} \sum_{t=a_i}^{d_i} x_{i,t}\,\Delta t \;\geq\; E_i & \forall i \;\;\text{(energy need)}\\ 0 \leq x_{i,t} \leq p_i & \forall (i,t) \\ \sum_i x_{i,t} \;\leq\; K & \forall t \;\;\text{(transformer capacity)}\end{cases}$$ Pure LP (continuous): solved to the optimum in seconds for thousands of vehicles. The dual delivers the usage prices of the transformer hour by hour — enough to price the incentive rather than forbid. ILP variant: *fast* charging available when needed ($z_{i,t} \in \{0,1\}$, $x \leq M z$, fixed cost $\kappa z$); stochastic variant: unexpected departures (scenarios, recourse); robust variant (ch. 8: uncertainty on $c_t$).
+[Case study 5.2 — Coordinated charging of an electric vehicle fleet]{.tag} **Data.** $N$ vehicles, each plugged in from $a_i$ to $d_i$, need $E_i$ (kWh), max power $p_i$. Grid: hourly intensity $c_t$, tariff $p_t^\text{elec}$, local transformer capacity $K$ (the real "bottleneck" of company parking lots: without coordination, everyone plugs in at 6 pm). **Model.** $$\min_{x_{i,t} \geq 0}\; \sum_{i,t}\; c_t\, x_{i,t} \quad\text{subject to}\quad \begin{cases} \sum_{a_i \leq t < d_i} x_{i,t}\,\Delta t \;\geq\; E_i & \forall i \;\;\text{(energy need)}\\ 0 \leq x_{i,t} \leq p_i & \forall (i,t) \\ \sum_i x_{i,t} \;\leq\; K & \forall t \;\;\text{(transformer capacity)}\end{cases}$$ Pure LP (continuous): solved to the optimum in seconds for thousands of vehicles. The dual delivers the usage prices of the transformer hour by hour — enough to price the incentive rather than forbid. ILP variant: *fast* charging available when needed ($z_{i,t} \in \{0,1\}$, $x \leq M z$, fixed cost $\kappa z$); stochastic variant: unexpected departures (scenarios, recourse); robust variant (ch. 8: uncertainty on $c_t$).
 :::
 
 ```python
 import numpy as np
 from scipy.optimize import linprog
 
-# 3 vehicles, 8 hourly slots, transformer capacity 11 kW
+# 3 vehicles, 8 hourly slots from 18h to 2h, transformer capacity 11 kW
 T, K = 8, 11.0
-c = np.array([ 60, 55, 52, 58,140,320,380,300])       # gCO2/kWh per slot
-veh = [ (0, 4, 20.0, 7.0), (1, 5, 28.0, 7.0), (3, 8, 15.0, 3.5) ]  # (a, d, E, p)
+c = np.array([300, 380, 320, 140, 60, 55, 52, 58])    # gCO2/kWh per slot
+veh = [ (0, 8, 20.0, 7.0), (0, 8, 28.0, 7.0), (2, 8, 15.0, 3.5) ]  # (a, d, E, p): slots a <= t < d
 n = len(veh) * T                                      # variable x[i, t] = idx i*T + t
 cost = np.array([c[idx % T] for idx in range(n)])     # minimize sum c_t x_it
 
@@ -443,11 +486,70 @@ res = linprog(cost, A_ub=np.array(A_ub), b_ub=b_ub, A_eq=np.array(A_eq),
 x = res.x.reshape(len(veh), T)
 print("optimal emissions (kg CO2eq):", round(res.fun / 1000, 2))
 print(np.round(x, 1))   # the cars wait for the low-carbon slots
+print(res.ineqlin.marginals)   # transformer prices (negative: scipy's sign convention)
 ```
+
+::: ex
+[Example 5.3 — What the solver says about the transformer]{.tag} The program above returns $6.42$ kg CO~2~eq. The four night slots (52–60 g/kWh) are saturated at $11$ kW, as is the 21h slot (140 g/kWh); the remaining $8$ kWh go to the 18h slot (300 g/kWh), the cleanest of the evening ones. Removing the transformer limit ($K$ very large) lets each vehicle charge only at night, for $3.60$ kg: the capacity of the transformer costs $2.8$ kg per evening. The dual variables say the same thing hour by hour: the multiplier of the capacity constraint is $300 - c_t$ for each saturated slot — from $160$ g/kWh at 21h to $248$ g/kWh at 0h — because one more kW at that hour replaces one kWh charged at 300 g. These are the numbers to put in front of the facility manager: they price an upgrade of the transformer, or an incentive to leave the car plugged in longer, in kg of CO~2~ avoided.
+:::
 
 ::: note
 [What these cases teach (meta-lesson)]{.tag} (1) Structure matters more than size: these models with thousands of variables solve in seconds *because they are linear*; a single non-linear term can change everything. (2) The dual is a product: dynamic prices, incentive signals, marginal value of carbon. (3) The hard part is not the optimizer but the **data** (forecasts, measurements) and **governance** (who accepts that their task waits?) — optimization is the art of making these trade-offs explicit.
 :::
+
+## 6. Measuring the footprint: energy, PUE, carbon accounting {#ch6}
+
+Every optimization of the previous chapters minimizes a number — kWh, gCO~2~eq — that someone must first measure. This chapter turns that number into a protocol: what is measured, at which boundary, with which conversion factors and with what uncertainty, so that two claims can be compared and audited (ch. 7).
+
+::: def
+[Definition 6.1 — Energy of a job, measurement boundary and PUE]{.tag} The energy of a job is the integral of the power drawn while it runs, $E_{\mathrm{IT}} = \int P(t)\,dt$, in kWh. Its value depends on the **boundary** of the measurement: software counters read the power of one component — NVML for the GPU board, RAPL for the CPU package and the DRAM — while a meter at the wall plug sees the whole server, fans and power supply included. The building adds cooling, power conversion losses and lighting, summarized by the **power usage effectiveness** $$\mathrm{PUE} = \frac{\text{total energy of the facility}}{\text{energy of the IT equipment}} \;\geq\; 1,$$ so that the energy attributable to the job is $E = \mathrm{PUE}\cdot E_{\mathrm{IT}}$. Values around $1.1$ are reported for the most efficient hyperscale sites; industry surveys give averages around $1.5$.
+:::
+
+::: def
+[Definition 6.2 — Operational and embodied emissions]{.tag} The **operational** emissions of a job are $C_{\mathrm{op}} = E \cdot \mathrm{CI}$, where $\mathrm{CI}$ is a carbon intensity in gCO~2~eq/kWh (def. 2.1). The intensity can be *location-based* (the physical mix of the grid where and when the job ran) or *market-based* (the contractual factor of the electricity purchased, certificates included); the GHG Protocol asks companies to report both, and only the first one describes the physics of the grid (ch. 7, pitfall 3). The **embodied** emissions come from manufacturing, transporting and disposing of the hardware; a job that occupies a machine for a duration $T_{\mathrm{job}}$ out of a service life $T_{\mathrm{life}}$ is charged the share $$C_{\mathrm{emb}} = \frac{T_{\mathrm{job}}}{T_{\mathrm{life}}}\; C_{\mathrm{manuf}}.$$ The footprint reported for the job is $C = C_{\mathrm{op}} + C_{\mathrm{emb}}$.
+:::
+
+::: ex
+[Example 6.3 — The footprint of a three-day fine-tuning, step by step]{.tag} A fine-tuning runs for $72$ h on a server with $8$ GPUs. NVML reports an average of $300$ W per GPU, i.e. $8 \times 0.3 \times 72 = 172.8$ kWh. A meter at the wall reads an average of $3.4$ kW for the whole server, i.e. $E_{\mathrm{IT}} = 3.4 \times 72 = 244.8$ kWh: the GPU-only figure misses $29\%$ of the server's consumption. With a PUE of $1.2$, $E = 293.8$ kWh. On a low-carbon grid at $55$ g/kWh, $C_{\mathrm{op}} \approx 16.2$ kg; on a grid dominated by gas and coal at $400$ g/kWh, $C_{\mathrm{op}} \approx 117.5$ kg. For the embodied share, *assume* $C_{\mathrm{manuf}} = 3000$ kgCO~2~eq for the server and a service life of $4$ years ($35\,040$ h) — published estimates of embodied footprints vary by a factor of several, so this is an assumption to be stated, not a datum. Then $C_{\mathrm{emb}} = \frac{72}{35\,040} \times 3000 \approx 6.2$ kg. The lesson is in the ratio: the embodied share is about $28\%$ of the total on the low-carbon grid and about $5\%$ on the fossil one. The cleaner the electricity, the more the manufacturing of the hardware matters — and the less a "we use green power" argument settles the question.
+:::
+
+:::: prop
+[Proposition 6.4 — Relative uncertainties of a product add in quadrature (proved to first order)]{.tag} Let $C = X_1 X_2 \cdots X_n$ be a product of independent positive factors, each with a small relative standard deviation $r_i = \sigma_i / X_i$. Then, to first order, the relative standard deviation of $C$ is $$r_C \;\approx\; \sqrt{r_1^2 + \cdots + r_n^2},$$ and the worst-case relative error is at most $\prod_i (1 + r_i) - 1 \approx r_1 + \cdots + r_n$ when each factor is off by at most $r_i$.
+
+::: proof
+Take logarithms: $\log C = \sum_i \log X_i$. A small perturbation $\delta X_i$ changes $\log X_i$ by $\delta X_i / X_i$ to first order, so $\delta C / C \approx \sum_i \delta X_i / X_i$. The variance of a sum of independent terms is the sum of the variances, which gives $r_C^2 \approx \sum_i r_i^2$. For the worst case, $\prod_i (1+r_i) - 1$ is the largest relative increase of the product when each factor increases by its maximal relative error, and its expansion to first order is $\sum_i r_i$. [∎]{.qed}
+:::
+::::
+
+::: ex
+[Example 6.5 — An honest error bar on example 6.3]{.tag} Take a relative uncertainty of $10\%$ on $E_{\mathrm{IT}}$ (software counters and averaging), $5\%$ on the PUE and $30\%$ on the carbon intensity (an annual average used for a job whose hourly intensity is unknown). Proposition 6.4 gives $r_C \approx \sqrt{0.01 + 0.0025 + 0.09} \approx 0.32$. The operational footprint on the fossil grid should therefore be published as about $117$ kg $\pm 32\%$, i.e. roughly $80$ to $155$ kg — and not as "117.5 kg". The quadrature sum also says where to invest effort: the intensity term dominates, so obtaining the hourly intensity of the region (Electricity Maps, grid operators) improves the estimate far more than a better power meter would.
+:::
+
+::: def
+[Definition 6.6 — Training versus inference: the break-even time]{.tag} A model trained once with energy $E_{\mathrm{train}}$ then serves $N$ queries per day at an energy $e_q$ per query. Inference overtakes training after $$D^\star = \frac{E_{\mathrm{train}}}{N\, e_q} \text{ days}.$$ Patterson et al. (2021) estimate the training of GPT-3 at about $1\,287$ MWh. Under the *assumption* of $0.3$ Wh per query, $10$ million queries a day consume $3$ MWh a day, and inference overtakes training after about $430$ days; at $100$ million queries a day, after about $43$ days. The same authors report that at Google, inference accounted for about three fifths of the energy spent on machine learning in 2019–2021 (Patterson et al., 2022). A footprint that counts only training therefore describes the beginning of the life of a widely used model, not its life.
+:::
+
+::: note
+[The protocol sheet — what any published figure must state]{.tag} (1) The task and the quality reached. (2) The hardware: model and number of accelerators, and the server. (3) The measurement method and its boundary (NVML, RAPL, wall meter) and the sampling period. (4) The duration and the energy $E_{\mathrm{IT}}$, including the failed runs and the hyperparameter search, which Strubell et al. (2019) showed can multiply the cost of the final run many times over. (5) The PUE and its source. (6) The carbon intensity: location- or market-based, region, temporal resolution (hourly or annual), source. (7) The embodied share and the assumptions behind it. (8) An uncertainty range (prop. 6.4). (9) The code and configuration needed to redo the measurement. Tools such as CodeCarbon or the experiment-impact-tracker of Henderson et al. (2020) automate items 3 to 6 by reading the counters and a regional intensity table; when the counters are not accessible they fall back to estimates based on the nominal power of the processor, which must then be stated as such.
+:::
+
+::: note
+[Common mistakes in measurement]{.tag} (i) Multiplying the nominal maximal power (TDP) of a GPU by the duration: a GPU rarely runs at its TDP for a whole job, so the result overestimates, sometimes by a factor of two. (ii) Confusing kW (a power) and kWh (an energy): "the cluster consumes 40 kWh" says nothing without a duration. (iii) Measuring the GPU only and calling it the job's energy (example 6.3: $29\%$ missing). (iv) Comparing two models measured with different boundaries or different intensity sources. (v) Forgetting idle time: a reserved but idle node still draws a large fraction of its peak power, and that energy belongs to the project that reserved it.
+:::
+
+```python
+import numpy as np
+rng = np.random.default_rng(0)
+n = 100_000
+E_it = 244.8 * rng.lognormal(0, 0.10, n)     # kWh, +-10% (counters, averaging)
+pue  = 1.2   * rng.lognormal(0, 0.05, n)     # +-5%
+ci   = 0.400 * rng.lognormal(0, 0.30, n)     # kgCO2eq/kWh, +-30% (annual average)
+C = E_it * pue * ci
+lo, med, hi = np.percentile(C, [5, 50, 95])
+print(f"median {med:.0f} kg, 90% interval [{lo:.0f}, {hi:.0f}] kg")
+print(f"relative spread {np.std(np.log(C)):.2f} vs quadrature "
+      f"{np.sqrt(0.10**2 + 0.05**2 + 0.30**2):.2f}")   # prop. 6.4
+```
 
 ## 7. Limits, rebound effect and greenwashing {#ch7}
 
@@ -502,9 +604,9 @@ Sonia Vanier is a professor at École Polytechnique (LIX, CNRS, Institut Polytec
 
 3.  **Carbon scheduling.** Take up example 2.3 with an additional constraint: deadline at +24 h. (a) Solve by hand with the exchange argument of theorem 2.2. (b) Write the dual of the "knapsack" $\min \sum c_t x_t$, $\sum x_t = T$, $0 \leq x_t \leq 1$ and interpret the dual variable (price of an hour of delay). (c) What becomes the optimum if the job can be sequenced in pieces of one hour minimum? *Hint*: nothing changes — why?
 
-4.  **Quantization error propagation.** A two-layer network, $\mathrm{Lip}_1 = 3$, $\mathrm{Lip}_2 = 2$, 8-bit quantizations of step $\Delta_1 = \Delta_2 = 2^{-7}$ over a weight domain in $[-0.5, 0.5]$. (a) Verify the step with definition 3.2. (b) Apply proposition 3.2 and bound the output error. (c) Redo at 4 bits; from what depth $L$ (identical layers) does the error exceed 0.1? Conclude on the necessity of QAT for int4 deep networks.
+4.  **Quantization error propagation.** A two-layer network, $\mathrm{Lip}_1 = 3$, $\mathrm{Lip}_2 = 2$, 8-bit quantization over a weight domain $[-0.5, 0.5]$. (a) Compute the step with proposition 3.3 and check that $\Delta_1 = \Delta_2 = 1/255 \approx 2^{-8}$. (b) Apply proposition 3.3 and bound the output error. (c) Redo at 4 bits ($\Delta = 1/15$); for a stack of $L$ identical layers with $\mathrm{Lip} = 2$, from what depth $L$ does the bound exceed $0.1$? Conclude on the necessity of QAT for int4 deep networks. *Solution*: (b) $\frac{\Delta}{2}(\mathrm{Lip}_2 + 1) = \frac{3}{510} \approx 0.006$; (c) the bound is $\frac{\Delta}{2}(2^L - 1) = \frac{2^L - 1}{30}$, which exceeds $0.1$ as soon as $2^L > 4$, i.e. from $L = 3$ on.
 
-5.  **Distillation lab.** Teacher: a \~1M-parameter CNN on MNIST (98.5% expected); student: an MLP with \~20k. (a) Train the student alone (baseline \~97%). (b) Distill ($\tau \in \{1,2,4\}$, $\alpha \in \{0.3, 0.7\}$). (c) Measure inference energy per batch and parameters; plot the (energy, accuracy) point of the two models on the Pareto plot of example 1.5 (ch. 1). *Partial solution (PyTorch)*:
+5.  **Distillation lab.** Teacher: a \~1M-parameter CNN on MNIST (98.5% expected); student: an MLP with \~20k. (a) Train the student alone (baseline \~97%). (b) Distill ($\tau \in \{1,2,4\}$, $\alpha \in \{0.3, 0.7\}$). (c) Measure inference energy per batch and parameters; plot the (energy, accuracy) point of the two models on the Pareto plot of example 1.6 (ch. 1). *Partial solution (PyTorch)*:
 
     ``` code
     import torch, torch.nn as nn, torch.nn.functional as F
