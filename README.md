@@ -39,6 +39,13 @@ Cette sélection correspond aux tracks *« Graph AI / Structured Generative AI �
 - Règles et preuves : `specs/hours-and-progression.md`, contrôle `python3 tools/check_progression.py` (lancé aussi par `tools/check_gates.py`).
 - Outils : `tools/render.py` (rendu Quarto 1.7.32 + empreinte KaTeX), `tools/renumber_chapters.py`, `tools/grade_exercises.py`, `tools/cross_refs.py`, `tools/programme_table.py`.
 
+## Cohérence d'ensemble et projets
+
+- **Analyse de cohérence** (octobre 2026) : chaque page a été lue en entier, puis analysée selon cinq angles : couverture des objectifs du master O1–O8, chaîne des prérequis, redondances et notations, erreurs, projets intégrateurs. Les corrections ont été appliquées page par page et relues par un second agent. Contrat : `specs/coherence-objectives.md`. Analyse complète : `specs/coherence-2026-10/`.
+- **Projets et évaluations** : chaque cours scientifique se termine par une section *Projects and assessment* (sujets solo et en groupe, sujet d'examen écrit avec barème, grille d'évaluation).
+- **Projets de fin d'année** : la page `projects/` propose 5 projets intégrateurs de fin de M1 (rattachés aux projets officiels de la période 2) et 5 projets de M2 (format du projet transverse, 8 ECTS).
+- **Notations** : la page `notation/` fixe les conventions communes aux cours.
+
 ## Utilisation
 
 Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste des modules ci-dessous. Les formules mathématiques sont rendues par [KaTeX](https://katex.org) 0.19.0, chargé depuis jsDelivr avec une empreinte d'intégrité (une connexion internet reste utile ; le texte reste lisible hors ligne).
