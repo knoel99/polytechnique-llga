@@ -1369,15 +1369,17 @@ rng = np.random.default_rng(0)
 x  = np.sin(2*np.pi*440*t) + 0.5*rng.random(2*fs)      # a note with noise
 f, T, S = sig.stft(x, fs=fs, nperseg=512, window='hann')
 
-A = np.abs(S[:, T < 0.5]).ravel()                      # spectra t < 0.5 s
-B = np.abs(S[:, T >= 0.5]).ravel()                     # spectra t >= 0.5 s
-a, b = np.ones(len(A))/len(A), np.ones(len(B))/len(B)
-G  = ot.sinkhorn(a, b, ot.dist(A[:,None], B[:,None]), reg=0.05)
-# Matplotlib visualization described: ot.plot.plot1D_mat(A, B, G, "transport plan")
-# -- the mass connects the spectra of the same contour; compare with simple correlation
+A = np.abs(S[:, T < 0.5]).T                            # 16 frames t < 0.5 s, each a point of R^257
+B = np.abs(S[:, T >= 0.5]).T                           # 48 frames t >= 0.5 s
+a, b = ot.unif(len(A)), ot.unif(len(B))                # uniform mass per frame
+M  = ot.dist(A, B)                                     # 16 x 48 squared distances between spectra
+G  = ot.sinkhorn(a, b, M / M.max(), reg=0.05)          # transport plan between the two sets of frames
+print("OT cost:", ot.emd2(a, b, M))                    # about 0.08 for this stationary note
+# Switch the note to 660 Hz after t = 1 s: the cost rises to about 0.48, because
+# half of the frames of B no longer resemble any frame of A.
 ```
 
-One "transports" the distribution of the spectra of one half toward the other: this is exactly the basic building block of the spectral losses of generative audio ML (ch. 8), and the first lab of the M1P2 module.
+Each frame is a magnitude spectrum, a point of $\mathbb{R}^F$ with $F = 257$ frequency bins, and one "transports" the distribution of the frames of one half toward the other (flattening the array instead would only compare histograms of scalar magnitudes): this is exactly the basic building block of the spectral losses of generative audio ML (ch. 8), and the first lab of the M1P2 module.
 :::
 
 ::: note
