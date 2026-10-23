@@ -940,22 +940,22 @@ from sklearn.linear_model import LogisticRegression
 # (load with pandas.read_csv("adult.data"), encode the categoricals)
 
 def repair_1d(x, s, lam):
-    """Partial quantile repair, feature by feature (th. 6.2)."""
-    xR = x.copy()
-    qs = {sv: np.sort(x[s == sv]) for sv in np.unique(s)}
-    n = min(len(v) for v in qs.values())          # common ranks
-    bary = np.mean([v[np.linspace(0, len(v)-1, n).astype(int)]
-                    for v in qs.values()], axis=0)  # Q*: average of the quantiles
-    for sv in np.unique(s):
-        v, idx = np.sort(x[s == sv]), np.argsort(x[s == sv])
-        ranks = np.linspace(0, len(v)-1, n)
-        rep = (1-lam) * np.interp(ranks, range(len(v)), v) + lam * bary
-        xR[s == sv] = np.interp(np.argsort(np.argsort(x[s == sv])),
-                                ranks, rep)[np.argsort(idx)]
+    """Partial quantile repair of one feature (th. 6.2): x -> (1-lam) x + lam Q_bar(F_s(x))."""
+    xR, groups = x.astype(float).copy(), np.unique(s)
+    p = {g: np.mean(s == g) for g in groups}                 # group weights p_s
+    u = np.linspace(0, 1, 101)
+    bary = sum(p[g] * np.quantile(x[s == g], u) for g in groups)  # weighted barycentric quantile
+    for g in groups:
+        xg = x[s == g]
+        ug = (np.argsort(np.argsort(xg)) + 0.5) / len(xg)   # within-group ranks in (0, 1)
+        xR[s == g] = (1 - lam) * xg + lam * np.interp(ug, u, bary)
     return xR
 
+def repair(X, s, lam):                                       # feature by feature
+    return np.column_stack([repair_1d(X[:, j], s, lam) for j in range(X.shape[1])])
+
 for lam in np.linspace(0, 1, 11):                  # lambda -> trade-off curve
-    Xr = repair_1d(X_num, S, lam)
+    Xr = repair(X_num, S, lam)
     clf = LogisticRegression().fit(Xr, Y)
     acc = clf.score(Xr, Y)
     dp = abs(clf.predict_proba(Xr[S==0])[:,1].mean()
