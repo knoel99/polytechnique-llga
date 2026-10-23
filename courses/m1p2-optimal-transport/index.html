@@ -921,28 +921,27 @@ c^{(t)}_{ij} \;=\; \sum_{k,l}\ \big(D_{ik} - D'_{jl}\big)^2\ \Gamma^{(t)}_{kl} \
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co"># (load with pandas.read_csv("adult.data"), encode the categoricals)</span></span>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> repair_1d(x, s, lam):</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Partial quantile repair of one feature (th. 6.2): x -&gt; (1-lam) x + lam Q_bar(F_s(x))."""</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    xR, groups <span class="op">=</span> x.astype(<span class="bu">float</span>).copy(), np.unique(s)</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> {g: np.mean(s <span class="op">==</span> g) <span class="cf">for</span> g <span class="kw">in</span> groups}                 <span class="co"># group weights p_s</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    u <span class="op">=</span> np.linspace(<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">101</span>)</span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    bary <span class="op">=</span> <span class="bu">sum</span>(p[g] <span class="op">*</span> np.quantile(x[s <span class="op">==</span> g], u) <span class="cf">for</span> g <span class="kw">in</span> groups)  <span class="co"># weighted barycentric quantile</span></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> g <span class="kw">in</span> groups:</span>
-<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        xg <span class="op">=</span> x[s <span class="op">==</span> g]</span>
-<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        ug <span class="op">=</span> (np.argsort(np.argsort(xg)) <span class="op">+</span> <span class="fl">0.5</span>) <span class="op">/</span> <span class="bu">len</span>(xg)   <span class="co"># within-group ranks in (0, 1)</span></span>
-<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        xR[s <span class="op">==</span> g] <span class="op">=</span> (<span class="dv">1</span> <span class="op">-</span> lam) <span class="op">*</span> xg <span class="op">+</span> lam <span class="op">*</span> np.interp(ug, u, bary)</span>
-<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> xR</span>
-<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> repair(X, s, lam):                                       <span class="co"># feature by feature</span></span>
-<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.column_stack([repair_1d(X[:, j], s, lam) <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(X.shape[<span class="dv">1</span>])])</span>
-<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> lam <span class="kw">in</span> np.linspace(<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">11</span>):                  <span class="co"># lambda -&gt; trade-off curve</span></span>
-<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    Xr <span class="op">=</span> repair(X_num, S, lam)</span>
-<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    clf <span class="op">=</span> LogisticRegression().fit(Xr, Y)</span>
-<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    acc <span class="op">=</span> clf.score(Xr, Y)</span>
-<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    dp <span class="op">=</span> <span class="bu">abs</span>(clf.predict_proba(Xr[S<span class="op">==</span><span class="dv">0</span>])[:,<span class="dv">1</span>].mean()</span>
-<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>           <span class="op">-</span> clf.predict_proba(Xr[S<span class="op">==</span><span class="dv">1</span>])[:,<span class="dv">1</span>].mean())</span>
-<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"lambda=</span><span class="sc">{</span>lam<span class="sc">:.1f}</span><span class="ss">  accuracy=</span><span class="sc">{</span>acc<span class="sc">:.3f}</span><span class="ss">  dp_gap=</span><span class="sc">{</span>dp<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
-<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot accuracy vs dp_gap: knee of the curve, discussion in the lab</span></span></code></pre></div>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    xR, groups <span class="op">=</span> x.astype(<span class="bu">float</span>).copy(), np.unique(s)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    p <span class="op">=</span> {g: np.mean(s <span class="op">==</span> g) <span class="cf">for</span> g <span class="kw">in</span> groups}</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    u <span class="op">=</span> np.linspace(<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">101</span>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    bary <span class="op">=</span> <span class="bu">sum</span>(p[g] <span class="op">*</span> np.quantile(x[s <span class="op">==</span> g], u) <span class="cf">for</span> g <span class="kw">in</span> groups)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> g <span class="kw">in</span> groups:</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>        xg <span class="op">=</span> x[s <span class="op">==</span> g]</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>        ug <span class="op">=</span> (np.argsort(np.argsort(xg)) <span class="op">+</span> <span class="fl">0.5</span>) <span class="op">/</span> <span class="bu">len</span>(xg)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        xR[s <span class="op">==</span> g] <span class="op">=</span> (<span class="dv">1</span> <span class="op">-</span> lam) <span class="op">*</span> xg <span class="op">+</span> lam <span class="op">*</span> np.interp(ug, u, bary)</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> xR</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> repair(X, s, lam):</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> np.column_stack([repair_1d(X[:, j], s, lam) <span class="cf">for</span> j <span class="kw">in</span> <span class="bu">range</span>(X.shape[<span class="dv">1</span>])])</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> lam <span class="kw">in</span> np.linspace(<span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">11</span>):                  <span class="co"># lambda -&gt; trade-off curve</span></span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    Xr <span class="op">=</span> repair(X_num, S, lam)</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>    clf <span class="op">=</span> LogisticRegression().fit(Xr, Y)</span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>    acc <span class="op">=</span> clf.score(Xr, Y)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>    dp <span class="op">=</span> <span class="bu">abs</span>(clf.predict_proba(Xr[S<span class="op">==</span><span class="dv">0</span>])[:,<span class="dv">1</span>].mean()</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>           <span class="op">-</span> clf.predict_proba(Xr[S<span class="op">==</span><span class="dv">1</span>])[:,<span class="dv">1</span>].mean())</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"lambda=</span><span class="sc">{</span>lam<span class="sc">:.1f}</span><span class="ss">  accuracy=</span><span class="sc">{</span>acc<span class="sc">:.3f}</span><span class="ss">  dp_gap=</span><span class="sc">{</span>dp<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot accuracy vs dp_gap: knee of the curve, discussion in the lab</span></span></code></pre></div>
 <p>Lab questions:</p>
 <ol type="1">
 <li>where is the knee, and what does it say?</li>
