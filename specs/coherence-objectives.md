@@ -5,7 +5,7 @@
 | ID | `coherence-objectives` |
 | Request | Owner, 22 October 2026: “analyse the overall coherence of the courses, so that their content fulfils the objectives set by the master” |
 | Scope | All 49 pages under `courses/` (40 science pages, 9 framing pages), the home page, the new pages `projects/` and `notation/` |
-| Full analysis | `specs/coherence-2026-10/` — `report.md` (summary), `objectives.md` (objective × course matrix with a reason per cell), `prerequisites.md` (concept dependency table), `redundancy-notation.md`, `errors.md`, `capstones.md` |
+| Full analysis | `specs/coherence-objectives-report.md` (current scores, applied local fixes, backlog). `specs/coherence-2026-10/` is the 22 October 2026 before-state: `report.md`, `objectives.md`, `prerequisites.md`, `redundancy-notation.md`, `errors.md`, `capstones.md` |
 | Related | `specs/projects-and-assessment.md` (projects on every page, end-of-year projects) |
 
 ## Method
@@ -17,8 +17,8 @@
    - redundancy and notation;
    - cross-page consistency and confirmation of the high-severity errors;
    - end-of-year projects.
-3. **Plan bounded edits.** At most six coherence actions per page (87 “must”, 107 “should”), plus the page's own issue list, which each editor verifies before fixing. The in-class prose of each page stays within 100–320 words per hour; larger additions go to signposted self-study sections.
-4. **Edit, then review independently.** One editor per page applies its plan and writes the *Projects and assessment* section. A second agent reviews the diff, checks the maths, the facts and the references, and fixes what is wrong.
+3. **Plan bounded edits.** At most six coherence actions per page (87 "must", 107 "should"), plus the page's own issue list. The in-class prose of each page stays within 100 to 320 words per hour. Larger additions would go to signposted self-study sections. That plan was not carried out as chapter rewrites.
+4. **Score the chapter body, then apply only local corrections.** The readable matrix, the applied fixes, and the backlog are in `specs/coherence-objectives-report.md`. No second agent reviewed a chapter rewrite, because those rewrites did not land. `python3 tools/check_coherence_map.py` checks the matrix.
 
 ## Objectives (from the official description quoted on the home page)
 
@@ -35,6 +35,8 @@
 
 ## Findings before the edits
 
+The table below is the 22 October 2026 reading. The current matrix is in `specs/coherence-objectives-report.md`. Two cells moved. NLP O2 is 2 because Model 1.6 proves an interpolated Kneser-Ney bigram. Refresher Neural Nets O7 is 2 because section 2.3 is an in-page NumPy loop. LLM chapter 4 now teaches prompting, in-context learning, LoRA, and logit distillation. Distributed training is still absent. Attention is still undefined for students who take only Deep Learning (P2).
+
 Each cell gives the maximum depth on that path: 0 absent, 1 mention, 2 taught but partial, 3 core supplier. Depth is judged on what the pages deliver, not on what they announce.
 
 | Objective | Mandatory path | Graph × LLM route | AI systems route |
@@ -50,10 +52,10 @@ Each cell gives the maximum depth on that path: 0 absent, 1 mention, 2 taught bu
 
 Main structural problems:
 
-- **“Deep Learning once, in P1 or P2” leaves holes.** The DL P2 variant assumes DL P1 material. Graph ML, NLP and RL rely on self-attention, which DL P2 never defines.
-- **Retrieval is used before it is taught.** Basic RAG is used in Year 1 P2 but taught in Year 2 P1.
-- **Prompting and in-context learning are taught nowhere.**
-- **Concepts without a mandatory home.** LoRA, group fairness, differential privacy and model comparison are taught only in optional courses.
+- **“Deep Learning once, in P1 or P2” leaves holes.** The DL P2 page still does not define self-attention. Graph ML, NLP and RL now point P2-route students at Deep Learning (P1) chapter 6 as reading. A transformer block on the P2 page is backlog.
+- **Retrieval is used before it is taught.** Basic RAG is used in Year 1 P2. The full treatment is LLM chapter 7. Graph ML chapter 10 has a short recall. A worked Year 1 chapter is backlog.
+- **Prompting and in-context learning** are LLM section 4.0. LoRA is Definition 4.3 on that page.
+- **Concepts without a mandatory home.** Group fairness, TreeSHAP, differential privacy and model comparison are still not taught on the mandatory path. LoRA now has a section on the LLM page.
 - **Course order.** Control in Generative AI (Year 2 P1) depends on Graph Generative Models (Year 2 P2).
 - **Year 2 prerequisites.** Year 2 pages name prerequisites that their own route excludes.
 - **Pointers.** About 45 pointers lead to the wrong chapter or to content that does not exist.
@@ -61,7 +63,9 @@ Main structural problems:
 - **Notation.** Ten notation contradictions, including the sign of the mean curvature, the PageRank α, the classifier-free guidance weight and the orientation of discrete diffusion.
 - **Errors.** All eleven high-severity errors were confirmed, for example a reversed MALA acceptance ratio, an over-squashing bound stated with the wrong eigenvalue, and a FLOP count off by orders of magnitude.
 
-## Decisions (what the edits do)
+## Decisions (October plan, not applied as chapter rewrites)
+
+The table is the plan from 22 October 2026. Large rows are backlog. Local fixes that did land are marked applied in `specs/coherence-objectives-report.md`.
 
 | Gap | Fix |
 |---|---|
@@ -96,6 +100,7 @@ Year 1 projects map onto three official Period 2 vehicles in one team repository
 
 ## Proof
 
-- `python3 tools/check_gates.py` passes. It includes the projects-section and projects-page gates.
-- `python3 tools/check_progression.py` passes: hours and the words-per-hour band hold after the additions.
-- Each page edit was reviewed by an independent agent (diff, maths, facts, references).
+- Current scores, applied local fixes, and backlog: `specs/coherence-objectives-report.md`.
+- `python3 tools/check_coherence_map.py` reads that report. It fails if a science course is missing or a score is outside 0 to 3. It checks that NLP O2 is 2 and that Refresher Neural Nets O7 is 2.
+- `python3 tools/check_gates.py`, `python3 tools/check_progression.py`, and `python3 tools/check_airiness.py` still gate the pages. They do not score objectives.
+- The 194 planned chapter edits were not applied and were not independently reviewed.

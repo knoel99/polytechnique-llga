@@ -1,3 +1,7 @@
+The readable score report is `specs/coherence-objectives-report.md`.
+`python3 tools/check_coherence_map.py` checks that report.
+The rest of this folder is the 22 October 2026 before-state.
+
 # LLGA study notes: coherence report
 
 Sources: the per-course reader records (49 pages); objectives.md, prerequisites.md, redundancy-notation.md, errors.md and capstones.md in this folder; index.html; course pages, which were opened to check locations. Hours headroom comes from tools/check_progression.py. This was read-only work.
