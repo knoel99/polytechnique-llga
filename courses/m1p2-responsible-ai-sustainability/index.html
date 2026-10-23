@@ -544,17 +544,17 @@ B \approx 3.8 \text{ kWh}.
 <p>The cheapest kg CO<sub>2</sub> is the one not emitted: reducing the model’s cost <em>at equal quality</em> is the first lever of sustainable AI. Three families, complementary, all “Pareto-active” (ch.&nbsp;1).</p>
 <div class="def">
 <p><span class="tag">Definition 3.1 — Distillation (Hinton, Vinyals, Dean, 2015)</span> Train a small <strong>student</strong> to reproduce the <em>soft</em> outputs of a large <strong>teacher</strong>: <span class="math display">
-\mathcal{L} = \alpha\, \tau^2\, \mathrm{KL}\big(\mathrm{softmax}(z_T/\tau)\,\|\,\mathrm{softmax}(z_S/\tau)\big) + (1-\alpha)\,\ell(y, z_S),
-</span> where <span class="math inline">\tau</span> is the temperature: at high temperature, the teacher’s logits deliver <em>similarities between classes</em> (dark knowledge) — far more information per example than the one-hot label alone.</p>
+\mathcal{L} = \alpha\, T^2\, \mathrm{KL}\big(\mathrm{softmax}(z_T/T)\,\|\,\mathrm{softmax}(z_S/T)\big) + (1-\alpha)\,\ell(y, z_S),
+</span> <span class="math inline">T</span> is the temperature. At high temperature, the teacher’s logits deliver <em>similarities between classes</em> (dark knowledge), far more information per example than the one-hot label alone.</p>
 <p>Reference: Hinton et al.&nbsp;2015; for the LLM case (logit distillation), see the Deep Learning P2 module, ch.&nbsp;5.</p>
 </div>
 <div class="ex">
 <p><span class="tag">Example 3.2 — What the temperature reveals, in numbers</span> A teacher outputs the logits <span class="math inline">z_T = (4, 2, 0)</span> for an image of a cat, the classes being (cat, dog, car).</p>
 <ul>
-<li>At <span class="math inline">\tau = 1</span> the softmax gives <span class="math inline">(0.867,\ 0.117,\ 0.016)</span>: almost a one-hot label, and the student learns little more than “cat”.</li>
-<li>At <span class="math inline">\tau = 4</span> the logits become <span class="math inline">(1, 0.5, 0)</span> and the softmax gives <span class="math inline">(0.506,\ 0.307,\ 0.186)</span>: the teacher now says clearly that this cat looks much more like a dog than like a car.</li>
+<li>At <span class="math inline">T = 1</span> the softmax gives <span class="math inline">(0.867,\ 0.117,\ 0.016)</span>: almost a one-hot label, and the student learns little more than “cat”.</li>
+<li>At <span class="math inline">T = 4</span> the logits become <span class="math inline">(1, 0.5, 0)</span> and the softmax gives <span class="math inline">(0.506,\ 0.307,\ 0.186)</span>: the teacher now says clearly that this cat looks much more like a dog than like a car.</li>
 </ul>
-<p>This ranking of the wrong classes is the “dark knowledge” that a hard label does not carry. The factor <span class="math inline">\tau^2</span> in the loss compensates for the fact that the gradient of the softened term with respect to the student’s logits scales like <span class="math inline">1/\tau^2</span>; without it, raising the temperature would silently reduce the weight of the teacher’s term.</p>
+<p>This ranking of the wrong classes is the “dark knowledge” that a hard label does not carry. The factor <span class="math inline">T^2</span> in the loss compensates for the fact that the gradient of the softened term with respect to the student’s logits scales like <span class="math inline">1/T^2</span>. Without it, raising the temperature would silently reduce the weight of the teacher’s term.</p>
 </div>
 <div class="prop">
 <p><span class="tag">Proposition 3.3 — Uniform quantization error (proved)</span> Quantizing on <span class="math inline">b</span> bits a value <span class="math inline">x \in [x_{\min}, x_{\max}]</span> means storing the integer code <span class="math display">
@@ -1007,11 +1007,11 @@ E = A\,(p_0/k)^{-\varepsilon}\,(e_0/k) = A\,p_0^{-\varepsilon} e_0 \cdot k^{\var
 </ol>
 <p><em>Solution</em>: (c) at equilibrium <span class="math inline">w_1/w_2 = (1-x^2)/x = 3/2</span> for <span class="math inline">x=0.5</span>.</p></li>
 <li><p><strong>★★ Carbon scheduling.</strong> Take up example 2.3 with an additional constraint: deadline at +24 h. (a) Solve by hand with the exchange argument of theorem 2.2. (b) Write the dual of the “knapsack” <span class="math inline">\min \sum c_t x_t</span>, <span class="math inline">\sum x_t = T</span>, <span class="math inline">0 \leq x_t \leq 1</span> and interpret the dual variable (price of an hour of delay). (c) What becomes the optimum if the job can be sequenced in pieces of one hour minimum? <em>Hint</em>: nothing changes — why?</p></li>
-<li><p><strong>★★ Distillation lab.</strong> Teacher: a ~1M-parameter CNN on MNIST (98.5% expected); student: an MLP with ~20k. (a) Train the student alone (baseline ~97%). (b) Distill (<span class="math inline">\tau \in \{1,2,4\}</span>, <span class="math inline">\alpha \in \{0.3, 0.7\}</span>). (c) Measure inference energy per batch (protocol of ch.&nbsp;6) and the number of parameters; plot the (energy, accuracy) point of the two models on the Pareto plot of example 1.6 (ch.&nbsp;1). <em>Partial solution (PyTorch)</em>:</p>
+<li><p><strong>★★ Distillation lab.</strong> Teacher: a ~1M-parameter CNN on MNIST (98.5% expected); student: an MLP with ~20k. (a) Train the student alone (baseline ~97%). (b) Distill (<span class="math inline">T \in \{1,2,4\}</span>, <span class="math inline">\alpha \in \{0.3, 0.7\}</span>). (c) Measure inference energy per batch (protocol of ch.&nbsp;6) and the number of parameters; plot the (energy, accuracy) point of the two models on the Pareto plot of example 1.6 (ch.&nbsp;1). <em>Partial solution (PyTorch)</em>:</p>
 <pre class="code"><code>import torch, torch.nn as nn, torch.nn.functional as F
-def distill_loss(zs, zt, y, tau=4.0, alpha=0.7):
-    kd = F.kl_div(F.log_softmax(zs/tau, 1), F.softmax(zt/tau, 1),
-                  reduction="batchmean") * tau*tau
+def distill_loss(zs, zt, y, T=4.0, alpha=0.7):
+    kd = F.kl_div(F.log_softmax(zs/T, 1), F.softmax(zt/T, 1),
+                  reduction="batchmean") * T*T
     return alpha*kd + (1-alpha)*F.cross_entropy(zs, y)
 # loop: zs = student(x); with torch.no_grad(): zt = teacher(x)</code></pre></li>
 <li><p><strong>★★ Framed measurement.</strong> With CodeCarbon (ch.&nbsp;6), measure the energy of the same training (logistic regression on MNIST, 10 epochs) (a) on your machine, (b) with the offline tracker set to France (<code>country_iso_code="FRA"</code>), then Germany (<code>"DEU"</code>), then with a world-average intensity of about <span class="math inline">475</span> gCO<sub>2</sub>eq/kWh entered by hand. (c) Produce the protocol sheet of ch.&nbsp;6: boundary, hardware, intensity source, uncertainty (prop. 6.4). (d) Sensitivity: replace the hourly intensity with the annual average and quantify the gap. <em>Deliverable</em>: 10 lines, two figures, one range.</p></li>

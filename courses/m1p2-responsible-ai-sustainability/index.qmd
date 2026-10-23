@@ -425,9 +425,9 @@ The cheapest kg CO~2~ is the one not emitted: reducing the model's cost *at equa
 ::: def
 [Definition 3.1 — Distillation (Hinton, Vinyals, Dean, 2015)]{.tag} Train a small **student** to reproduce the *soft* outputs of a large **teacher**:
 $$
-\mathcal{L} = \alpha\, \tau^2\, \mathrm{KL}\big(\mathrm{softmax}(z_T/\tau)\,\|\,\mathrm{softmax}(z_S/\tau)\big) + (1-\alpha)\,\ell(y, z_S),
+\mathcal{L} = \alpha\, T^2\, \mathrm{KL}\big(\mathrm{softmax}(z_T/T)\,\|\,\mathrm{softmax}(z_S/T)\big) + (1-\alpha)\,\ell(y, z_S),
 $$
-where $\tau$ is the temperature: at high temperature, the teacher's logits deliver *similarities between classes* (dark knowledge) — far more information per example than the one-hot label alone.
+$T$ is the temperature. At high temperature, the teacher's logits deliver *similarities between classes* (dark knowledge), far more information per example than the one-hot label alone.
 
 Reference: Hinton et al. 2015; for the LLM case (logit distillation), see the Deep Learning P2 module, ch. 5.
 :::
@@ -435,10 +435,10 @@ Reference: Hinton et al. 2015; for the LLM case (logit distillation), see the De
 ::: ex
 [Example 3.2 — What the temperature reveals, in numbers]{.tag} A teacher outputs the logits $z_T = (4, 2, 0)$ for an image of a cat, the classes being (cat, dog, car).
 
--   At $\tau = 1$ the softmax gives $(0.867,\ 0.117,\ 0.016)$: almost a one-hot label, and the student learns little more than "cat".
--   At $\tau = 4$ the logits become $(1, 0.5, 0)$ and the softmax gives $(0.506,\ 0.307,\ 0.186)$: the teacher now says clearly that this cat looks much more like a dog than like a car.
+-   At $T = 1$ the softmax gives $(0.867,\ 0.117,\ 0.016)$: almost a one-hot label, and the student learns little more than "cat".
+-   At $T = 4$ the logits become $(1, 0.5, 0)$ and the softmax gives $(0.506,\ 0.307,\ 0.186)$: the teacher now says clearly that this cat looks much more like a dog than like a car.
 
-This ranking of the wrong classes is the "dark knowledge" that a hard label does not carry. The factor $\tau^2$ in the loss compensates for the fact that the gradient of the softened term with respect to the student's logits scales like $1/\tau^2$; without it, raising the temperature would silently reduce the weight of the teacher's term.
+This ranking of the wrong classes is the "dark knowledge" that a hard label does not carry. The factor $T^2$ in the loss compensates for the fact that the gradient of the softened term with respect to the student's logits scales like $1/T^2$. Without it, raising the temperature would silently reduce the weight of the teacher's term.
 :::
 
 :::: prop
@@ -979,13 +979,13 @@ Sonia Vanier is a professor at École Polytechnique (LIX, CNRS, Institut Polytec
 
 5.  **★★ Carbon scheduling.** Take up example 2.3 with an additional constraint: deadline at +24 h. (a) Solve by hand with the exchange argument of theorem 2.2. (b) Write the dual of the "knapsack" $\min \sum c_t x_t$, $\sum x_t = T$, $0 \leq x_t \leq 1$ and interpret the dual variable (price of an hour of delay). (c) What becomes the optimum if the job can be sequenced in pieces of one hour minimum? *Hint*: nothing changes — why?
 
-6.  **★★ Distillation lab.** Teacher: a \~1M-parameter CNN on MNIST (98.5% expected); student: an MLP with \~20k. (a) Train the student alone (baseline \~97%). (b) Distill ($\tau \in \{1,2,4\}$, $\alpha \in \{0.3, 0.7\}$). (c) Measure inference energy per batch (protocol of ch. 6) and the number of parameters; plot the (energy, accuracy) point of the two models on the Pareto plot of example 1.6 (ch. 1). *Partial solution (PyTorch)*:
+6.  **★★ Distillation lab.** Teacher: a \~1M-parameter CNN on MNIST (98.5% expected); student: an MLP with \~20k. (a) Train the student alone (baseline \~97%). (b) Distill ($T \in \{1,2,4\}$, $\alpha \in \{0.3, 0.7\}$). (c) Measure inference energy per batch (protocol of ch. 6) and the number of parameters; plot the (energy, accuracy) point of the two models on the Pareto plot of example 1.6 (ch. 1). *Partial solution (PyTorch)*:
 
     ``` code
     import torch, torch.nn as nn, torch.nn.functional as F
-    def distill_loss(zs, zt, y, tau=4.0, alpha=0.7):
-        kd = F.kl_div(F.log_softmax(zs/tau, 1), F.softmax(zt/tau, 1),
-                      reduction="batchmean") * tau*tau
+    def distill_loss(zs, zt, y, T=4.0, alpha=0.7):
+        kd = F.kl_div(F.log_softmax(zs/T, 1), F.softmax(zt/T, 1),
+                      reduction="batchmean") * T*T
         return alpha*kd + (1-alpha)*F.cross_entropy(zs, y)
     # loop: zs = student(x); with torch.no_grad(): zt = teacher(x)
     ```

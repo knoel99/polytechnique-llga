@@ -362,7 +362,7 @@ window.Quarto = {
 <li><strong>The problem</strong>: sample <span class="math inline">G \sim p_\theta(G)</span> where <span class="math inline">p</span> is learned on a family of graphs (active molecules, networks…), with three specific difficulties: variable size, <em>discrete</em> outputs, a space quotiented by isomorphism;</li>
 <li><strong>The limiting model</strong>: graphons <span class="math inline">W : [0,1]^2 \to [0,1]</span> and the Aldous-Hoover theorem — every sequence of <em>exchangeable</em> graphs admits a limiting graphon in the sense of the cut metric; estimation by step functions;</li>
 <li><strong>Classical random models</strong>: Erdős-Rényi <span class="math inline">G(n,p)</span> (iid edges, degrees <span class="math inline">\sim \mathrm{Bin}(n-1,p)</span>, connectivity thresholds) and the SBM: <span class="math inline">P(A_{ij}=1 \mid z_i=a, z_j=b) = B_{ab}</span>, likelihood, EM/MCMC inference, the Kesten-Stigum threshold;</li>
-<li><strong>An overview of the deep families</strong>: GraphVAE (one-shot decoder), NeVAE (sequential decoding constrained by valence), GraphRNN (sequentialization by adjacency rows, BFS orders), DiGress (categorical noising <span class="math inline">q(X_t \mid X_{t-1}) = \mathrm{Cat}(Q_t X_{t-1})</span>, closed-form Bayesian denoising);</li>
+<li><strong>An overview of the deep families</strong>: GraphVAE (one-shot decoder), NeVAE (sequential decoding constrained by valence), GraphRNN (sequentialization by adjacency rows, BFS orders), DiGress (categorical noising <span class="math inline">q(X_t \mid X_{t-1}) = \mathrm{Cat}(X_{t-1} Q_t)</span>, closed-form Bayesian denoising);</li>
 <li><strong>First metrics</strong>: validity/uniqueness/novelty, MMD on histograms, FCD — the analogue of the image FID (cf.&nbsp;Multimodal GenAI module ch.&nbsp;7);</li>
 <li><strong>The GNN foundation</strong>: message passing, MPNN, GIN and the 1-WL bound (cf.&nbsp;Advanced GNN module ch.&nbsp;2) — the <em>encoder</em> of all the models in this module.</li>
 </ul>
@@ -625,7 +625,7 @@ x_t = f_\theta\big(z_t\,;\ s_t\big), \qquad s_t = \mathrm{GNN}\big(G_{t-1}, \tex
 <p>Continuous diffusion (Multimodal GenAI module ch.&nbsp;3) noises with Gaussians — pointless for categorical atom types. DiGress (Vignac et al., ICLR 2023) transposes the machinery to the <em>categorical</em>, via the D3PM framework (Austin et al., 2021): noising = Markov chains on the categories, denoising = closed-form Bayesian posterior. Goal of this chapter: master <em>all</em> the equations.</p>
 <div class="def">
 <p><span class="tag">Definition 5.1 — Forward process by transition matrices</span> A type <span class="math inline">x</span> (atom among <span class="math inline">K</span>) is represented as a one-hot <span class="math inline">X \in \{0,1\}^K</span>. The noising is a Markov chain <em>independent per node and per edge</em>: <span class="math display">
-q(X_t \mid X_{t-1}) = \mathrm{Cat}\big(X_t;\ Q_t X_{t-1}\big),
+q(X_t \mid X_{t-1}) = \mathrm{Cat}\big(X_t;\ X_{t-1} Q_t\big),
 </span> where <span class="math inline">Q_t \in [0,1]^{K \times K}</span> is stochastic (rows summing to 1): row <span class="math inline">k</span> is the law of the new type given the old one <span class="math inline">k</span>.</p>
 <p>The usual cases:</p>
 <ul>
@@ -636,7 +636,7 @@ Q_t = (1 - \beta_t) I + \beta_t \frac{1}{K}\mathbf{1}\mathbf{1}^\top
 <li><strong>discretized Gaussian</strong> (transition toward neighboring types).</li>
 </ul>
 <p>The composition is exact: <span class="math display">
-q(X_t \mid X_s) = \mathrm{Cat}(X_t\,;\ \bar Q_s^t X_s) \quad \text{with} \quad \bar Q_s^t = Q_{s+1} \dots Q_t.
+q(X_t \mid X_s) = \mathrm{Cat}(X_t\,;\ X_s \bar Q_s^t) \quad \text{with} \quad \bar Q_s^t = Q_{s+1} \dots Q_t.
 </span></p>
 </div>
 <div class="prop">
@@ -645,9 +645,9 @@ q(X_t \mid X_0) = \mathrm{Cat}\big((1-\bar\beta_t) X_0 + \bar\beta_t\, \mathbf{u
 </span> with <span class="math inline">\mathbf{u}</span> the uniform law and <span class="math inline">\bar\beta_t = 1 - \prod_{s \leq t}(1 - \beta_s)</span>: at large <span class="math inline">t = T</span>, the law is (almost) uniform — independent of <span class="math inline">X_0</span>, the condition for “total” noising.</p>
 <div class="proof">
 <p><span class="proof-title"><em>Proof</em>. </span>By recursion: let <span class="math inline">p_t = q(X_t \mid X_0)</span> (row vector); then <span class="math display">
-p_t^\top = Q_t\, p_{t-1}^\top = \big[(1-\beta_t) I + \frac{\beta_t}{K}\mathbf{1}\mathbf{1}^\top\big] p_{t-1}^\top = (1-\beta_t)\,p_{t-1}^\top + \beta_t\, \mathbf{u}^\top
-</span> since <span class="math inline">\mathbf{1}^\top p_{t-1}^\top = 1</span> (mass law). Unrolling, <span class="math display">
-p_t^\top = \big(\prod_s (1-\beta_s)\big) X_0^\top + \big(1 - \prod_s(1-\beta_s)\big)\mathbf{u}^\top.
+p_t = p_{t-1} Q_t = p_{t-1}\big[(1-\beta_t) I + \frac{\beta_t}{K}\mathbf{1}\mathbf{1}^\top\big] = (1-\beta_t)\,p_{t-1} + \beta_t\, \mathbf{u}
+</span> since <span class="math inline">p_{t-1}\mathbf{1} = 1</span> (mass law). Unrolling, <span class="math display">
+p_t = \big(\prod_s (1-\beta_s)\big) X_0 + \big(1 - \prod_s(1-\beta_s)\big)\mathbf{u}.
 </span> At <span class="math inline">t = T</span>, the weight of <span class="math inline">X_0</span> is <span class="math inline">\prod_s (1-\beta_s) \approx 0</span> (schedule <span class="math inline">\beta_s \to 1</span>).</p>
 <p>The <em>dataset</em> marginal law is also accessible: one can make it converge toward the empirical marginal <span class="math inline">\mathbf{m} = \frac{1}{N}\sum_i X_0^{(i)}</span> rather than the uniform, by replacing <span class="math inline">\mathbf{u}</span> with <span class="math inline">\mathbf{m}</span>: DiGress uses this option (“no bond” edges dominate, reflecting them in the final law helps the denoising). <span class="qed">∎</span></p>
 </div>
