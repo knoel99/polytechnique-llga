@@ -1,10 +1,3 @@
-"""Authoring and verification for the science-page projects section.
-
-apply() writes only the qmd of the slug it is given. gate_invariants() only
-reads that markdown. The qmd is the committed section. There is no payload
-file. Workers call apply(). They do not call the splice helper.
-"""
-
 from __future__ import annotations
 
 import ast
@@ -28,7 +21,6 @@ def _default_repo() -> Path:
 
 REPO = _default_repo()
 
-# The same character sequence check_gates.py already splits on.
 H2 = "## Projects and assessment {#projects}"
 SOLO_PREFIX = "### Solo projects"
 GROUP_PREFIX = "### Group projects"
@@ -57,7 +49,7 @@ ANCHOR_REF_RE = re.compile(r"\]\(#([\w-]+)\)")
 
 
 class ProjectError(Exception):
-    """A section the checker would reject, or a page this module will not write."""
+    pass
 
 
 class Objective(enum.Enum):
@@ -82,8 +74,6 @@ class Compute(enum.Enum):
 
 
 class ExamKind(enum.Enum):
-    """Stored so the exam mix can be required. The renderer does not print it."""
-
     COURSE = "course question"
     COMPUTATION = "computation"
     PROOF = "short proof"
@@ -318,13 +308,6 @@ class RubricRow:
 
 @dataclass(frozen=True)
 class Assessment:
-    """One projects section. Illegal counts, sums, and mixes cannot be built.
-
-    Totals are not fields. Exam points sum to 20 and rubric weights sum to 100,
-    or Assessment() raises. At least one subject carries a Paper, and at least
-    one carries a CrossLink.
-    """
-
     opening: NotDisplayed | FicheQuote
     objectives: tuple[Objective, ...]
     solos: tuple[Subject, ...]
@@ -442,7 +425,6 @@ def _math_block(text: str | None) -> list[str]:
 
 
 def render(assessment: Assessment) -> str:
-    """Canonical markdown for one Assessment. Deterministic. No total row."""
     if type(assessment) is not Assessment:
         raise ProjectError("render takes an Assessment")
     lines = [H2, "", _opening_paragraph(assessment.opening, assessment.objectives), "", SOLO_H, ""]
@@ -522,14 +504,6 @@ def _course_on_disk(root: Path, item: str, slug: str | None) -> bool:
 def gate_invariants(
     section_body: str, slug: str | None = None, root: Path | None = None
 ) -> tuple[str, ...]:
-    """Read one section body. Return the contract failures this extension owns.
-
-    The body is the slice check_gates.py already takes, from the heading through
-    the character before the next h2. Empty means the paper, a cross-link to
-    another course directory on disk, the 20-point sum, and the 100-weight sum
-    all hold. This function does not build an Assessment and does not rewrite
-    the page.
-    """
     repo = REPO if root is None else root
     findings: list[str] = []
     region = _subject_region(section_body)
@@ -557,7 +531,6 @@ def gate_invariants(
 
 
 def exempt_slugs(root: Path = REPO) -> frozenset[str]:
-    """The NON_SCIENCE set in check_gates.py. This module does not keep a copy."""
     source = (root / "tools" / "check_gates.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     for node in tree.body:
@@ -570,7 +543,6 @@ def exempt_slugs(root: Path = REPO) -> frozenset[str]:
 
 
 def missing_slugs(root: Path = REPO) -> tuple[str, ...]:
-    """Science course directories whose qmd has no projects heading. Derived."""
     exempt = exempt_slugs(root)
     missing: list[str] = []
     for path in sorted((root / "courses").iterdir()):
@@ -584,12 +556,6 @@ def missing_slugs(root: Path = REPO) -> tuple[str, ...]:
 
 
 def _cut_section(text: str) -> str:
-    """Remove one projects span, stopping before the references line.
-
-    The span ends at the earlier of the next line that starts with '## ' and
-    the line that contains the references marker. A section nested above
-    '### References' therefore keeps the bibliography.
-    """
     found = list(HEADING_RE.finditer(text))
     if not found:
         return text
@@ -609,14 +575,6 @@ def _cut_section(text: str) -> str:
 
 
 def _insertion_index(text: str) -> int:
-    """Index of the unique legal slot, in a qmd that has no projects heading.
-
-    The slot is the h2 that owns the first `## References` match used by
-    check_gates.py. A `### References` line snaps back to its enclosing h2,
-    which is how the neural-nets page keeps the section before Sources.
-    An h2 `## References` line is the slot itself, which is how the statistics
-    and refresher-cs contents lists keep the section after Sources.
-    """
     if HEADING_RE.search(text):
         raise ProjectError("the projects heading is still present")
     exercises = text.find("## Exercises")
@@ -641,7 +599,6 @@ def _insertion_index(text: str) -> int:
 
 
 def _splice(text: str, rendered: str) -> str:
-    """Cut any existing projects span and insert rendered at the legal slot."""
     if not rendered.startswith(H2 + "\n"):
         raise ProjectError("rendered section must start with the contract heading")
     if HEADING_RE.search(rendered[len(H2) :]) or "\n## " in rendered:
@@ -702,12 +659,6 @@ def _page_checks(page_without_section: str, assessment: Assessment, slug: str, r
 
 
 def apply(slug: str, assessment: Assessment, root: Path = REPO) -> ApplyResult:
-    """Write the section into courses/<slug>/index.qmd, or leave the file untouched.
-
-    A second call with an equal Assessment finds the same bytes and writes
-    nothing. A crash before os.replace leaves the qmd as it was. The temp
-    name is index.qmd.projects.tmp beside that qmd, and replace removes it.
-    """
     if type(assessment) is not Assessment:
         raise ProjectError("apply takes an Assessment")
     if slug in exempt_slugs(root):
@@ -817,7 +768,6 @@ def _line_at(text: str, index: int) -> str:
 
 
 def self_check(repo: Path = REPO) -> int:
-    """Read the real course pages and write only a throwaway fixture."""
     failures: list[str] = []
 
     def expect(ok: bool, label: str) -> None:
