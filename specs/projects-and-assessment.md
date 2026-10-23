@@ -5,7 +5,7 @@
 | ID | `projects-and-assessment` |
 | Request | Owner, 22 October 2026: “propose project subjects to carry out solo or in groups, or classical assessments; then propose end-of-year projects that bring together what has been studied” |
 | Scope | Section `## Projects and assessment {#projects}` of every science page (`courses/*/index.qmd` minus `specs/non-science-pages.md`); page `projects/index.qmd` |
-| Gate | `tools/check_gates.py` checks that `projects/` exists and that the home page links to it. The per-course section counts below are the format for the owner of that page work. They are not enforced yet, because the subjects and exam proposals are not written. |
+| Gate | `tools/check_gates.py` (per-course counts below, plus the projects page and the home link) |
 | Shared with | `knoel99/master-mva` (same section format) |
 | Depends on | `specs/coherence-objectives.md` (objectives O1–O8 that the projects exercise) |
 

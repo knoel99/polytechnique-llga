@@ -20,6 +20,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+TOOLS = Path(__file__).resolve().parent
+if str(TOOLS) not in sys.path:
+    sys.path.insert(0, str(TOOLS))
+import projects_section
 
 # Pages outside the ">= 6 exercises" gate — specs/non-science-pages.md (lot A).
 NON_SCIENCE = {
@@ -81,6 +85,29 @@ for cdir in course_dirs:
         check(True, f"{cid}: exercises (non-science exempt, {n_ex})")
     else:
         check(n_ex >= 6, f"{cid}: >= 6 exercises", f"found {n_ex}")
+    if cid not in NON_SCIENCE:
+        qsrc = read(cdir / "index.qmd") if (cdir / "index.qmd").is_file() else ""
+        proj = qsrc.split("## Projects and assessment {#projects}", 1)
+        check(len(proj) == 2, f"{cid}: '## Projects and assessment {{#projects}}' section",
+              "specs/projects-and-assessment.md")
+        if len(proj) == 2:
+            pbody = proj[1].split("\n## ", 1)[0]
+            solo = len(re.findall(r"^\d+\.\s+\*\*\[Solo", pbody, re.M))
+            group = len(re.findall(r"^\d+\.\s+\*\*\[Group", pbody, re.M))
+            check(solo >= 2, f"{cid}: >= 2 solo project subjects", f"found {solo}")
+            check(group >= 2, f"{cid}: >= 2 group project subjects", f"found {group}")
+            exam = pbody.split("### Written exam", 1)
+            nq = len(re.findall(r"^\d+\.\s", re.split(r"^### ", exam[1], maxsplit=1, flags=re.M)[0], re.M)) if len(exam) == 2 else 0
+            check(nq >= 3, f"{cid}: written-exam proposal with >= 3 questions", f"found {nq}")
+            check(qsrc.find("## Exercises") < qsrc.find("## Projects and assessment")
+                  < qsrc.find("## References"),
+                  f"{cid}: Projects section between Exercises and References")
+            findings = projects_section.gate_invariants(pbody, cid, ROOT)
+            check(
+                not findings,
+                f"{cid}: P1 paper and cross-link, P3 points sum to 20, P4 weights sum to 100",
+                "; ".join(findings),
+            )
     if cid == "m1p1-refresher-neural-nets":
         qmd = read(cdir / "index.qmd") if (cdir / "index.qmd").is_file() else html
         nn_numpy_seen = bool(re.search(r"numpy|import np\b|np\.", qmd, re.IGNORECASE))
