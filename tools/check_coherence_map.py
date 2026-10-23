@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Check the O1 to O8 score table in specs/coherence-objectives-report.md.
-
-Run from the repository root:
-    python3 tools/check_coherence_map.py
-Exit code 0 means every science course has eight scores in 0 to 3,
-and the two cells that moved are the values named below.
-"""
+"""Fail unless the coherence report scores every science course on O1 to O8."""
 
 import re
 import sys
