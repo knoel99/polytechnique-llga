@@ -4,7 +4,7 @@ Lecture faite le 24 octobre 2026 sur `main` à `484e977` (PR 46, après la PR 44
 
 ## Verdict
 
-La PR 43 publie un barème O1 à O8, corrige des formules et des notations, et ajoute des projets et un examen sur les 40 pages scientifiques. La PR 45 est déjà contenue dans l'historique au-dessus du `main` actuel. Elle ajoute la licence Apache 2.0, un README réécrit, les dates de l'AI Act après le règlement (UE) 2026/1744, et des corrections factuelles courtes. La PR 45 est plus forte sur ce qui manque encore à `main`. La PR 43 est plus large, mais les formules et les sections de projets qu'elle apporte sont déjà dans `main` par les PR 44 et 46, souvent dans une relecture plus précise, et sa fusion entre en conflit sur 82 fichiers. Il fusionne la PR 45 en fast-forward, de préférence en squash à cause des commits de travail, et il ferme la PR 43 sans la fusionner. Il ne reprend pas les pages de cours de la PR 43. Le contrôle `tools/check_coherence_map.py` n'existe que sur la PR 43. Il ne le reprend qu'après avoir refait le tableau sur `main`.
+La PR 43 publie un barème O1 à O8, corrige des formules et des notations, et ajoute des projets et un examen sur les 40 pages scientifiques. La PR 45 est déjà contenue dans l'historique au-dessus du `main` actuel. Elle ajoute la licence Apache 2.0, un README réécrit, les dates de l'AI Act après le règlement (UE) 2026/1744, et des corrections factuelles courtes. La PR 45 est plus forte sur ce qui manque encore à `main`. La PR 43 est plus large, mais les formules et les sections de projets qu'elle apporte sont déjà dans `main` par les PR 44 et 46, souvent dans une relecture plus précise, et sa fusion entre en conflit sur 82 fichiers. Il fusionne la PR 45 en fast-forward, de préférence en squash à cause des commits de travail, et il ferme la PR 43 sans la fusionner. Il ne reprend pas les pages de cours de la PR 43. Le contrôle `tools/check_coherence_map.py` n'existe que sur la PR 43. Il ne le reprend qu'après avoir refait le tableau sur `main`. Après la fusion, il réécrit une phrase du cours de formes. Cette phrase pointe la bonne ancre et prête à la section 7.1 un propos qu'elle n'a pas.
 
 ## Périmètre et taille
 
@@ -94,6 +94,18 @@ PR 45, `courses/m1p2-graph-ml/index.qmd`, ligne 191. Avant, sur `main`, la même
 
 `courses/m1p2-deep-learning-p2/index.qmd`, lignes 718 à 722. `main` écrit la somme (N_c/N) à la puissance α_N, plus (D_c/D) à la puissance α_D, plus L_∞. La PR 45 écrit le crochet [(N_c/N) à la puissance α_N/α_D, plus D_c/D] à la puissance α_D. La phrase qui suit, « enlarging the model helps more than enlarging the data », ne change pas. Le paragraphe Chinchilla qui vient après non plus. Je n'ai pas rouvert le PDF de Kaplan 2020 dans cette lecture. Les deux écritures circulent comme formes de Kaplan. Le changement reste compatible avec la phrase qui suit. Je le laisse hors des erreurs introduites.
 
+### Renvoi du cours de formes
+
+PR 45, `courses/m1p1-shapes/index.qmd`, ligne 245. Avant, la ligne 245 de `main` dit que les algorithmes sont écrits d'abord sur la combinatoire, puis plongés dans les positions, « the same discipline as for the graphs of the Machine Learning module ». Après, la même phrase renvoie à la section 7.1 du refresher d'informatique, ancre `representations-lists-matrix-csr`. L'ancre existe. Le HTML de la branche, ligne 1714, a `id="representations-lists-matrix-csr"`. Le titre, ligne 1646 du `.qmd`, est « 7.1. Representations: lists, matrix, CSR ». Le corps montre trois stockages d'un graphe. Il ne dit pas qu'on écrit l'algorithme sur la combinatoire puis qu'on le plonge dans des positions. L'ancre est la bonne. La phrase attribue à la section un propos qu'elle n'a pas. C'est une erreur introduite par la PR 45.
+
+### RoPE
+
+Ligne 1165 de `courses/m1p1-deep-learning/index.qmd` sur la PR 45 remplace « with unbounded length support » par « a model does not generalize beyond its training context unless the angles are rescaled », avec un renvoi au chapitre 3 du cours advanced topics. La proposition 3.2, ligne 383 de ce cours, dit que prolonger le contexte revient à reparamétrer les angles. La section 3.2 ajoute un affinage après l'interpolation. Le renvoi tombe au bon chapitre. La nécessité écrite dans la phrase est plus forte que le chapitre, qui parle aussi d'un affinage.
+
+### Deux phrases fausses dans le barème de la PR 43
+
+Le fichier `specs/coherence-objectives-report.md` n'existe que sur la PR 43. Deux de ses raisons sont fausses sur cette branche elle-même. La ligne 36 dit que la section 7.4 des LLM est encore une seule puce GraphRAG. Sur la même branche, `courses/m2-large-language-models/index.qmd`, lignes 739 à 743, a trois puces, HyDE, GraphRAG et les requêtes structurées, plus un bloc de code. La ligne 40 dit que le chapitre 10 de Graph ML est encore de la prose. Le chapitre, lignes 1452 à 1505, a deux encadrés, un pseudo-code et un labo. L'échelle de la ligne 5 compte un labo sur la page comme profondeur 3. La note O5 égale à 2 de cette page contredit cette échelle. `tools/check_coherence_map.py` lit le tableau. Il ne lit pas les pages. Il ne voit pas ces deux phrases.
+
 ## Dates de l'AI Act dans la PR 45
 
 Le texte nouveau est dans `courses/m2-ethical-issues-ai/index.qmd`, lignes 128 à 132, et il est repris en plus court dans `courses/m2-explainability-security-privacy-llms/index.qmd`. Source lue le 24 octobre 2026.
@@ -135,7 +147,7 @@ Le suivi de tickets est activé et compte 0 ticket (`gh repo view` et `gh issue 
 | Critère | PR 43 | PR 45 |
 |---|---|---|
 | Portée | 101 fichiers, 20729 insertions, 1631 suppressions, 22 commits. Barème, formules, notations, projets et examens. | 46 fichiers, 508 insertions, 150 suppressions, 27 commits. Licence, README, AI Act, corrections courtes, plus un rapport de 139 lignes ajouté le 24 octobre. |
-| Correction | Les formules relues ici sont justes, et `main` les a déjà, souvent mieux écrites. | Les marches, les auteurs, les identifiants arXiv, Slater et le théorème ergodique corrigent des erreurs encore sur `main`. L'AI Act suit le Journal officiel, avec l'oubli de l'article 6, paragraphe 5. |
+| Correction | Les formules relues ici sont justes, et `main` les a déjà, souvent mieux écrites. Deux raisons du barème sont fausses sur la branche elle-même. | Les marches, les auteurs, les identifiants arXiv, Slater et le théorème ergodique corrigent des erreurs encore sur `main`. L'AI Act suit le Journal officiel, avec l'oubli de l'article 6, paragraphe 5. Le renvoi du cours de formes tombe sur la bonne ancre et attribue à la section 7.1 un propos qu'elle n'a pas. |
 | Cohérence avec O1 à O8 | Seule branche qui note chaque cours et qui échoue si un cours manque au tableau. Le tableau décrit cette branche, pas `main` après la PR 46. | Ne note pas les cours. Elle s'appuie sur la cohérence déjà fusionnée par les PR 44 et 46. |
 | Pédagogie | Projets, examen et barème sur les 40 pages, générés puis rendus. `main` a déjà ces sections, relues par la PR 46. | Peu de pédagogie nouvelle. Elle répare des renvois et une phrase de théorème. Le CSS retire le mot Proof devant une boîte qui porte déjà son nom. |
 | Maintenabilité | `projects_section.py` et `check_coherence_map.py` sont des leviers, mais le premier réécrirait les pages déjà relues. Historique mélangé Claude puis Cursor, basé avant la PR 44. | Diff petit et fast-forward. Vingt-sept commits, dont beaucoup sont des « work in progress ». Un squash laisse un commit lisible. Le README reste en français, comme le fichier qu'il remplace. Les contrôles ne le rejettent pas. |
@@ -151,10 +163,10 @@ La PR 45 ne répare pas une formule que la PR 46 aurait laissée fausse dans l'�
 
 ## Plan de fusion
 
-1. Il fusionne la PR 45 en fast-forward. Un squash évite de poser sur `main` les commits de travail. Le squash emporte aussi `docs/analyse-pr-43-45.md`. Ce fichier est la note de Claude. Il peut le garder ou le retirer au moment du squash. Il ne change pas les pages de cours.
+1. Il fusionne la PR 45 en fast-forward. Un squash évite de poser sur `main` les commits de travail. Le squash emporte aussi `docs/analyse-pr-43-45.md`. Ce fichier est la note de Claude. Il peut le garder ou le retirer au moment du squash. Après la fusion, il réécrit la phrase du cours de formes, ligne 245, pour qu'elle ne prête plus à la section 7.1 du refresher un propos que cette section n'a pas. Le reste des pages de cours de la PR 45 peut rester.
 2. Il ferme la PR 43 sans la fusionner. Les 82 conflits opposeraient sa rédaction à la PR 46. Les corrections de formules de l'échantillon sont déjà sur `main`.
 3. Il ne cherry-pick pas de page de cours depuis la PR 43.
-4. S'il veut le contrôle de carte, il réécrit le tableau contre les pages de `main`, puis il ajoute le script. Reprendre le tableau de la branche 43 noterait un texte que `main` n'a plus.
+4. S'il veut le contrôle de carte, il réécrit le tableau contre les pages de `main`, puis il ajoute le script. Reprendre le tableau de la branche 43 noterait un texte que `main` n'a plus. Deux raisons de ce tableau sont déjà fausses sur la branche 43. Une recherche Notion et une recherche Drive, le 24 octobre 2026, ne trouvent aucune note de Kim qui choisisse entre ces deux PR. La phrase « The owner chose » du corps de la PR 45 est celle du commit `d6330df`, signé Claude. Ce n'est pas un message enregistré de Kim.
 5. Il ne lance pas `projects_section.py` de la PR 43 sur `main`. Le script réécrirait les sections déjà relues.
 
 ## Annexe. Commandes
@@ -298,3 +310,17 @@ git ls-tree -r --name-only origin/main .github
 ```
 
 Les lignes citées viennent de `git show <ref>:<path>` et de `git grep -n`. Les essais de fusion manuels, avant le script, étaient des `git worktree add --detach` sous `/tmp/pr-compare`, suivis de `git merge --no-commit --no-ff` ou `--ff-only`, puis `git merge --abort` et `git worktree remove --force`. Ils ont donné les mêmes 82, 0 et 83 fichiers.
+
+Le renvoi de formes, RoPE et le barème ont été relus après coup avec ces commandes.
+
+```
+git show origin/claude/lucid-edison-imzaab:courses/m1p1-shapes/index.qmd
+git show origin/main:courses/m1p1-shapes/index.qmd
+git grep -n 'id="representations-lists-matrix-csr"' origin/claude/lucid-edison-imzaab -- courses/m1p1-refresher-cs/index.html
+git show origin/claude/lucid-edison-imzaab:courses/m1p1-deep-learning/index.qmd
+git show origin/claude/lucid-edison-imzaab:courses/m2-advanced-topics-llms/index.qmd
+git show origin/cursor/coherence-objectives-dbc9:specs/coherence-objectives-report.md
+git show origin/cursor/coherence-objectives-dbc9:courses/m2-large-language-models/index.qmd
+git show origin/cursor/coherence-objectives-dbc9:courses/m1p2-graph-ml/index.qmd
+git log -1 --format='%h %an %s%n%b' d6330df
+```
