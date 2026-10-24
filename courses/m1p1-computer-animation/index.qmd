@@ -54,6 +54,7 @@ format:
 -   [10. Procedural versus data-driven](#ch10)
 -   [11. Course research notes (Desbrun)](#ch11)
 -   [Exercises](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -149,7 +150,7 @@ Level 1 = foundations (refreshers, definitions, first worked examples), 2 = core
 | 5 | 3 h | 2 | ch. 4 Particles, mass-spring networks, eigenmodes, the implicit step (Def. 4.1–4.4 and the simulator code) | Ex. 3 |
 | 6 | 3 h | 2 | ch. 4 (end) Continuum models, cloth, fluids (Def. 4.5–4.6); elasticity, cloth and fluids in practice: Young's modulus and the CFL step, Baraff–Witkin energies, SPH, grid step with projection, semi-Lagrangian advection (Ex. 4.7–4.11) | Ex. 10 (start of the project) |
 | 7 | 3 h | 2 | ch. 5 Rigid bodies, quaternions, angular momentum | Ex. 6 |
-| 8 | 3 h | 2 | ch. 6 Collisions: detection, impulses, constraints, PBD | Ex. 4 |
+| 8 | 3 h | 2 | ch. 6 Collisions: detection, impulses (with rotation, C++ lab stub), constraints, PBD | Ex. 4 |
 | 9 | 3 h | 2 | ch. 7 Skinning: LBS, the candy-wrapper theorem, DQS, cages, blendshapes and their fitting to markers (Example 7.6) | Ex. 7 |
 | 10 | 3 h | 2 | ch. 8 Inverse kinematics: closed form, Jacobian, CCD, FABRIK | Ex. 8 |
 | 11 | 3 h | 2 | ch. 9 Crowds: boids, social forces, navigation | Ex. 9 |
@@ -187,7 +188,7 @@ L3 prerequisites mobilized
 ::::
 
 ::: prop
-[Proposition 0.1 — The harmonic oscillator, the course's compass]{.tag} For $m = 1$, $k = \omega^2$, the system $\ddot{x} = -\omega^2 x$ rewrites in state dimension 1 as:
+[Proposition 0.1 — The harmonic oscillator, the course's compass]{.tag} For $m = 1$, $k = \omega^2$, the system $\ddot{x} = -\omega^2 x$ (one degree of freedom) rewrites as a first-order system with a two-dimensional state:
 $$
 \dot{\mathbf{y}} = A\,\mathbf{y}, \qquad \mathbf{y} = \begin{pmatrix} x \\ v \end{pmatrix}, \quad A = \begin{pmatrix} 0 & 1 \\ -\omega^2 & 0 \end{pmatrix}, \qquad \sigma(A) = \{\, i\omega,\ -i\omega \,\}.
 $$
@@ -270,14 +271,14 @@ The object accelerates then decelerates around its mean speed of 2 m/s — an ea
     $$
     \mathbf{v}_i = \dfrac{\mathbf{p}_{i+1} - \mathbf{p}_{i-1}}{t_{i+1} - t_{i-1}} :
     $$
-    the curve passes *through* all the keys, is $C^1$, local (a moved key affects only two segments);
+    the curve passes *through* all the keys, is $C^1$, and local: moving the key $\mathbf{p}_i$ changes $\mathbf{p}_i$ and the tangents $\mathbf{v}_{i-1}, \mathbf{v}_{i+1}$, hence the four segments between $t_{i-2}$ and $t_{i+2}$ (the locality of a cubic B-spline);
 -   **Cubic B-splines**: $C^2$ but the curve does not interpolate the keys (they become *approximation* points) — the standard compromise for camera curves, where continuity of acceleration avoids shaking.
 :::
 
 | Curve | Continuity | Passes through the keys? | Locality | Typical use |
 |---|---|---|---|---|
 | Hermite / Bézier | $C^1$ | yes | strong | animator poses, UI |
-| Catmull-Rom | $C^1$ | yes | two segments | trajectories, cameras |
+| Catmull-Rom | $C^1$ | yes | four segments | trajectories, cameras |
 | Cubic B-spline | $C^2$ | no | four segments | cinematic camera |
 
 ::: note
@@ -396,13 +397,15 @@ A small time step does not guarantee a sane simulation: some schemes add energy 
 ::: def
 [Definition 3.1 — Amplification and stability]{.tag} Applied to the linear system $\dot{\mathbf{y}} = A\mathbf{y}$, the schemes of chapter 2 write $\mathbf{y}_{n+1} = G\,\mathbf{y}_n$ with $G$ linear.
 
-The scheme is **stable** on this system if the spectral radius $\rho(G) \leq 1$ (every component remains bounded), **unstable** if $\rho(G) > 1$ (geometric divergence).
+The scheme is **stable** on this system if every component remains bounded. This holds when the spectral radius $\rho(G) \leq 1$ *and* every eigenvalue of modulus 1 is semisimple (no Jordan block larger than $1 \times 1$).
+
+It is **unstable** if $\rho(G) > 1$ (geometric divergence), or if an eigenvalue of modulus 1 is defective (linear growth, as at $h\omega = 2$ in Theorem 3.5).
 
 For EE, $G = I + hA$; for EI, $G = (I - hA)^{-1}$: in both cases stability depends on the product $h\lambda$ for each eigenvalue $\lambda$ of $A$. The set
 $$
 \{z \in \mathbb{C} : |1 + z| \leq 1\} \quad (\text{resp. } \{z \in \mathbb{C} : |1 - z| \geq 1\})
 $$
-is the **stability region** of EE (resp. EI): the scheme is stable when $z = h\lambda$ lies in it for every eigenvalue $\lambda$.
+is the **stability region** of EE (resp. EI): for a diagonalizable $A$, such as the oscillator's, the scheme is stable when $z = h\lambda$ lies in it for every eigenvalue $\lambda$.
 :::
 
 :::: thm
@@ -545,13 +548,13 @@ $$
 :::
 
 ::: ex
-[Example 4.3 — Choosing the step for a garment]{.tag} A discrete cloth of $20 \times 20$ points, mesh size $d = 1$ cm, structural springs $k_s = 50$ N/m, mass per point $m = 2$ g. The fastest mode couples two neighboring points:
+[Example 4.3 — Choosing the step for a garment]{.tag} A discrete cloth of $20 \times 20$ points, mesh size $d = 1$ cm, structural springs $k_s = 50$ N/m, mass per point $m = 2$ g. The fastest mode is the zigzag in which neighboring points move in opposite directions, so each point is pulled by the two springs of its row; as for the chain of Example 4.7, the largest eigenvalue of $M^{-1}K$ is $4k_s/m$:
 $$
-\omega \approx \sqrt{2k_s/m} = \sqrt{2 \cdot 50 / 0.002} \approx 224 \text{ rad/s},
+\omega_{\max} \approx 2\sqrt{k_s/m} = 2\sqrt{50 / 0.002} \approx 316 \text{ rad/s},
 $$
-hence $h < 2/\omega \approx 9$ ms (≈ 110 Hz).
+hence $h < 2/\omega_{\max} \approx 6.3$ ms (≈ 160 Hz). The frequency $\sqrt{2k_s/m}$ of an isolated pair of masses would underestimate it.
 
-With "2-hop" bending springs five times stiffer, $\omega$ is multiplied by $\sqrt{5}$ and the allowed step divided accordingly — hence the value of the implicit approach. Remember the orders of magnitude:
+With "2-hop" bending springs five times stiffer, $\omega_{\max}$ grows by a factor of about $\sqrt{5}$ and the allowed step shrinks accordingly — hence the value of the implicit approach. Remember the orders of magnitude:
 
 -   real-time garment simulation: $h \sim 2$–5 ms, implicit;
 -   effects particles: $h \sim 16$–33 ms, symplectic.
@@ -636,11 +639,17 @@ def simulate(n=40, steps=1200, h=1/240, seed=0):
         v[hit, 2] = -0.8 * v[hit, 2]
         yield x.copy(), v.copy()
 
-# mechanical energy: must remain bounded (cf. theorem 3.5)
-for k, (x, v) in enumerate(simulate()):
-    if k % 240 == 0:
-        E = 0.5 * 0.05 * (v ** 2).sum() + 0.05 * 9.81 * x[:, 2].sum()
-        print(f"t = {k/240:5.2f} s   E = {E:7.3f} J")
+# total mechanical energy = kinetic + gravity + springs (same m, k, r as above)
+def energy(x, v, m=0.05, k=80.0, r=0.15):
+    L = np.linalg.norm(np.diff(x, axis=0), axis=1)   # lengths of the chain springs
+    return (0.5 * m * (v ** 2).sum() + m * 9.81 * x[:, 2].sum()
+            + 0.5 * k * ((L - r) ** 2).sum())
+
+# drag, dampers and restitution 0.8 only remove energy: E must decay
+# (about 2800 J -> 0.03 J); any sustained growth means an unstable step
+for step, (x, v) in enumerate(simulate()):
+    if step % 240 == 0:
+        print(f"t = {step/240:5.2f} s   E = {energy(x, v):9.3f} J")
 ```
 
 ::: note
@@ -649,7 +658,7 @@ for k, (x, v) in enumerate(simulate()):
 1.  the order of the "velocity then position" lines — swapping these two lines gives back explicit Euler and makes the chain explode (try it with $k = 500$);
 2.  handling of the ground by *projection* (position corrected, velocity reflected) foreshadows the constraints of chapter 6: no contact spring, hence no added stiffness.
 
-The energy loop must oscillate boundedly — the most useful diagnostic of a physics engine.
+The energy printout is the most useful diagnostic of a physics engine, provided it counts every term (kinetic, gravity *and* springs). This system is deliberately dissipative — global drag, dampers, restitution 0.8 — so its energy must decay, with small step-to-step wiggles. A sustained growth is the signature of an unstable step (Theorem 3.2); without the dissipative terms, symplectic Euler would keep the energy oscillating around its initial value (Theorem 3.5).
 :::
 
 ### Elasticity, cloth and fluids in practice {#continuum-practice}
@@ -714,9 +723,9 @@ A step splits them into three parts:
     $$
     \mathbf{u}^\ast(\mathbf{x}) = \mathbf{u}(\mathbf{x} - \Delta t\,\mathbf{u}(\mathbf{x})) ;
     $$
-2.  **forces**, plus viscosity:
+2.  **forces, then viscosity** — add the body force, then diffuse implicitly (a sparse linear solve, stable for every $\Delta t$, as Stable Fluids does):
     $$
-    \mathbf{u}^{\ast\ast} = \mathbf{u}^\ast + \Delta t\,\mathbf{g} ;
+    \mathbf{u}^{+} = \mathbf{u}^\ast + \Delta t\,\mathbf{g}, \qquad \big(I - \nu\,\Delta t\,\nabla^2\big)\,\mathbf{u}^{\ast\ast} = \mathbf{u}^{+} ;
     $$
 3.  **projection**: solve the Poisson equation and set the new velocity,
     $$
@@ -747,7 +756,7 @@ Each new value is a convex combination of old ones, so the maximum can never gro
 Particles have a position but no orientation; boxes, wheels and bones need both. This chapter describes the state of a rigid body, explains why orientations are stored as unit quaternions rather than angles, and gives the conservation law that a rotating body must respect.
 
 ::: def
-[Definition 5.1 — Rigid body]{.tag} A **rigid body** is a set of material points whose mutual distances are constant. Its configuration is an element of $SE(3) = SO(3) \times \mathbb{R}^3$ (rotation + translation), its state $(\mathbf{c}, R, \mathbf{P}, \mathbf{L})$: center of mass, orientation, linear momentum $\mathbf{P} = M\mathbf{V}$ (with $\mathbf{V} = \dot{\mathbf{c}}$ the velocity of the center of mass and $M$ the total mass), angular momentum $\mathbf{L}$. The motion obeys
+[Definition 5.1 — Rigid body]{.tag} A **rigid body** is a set of material points whose mutual distances are constant. Its configuration is an element of $SE(3) = SO(3) \ltimes \mathbb{R}^3$ (rotation + translation; a semidirect product, since composing two motions rotates the second translation), its state $(\mathbf{c}, R, \mathbf{P}, \mathbf{L})$: center of mass, orientation, linear momentum $\mathbf{P} = M\mathbf{V}$ (with $\mathbf{V} = \dot{\mathbf{c}}$ the velocity of the center of mass and $M$ the total mass), angular momentum $\mathbf{L}$. The motion obeys
 $$
 \dot{\mathbf{P}} = \mathbf{F}_{ext}, \qquad \dot{\mathbf{L}} = \boldsymbol{\tau}_{ext} \ \ (\text{wrenches}), \qquad \mathbf{v}(\mathbf{p}) = \mathbf{V} + \boldsymbol{\omega} \times (\mathbf{p} - \mathbf{c})
 $$
@@ -772,7 +781,11 @@ $$
 
 composition is the quaternion product, and $q$ and $-q$ give the *same* rotation (anticipation for the weighted summation of chapter 7).
 
-Integration uses $\dot{q} = \tfrac12\, q \otimes (0, \boldsymbol{\omega})$, then renormalization ($q \leftarrow q/\|q\|$) — the symplectic approach applies here too.
+With $\boldsymbol{\omega}$ the world-frame angular velocity of Definition 5.1, integration uses
+$$
+\dot{q} = \tfrac12\, (0, \boldsymbol{\omega}) \otimes q \qquad \big(\text{equivalently } \tfrac12\, q \otimes (0, \boldsymbol{\omega}_{body}),\ \ \boldsymbol{\omega}_{body} = R^\top\boldsymbol{\omega}\big),
+$$
+then renormalization ($q \leftarrow q/\|q\|$) — the symplectic approach applies here too.
 ::::
 
 :::: thm
@@ -886,8 +899,97 @@ Checks:
 -   energy: from 9 to $6.75$ J (2.25 J dissipated in deformation and sound), consistent with $e < 1$.
 :::
 
+Billiard balls hit head-on, so the impulse passes through their centers and nothing turns. A box landing on a corner, a rod hitting the ground with one end or a car door slamming all receive the impulse off-center: part of it goes into rotation, and the formula of Theorem 6.2 must account for it.
+
+:::: prop
+[Proposition 6.4 — Contact impulse between rotating bodies]{.tag} Let the bodies of Theorem 6.2 also rotate, with angular velocities $\boldsymbol{\omega}_a, \boldsymbol{\omega}_b$ and world-frame inverse inertias $I_a^{-1}, I_b^{-1}$ (Definition 5.1). Call $\mathbf{r}_a = \mathbf{p} - \mathbf{c}_a$ and $\mathbf{r}_b = \mathbf{p} - \mathbf{c}_b$ the lever arms of the contact point $\mathbf{p}$. The relative velocity is now taken *at the contact point*:
+$$
+\mathbf{v}_{rel} = (\mathbf{v}_b + \boldsymbol{\omega}_b \times \mathbf{r}_b) - (\mathbf{v}_a + \boldsymbol{\omega}_a \times \mathbf{r}_a),
+$$
+and the impulse gains one angular term per body in its denominator:
+
+::: key
+[Key result — the contact impulse with rotation]{.tag}
+$$
+j = -\,\frac{(1 + e)\,(\mathbf{v}_{rel}\cdot\mathbf{n})}{\dfrac{1}{m_a} + \dfrac{1}{m_b} + (\mathbf{r}_a \times \mathbf{n})^\top I_a^{-1}(\mathbf{r}_a \times \mathbf{n}) + (\mathbf{r}_b \times \mathbf{n})^\top I_b^{-1}(\mathbf{r}_b \times \mathbf{n})}
+$$
+:::
+
+The linear velocities change as in Theorem 6.2, and the angular velocities as
+$$
+\boldsymbol{\omega}_a^+ = \boldsymbol{\omega}_a - j\,I_a^{-1}(\mathbf{r}_a \times \mathbf{n}), \qquad \boldsymbol{\omega}_b^+ = \boldsymbol{\omega}_b + j\,I_b^{-1}(\mathbf{r}_b \times \mathbf{n}).
+$$
+The angular terms are nonnegative, so rotation can only *lower* the impulse: the body turns instead of stopping. For a static body such as the ground, set $1/m_b = 0$ and $I_b^{-1} = 0$.
+
+::: proof
+The impulse $j\mathbf{n}$ acts on $b$ at the contact point, and $-j\mathbf{n}$ on $a$. It changes the angular momenta by $\mathbf{r}_b \times j\mathbf{n}$ and $-\mathbf{r}_a \times j\mathbf{n}$, which gives the angular updates.
+
+The velocity of $b$ at the contact point therefore changes by
+$$
+\frac{j}{m_b}\,\mathbf{n} + j\,\big(I_b^{-1}(\mathbf{r}_b \times \mathbf{n})\big) \times \mathbf{r}_b ,
+$$
+and that of $a$ by the opposite of the same expression written for $a$.
+
+Dot the difference with $\mathbf{n}$ and use the triple product identity
+$$
+\mathbf{n} \cdot (\mathbf{u} \times \mathbf{r}) = \mathbf{u} \cdot (\mathbf{r} \times \mathbf{n}), \qquad \mathbf{u} = I^{-1}(\mathbf{r} \times \mathbf{n}):
+$$
+the normal relative velocity changes by $j$ times the denominator. Imposing the restitution law, as in the proof of Theorem 6.2, gives $j$. Each angular term is a quadratic form of the positive definite $I^{-1}$, hence nonnegative. [∎]{.qed}
+:::
+::::
+
+::: ex
+[Example 6.5 — A falling rod hits the ground with one end]{.tag} A rod of mass $M = 1.2$ kg and length $l = 1$ m has $I = Ml^2/12 = 0.1$ kg·m² (table of chapter 5). It falls flat, without rotating, at $2$ m/s and hits rigid ground with its left end, with $e = 0.5$.
+
+Work in the vertical plane, with the ground as body $b$ (infinite mass) and $\mathbf{n} = (0, -1)$ pointing from the rod into the ground.
+
+1.  Lever arm $\mathbf{r}_a = (-0.5, 0)$. In the plane, $\mathbf{r}_a \times \mathbf{n}$ is the scalar $0.5$, so the angular term is $0.5^2/0.1 = 2.5$ kg⁻¹.
+2.  The rod approaches with $\mathbf{v}_{rel}\cdot\mathbf{n} = -2$ m/s, so
+    $$
+    j = \frac{1.5 \times 2}{1/1.2 + 2.5} = \frac{3}{3.33} = 0.9 \text{ N·s},
+    $$
+    four times less than the $3.6$ N·s a point mass would receive.
+3.  After impact the center still falls, at $V^+ = -2 + 0.9/1.2 = -1.25$ m/s, and the rod spins clockwise:
+    $$
+    \omega^+ = -0.9 \times 0.5/0.1 = -4.5 \text{ rad/s}.
+    $$
+    The left end now rises at $-1.25 + 4.5 \times 0.5 = 1.0$ m/s, which is $e \times 2$ m/s ✓.
+4.  Energy: from $2.4$ J to $0.94 + 1.01 = 1.95$ J (translation plus rotation). The loss of $0.45$ J equals $\tfrac12 m_{\text{eff}}(1 - e^2)\,v_n^2$ with $m_{\text{eff}} = 1/3.33 = 0.3$ kg, the effective mass that the contact sees.
+
+Forgetting the angular term — a classic lab bug — gives $j = 3.6$ N·s: the rod bounces like a block and never starts to spin.
+:::
+
+::: note
+[Lab stub (C++)]{.tag} The labs of the course are in C++ with OpenGL. The physics step does not depend on the drawing code: below is Proposition 6.4 for one body against static ground, written with the GLM vector types (Eigen, or the vector types of your framework, work the same way).
+
+For the window, camera and drawing, the open CGP library of D. Rohmer ([imagecomputing.net/cgp](https://imagecomputing.net/cgp/), MIT licence) is a minimal C++/OpenGL framework used in the École Polytechnique courses INF443 (the official prerequisite) and INF585 (3D animation and simulation), whose lab code is public ([inf585_lab_code](https://github.com/drohmer/inf585_lab_code)). This is a pointer of these notes, not the official kit of the 2026–2027 occurrence.
+:::
+
+```cpp
+#include <glm/glm.hpp>
+using glm::vec3; using glm::mat3;
+
+struct RigidBody {
+    float m;  mat3 Ibody_inv;        // mass, inverse inertia in the body frame
+    vec3 c, V, L;  mat3 R;           // center, velocity, angular momentum, orientation
+};
+
+// Contact with static ground at point p; n = unit normal from the body into the ground.
+void contact_impulse(RigidBody& a, vec3 p, vec3 n, float e) {
+    mat3 Iinv = a.R * a.Ibody_inv * glm::transpose(a.R);  // world inverse inertia
+    vec3 r = p - a.c, w = Iinv * a.L;                      // lever arm, angular velocity
+    float vn = -glm::dot(a.V + glm::cross(w, r), n);       // v_rel . n, ground at rest
+    if (vn >= 0.0f) return;                                // separating: no impulse
+    vec3 rn = glm::cross(r, n);
+    float denom = 1.0f / a.m + glm::dot(rn, Iinv * rn);    // angular term >= 0
+    float j = -(1.0f + e) * vn / denom;
+    a.V -= (j / a.m) * n;                                  // linear update
+    a.L -= j * rn;                                         // angular: L += r x (-j n)
+}
+```
+
 ::: def
-[Definition 6.4 — Three ways to handle constraints]{.tag}
+[Definition 6.6 — Three ways to handle constraints]{.tag}
 
 -   **Penalty**: a spring of stiffness $k$ on the interpenetration $\delta$: simple but stiff (constraint $h < 2/\sqrt{k/m}$, cf. ch. 4); a common choice for compliant contacts is $k \approx m/h^2$, which gives $h\sqrt{k/m} = 1$, safely inside the stability limit;
 -   **Impulse / projection**: solve the contacts in velocities by linear complementarity (LCP):
@@ -949,7 +1051,7 @@ $$
 
 -   **Dual Quaternion Skinning**: replace the matrix average by an average of *dual quaternions* (rigid rotation + translation): the blended transformation remains an isometry ⟹ no more collapse, at the price of a slight bulging of folds and the loss of the expressivity property of weights;
 -   **Cages and free-form deformations**: embed the mesh in a simple shell and deform it through harmonic or Green coordinates — fine control of folds, higher cost;
--   **Learned skinning**: predict the weights or the deformation with a neural network (for instance, learning the folds from sculpted examples): cf. Machine Learning module, neural networks chapter — skinning becomes a regression problem on (pose, mesh) pairs.
+-   **Learned skinning**: predict the weights or the deformation with a neural network (for instance, learning the folds from sculpted examples): cf. [Deep Learning, ch. 1–2](../m1p1-deep-learning/index.html#ch1) (networks and backpropagation), or [ch. 0](../m1p2-deep-learning-p2/index.html#ch0) of its P2 variant — skinning becomes a regression problem on (pose, mesh) pairs.
 :::
 
 ::: ex
@@ -1072,17 +1174,28 @@ Animating hundreds of characters one by one is impossible, so crowds are animate
     \mathbf{f}_c = \overline{\mathbf{x}}_{\mathcal{N}} - \mathbf{x}_i .
     $$
 
-Emergence (flocks, schools) comes from *local* rules without a leader or a plan; cost $O(n \cdot k)$ with $k$ neighbors, neighborhood found by spatial grid or kd-tree — cf. Refresher CS module, spatial data structures chapter.
+Emergence (flocks, schools) comes from *local* rules without a leader or a plan; cost $O(n \cdot k)$ with $k$ neighbors, neighborhood found by spatial grid or kd-tree — the broad-phase structures of [chapter 6](#ch6) (Definition 6.1); kd-trees, grids and BVHs are compared in [Image Synthesis, ch. 6](../m1p2-image-synthesis/index.html#ch6).
 :::
 
 ::: def
-[Definition 9.2 — Social forces (Helbing–Molnár)]{.tag} For human crowds, each agent has a desired velocity $\mathbf{v}_i^0$ (toward its goal, via a navigation graph) and undergoes
+[Definition 9.2 — Social forces (Helbing and Molnár, 1995; Helbing, Farkas and Vicsek, 2000)]{.tag} For human crowds, each agent $i$ is a disc of radius $r_i$ with a desired velocity $\mathbf{v}_i^0$ (toward its goal, via a navigation graph), and undergoes
 $$
-m_i\dot{\mathbf{v}}_i = \underbrace{m_i\tfrac{1}{\tau}\big(\mathbf{v}_i^0 - \mathbf{v}_i\big)}_{\text{goal attainment}} + \underbrace{\sum_{j\neq i} \mathbf{f}_{ij}^{soc}}_{\text{psych. repulsion}} + \underbrace{\mathbf{f}_{i}^{wall}}_{\text{walls}}, \qquad \mathbf{f}_{ij}^{soc} = A\,e^{-\|\mathbf{x}_j - \mathbf{x}_i\|/B}\,\mathbf{n}_{ij}.
+m_i\dot{\mathbf{v}}_i = \underbrace{m_i\tfrac{1}{\tau}\big(\mathbf{v}_i^0 - \mathbf{v}_i\big)}_{\text{goal attainment}} + \underbrace{\sum_{j\neq i} \mathbf{f}_{ij}}_{\text{other agents}} + \underbrace{\mathbf{f}_{i}^{wall}}_{\text{walls}}.
 $$
-Typical parameters $A = 2 \times 10^3$ N, $B = 0.08$ m, $\tau = 0.5$ s.
+Write $d_{ij} = \|\mathbf{x}_i - \mathbf{x}_j\|$ for the distance of the centers, $\mathbf{n}_{ij} = (\mathbf{x}_i - \mathbf{x}_j)/d_{ij}$ for the unit vector from $j$ to $i$, and $r_{ij} = r_i + r_j$ for the sum of the two radii. The psychological repulsion is
+$$
+\mathbf{f}_{ij}^{soc} = A\,e^{(r_{ij} - d_{ij})/B}\,\mathbf{n}_{ij} .
+$$
+When the bodies touch ($d_{ij} < r_{ij}$), the 2000 model adds a body compression $k\,(r_{ij} - d_{ij})\,\mathbf{n}_{ij}$ and a sliding friction of strength $\kappa\,(r_{ij} - d_{ij})$ times the tangential relative velocity. Its parameters are
+$$
+m_i \approx 80\ \text{kg},\quad r_i \in [0.25, 0.35]\ \text{m},\quad A = 2\times10^3\ \text{N},\quad B = 0.08\ \text{m},
+$$
+$$
+\tau = 0.5\ \text{s},\quad k = 1.2\times10^5\ \text{kg/s}^2,\quad \kappa = 2.4\times10^5\ \text{kg/(m·s)}.
+$$
+The radii matter: at the touching distance $d_{ij} = r_{ij} \approx 0.6$ m the repulsion equals $A = 2000$ N, whereas $A\,e^{-d_{ij}/B}$ without them would give about 1 N, negligible against the driving term $m_i v^0/\tau \approx 160$ N.
 
-Documented emergent phenomena: formation of opposing lanes in corridors, arches in front of doors, "faster-is-slower" (pushing more slows down evacuation).
+Documented emergent phenomena: formation of opposing lanes in corridors, arches in front of doors (held by the contact and friction forces), "faster-is-slower" (pushing more slows down evacuation).
 :::
 
 ::: ex
@@ -1097,7 +1210,7 @@ An animation engine uses this to *regulate* background crowds (level of detail: 
 :::
 
 ::: note
-[Navigation: graph, grid, fields]{.tag} The goal $\mathbf{v}^0$ comes from a navigation layer: waypoint graph (A\*, Dijkstra — cf. Refresher CS module, graphs chapter), navigation mesh (navmesh) with hierarchical search, or potential fields precomputed by the eikonal equation (fast marching — the same equation as the geodesic distances of the geometry module).
+[Navigation: graph, grid, fields]{.tag} The goal $\mathbf{v}^0$ comes from a navigation layer: waypoint graph (A\*, Dijkstra — cf. [Refresher in Computer Science, ch. 7](../m1p1-refresher-cs/index.html#ch7)), navigation mesh (navmesh) with hierarchical search, or potential fields precomputed by the eikonal equation (fast marching — the same equation as the geodesic distances of the geometry module).
 
 The RVO/ORCA techniques (*reciprocal velocity obstacles*) replace forces with a chosen velocity avoiding collisions over a short horizon: more stable at high density than social forces, the standard of real-time urban simulations.
 :::
@@ -1125,11 +1238,11 @@ The standard of AAA games: no state machine to write, but a galaxy of data to re
 :::
 
 ::: prop
-[Proposition 10.3 — Learning motion]{.tag} Recurrent networks (or transformers) on mocap windows predict the next pose conditioned on control; *phase-functioned networks* (Holden et al., 2016) condition an MLP on the phase of the walking cycle; temporal autoregressive networks drift in the long run — hence learning in latent space with reinjected constraints (feet on the ground: IK losses).
+[Proposition 10.3 — Learning motion]{.tag} Recurrent networks (or transformers) on mocap windows predict the next pose conditioned on control; *phase-functioned networks* (Holden et al., 2017) condition an MLP on the phase of the walking cycle; temporal autoregressive networks drift in the long run — hence learning in latent space with reinjected constraints (feet on the ground: IK losses).
 
 Differentiable physics (gradients of the solver, cf. chapter 4: the linear system $(M - h^2J)\Delta\mathbf{v} = \dots$ can be differentiated) closes the loop: learning controllers *through* simulation.
 
-All these models rest on the same foundations as the Machine Learning module (backpropagation and recurrent network chapters) and prepare the multimodal generative models of the Multimodal GenAI module (chapter on 3D/video generation).
+All these models rest on the foundations of [Deep Learning](../m1p1-deep-learning/index.html) (ch. 2 backpropagation, ch. 5 RNN and LSTM, ch. 6 transformers; in the P2 variant, [ch. 0](../m1p2-deep-learning-p2/index.html#ch0)) and prepare the generative models of [Multimodal Generative AI, ch. 8](../m1p2-multimodal-genai/index.html#ch8) (video, robot actions, 3D).
 :::
 
   Criterion          Keyframe                   Procedural physics   Data-driven
@@ -1249,6 +1362,87 @@ Their animated implicit surfaces will motivate the "reconstruction" chapter of t
 9.  **★★ Crowd.** Implement the three boids forces (Definition 9.1) with a grid-based neighborhood; tune the weights to observe (a) a coherent flock, (b) fragmentation into subgroups, (c) the instability when separation dominates. Which force corresponds to which stability term of chapter 3?
 10. **★★★ Project — mini-garment.** A $16 \times 16$ grid of masses, structural/shear/bend springs, symplectic then implicit integrator by conjugate gradient, collision with a moving sphere; measure the critical step of each scheme and the achievable real time (frame < 16 ms); conclude on the PBD versus implicit choice for a game.
 
+## Projects and assessment {#projects}
+
+The fiche above records the official assessment as not displayed: "the 2026-2027 sheet gives no assessment text, and its LLGA section is empty; for the other listed degrees it shows the grade format (out of 20, or letter grade) and that a resit is allowed". The sheet describes the course as half lectures and half C++/OpenGL lab sessions. The subjects below are proposals of these notes, not official rules: a project can stand for lab or project marks, and the exam proposal for a final written test.
+
+The projects exercise mainly O7 (simulators written from the equations and measured against the theory) and O6 (motion as a generated modality: text-to-motion, faces tracked from video). O4 enters with the mesh-graph surrogate, O1 with the learned components and O3 with the language model that drafts keyframes.
+
+### Solo projects {#projects-solo}
+
+1.  **[Solo · ≈ 20 h] Integrator zoo: the oscillator theorem on chains and cloth.** Do the critical steps predicted from the spectrum of $M^{-1}K$ match the ones a simulator actually shows?
+    -   *Work*: explicit, symplectic and implicit Euler, Verlet and RK4 (ch. 2) on 1D chains and on anchored $N \times N$ cloth grids with structural, shear and 2-hop bending springs (ch. 4). Compute $\omega_{\max}$ from the eigenvalues of $M^{-1}K$ (`scipy.sparse.linalg.eigsh`), predict the critical step (Proposition 4.2), and measure it by bisection on the energy growth of a small-amplitude start over 2000 steps.
+    -   *Data*: synthetic only; Examples 4.3 and 4.7 serve as test cases (the zigzag bound $2\sqrt{k/m}$, the factor of about $\sqrt5$ brought by stiff bending springs).
+    -   *Success criterion*: measured critical steps within 2 % of the predictions for symplectic Euler and Verlet at three grid sizes; the RK4 limit $h\omega_{\max} \approx 2.83$ recovered; energy-drift curves that match the table of chapter 3.
+    -   *Deliverables*: code, a 4–6 page report, a 10-minute talk; chapters 2–4, Exercises 3 and 5.
+2.  **[Solo · ≈ 20 h] Paper study: dual quaternion skinning (Kavan, Collins, Žára and O'Sullivan, 2008).** How much volume does LBS lose at a twisting and at a bending joint, and what does DQS trade to fix it?
+    -   *Work*: LBS (Definition 7.1) and DQS (Definition 7.3) in NumPy on a cylinder of 32 rings around a two-bone joint with smooth weights. Measure the minimum radius against the twist angle, compared with the $r\cos(\theta/2)$ of Theorem 7.2; the enclosed volume (divergence theorem on the closed mesh) in twist and in bend; the bulge of DQS at a 90° bend.
+    -   *Data*: the synthetic cylinder; optionally a free Mixamo character driven by a clip of the CMU Graphics Lab Motion Capture Database.
+    -   *Success criterion*: the LBS radius within 1 % of $r\cos(\theta/2)$ at weights ½–½; the DQS radius constant under pure twist; the DQS bulge measured, and the paper's comparison figures reproduced qualitatively.
+    -   *Deliverables*: code, report, talk; chapters 5 and 7, Exercises 6 and 7.
+3.  **[Solo · ≈ 20 h] Blendshape weights from video landmarks.** Does a bounded least-squares fit on split and corrective targets (Example 7.6) track a face as well as a learned regressor?
+    -   *Data*: the open ICT FaceKit face model (USC Institute for Creative Technologies), whose FACS-based expression blendshapes are split left and right, close to the ARKit set; landmarks and ARKit-style blendshape scores from MediaPipe Face Landmarker, run on a self-recorded one-minute video.
+    -   *Work*: 40–60 landmark–vertex correspondences chosen once; head pose by a similarity (Procrustes) fit; then the weights by `scipy.optimize.lsq_linear` with bounds $[0, 1]$ and a small temporal smoothness term. Compare with MediaPipe's own scores, which come from a learned regressor (Definition 7.5).
+    -   *Success criterion*: landmark error of the fitted weights against that of the regressor's weights on held-out frames; the gain of split and corrective targets over a symmetric basis, measured as in Example 7.6.
+    -   *Deliverables*: code, report, talk; chapter 7 (Definition 7.5, Example 7.6) and chapter 1 for temporal filtering.
+
+### Group projects {#projects-group}
+
+1.  **[Group of 3 · ≈ 30 h each] Paper study: a learned cloth surrogate (Pfaff, Fortunato, Sanchez-Gonzalez and Battaglia, 2021).** Can a mesh-graph network trained on the mini-garment of Exercise 10 replace the semi-implicit step, and at what time step does its rollout stay stable?
+    -   *Data*: trajectories from the group's own simulator — Baraff–Witkin energies and semi-implicit step (Definitions 4.4 and 4.8), collisions with a moving sphere (ch. 6) — over varied sphere paths; the `flag_simple` dataset released with the MeshGraphNets paper as a second benchmark.
+    -   *Work*: an encode–process–decode GNN that predicts per-node accelerations from mesh-space and world-space edges, by the message passing of [Graph ML, ch. 5](../m1p2-graph-ml/index.html#ch5), trained with noise injection; rollouts compared with the reference simulator and with PBD (Definition 6.6).
+    -   *Split*: simulator and data generation; GNN and training; evaluation (rollout error, energy, collisions, speed).
+    -   *Success criterion*: position RMSE over a 100-step rollout on held-out sphere paths; the largest step at which rollouts stay bounded, against the $2/\omega_{\max}$ of Proposition 4.2 and the implicit step; wall-clock time per frame.
+    -   *Deliverables*: code, an 8–10 page joint report, a 20-minute talk; chapters 3, 4 and 6, Exercise 10.
+2.  **[Group of 3 · ≈ 30 h each] Text-to-motion with physical cleanup.** Generated motions often slide their feet and jitter: how much of that can the classical tools of this course remove, without changing what the motion means?
+    -   *Data*: HumanML3D (Guo, Zou, Zuo, Wang, Ji, Li and Cheng, 2022), text descriptions of AMASS motions (AMASS needs a free research registration), with its standard evaluator.
+    -   *Work*: motions from a pretrained text-to-motion diffusion model (MDM, Tevet et al., 2023) and, as a baseline, keyframes (root path, foot contacts, a few joint targets) proposed by an instruction-tuned LLM and interpolated by splines (ch. 1). Then foot-contact detection, damped least-squares IK (Proposition 8.2) to pin the feet, and skinning by LBS or DQS (ch. 7).
+    -   *Split*: generation (diffusion model and LLM prompts); cleanup (contacts, IK, filtering); skinning, metrics and figures.
+    -   *Success criterion*: foot skating (mean horizontal speed of a foot during contact) cut by at least half, without raising the mean jerk; the HumanML3D text–motion R-precision unchanged within its confidence interval.
+    -   *Deliverables*: code, joint report, talk; chapters 1, 7, 8 and 10. It continues [Multimodal Generative AI, ch. 8](../m1p2-multimodal-genai/index.html#ch8) and the motion priors of Proposition 10.3.
+3.  **[Group of 3 · ≈ 30 h each] Paper study: escape panic and faster-is-slower (Helbing, Farkas and Vicsek, 2000).** Does the social-force model of Definition 9.2 reproduce clogging at a narrow exit, and can a learned desired speed beat the best hand-tuned one?
+    -   *Work*: social forces with body radii, body compression and sliding friction as in the paper; walls; navigation by A\* on a grid or a navmesh ([Real-time AI for video games, ch. 2](../m1p2-realtime-ai-videogames/index.html#ch2)); RVO avoidance as a comparison. Then a policy that sets each agent's desired speed, trained by policy gradient ([Reinforcement Learning, ch. 5](../m1p2-reinforcement-learning/index.html#ch5)) to maximize the evacuation flow.
+    -   *Data*: synthetic rooms with a single 1 m exit and about 200 agents; lane formation in a corridor with two opposing flows (Helbing and Molnár, 1995).
+    -   *Split*: simulator and integrator (time step chosen from ch. 3); navigation and RVO; RL environment and training.
+    -   *Success criterion*: evacuation time against desired speed, with the faster-is-slower minimum reproduced (confidence intervals over 20 seeds); the learned policy's flow against the best constant speed.
+    -   *Deliverables*: code, joint report, talk; chapters 2–3 and 9. The simulator can serve as an extra RL environment in the [Y1.2 fleet-dispatch project](../../projects/index.html#y1-2).
+
+### Written exam (proposal) {#projects-exam}
+
+Two hours, one handwritten A4 sheet and a simple calculator allowed; four exercises: a course question, two computations and a short proof.
+
+1.  **Question (4 points).** A mass $m$ hangs on a spring of stiffness $k$, with $\omega = \sqrt{k/m}$. Explain what explicit, symplectic and implicit Euler do to its energy, give the stability condition of each in terms of $h\omega$, and say which scheme you would choose for effects particles and which for a stiff garment.
+    -   *Expected*: explicit Euler has $\rho = \sqrt{1 + h^2\omega^2} > 1$: the energy grows by the factor $1 + h^2\omega^2$ per step, for every $h$ (Theorem 3.2).
+    -   Symplectic Euler has $\det G = 1$ and is stable if and only if $h\omega < 2$, with an energy that oscillates (Theorem 3.5); implicit Euler has $\rho = 1/\sqrt{1 + h^2\omega^2}$: stable for every $h$, but damped (Theorem 3.4).
+    -   Symplectic Euler for cheap particles at frame-rate steps; the semi-implicit step of Definition 4.4 for a stiff garment, where $2/\omega_{\max}$ would force tiny steps.
+2.  **Question (6 points).** A thin rod of mass 2 kg and length 1.2 m falls flat, without rotating, at 3 m/s onto rigid ground and hits it with one end; restitution $e = 0$. Using $I = Ml^2/12$, compute the impulse, the velocity of the center and the angular velocity just after impact, and the energy lost. Compare with a point mass of 2 kg.
+    -   *Expected*: $I = 0.24$ kg·m², lever arm 0.6 m, angular term $0.6^2/0.24 = 1.5$ kg⁻¹, denominator $0.5 + 1.5 = 2$ (Proposition 6.4), so $j = 3/2 = 1.5$ N·s.
+    -   $V^+ = -3 + 1.5/2 = -2.25$ m/s and $|\omega^+| = 1.5 \times 0.6/0.24 = 3.75$ rad/s. The end that hit stops, since $-2.25 + 3.75 \times 0.6 = 0$, as $e = 0$ requires.
+    -   Energy: 9 J before, $5.06 + 1.69 = 6.75$ J after, so 2.25 J lost, which is $\tfrac12 m_{\text{eff}} v_n^2$ with $m_{\text{eff}} = 0.5$ kg. A point mass would receive 6 N·s and lose all 9 J.
+3.  **Question (5 points).** Prove that symplectic Euler applied to $\ddot{x} = -\omega^2 x$ is stable, in the sense of Definition 3.1, if and only if $0 < h\omega < 2$.
+    -   *Expected*: $\det G_{ES} = 1$ and $\mathrm{tr}\,G_{ES} = 2 - h^2\omega^2$, so the eigenvalues are the roots of $\lambda^2 - 2c\lambda + 1$ with $c = 1 - h^2\omega^2/2$.
+    -   If $|c| < 1$, the roots are two distinct conjugates of modulus 1: $G_{ES}$ is diagonalizable and every component stays bounded.
+    -   If $h\omega > 2$, then $c < -1$ and one real root has modulus $|c| + \sqrt{c^2 - 1} > 1$.
+    -   If $h\omega = 2$, the eigenvalue $-1$ is double but $G_{ES} \neq -I$, so it is defective: linear growth, unstable.
+4.  **Question (5 points).** A planar arm has two segments of length 1. Find both joint configurations that reach the target $(0, 1.6)$ and check one by forward kinematics. Give the Jacobian at that pose and its determinant, and explain why damped least squares (Proposition 8.2) is needed near a fully extended arm.
+    -   *Expected*: $\cos\theta_2 = (2.56 - 2)/2 = 0.28$, so $\theta_2 = \pm 73.74°$ and $\sin\theta_2 = \pm 0.96$.
+    -   For $\theta_2 = +73.74°$: $\theta_1 = 90° - \mathrm{atan2}(0.96, 1.28) = 53.13°$; the other solution is $(126.87°, -73.74°)$. Forward kinematics: $x = 0.6 - 0.6 = 0$ and $y = 0.8 + 0.8 = 1.6$ ✓.
+    -   At the first pose,
+        $$
+        J = \begin{pmatrix} -1.6 & -0.8 \\ 0 & -0.6 \end{pmatrix}, \qquad \det J = L_1 L_2 \sin\theta_2 = 0.96 .
+        $$
+    -   As the arm straightens, $\theta_2 \to 0$ and $\det J \to 0$: the undamped inverse produces huge steps, and the damping $\lambda > 0$ keeps them bounded.
+
+### Grading rubric (proposal) {#projects-rubric}
+
+| Criterion | Weight | What earns the marks |
+|---|---|---|
+| Model and question | 15 % | the physical model, its parameters (masses, stiffnesses, time step) and the question stated and justified from the chapters |
+| Correct simulation code | 25 % | code written from the definitions and tested on a case with a known answer (oscillator, two-body impulse, closed-form IK) |
+| Stability and accuracy evidence | 20 % | time steps chosen from the theory (ch. 3–4), energy or error curves, several seeds or scenes |
+| Analysis tied to the theory | 25 % | each result, failures included, explained by a statement of the course (stability, locality, collapse, conservation) |
+| Communication | 15 % | videos or figures with units that answer the question, a talk on time, honest limits |
+
 ## References {#refs}
 
 -   M. Desbrun, M.-P. Cani (Gascuel), [Smoothed Particles: A New Paradigm for Animating Highly Deformable Bodies](https://inria.hal.science/inria-00537534/document), EG Workshop on Computer Animation and Simulation, 1996.
@@ -1257,8 +1451,11 @@ Their animated implicit surfaces will motivate the "reconstruction" chapter of t
 -   M. Desbrun, A. Hirani, M. Leok, J. Marsden, [Discrete Exterior Calculus](https://arxiv.org/abs/math/0508341), arXiv 2005; M. Desbrun, E. Kanso, Y. Tong, [Discrete Differential Forms for Computational Modeling](https://link.springer.com/chapter/10.1007/978-3-7643-8621-4_16), Springer; K. Crane, F. de Goes, M. Desbrun, P. Schröder, [Digital Geometry Processing with Discrete Exterior Calculus](https://dl.acm.org/doi/10.1145/2504435.2504442), SIGGRAPH Asia Courses 2013 — open notes: [DDG](https://www.cs.cmu.edu/~kmcrane/Projects/DDG/).
 -   C. Reynolds, [Flocks, Herds and Schools: A Distributed Behavioral Model](https://dl.acm.org/doi/10.1145/37402.37406), SIGGRAPH 1987 (boids).
 -   D. Baraff, A. Witkin, Large Steps in Cloth Simulation, SIGGRAPH 1998 (the implicit approach for stiff springs); M. Müller, B. Heidelberger, M. Hennix, J. Ratcliff, Position Based Dynamics, JVCIR 2007 (and XPBD, M. Macklin, M. Müller, N. Chentanez, 2016).
--   L. Kavan, S. Collins, J. Zara, C. O'Sullivan, Geometric Skinning with Approximate Dual Quaternion Transformations, TOG 2008 (DQS); A. Le, J. Lewis, F. Pighin, Motion Capture and Simulation of Bodies and Clothing (skinning survey).
--   A. Aristidou, J. Lasenby, FABRIK: A Fast, Iterative Solver for the Inverse Kinematics Problem, Graphical Models 2011; L. Wang, C. Wu, K. Liu, An Optimization-based Framework for Pose Estimation (CCD).
--   G. Grossman, D. Goodwin, Motion Matching, GDC 2016 (talk); D. Holden, T. Komura, J. Saito, Phase-Functioned Neural Networks for Character Control, SIGGRAPH 2016.
+-   J. Stam, Stable Fluids, SIGGRAPH 1999 (semi-Lagrangian advection, implicit diffusion, pressure projection).
+-   L. Kavan, S. Collins, J. Žára, C. O'Sullivan, Geometric Skinning with Approximate Dual Quaternion Blending, ACM TOG 27(4), 2008 (DQS); A. Jacobson, Z. Deng, L. Kavan, J. P. Lewis, Skinning: Real-time Shape Deformation, SIGGRAPH 2014 Courses (skinning survey).
+-   A. Aristidou, J. Lasenby, FABRIK: A Fast, Iterative Solver for the Inverse Kinematics Problem, Graphical Models 2011; L.-C. T. Wang, C. C. Chen, A Combined Optimization Method for Solving the Inverse Kinematics Problem of Mechanical Manipulators, IEEE Transactions on Robotics and Automation 7(4), 1991 (CCD).
+-   D. Helbing, P. Molnár, Social Force Model for Pedestrian Dynamics, Physical Review E 51, 1995; D. Helbing, I. Farkas, T. Vicsek, Simulating Dynamical Features of Escape Panic, Nature 407, 2000 (the parameters of Definition 9.2).
+-   S. Clavet, Motion Matching and The Road to Next-Gen Animation, GDC 2016 (talk; see also M. Büttner, S. Clavet, nucl.ai 2015, and K. Zadziuk, GDC 2016); D. Holden, T. Komura, J. Saito, Phase-Functioned Neural Networks for Character Control, ACM TOG 36(4), SIGGRAPH 2017.
+-   Project papers: T. Pfaff, M. Fortunato, A. Sanchez-Gonzalez, P. Battaglia, Learning Mesh-Based Simulation with Graph Networks, ICLR 2021; C. Guo et al., Generating Diverse and Natural 3D Human Motions from Text (HumanML3D), CVPR 2022; G. Tevet et al., Human Motion Diffusion Model, ICLR 2023.
 -   E. Hairer, C. Lubich, G. Wanner, Geometric Numerical Integration, Springer (symplecticity, stability regions); the course notes [Discrete Differential Geometry](https://www.cs.cmu.edu/~kmcrane/Projects/DDG/) for the geometry/simulation bridge.
 -   Lab tools: [NumPy](https://numpy.org), [Matplotlib](https://matplotlib.org), [libigl](https://libigl.github.io) (geometry), engines: Bullet, XPBD/Jolt (open source).
