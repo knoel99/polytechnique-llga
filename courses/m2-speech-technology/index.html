@@ -322,7 +322,7 @@ window.Quarto = {
 <li><strong>Time-frequency analysis</strong> (ch.&nbsp;6): STFT, Gabor windows, time-frequency trade-off — <em>the</em> spectrogram is the input of almost all the models in this module (cf.&nbsp;Signal Processing module ch.&nbsp;6);</li>
 <li><strong>Mel spectrogram and MFCC</strong> (ch.&nbsp;8): 25 ms frames every 10 ms, Hann window, Mel filter bank (perceptual scale linear below 1 kHz then logarithmic: <span class="math inline">m = 2595\log_{10}(1 + f/700)</span>), 20-80 coefficients, possibly DCT (MFCC);</li>
 <li><strong>Random signals</strong> (ch.&nbsp;7): power spectral density, periodogram — used by energy-based VADs (ch.&nbsp;10) and spread-spectrum watermarking (ch.&nbsp;9);</li>
-<li><strong>Recurrent networks and transformers</strong> (<a href="../m1p1-deep-learning/index.html#ch6">Deep Learning</a> M1, or <a href="../m1p2-deep-learning-p2/index.html#dl-textgen">Deep Learning P2</a> on its path): LSTM, attention <span class="math inline">\mathrm{softmax}(QK^\top/\sqrt{d})V</span> — the ASR/TTS encoder is a transformer (ch.&nbsp;3-4);</li>
+<li><strong>Recurrent networks and transformers</strong> (<a href="../m1p1-deep-learning/index.html#ch5">Deep Learning</a> M1 ch.&nbsp;5–6, or <a href="../m1p2-deep-learning-p2/index.html#dl-rnn">Deep Learning P2</a> on its path, sections on recurrent networks and text generation): LSTM, attention <span class="math inline">\mathrm{softmax}(QK^\top/\sqrt{d})V</span> — the ASR/TTS encoder is a transformer (ch.&nbsp;3-4);</li>
 <li><strong>Diffusion and VAE</strong> (<a href="../m1p2-multimodal-genai/index.html#ch3">Multimodal GenAI</a> M1 ch.&nbsp;1 and 3, or <a href="../m1p1-deep-learning/index.html#ch9">Deep Learning</a> ch.&nbsp;9 / <a href="../m1p2-deep-learning-p2/index.html#dl-generative">Deep Learning P2</a> §7.3): ELBO, DDPM, noise prediction — the generative TTS models (ch.&nbsp;7) descend directly from them; normalizing flows and flow matching are recalled in ch.&nbsp;7.</li>
 </ul>
 </div>
@@ -575,7 +575,7 @@ window.Quarto = {
 </span> The Jacobian term corrects for the local stretching of volume, so that the density of <span class="math inline">x</span> still integrates to 1.</p>
 <p><em>Normalizing flow.</em> One composes simple bijections whose log-determinants are cheap. In an affine <em>coupling</em> layer, half of the coordinates pass unchanged and the other half are rescaled and shifted by functions <span class="math inline">s</span> and <span class="math inline">t</span> of the first half: <span class="math display">
 y_{1:k} = z_{1:k}, \qquad y_{k+1:d} = z_{k+1:d} \odot e^{s(z_{1:k})} + t(z_{1:k}), \qquad \log\big|\det J_f\big| = \sum_j s_j(z_{1:k}).
-</span> The Jacobian is triangular, so the exact log-likelihood costs one pass (the log-determinant enters it with a minus sign) and training maximizes it directly: this is the flow of VITS.</p>
+</span> The Jacobian is triangular, so the exact log-likelihood costs one pass (the log-determinant enters it with a minus sign), and a flow used alone is trained by maximizing it. VITS stacks such layers in their shift-only form (<span class="math inline">s = 0</span>, log-determinant zero) to make its text-conditioned prior more flexible; the whole model is still trained on an ELBO.</p>
 <p><em>Flow matching</em> (Lipman et al., ICLR 2023) learns instead a velocity field <span class="math inline">v_\theta(x, t)</span>, for <span class="math inline">t \in [0, 1]</span>, whose differential equation carries Gaussian noise <span class="math inline">x_0</span> at <span class="math inline">t = 0</span> to data <span class="math inline">x_1</span> at <span class="math inline">t = 1</span>. Along the straight path from a noise sample to a data sample the velocity is constant, which gives the <em>conditional flow-matching loss</em>: <span class="math display">
 x_t = (1 - t)\, x_0 + t\, x_1, \qquad \mathcal{L}_{\mathrm{CFM}}(\theta) = \mathbb{E}_{t, x_0, x_1}\, \big\| v_\theta(x_t, t) - (x_1 - x_0) \big\|^2 .
 </span> Its minimizer is the conditional mean of <span class="math inline">x_1 - x_0</span> given <span class="math inline">x_t</span>: the velocity field that transports the whole noise distribution onto the data distribution. Training never simulates the equation; sampling integrates it with an ODE solver in a few to a few dozen steps. Voicebox (theorem 7.3) conditions <span class="math inline">v_\theta</span> on the text and on the unmasked part of the Mel.</p>
@@ -584,7 +584,7 @@ x_t = (1 - t)\, x_0 + t\, x_1, \qquad \mathcal{L}_{\mathrm{CFM}}(\theta) = \math
 <p><span class="tag">Proposition 7.2 — VITS (Kim et al., ICML 2021): one-stage, stochastic, end-to-end</span> Three ideas that answer Tacotron’s diseases.</p>
 <ol type="1">
 <li><em>VAE:</em> a variational encoder encodes the target speech into <span class="math inline">z</span>; the decoder (HiFi-GAN) writes the wave from <span class="math inline">z</span> — the <em>noise</em> of the prior explores the multiplicity of ways of saying;</li>
-<li><em>normalizing flow:</em> a flow (exact change of variables, recalled in the box above) aligns the distribution of the text-conditioned latent with the prior, which makes training end-to-end (exact likelihood + adversary);</li>
+<li><em>normalizing flow:</em> a flow (exact change of variables, recalled in the box above) aligns the distribution of the text-conditioned latent with the prior, which makes training end-to-end (an ELBO whose prior density is exact, plus an adversary);</li>
 <li><em>implicit monotone alignment</em> (MAS: search for the optimal monotone alignment between text and Mel, refined at each step).</li>
 </ol>
 <p>Result: a single text→wave network, parallel, stochastic — the first “industrializable” generation of TTS (YourTTS, ch.&nbsp;9, derives from it).</p>
@@ -956,7 +956,7 @@ x_t = (1 - t)\, x_0 + t\, x_1, \qquad \mathcal{L}_{\mathrm{CFM}}(\theta) = \math
 </div>
 <p><strong>Q4 (4 pts) — Flows and flow matching.</strong> (a) A one-dimensional flow maps <span class="math inline">z \sim \mathcal{N}(0, 1)</span> to <span class="math inline">x = 1 + 2z</span>: compute <span class="math inline">\log p(x)</span> at <span class="math inline">x = 3</span> by the change of variables.</p>
 <ol start="2" type="a">
-<li>For conditional flow matching with <span class="math inline">x_0 = (0, 1)</span>, <span class="math inline">x_1 = (2, -1)</span> and <span class="math inline">t = 0.25</span>, give <span class="math inline">x_t</span> and the regression target. (c) Why does VITS have an exact likelihood when a VAE does not, and what does flow matching trade it for?</li>
+<li>For conditional flow matching with <span class="math inline">x_0 = (0, 1)</span>, <span class="math inline">x_1 = (2, -1)</span> and <span class="math inline">t = 0.25</span>, give <span class="math inline">x_t</span> and the regression target. (c) Why does a normalizing flow have an exact likelihood when a VAE does not, and what does flow matching trade it for?</li>
 </ol>
 <div class="proof">
 <p><span class="proof-title"><em>Proof</em>. </span><span class="tag">Marking points</span></p>
@@ -970,7 +970,7 @@ x_t = (1 - t)\, x_0 + t\, x_1, \qquad \mathcal{L}_{\mathrm{CFM}}(\theta) = \math
 <li><span class="math inline">x_t = 0.75\, x_0 + 0.25\, x_1 = (0.5,\ 0.5)</span> and the target velocity is <span class="math inline">x_1 - x_0 = (2, -2)</span> (1 pt).</li>
 </ol></li>
 <li><ol start="3" type="a">
-<li>A flow is a bijection with a tractable Jacobian, so the change of variables gives the density exactly, whereas a VAE only bounds it by the ELBO. Flow matching is not trained by likelihood but by regression on velocities, which needs no simulation during training and allows sampling in few steps; its likelihood would require integrating the divergence of the field along the trajectory (1.5 pts). Common error: forgetting the <span class="math inline">-\log 2</span> Jacobian term.</li>
+<li>A flow is a bijection with a tractable Jacobian, so the change of variables gives the density exactly, whereas a VAE only bounds it by the ELBO (VITS is a VAE and uses its flow only to make the prior density exact). Flow matching is not trained by likelihood but by regression on velocities, which needs no simulation during training and allows sampling in few steps; its likelihood would require integrating the divergence of the field along the trajectory (1.5 pts). Common error: forgetting the <span class="math inline">-\log 2</span> Jacobian term.</li>
 </ol></li>
 </ul>
 </div>
@@ -1172,7 +1172,7 @@ x_t = (1 - t)\, x_0 + t\, x_1, \qquad \mathcal{L}_{\mathrm{CFM}}(\theta) = \math
 <tbody>
 <tr class="odd">
 <td>Goal</td>
-<td>Build a streaming VAD → ASR → LLM → TTS loop and report, on 200 spoken turns, the P50 and P99 latency of each stage, the endpointing errors (cut-offs and dead silences) for three silence thresholds, and the detection rate of an AudioSeal mark on the answers, clean and after 64 kbps MP3, against the non-streaming pipeline of Ex. 5.</td>
+<td>Build a streaming VAD → ASR → LLM → TTS loop and report, on 200 spoken turns, the P50 and P99 latency of each stage, the endpointing errors (cut-offs and dead silences) for three silence thresholds, and the detection rate of an AudioSeal mark on the answers, clean and after 64 kbps MP3, against a non-streaming baseline that transcribes the whole turn and synthesizes the whole answer.</td>
 </tr>
 <tr class="even">
 <td>Data</td>
