@@ -141,6 +141,7 @@ Downstream, the module directly prepares [ML Ops and LLM Engineering Principles]
 -   **Theoretical complexity of training** — the lower bounds that say what no trick will ever beat, once the systems side is known.
 -   **Research readings: lower bounds and Lipschitz regularity** — the papers of K. Scaman and co-authors behind chapter 8 and section 7.1 (not the works of the official team), read with the module's tools.
 -   **Exercises** — counts, bounds and parallelism choices to defend.
+-   **Projects and assessment** — solo and group subjects that measure what the course counts, a written-exam proposal and a grading rubric.
 -   **References** — the systems and theory papers underlying each chapter.
 
 ### Session plan {#sessions}
@@ -156,7 +157,7 @@ Level 1 = foundations (pipeline, autodiff, building blocks, first counts), 2 = c
 | 1 | 3 h | 1 | ch. 0 The field and its tasks, universal approximation (official 1); the PyTorch training pipeline (official 2) | lab: the ResNet-18 script, initial-loss and one-batch checks |
 | 2 | 3 h | 1 | ch. 0 Automatic differentiation; optimization for deep learning: initialization, learning rate, Adam and AdamW, rates for non-convex and convex problems (official 3) | Example 0.6 in PyTorch; learning-rate range test |
 | 3 | 3 h | 1 | ch. 0 From MLP to transformer block: convolution sizes, attention and the $\sqrt{d_k}$ scaling, positions, BPE, pre-LN block, causal mask, LoRA (1.5 h); ch. 1 Units, cost of a linear layer and of a transformer block, the $6ND$ rule (1.5 h) | the block of ch. 0 in PyTorch; Ex. 1 |
-| 4 | 3 h | 2 | ch. 1 Training memory, scaling laws, the GPU memory hierarchy; convolutional networks and translation equivariance (official 4) | lab: counting a ResNet stage; Ex. 8 |
+| 4 | 3 h | 2 | ch. 1 Training memory, the GPU memory hierarchy, scaling laws; convolutional networks and translation equivariance (official 4) | lab: counting a ResNet stage; Ex. 8 |
 | 5 | 3 h | 2 | ch. 1 Equivariant models; recurrent networks and LSTMs (official 5); text generation with transformers, decoding (official 6) | lab: temperature and nucleus sampling on a small model |
 | 6 | 3 h | 2 | ch. 2 Data, tensor and pipeline parallelism; the decision tree | Ex. 2 |
 | 7 | 3 h | 2 | ch. 3 All-reduce: ring and tree, overlap; ch. 4 Checkpointing, ZeRO, mixed precision | Ex. 5, 6 |
@@ -478,7 +479,7 @@ If $\eta$ is the square root, both terms equal $\sigma\sqrt{2L\Delta/K}$. If $\e
 ::: prop
 [Proposition 0.11 — Gradient descent versus Nesterov acceleration (Nesterov 1983, 2004; stated)]{.tag} Let $f$ be $L$-smooth and $\mu$-strongly convex, with condition number $\kappa = L/\mu$.
 
--   Gradient descent with step $1/L$ needs $O(\kappa\ln(1/\varepsilon))$ gradient evaluations to reach accuracy $\varepsilon$ (proved in the [Machine Learning](../m1p1-machine-learning/index.html#gd-sgd) course, theorem 0.5, with the convex SGD rate).
+-   Gradient descent with step $1/L$ needs $O(\kappa\ln(1/\varepsilon))$ gradient evaluations to reach accuracy $\varepsilon$ (theorem 0.5 of the [Machine Learning](../m1p1-machine-learning/index.html#gd-sgd) course, proved there for quadratics, next to the convex SGD rate).
 -   Nesterov's accelerated gradient needs only $O(\sqrt{\kappa}\ln(1/\varepsilon))$:
     $$
     y_k = x_k + \frac{\sqrt\kappa - 1}{\sqrt\kappa + 1}\,(x_k - x_{k-1}), \qquad x_{k+1} = y_k - \frac1L\nabla f(y_k).
@@ -611,7 +612,7 @@ print(sum(p.numel() for p in Block().parameters()))   # 7,087,872 = 12 d^2 + 13 
 
 **LoRA in five lines** (Hu et al. 2022). Fine-tuning all the weights costs the full 16 bytes per parameter of ch. 1 (definition 1.4). LoRA freezes each pretrained matrix $W_0$, of size $d_\mathrm{out} \times d_\mathrm{in}$, and learns a low-rank correction:
 $$
-W = W_0 + BA, \qquad B \in \mathbb{R}^{d_\mathrm{out} \times r}, \quad A \in \mathbb{R}^{r \times d_\mathrm{in}}, \quad r \ll d .
+W = W_0 + BA, \qquad B \in \mathbb{R}^{d_\mathrm{out} \times r}, \quad A \in \mathbb{R}^{r \times d_\mathrm{in}}, \quad r \ll \min(d_\mathrm{in}, d_\mathrm{out}) .
 $$
 
 $B$ starts at zero, so training starts from the pretrained model. Only $r(d_\mathrm{in} + d_\mathrm{out})$ parameters per matrix receive gradients and Adam states. After training, $BA$ is added into $W_0$, so inference costs nothing extra.
@@ -627,12 +628,6 @@ A GPU budget is easily burned because nobody counted the FLOPs and the bytes bef
 :::
 
 The point of counting by hand: An engineer who can estimate the FLOPs of a training run by hand saves GPU-days — and catches configuration errors before they explode.
-
-::: note
-[The GPU memory hierarchy, in one box]{.tag} A GPU computes in its streaming multiprocessors, each with registers and a small on-chip SRAM: 192 KB per multiprocessor on an A100, about 20 MB in all, read at roughly 19 TB/s. Behind them sit a 40 MB L2 cache and the HBM, the “GPU memory” of `nvidia-smi`: 80 GB at about 2 TB/s (figures of Dao et al. 2022).
-
-Beyond the card, NVLink joins the GPUs of a node (600 GB/s per A100), InfiniBand joins nodes (about 25 GB/s per link) and PCIe reaches the host memory (about 32 GB/s). Each step down is roughly ten times slower and much larger. Every count of this module — the 16 bytes per parameter, the KV cache, the all-reduce, the roofline of ch. 6 — asks at which level the bytes live and how often they cross a boundary.
-:::
 
 ::: def
 [Definition 1.1 — Units: FLOP, FLOPs, FLOP/s]{.tag} A **FLOP** (floating-point operation) = one elementary operation (+, ×); we count a multiply-add $a \cdot b + c$ as **2 FLOPs** (the module's convention, aligned with the systems literature); **FLOP/s** = throughput.
@@ -711,6 +706,12 @@ Experience (profiling of large training runs) confirms within ±10%, the gap com
 The activation line follows Korthikanti et al. (2022): a transformer layer keeps about $34\,d$ bytes per token in bf16, plus a term that grows with the context length when the attention scores are stored.
 
 Order of magnitude to remember: **16 bytes per parameter** of states + activations. A 7B model with Adam: $7\times10^9 \times 16$ ≈ 112 GB — before any activation: a single 80 GB GPU is not enough (ch. 4 and 6).
+:::
+
+::: note
+[The GPU memory hierarchy, in one box]{.tag} A GPU computes in its streaming multiprocessors, each with registers and a small on-chip SRAM: 192 KB per multiprocessor on an A100, about 20 MB in all, read at roughly 19 TB/s. Behind them sit a 40 MB L2 cache and the HBM, the “GPU memory” of `nvidia-smi`: 80 GB at about 2 TB/s (figures of Dao et al. 2022).
+
+Beyond the card, NVLink joins the GPUs of a node (600 GB/s per A100), InfiniBand joins nodes (about 25 GB/s per link) and PCIe reaches the host memory (about 32 GB/s). Each step down is several to tens of times slower, and much larger. Every count of this module — the 16 bytes per parameter, the KV cache, the all-reduce, the roofline of ch. 6 — asks at which level the bytes live and how often they cross a boundary.
 :::
 
 ::: note
@@ -1384,7 +1385,7 @@ Recall — proved in the RL course (ch. 1, theorem 5.1, algorithm 6.1)
     \big(r + \gamma\max_{a'}Q_{\theta^-}(s', a') - Q_\theta(s, a)\big)^2 ,
     $$
     where the **target network** $\theta^-$ is a copy of $\theta$ refreshed every few thousand steps.
--   **Theorem 7.5 — Policy gradient** (REINFORCE, Williams 1992; [RL, theorem 5.1](../m1p2-reinforcement-learning/index.html#ch5)). For a differentiable policy $\pi_\theta$, a horizon $H$ and $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[G(\tau)]$, for any constant baseline $b$,
+-   **Theorem 7.5 — Policy gradient** (REINFORCE, Williams 1992; [RL, theorem 5.1](../m1p2-reinforcement-learning/index.html#ch5)). For a differentiable policy $\pi_\theta$, trajectories of $H$ steps (the return $G(\tau)$ then sums over $t < H$) and $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[G(\tau)]$, for any constant baseline $b$,
     $$
     \nabla J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\Big[\big(G(\tau) - b\big)\sum_{t=0}^{H-1}\nabla_\theta\log\pi_\theta(a_t \mid s_t)\Big].
     $$
@@ -1779,7 +1780,7 @@ Three papers to know:
 
     **(b)** Implement the ancestral sampler of definition 7.13 with $\varepsilon^\star$, 100 steps, $\beta_t$ linear from 0.001 to 0.2 and $\sigma_t^2 = \beta_t$. From 100 000 noise draws, compare the standard deviation of the samples with $s$, for $s = 0.5$ and $s = 2$.
 
-    **(c)** Train an MLP $\varepsilon_\theta(x_t, t)$ (three hidden layers of $128$ units, input $(x_t, t/T_\mathrm{diff})$) on scikit-learn's `make_moons` (noise $0.05$, standardized), then sample $2\,000$ points and compare them with the data.
+    **(c)** With the schedule of (b), train an MLP $\varepsilon_\theta(x_t, t)$ (three hidden layers of $128$ units, input $(x_t, t/T_\mathrm{diff})$) on scikit-learn's `make_moons` (noise $0.05$, standardized), then sample $2\,000$ points and compare them with the data.
 
     *Solution*: (a) the minimizer is the conditional mean $\mathbb{E}[\varepsilon \mid x_t]$. The pair $(\varepsilon, x_t)$ is Gaussian, with covariance $\sqrt{1 - \bar\alpha_t}$ and $\mathrm{Var}\,x_t = \bar\alpha_t s^2 + 1 - \bar\alpha_t$.
 
@@ -1812,7 +1813,7 @@ Three papers to know:
 
 **Official assessment.** The fiche above quotes the SynapseS 2026–2027 sheet: a numerical grade out of 20, “validation by project” stated for the engineering degree and the exchange programmes, a resit allowed (the better of the two grades is kept), and the course unit earned at 10/20. The modalities specific to the LLGA track are **not displayed**: that section of the sheet is empty. Everything below is our proposal, built to fit a validation by project: subjects, a written exam and a rubric.
 
-The projects exercise the master objectives **O1** (deep learning foundations), **O3** (large language models, through their training and serving budgets) and **O7** (hands-on practice: profiling, distributed training, serving), and **O2** (generative modelling) through the diffusion sampler of section 7.3. Their measured numbers are meant to fill the compute-budget line of the end-of-year capstone projects.
+The projects exercise the master objectives **O1** (deep learning foundations), **O3** (large language models, through their training and serving budgets) and **O7** (hands-on practice: profiling, distributed training, serving), and **O2** (generative modelling) through the diffusion sampler of section 7.3. Their measured numbers are meant to fill the compute-budget line of the charter of the [end-of-year projects](../../projects/index.html#charter).
 
 ### Solo projects {#projects-solo}
 
@@ -1838,22 +1839,22 @@ The projects exercise the master objectives **O1** (deep learning foundations), 
 ### Group projects {#projects-group}
 
 1.  **[Group of 3 · ≈ 30 h each] From DDP to ZeRO-3: measuring the all-reduce term and Amdahl's ceiling.** Question: does the ring formula of theorem 3.2 predict the step time of real data-parallel training, and when does sharding pay?
-    -   *Implement*: train GPT-2 small (or the ResNet-18 of ch. 0) with DDP, ZeRO-2 (`ZeroRedundancyOptimizer` or DeepSpeed) and FSDP full sharding (Zhao et al. 2023), on 1 and 2 GPUs (Kaggle's free 2 × T4), and on 2 to 8 CPU processes with the `gloo` backend for the communication fit.
+    -   *Implement*: train GPT-2 small (or the ResNet-18 of ch. 0) with DDP, ZeRO-1 (PyTorch's `ZeroRedundancyOptimizer`), ZeRO-2 (FSDP's `SHARD_GRAD_OP` or DeepSpeed) and FSDP full sharding (Zhao et al. 2023), on 1 and 2 GPUs (Kaggle's free 2 × T4), and on 2 to 8 CPU processes with the `gloo` backend for the communication fit.
     -   *Measure*: step time with error bars; the bandwidth term of theorem 3.2, fitted from all-reduce micro-benchmarks; the gain of overlap and of the bucket size; an Amdahl serial fraction (prop. 6.3); memory per GPU against definition 4.2.
-    -   *Split*: member A, DDP and the all-reduce benchmarks; member B, ZeRO-2 and FSDP memory; member C, the fits, Amdahl and the decision tree.
+    -   *Split*: member A, DDP and the all-reduce benchmarks; member B, ZeRO-1, ZeRO-2 and FSDP memory; member C, the fits, Amdahl and the decision tree.
     -   *Deliverables*: code, a 6-page report, the decision tree of ch. 2 annotated with the group's own numbers, a 15-minute talk.
     -   *Chapters*: ch. 2, 3, 4, 6; extends exercise 11.
     -   *Success*: a fitted bandwidth within a factor 2 of the nominal link, and memory per GPU within 10 % of definition 4.2 plus the measured activations.
 2.  **[Group of 3 · ≈ 30 h each] Serving a small LLM under a budget: quantization, speculative decoding, batching.** It connects this course to [Large Language Models](../m2-large-language-models/index.html#ch6) (ch. 6) and [ML Ops and LLM Engineering](../m2-mlops-llm-engineering/index.html#ch3) (ch. 3). Question: which combination of levers gives the best quality–latency–throughput–energy trade-off on one free GPU?
-    -   *Implement*: serve Qwen2.5-1.5B-Instruct with Hugging Face `transformers`, separating time to first token (prefill) from time per output token (decode); int8 and 4-bit weights (`bitsandbytes`, Dettmers et al. 2022); speculative decoding with Qwen2.5-0.5B-Instruct as draft model; static batches of 1 to 32 requests.
+    -   *Implement*: serve Qwen2.5-1.5B-Instruct with Hugging Face `transformers`, separating time to first token (prefill) from time per output token (decode); int8 and 4-bit weights (`bitsandbytes`: LLM.int8() of Dettmers et al. 2022, NF4 of Dettmers et al. 2023); speculative decoding with Qwen2.5-0.5B-Instruct as draft model; static batches of 1 to 32 requests.
     -   *Measure*: the acceptance rate against example 5.3, and the four columns of example 5.4 — perplexity on WikiText-2 and accuracy on 500 HellaSwag questions, p50 and p99 latency, tokens per second, energy from `nvidia-smi` power readings.
     -   *Split*: member A, quantization; member B, speculative decoding; member C, batching, the measurement harness and energy.
     -   *Deliverables*: code, a 6-page report, a 15-minute talk built on the four-column table.
     -   *Chapters*: ch. 5, 6.
     -   *Success*: at least five configurations measured on all four columns, and the speedup predicted from the measured acceptance rate within 20 % of the observed one.
 3.  **[Group of 4 · ≈ 30 h each] Paper study: a Chinchilla sweep at small scale (Hoffmann et al. 2022).** Question: does the compute-optimal ratio of ch. 1, about 20 tokens per parameter, hold for tiny language models trained on simple text?
-    -   *Implement*: a family of causal transformers built from the block of ch. 0, from 1 to 30 M parameters. At three budgets of about $10^{15}$, $10^{16}$ and $5 \times 10^{16}$ FLOPs (counted as $6ND$), train five or six models of different sizes each; fit the IsoFLOP minima and the law $L(N, D) = E + A/N^\alpha + B/D^\beta$.
-    -   *Data and hardware*: TinyStories (Eldan & Li 2023); one or two free T4 GPUs, under 10 GPU-hours in all.
+    -   *Implement*: a family of causal transformers built from the block of ch. 0, from 1 to 60 M parameters, so that each budget's optimum (about 3, 9 and 20 M at 20 tokens per parameter) is bracketed. At three budgets of about $10^{15}$, $10^{16}$ and $5 \times 10^{16}$ FLOPs (counted as $6ND$), train five or six models of different sizes each; fit the IsoFLOP minima and the law $L(N, D) = E + A/N^\alpha + B/D^\beta$.
+    -   *Data and hardware*: TinyStories (Eldan & Li 2023); one or two free T4 GPUs, about $4 \times 10^{17}$ FLOPs and 10 GPU-hours in all.
     -   *Split*: member A, data and tokenizer; member B, model family and training loop; member C, the sweep and the fits; member D, evaluation and sampling.
     -   *Deliverables*: code, a 6-page report with perplexities and samples under temperature and nucleus sampling (example 1.16), a 15-minute talk.
     -   *Chapters*: ch. 0, 1, 6.
@@ -1937,5 +1938,5 @@ The projects exercise the master objectives **O1** (deep learning foundations), 
 -   V. Sanh, L. Debut, J. Chaumond, T. Wolf, [DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/abs/1910.01108), 2019 — distillation figures of prop. 5.2.
 -   T. Miyato, T. Kataoka, M. Koyama, Y. Yoshida, [Spectral Normalization for Generative Adversarial Networks](https://arxiv.org/abs/1802.05957), ICLR 2018; D. Hendrycks, T. Dietterich, [Benchmarking Neural Network Robustness to Common Corruptions and Perturbations](https://arxiv.org/abs/1903.12261), ICLR 2019 — CIFAR-10-C (projects).
 -   R. Eldan, Y. Li, [TinyStories: How Small Can Language Models Be and Still Speak Coherent English?](https://arxiv.org/abs/2305.07759), 2023; A. Radford et al., [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) (GPT-2), 2019 — projects.
--   Y. Zhao et al., [PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel](https://arxiv.org/abs/2304.11277), VLDB 2023; T. Dettmers et al., [LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale](https://arxiv.org/abs/2208.07339), NeurIPS 2022 — projects.
+-   Y. Zhao et al., [PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel](https://arxiv.org/abs/2304.11277), VLDB 2023; T. Dettmers et al., [LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale](https://arxiv.org/abs/2208.07339), NeurIPS 2022; T. Dettmers, A. Pagnoni, A. Holtzman, L. Zettlemoyer, [QLoRA: Efficient Finetuning of Quantized LLMs](https://arxiv.org/abs/2305.14314), NeurIPS 2023 — projects.
 -   [PyTorch Distributed (DDP/FSDP)](https://pytorch.org/tutorials/distributed.html) and [NCCL](https://developer.nvidia.com/nccl-guide) — the lab tools.
