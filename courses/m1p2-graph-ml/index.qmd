@@ -1420,12 +1420,30 @@ Properties: exchangeability approximated by the use of BFS orders (the prefix is
 Limits: sensitivity to order (aromatic rings depend on the starting point); conditioning on properties is awkward (hence the models below). This "sequentialize the graph" scheme is exactly that of the LLM on text — the text-to-graph convergence is natural (ch. 10).
 :::
 
+::: recap
+[Recap — denoising diffusion (DDPM)]{.tag} Diffusion is taught in full in [Deep Learning, 9.4](../m1p1-deep-learning/index.html#diffusion), [Deep Learning P2, 7.3](../m1p2-deep-learning-p2/index.html#dl-generative) (Definition 7.10) and [Multimodal Generative AI, ch. 3](../m1p2-multimodal-genai/index.html#ch3). On some paths it arrives the same week as this session, so here is what DiGress uses.
+
+A fixed forward chain adds Gaussian noise in $T$ small steps of variance $\beta_t$. With $\alpha_t = 1 - \beta_t$ and $\bar\alpha_t = \prod_{s \le t} \alpha_s$, any step is reached in closed form:
+$$
+q(x_t \mid x_0) = \mathcal{N}\big(\sqrt{\bar\alpha_t}\, x_0,\ (1 - \bar\alpha_t) I\big), \qquad x_t = \sqrt{\bar\alpha_t}\, x_0 + \sqrt{1 - \bar\alpha_t}\, \varepsilon, \quad \varepsilon \sim \mathcal{N}(0, I).
+$$
+A network $\varepsilon_\theta(x_t, t)$ learns to recover the noise by minimizing
+$$
+\mathbb{E}_{t, x_0, \varepsilon} \big\| \varepsilon - \varepsilon_\theta(x_t, t) \big\|^2 .
+$$
+Sampling starts from $x_T \sim \mathcal{N}(0, I)$ and runs the learned reverse chain, one network call per step. DiGress keeps the three ingredients — a closed-form forward process, a network that predicts the clean data, step-by-step reverse sampling — and replaces Gaussian noise by categorical transitions.
+:::
+
 ::: thm
-[9.5 — Discrete diffusion: DiGress (Vignac et al., 2023)]{.tag} The molecular state of the art 2023-2026 transposes the diffusion of the Multimodal GenAI module to *categories* (atom types, bond types). Forward process (noising): at each step, each node and edge type is re-drawn
+[9.5 — Discrete diffusion: DiGress (Vignac et al., 2023)]{.tag} The molecular state of the art 2023-2026 carries this recipe over to *categories* (atom types, bond types). Forward process (noising): at each step, each node and edge type is re-drawn
 $$
 q(X_t \mid X_{t-1}) = \mathrm{Cat}\big(X_t;\ X_{t-1} Q^X_t\big), \qquad q(E_t \mid E_{t-1}) = \mathrm{Cat}\big(E_t;\ E_{t-1} Q^E_t\big),
 $$
-where $Q^X_t, Q^E_t$ are transition matrices (one row = law of the new type given the old one); after $T$ steps, the stationary law is the marginal of the datasets (distribution of the atoms/bonds).
+where $Q^X_t, Q^E_t$ are transition matrices (one row = law of the new type given the old one; the one-hot types are row vectors, multiplied on the right). As $\bar\alpha_t$ above, the $t$-step marginal is closed-form:
+$$
+q(X_t \mid X_0) = \mathrm{Cat}\big(X_t;\ X_0 \bar Q^X_t\big), \qquad \bar Q^X_t = Q^X_1 Q^X_2 \cdots Q^X_t,
+$$
+and likewise for $E$; after $T$ steps, the stationary law is the marginal of the datasets (distribution of the atoms/bonds).
 
 Backward process (denoising): a GNN $\theta_\phi$ (MPNN + attention) predicts $X_0$ and $E_0$ *clean* from $(X_t, E_t)$, then a Bayesian denoising step $q(X_{t-1} \mid X_t, \hat X_0)$ is derived in closed form; *perturbations*: edges are also added/removed during noising (discrete topology).
 
