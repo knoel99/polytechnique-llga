@@ -1471,7 +1471,7 @@ z \sim \mathcal{N}(\mu_\phi(x), \mathrm{diag}(\sigma_\phi^2(x)))
 <span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>        x <span class="op">=</span> x.view(<span class="op">-</span><span class="dv">1</span>, <span class="dv">784</span>)</span>
 <span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>        loss <span class="op">=</span> neg_elbo(x, <span class="op">*</span>model(x))</span>
 <span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>        opt.zero_grad()<span class="op">;</span> loss.backward()<span class="op">;</span> opt.step()</span>
-<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(epoch, <span class="bu">round</span>(loss.item(), <span class="dv">1</span>))       <span class="co"># VAE_LOSS_COMMENT</span></span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(epoch, <span class="bu">round</span>(loss.item(), <span class="dv">1</span>))       <span class="co"># last batch: ~129 nats after epoch 0, ~105 after epoch 9</span></span>
 <span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a><span class="cf">with</span> torch.no_grad():                         <span class="co"># generation: decode z ~ N(0, I)</span></span>
 <span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>    samples <span class="op">=</span> torch.sigmoid(model.dec(torch.randn(<span class="dv">64</span>, <span class="dv">16</span>))).view(<span class="dv">64</span>, <span class="dv">28</span>, <span class="dv">28</span>)</span></code></pre></div>
 <h3 id="gan-the-minimax-game-and-its-equilibrium">9.3. GAN: the minimax game and its equilibrium</h3>
@@ -1542,13 +1542,13 @@ x_t = \sqrt{\alpha_t}\,x_{t-1} + \sqrt{\beta_t}\,\varepsilon_t = \sqrt{\bar\alph
 \mathcal{L}(\theta) = \mathbb{E}_{x_0,\ t \sim \mathcal{U}\{1, \dots, T\},\ \varepsilon}\,\big\|\varepsilon - \varepsilon_\theta\big(\sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\varepsilon,\ t\big)\big\|^2 .
 </span></p>
 </div>
-<p>Ho et al.&nbsp;show that the ELBO of section 9.2, written for the whole chain, is a sum of KL divergences between Gaussians, each a weighted squared error on <span class="math inline">\varepsilon</span>; dropping the weights gives this loss, which trains better. The derivation is in <a href="../m1p2-multimodal-genai/index.html#ch3">Multimodal Generative AI ch.&nbsp;3</a>.</p>
+<p>Ho et al.&nbsp;show that the ELBO of section 9.2, written for the whole chain, is, up to a constant and a final reconstruction term, a sum of KL divergences between Gaussians, each a weighted squared error on <span class="math inline">\varepsilon</span>; dropping the weights gives this loss, which trains better. The derivation is in <a href="../m1p2-multimodal-genai/index.html#ch3">Multimodal Generative AI ch.&nbsp;3</a>.</p>
 <div class="thm">
 <p><span class="tag">Algorithm 9.9 — Ancestral sampling</span> Draw <span class="math inline">x_T \sim \mathcal{N}(0, I)</span>. For <span class="math inline">t = T, \dots, 1</span>, draw <span class="math inline">z \sim \mathcal{N}(0, I)</span> (and set <span class="math inline">z = 0</span> at the last step), then <span class="math display">
 x_{t-1} = \frac{1}{\sqrt{\alpha_t}}\Big(x_t - \frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\,\varepsilon_\theta(x_t, t)\Big) + \sqrt{\beta_t}\, z .
 </span> The first term removes the predicted noise; the second re-injects a little fresh noise, which keeps the chain a sampler rather than a deterministic denoiser.</p>
 </div>
-<p><strong>Cost.</strong> One network evaluation per step: <span class="math inline">T = 1\,000</span> forward passes per sample, against one for a VAE or a GAN. Deterministic samplers (DDIM) and distillation bring this down to 10–50 steps (<a href="../m1p2-multimodal-genai/index.html#ch4">Multimodal Generative AI ch.&nbsp;4</a>).</p>
+<p><strong>Cost.</strong> One network evaluation per step: <span class="math inline">T = 1\,000</span> forward passes per sample, against one for a VAE or a GAN. Deterministic samplers (DDIM) bring this down to a few tens of steps, and distillation to a handful (<a href="../m1p2-multimodal-genai/index.html#ch4">Multimodal Generative AI ch.&nbsp;4</a>).</p>
 <div class="def">
 <p><span class="tag">Definition 9.10 — Classifier-free guidance (Ho &amp; Salimans, 2022)</span> Train <span class="math inline">\varepsilon_\theta(x_t, t, c)</span> on pairs <span class="math inline">(x_0, c)</span>, where the condition <span class="math inline">c</span> is a class or a text prompt, and replace it by an empty token <span class="math inline">\varnothing</span> with probability about 10 %: one network learns both the conditional and the unconditional prediction.</p>
 <p>At sampling, use in place of <span class="math inline">\varepsilon_\theta</span> <span class="math display">
@@ -1631,12 +1631,7 @@ x_{t-1} = \frac{1}{\sqrt{\alpha_t}}\Big(x_t - \frac{\beta_t}{\sqrt{1-\bar\alpha_
 <p>This chapter connects the course to the current research of three researchers of the DaSciM group: Michalis Vazirgiannis (responsible of the course on the sheet), Johannes Lutzeyer (in its teaching team) and Ye Zhu (not listed on the 2026–2027 sheet). All three topics are rooted in the previous chapters. The arXiv references are in the bibliography.</p>
 <h3 id="michalis-vazirgiannis-from-the-graph-of-words-to-textual-gnns">10.1. Michalis Vazirgiannis: from the “Graph of Words” to textual GNNs</h3>
 <div class="ex">
-<p><span class="tag">Worked example — Graph of Words (Rousseau &amp; Vazirgiannis, CIKM 2013)</span> The <em>bag-of-words</em> representation throws away syntactic and order structure; the <strong>word graph</strong> restores it at almost no cost:</p>
-<ul>
-<li><strong>Construction</strong>: each distinct term of the document = one node; a <em>sliding window</em> of size <span class="math inline">w</span> over the text creates an edge between two terms if they co-occur in the window (weighted by the co-occurrence frequency). The document becomes a small, sparse weighted graph.</li>
-<li><strong>From TF-IDF to TW-IDF</strong>: in a bag of words, the weight of a term is its frequency; in a word graph, it is its <em>centrality</em> — TW-IDF weights the term by its average weighted degree across documents — the group then used the k-core decomposition of the word graph for keyword extraction (Rousseau, Kiagias &amp; Vazirgiannis, ECIR 2015). “Ad hoc” retrieval gains over TF-IDF: structurally important words emerge even when they are rare.</li>
-<li><strong>Positioning with respect to the course</strong>: this is the first building block of the program — <em>the data itself becomes a graph</em>. The NLP module reuses these representations; the Graph ML module generalizes them.</li>
-</ul>
+<p><span class="tag">Worked example — Graph of Words (Rousseau &amp; Vazirgiannis, CIKM 2013)</span> Each distinct term of a document becomes a node, and a sliding window of size <span class="math inline">w</span> links the terms that co-occur in it: the document becomes a small weighted graph, and the weight of a term becomes its centrality instead of its frequency (TW-IDF instead of TF-IDF). The construction, TW-IDF and keyword extraction by k-core are developed in <a href="../m1p2-nlp-text-mining/index.html#ch9">NLP ch.&nbsp;9</a>, the site’s reference. For this course, it is the first building block of the program: <em>the data itself becomes a graph</em>, which the Graph ML module generalizes.</p>
 </div>
 <div class="note">
 <p><span class="tag">GNN lineage: texts, expressivity, generation</span></p>
@@ -2072,7 +2067,7 @@ q = (1, 1, 1, 1), \quad k_1 = (1, 1, 1, 1), \quad k_2 = (1, -1, 1, -1), \quad v_
 </tbody>
 </table>
 <h3 id="projects-capstone">End-of-year projects</h3>
-<p>For students who take Deep Learning in Period 1, this course is the deep-learning component of the Year-1 integrative projects: the transformer encoder of <a href="../m1-integrative-projects/index.html#y1-5">Y1-5</a> (ch.&nbsp;6), the GRU generator of <a href="../m1-integrative-projects/index.html#y1-6">Y1-6</a> (ch.&nbsp;5 and 9; card P4 prepares it), the CNN and transfer learning of <a href="../m1-integrative-projects/index.html#y1-7">Y1-7</a> (ch.&nbsp;4 and 7; card P2 prepares it) and the LoRA retriever variant of <a href="../m1-integrative-projects/index.html#y1-8">Y1-8</a> (ch.&nbsp;7).</p>
+<p>For students who take Deep Learning in Period 1, this course supplies the deep-learning component of every Year-1 integrative project, for instance the transformer encoder of <a href="../m1-integrative-projects/index.html#y1-5">Y1-5</a> (ch.&nbsp;6), the GRU generator of <a href="../m1-integrative-projects/index.html#y1-6">Y1-6</a> (ch.&nbsp;5 and 9; card P4 prepares it), the CNN and transfer learning of <a href="../m1-integrative-projects/index.html#y1-7">Y1-7</a> (ch.&nbsp;4 and 7; card P2 prepares it) and the LoRA retriever variant of <a href="../m1-integrative-projects/index.html#y1-8">Y1-8</a> (ch.&nbsp;7).</p>
 <p>In Year 2, the generative core of capstone <a href="../m2-projet-transverse/index.html#c3">C3</a> (ch.&nbsp;5 and 9, guidance of 9.4) and the training practice of <a href="../m2-projet-transverse/index.html#c6">C6</a> (ch.&nbsp;3 and 8) build on it.</p>
 <h2 id="refs">References</h2>
 <h3 id="textbooks-and-courses">Textbooks and courses</h3>
