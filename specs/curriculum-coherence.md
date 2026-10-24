@@ -197,3 +197,28 @@ A section "How the courses serve the master's objectives" (`#objectives`) gives:
 - `python3 tools/check_progression.py` and `python3 tools/check_airiness.py` pass on every page.
 - KaTeX renders every span; no literal `$$` remains in rendered pages.
 - Every dataset URL of the new sections answered HTTP 200 when written (checked with `curl`).
+
+## 5. Result (24 October 2026)
+
+- **Projects and assessment** on all 40 science pages:
+  - 156 project cards: 87 solo, 69 group;
+  - 201 sample questions, each with marking points that add up to the paper's total.
+- **End-of-year projects**: eight Year-1 integrative projects and eight Year-2 capstones.
+- **Every gap of §3 is fixed** in the module named there. The verified audit's prerequisite, redundancy and consistency fixes are applied as well.
+- **Writer checks.** Each page was written by one agent, who checked every URL with `curl`.
+  - github.com answers 403 through the build proxy, so repositories were checked through `raw.githubusercontent.com`.
+- **Independent review.** A second agent then re-checked each page adversarially. About 90 defects were found and fixed, among them:
+  - marking keys that did not add up;
+  - wrong dataset sizes and licences;
+  - chapters cited for content they do not teach;
+  - a false claim about VITS likelihoods;
+  - a dropout-dependent causal check.
+- **Law.** The Digital Omnibus on AI was read in the Official Journal: Regulation (EU) 2026/1744 of 8 July 2026 (OJ of 24 July 2026). The AI Act timelines of the LLM, explainability and ethics pages follow it.
+- **Checks passed:**
+  - `check_gates.py`: 1055/1055;
+  - `check_progression.py`: 40/40;
+  - `check_airiness.py`: 50/50 pages;
+  - KaTeX: every span renders;
+  - no literal `$$` in any page;
+  - internal links and anchors resolve;
+  - Playwright: 51 pages × (1440 px, 390 px) × (light, dark), with no overflow, no script error and text contrast ≥ 7:1.

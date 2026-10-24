@@ -121,6 +121,15 @@ tp = read(ROOT / "courses/m2-projet-transverse/index.html")
 for k in range(1, 9):
     check(f'id="c{k}"' in tp, f"transverse project: capstone c{k} present")
 
+# Home: how the courses serve the master's objectives (specs/curriculum-coherence.md, D7)
+home_html = read(ROOT / "index.html")
+check('id="objectives"' in home_html, "home: objectives section present")
+for k in range(1, 10):
+    check(f"<strong>O{k}</strong>" in home_html, f"home: objective O{k} listed")
+check("courses/m1-integrative-projects/index.html" in home_html
+      and "courses/m2-projet-transverse/index.html#capstones" in home_html,
+      "home: end-of-year projects linked")
+
 # --- Root surface ------------------------------------------------------------
 root_pages = ["index.html"]
 for page in root_pages:
