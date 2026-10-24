@@ -169,7 +169,7 @@ Prerequisites (Signal Processing M1 module) — what is assumed known
 -   **Time-frequency analysis** (ch. 6): STFT, Gabor windows, time-frequency trade-off — *the* spectrogram is the input of almost all the models in this module (cf. Signal Processing module ch. 6);
 -   **Mel spectrogram and MFCC** (ch. 8): 25 ms frames every 10 ms, Hann window, Mel filter bank (perceptual scale linear below 1 kHz then logarithmic: $m = 2595\log_{10}(1 + f/700)$), 20-80 coefficients, possibly DCT (MFCC);
 -   **Random signals** (ch. 7): power spectral density, periodogram — used by energy-based VADs (ch. 10) and spread-spectrum watermarking (ch. 9);
--   **Recurrent networks and transformers** ([Deep Learning](../m1p1-deep-learning/index.html#ch6) M1, or [Deep Learning P2](../m1p2-deep-learning-p2/index.html#dl-textgen) on its path): LSTM, attention $\mathrm{softmax}(QK^\top/\sqrt{d})V$ — the ASR/TTS encoder is a transformer (ch. 3-4);
+-   **Recurrent networks and transformers** ([Deep Learning](../m1p1-deep-learning/index.html#ch5) M1 ch. 5–6, or [Deep Learning P2](../m1p2-deep-learning-p2/index.html#dl-rnn) on its path, sections on recurrent networks and text generation): LSTM, attention $\mathrm{softmax}(QK^\top/\sqrt{d})V$ — the ASR/TTS encoder is a transformer (ch. 3-4);
 -   **Diffusion and VAE** ([Multimodal GenAI](../m1p2-multimodal-genai/index.html#ch3) M1 ch. 1 and 3, or [Deep Learning](../m1p1-deep-learning/index.html#ch9) ch. 9 / [Deep Learning P2](../m1p2-deep-learning-p2/index.html#dl-generative) §7.3): ELBO, DDPM, noise prediction — the generative TTS models (ch. 7) descend directly from them; normalizing flows and flow matching are recalled in ch. 7.
 ::::
 
@@ -500,7 +500,7 @@ The Jacobian term corrects for the local stretching of volume, so that the densi
 $$
 y_{1:k} = z_{1:k}, \qquad y_{k+1:d} = z_{k+1:d} \odot e^{s(z_{1:k})} + t(z_{1:k}), \qquad \log\big|\det J_f\big| = \sum_j s_j(z_{1:k}).
 $$
-The Jacobian is triangular, so the exact log-likelihood costs one pass (the log-determinant enters it with a minus sign) and training maximizes it directly: this is the flow of VITS.
+The Jacobian is triangular, so the exact log-likelihood costs one pass (the log-determinant enters it with a minus sign), and a flow used alone is trained by maximizing it. VITS stacks such layers in their shift-only form ($s = 0$, log-determinant zero) to make its text-conditioned prior more flexible; the whole model is still trained on an ELBO.
 
 *Flow matching* (Lipman et al., ICLR 2023) learns instead a velocity field $v_\theta(x, t)$, for $t \in [0, 1]$, whose differential equation carries Gaussian noise $x_0$ at $t = 0$ to data $x_1$ at $t = 1$. Along the straight path from a noise sample to a data sample the velocity is constant, which gives the *conditional flow-matching loss*:
 $$
@@ -513,7 +513,7 @@ Its minimizer is the conditional mean of $x_1 - x_0$ given $x_t$: the velocity f
 [Proposition 7.2 — VITS (Kim et al., ICML 2021): one-stage, stochastic, end-to-end]{.tag} Three ideas that answer Tacotron's diseases.
 
 1.  *VAE:* a variational encoder encodes the target speech into $z$; the decoder (HiFi-GAN) writes the wave from $z$ — the *noise* of the prior explores the multiplicity of ways of saying;
-2.  *normalizing flow:* a flow (exact change of variables, recalled in the box above) aligns the distribution of the text-conditioned latent with the prior, which makes training end-to-end (exact likelihood + adversary);
+2.  *normalizing flow:* a flow (exact change of variables, recalled in the box above) aligns the distribution of the text-conditioned latent with the prior, which makes training end-to-end (an ELBO whose prior density is exact, plus an adversary);
 3.  *implicit monotone alignment* (MAS: search for the optimal monotone alignment between text and Mel, refined at each step).
 
 Result: a single text→wave network, parallel, stochastic — the first "industrializable" generation of TTS (YourTTS, ch. 9, derives from it).
@@ -865,7 +865,7 @@ Since no mode is published, this design follows the balanced default of these no
 
 **Q4 (4 pts) — Flows and flow matching.** (a) A one-dimensional flow maps $z \sim \mathcal{N}(0, 1)$ to $x = 1 + 2z$: compute $\log p(x)$ at $x = 3$ by the change of variables.
 
-(b) For conditional flow matching with $x_0 = (0, 1)$, $x_1 = (2, -1)$ and $t = 0.25$, give $x_t$ and the regression target. (c) Why does VITS have an exact likelihood when a VAE does not, and what does flow matching trade it for?
+(b) For conditional flow matching with $x_0 = (0, 1)$, $x_1 = (2, -1)$ and $t = 0.25$, give $x_t$ and the regression target. (c) Why does a normalizing flow have an exact likelihood when a VAE does not, and what does flow matching trade it for?
 
 ::: proof
 [Marking points]{.tag}
@@ -875,7 +875,7 @@ Since no mode is published, this design follows the balanced default of these no
   \log p(3) = \log \mathcal{N}(1;\, 0, 1) - \log 2 = -0.5 - 0.919 - 0.693 \approx -2.112 .
   $$
 - (b) $x_t = 0.75\, x_0 + 0.25\, x_1 = (0.5,\ 0.5)$ and the target velocity is $x_1 - x_0 = (2, -2)$ (1 pt).
-- (c) A flow is a bijection with a tractable Jacobian, so the change of variables gives the density exactly, whereas a VAE only bounds it by the ELBO. Flow matching is not trained by likelihood but by regression on velocities, which needs no simulation during training and allows sampling in few steps; its likelihood would require integrating the divergence of the field along the trajectory (1.5 pts). Common error: forgetting the $-\log 2$ Jacobian term.
+- (c) A flow is a bijection with a tractable Jacobian, so the change of variables gives the density exactly, whereas a VAE only bounds it by the ELBO (VITS is a VAE and uses its flow only to make the prior density exact). Flow matching is not trained by likelihood but by regression on velocities, which needs no simulation during training and allows sampling in few steps; its likelihood would require integrating the divergence of the field along the trajectory (1.5 pts). Common error: forgetting the $-\log 2$ Jacobian term.
 :::
 
 **Q5 (4 pts) — Interpretation.** (a) "CTC marginalizes alignments, Whisper generates them": explain, and give one typical failure of each. (b) Why is TTS watermarking easier than text watermarking? Name one transformation that still degrades an audio mark.
@@ -948,7 +948,7 @@ Group projects: a contribution statement and an oral with individual questions; 
 
 | Field | Content |
 |---|---|
-| Goal | Build a streaming VAD → ASR → LLM → TTS loop and report, on 200 spoken turns, the P50 and P99 latency of each stage, the endpointing errors (cut-offs and dead silences) for three silence thresholds, and the detection rate of an AudioSeal mark on the answers, clean and after 64 kbps MP3, against the non-streaming pipeline of Ex. 5. |
+| Goal | Build a streaming VAD → ASR → LLM → TTS loop and report, on 200 spoken turns, the P50 and P99 latency of each stage, the endpointing errors (cut-offs and dead silences) for three silence thresholds, and the detection rate of an AudioSeal mark on the answers, clean and after 64 kbps MP3, against a non-streaming baseline that transcribes the whole turn and synthesizes the whole answer. |
 | Data | [LibriSpeech test-clean](https://www.openslr.org/12) — CC BY 4.0 — 2,620 utterances; each turn joins two utterances of one speaker with a 400 ms pause, to test the endpointing (seed 0); models: [faster-whisper](https://github.com/SYSTRAN/faster-whisper) small (MIT), [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) in 4-bit (Apache 2.0), [MMS-TTS English](https://huggingface.co/facebook/mms-tts-eng) (CC BY-NC 4.0), [AudioSeal](https://huggingface.co/facebook/audioseal) (MIT) |
 | Chapters | [ch. 5](#ch5) (Definition 5.1, proposition 5.3), [ch. 7](#ch7) (example 7.4), [ch. 9](#ch9) (theorems 9.2–9.3), [ch. 10](#ch10) (proposition 10.2); LLM inference: Large Language Models ch. 6; extends Ex. 5 and Ex. 6 |
 | Deliverables | repository with a one-command run, 8-page report, 10-minute oral with a live demonstration and individual questions |
