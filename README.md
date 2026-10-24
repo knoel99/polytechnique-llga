@@ -25,6 +25,12 @@ Notes de cours indépendantes et open source pour le master **MScT « Large Lang
 - **Notations** (`notation/`) : les conventions communes aux cours.
 - **Pages de cadrage** pour les modules non scientifiques : management, langues, humanités, sport, stages, projet transverse, séminaire d'éthique (dont un résumé de l'AI Act et du RGPD).
 
+## Relectures (octobre 2026)
+
+- **Analyse de cohérence** : chaque page a été lue en entier, puis analysée selon cinq angles : couverture des objectifs du master O1–O8, chaîne des prérequis, redondances et notations, erreurs, projets intégrateurs. Les corrections ont été appliquées page par page et relues par un second agent. Contrat : `specs/coherence-objectives.md` ; analyse complète : `specs/coherence-2026-10/`.
+- **Seconde lecture** : les 49 pages ont été relues par un agent indépendant (mathématiques, faits, références, exécution du code). Sur les 37 dernières pages, 327 points ont été relevés et 278 corrigés sur place ; les autres sont de faible gravité ou sans objet. Les points qui touchent plusieurs pages ont été corrigés ensuite, chacun vérifié à nouveau par un autre agent.
+- **Comparaison des PR #43 et #45** : `docs/analyse-pr-43-45.md`.
+
 Le site est en anglais uniquement (`specs/en-only.md`). L'ancien chemin `/en/` redirige vers la racine.
 
 ## Structure du dépôt

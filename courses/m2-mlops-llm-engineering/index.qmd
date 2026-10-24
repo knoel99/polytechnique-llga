@@ -343,7 +343,7 @@ With $\bar\delta$ their mean and $s_\delta$ their standard deviation, the candid
 $$
 \bar\delta + 1.645\, \frac{s_\delta}{\sqrt n} \;\le\; \tau .
 $$
-For a skewed metric (F1, judge win rate, RAGAS score), use instead the 95th percentile of $\bar\delta$ over $10^4$ bootstrap resamples of the items.
+For a metric that is not a per-item mean (F1) or is far from normal (judge win rate, RAGAS score), use instead the 95th percentile of the metric difference recomputed on $10^4$ bootstrap resamples of the items.
 :::
 
 *Worked example* — $n = 1000$ right/wrong items; the candidate loses 40 items that production gets right and wins 30 that production gets wrong.
@@ -419,14 +419,14 @@ def step():
 
 :::: recap
 ::: recap-title
-Recall 3.2 — KV-cache size (proved in [LLMs, Proposition 2.4](../m2-large-language-models/index.html#kv-cache))
+Recall 3.2 — KV-cache size (stated in [LLMs, Proposition 2.4](../m2-large-language-models/index.html#kv-cache))
 :::
 
 For a transformer with $n_{\text{layers}}$ layers and $n_{\text{kv}}$ key/value heads (GQA) of dimension $d_{\text{head}}$, in precision $b$ bytes, the cache of a sequence of $T$ tokens occupies:
 $$
 M_{\text{KV}} \;=\; 2 \cdot n_{\text{layers}} \cdot n_{\text{kv}} \cdot d_{\text{head}} \cdot b \cdot T \;\text{bytes}.
 $$
-The factor 2 counts keys and values; only the K/V heads are cached, however many query heads there are.
+The count is direct: each layer stores, for each token, one key and one value of $n_{\text{kv}} d_{\text{head}}$ coefficients each, at $b$ bytes per coefficient. Hence the factor 2, and only the K/V heads count, however many query heads there are.
 
 *Example* (Llama-3-8B: $n_{\text{layers}}=32$, $n_{\text{kv}}=8$, $d_{\text{head}}=128$, fp16 $b=2$): $2\times32\times8\times128\times2 = 131,072$ bytes ≈ 128 KiB **per token**, i.e. 1 GiB for 8,192 tokens — as much memory as the weights of a small quantized model.
 ::::
@@ -516,6 +516,8 @@ async def main(conc=64):
     ttft = [r[0] for r in res if r[0] is not None]
     tpot = [r[1] for r in res if r[1] is not None]
     print(f"failed streams: {conc - len(tpot)}")
+    if not tpot:
+        return                                                # every stream failed
     print(f"conc={conc}  TTFT p50/p99 = {p(ttft,.5):.2f}/{p(ttft,.99):.2f}s"
           f"  TPOT p99 = {p(tpot,.99)*1e3:.0f}ms")
 
@@ -597,8 +599,8 @@ The two monthly bills, $aV$ and $F + C_{\text{train}}/H + bV$, are affine in $V$
 
 -   **API**: $a = 0.0015 + 0.0012 = 0.0027$ € per request, i.e. 810 € a month.
 -   **Fine-tuned 8B** (LoRA, ch. 7) on one GPU at 2 €/h, always on: $F \approx 1{,}460$ € a month, $C_{\text{train}} \approx 600$ € (data curation and GPU) over $H = 6$ months, and $b \approx 0$, since one batched GPU serves millions of requests a month (Proposition 4.1). Then $V^\star \approx 1{,}560 / 0.0027 \approx 580$ k requests a month, about 19 k a day.
--   **Distilled 1B student** on a small GPU at 0.6 €/h: $F \approx 440$ € a month and $C_{\text{train}} \approx 370$ € (100 k teacher answers bought from the API, plus training). Then $V^\star \approx 500 / 0.0027 \approx 185$ k requests a month, about 6 k a day.
--   **Verdict**: at 10 k requests a day only the distilled student pays off, and only if it passes the paired gate (Definition 2.3) against the API model. A GPU idle at night still bills $F$: utilization moves $V^\star$ more than the token prices do.
+-   **Distilled 1B student** on a small GPU at 0.6 €/h: $F \approx 440$ € a month and $C_{\text{train}} \approx 370$ € (100 k teacher answers bought from the API, plus training), over the same $H = 6$ months. Then $V^\star \approx 500 / 0.0027 \approx 185$ k requests a month, about 6 k a day.
+-   **Verdict**: at 10 k requests a day only the distilled student pays off, and only if it passes the paired gate (Definition 2.3) against the API model. A GPU idle at night still bills $F$: scaling it down off-peak moves $V^\star$ as much as a change in token prices does.
 
 ## 5. Evaluation in production: drift and monitoring {#ch5}
 
@@ -636,7 +638,7 @@ The classic detectors: PSI/KL per feature (interpretable, bin by bin), the Kolmo
 $$
 D = \sup_x \bigl|\widehat F_{\text{ref}}(x) - \widehat F_{\text{cur}}(x)\bigr| .
 $$
-Under "same continuous law", $D\sqrt{nm/(n+m)}$ follows the Kolmogorov distribution, whose 95 % quantile is about 1.36: alert when $D > 1.36\,\sqrt{(n+m)/(nm)}$.
+Under "same continuous law" and for large windows, $D\sqrt{nm/(n+m)}$ approximately follows the Kolmogorov distribution, whose 95 % quantile is about 1.36: alert when $D > 1.36\,\sqrt{(n+m)/(nm)}$.
 
 For an LLM, the "features" to monitor are: prompt length, language, topics (lightweight classifier), presence of injected documents, truncation rate — *and* output proxies: refusal rate, "I don't know" rate, median answer length, JSON parse failure rate.
 
@@ -970,7 +972,7 @@ print(f"{tracker.total_energy_kWh * 1000:.1f} Wh for this request",
     $$
     \text{energy/Mt} \;=\; \frac{P}{R} \cdot \frac{10^6}{3600} \;\approx\; 278 \cdot \frac{P}{R} \;\; \text{Wh/Mt}.
     $$
-    At $P = 500$ W and $R = 2{,}000$ tokens/s this is about 70 Wh/Mt; at batch 1 ($R \approx 60$), about 2.3 kWh/Mt — the same factor of 30 as on the bill.
+    At $P = 500$ W and $R = 2{,}000$ tokens/s this is about 70 Wh/Mt; at batch 1 ($R \approx 60$) and the same power, about 2.3 kWh/Mt — the factor of 30 of the bill. A lightly loaded GPU draws less power, so the real energy factor is somewhat smaller.
 4.  **Geographic and temporal scheduling**: moving the nightly batches to the low-carbon-mix regions at the right moment.
 
 The order matters: one does not buy green GPUs before having shortened the outputs.
@@ -1003,7 +1005,7 @@ The order matters: one does not buy green GPUs before having shortened the outpu
 
 1.  **[Solo · ≈ 20 h] How many false rollbacks? Statistically sound evaluation gates.** Which gate blocks real regressions without "dancing on the noise", and can an LLM judge be trusted as its sensor? A paper study of Zheng et al., "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena" (NeurIPS 2023).
     -   *Implement*: four gates — Hoeffding (Proposition 2.2), the paired gate (Definition 2.3, normal and bootstrap), McNemar, and Wald's sequential probability ratio test (1945). Measure the false-rollback rate and the detection power against $n$, on simulated correlated losses and on real model pairs.
-    -   *Data*: per-item outcomes of two small open models (for example Qwen2.5-0.5B- and 1.5B-Instruct) on GSM8K (Cobbe et al., 2021) and MMLU (Hendrycks et al., 2021), logged by lm-evaluation-harness; the MT-Bench human judgments released with the paper, to measure a judge's position and length biases.
+    -   *Data*: per-item outcomes of small open models (for example Qwen2.5-1.5B-Instruct against its own 4-bit version, a near-tie, and against Qwen2.5-0.5B-Instruct, a clear regression) on GSM8K (Cobbe et al., 2021) and MMLU (Hendrycks et al., 2021), logged by lm-evaluation-harness; the MT-Bench human judgments released with the paper, to measure a judge's position and length biases.
     -   *Deliverables*: a small gate library with tests, a 4–6 page report, a 10-minute talk. *Chapters*: ch. 2, 5.3.
     -   *Success*: error-rate curves with intervals that match the theory on simulations; the judge's agreement with humans measured with and without ties, as in the paper; the sign-test gate of 5.3 shown to pass an identical candidate and to block a worse one.
 2.  **[Solo · ≈ 20 h] An LLM serving capacity and cost planner.** How many GPUs, and which server settings, does a given traffic need to hold a P99 SLO at the lowest €/Mt and Wh/Mt? A paper study of Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention" (SOSP 2023). It extends solo subject 2 of [Large Language Models](../m2-large-language-models/index.html#projects-solo) from one server to a fleet.
@@ -1023,7 +1025,7 @@ The order matters: one does not buy green GPUs before having shortened the outpu
 1.  **[Group of 4 · ≈ 30 h each] Ship a GraphRAG enterprise assistant under SLOs.** Can the common-thread assistant (10.1, Ex. 12) hold its SLOs, freshness SLA and budget under replayed traffic and document edits — and survive a game day? The game day is the W4 red-team swap of the Year 2 [transverse project](../m2-projet-transverse/index.html).
     -   *Implement*: a hybrid vector + GraphRAG index kept fresh by change data capture (6.1 and the graph-freshness note of 6.3); CI gates from RAGAS and the order-swapped judge (Definition 2.3, 5.3); a multi-LoRA tone adapter (ch. 7); OTel tracing and an SLO dashboard with TTFT P99, PSI, cost and Wh per request (ch. 3, 5, 8).
     -   *Data*: the public GitLab Handbook (CC BY-SA 4.0), whose git history replays real document edits; a 300-question golden set written by the team (local, multi-hop and global questions), 30 % held out.
-    -   *Other modules*: GraphRAG from [Graph ML ch. 10](../m1p2-graph-ml/index.html#ch10); RAG and LoRA from [Large Language Models](../m2-large-language-models/index.html#ch7), 7 and 4.3.
+    -   *Other modules*: GraphRAG from [Graph ML ch. 10](../m1p2-graph-ml/index.html#ch10); RAG (ch. 7) and LoRA (4.3) from [Large Language Models](../m2-large-language-models/index.html#ch7).
     -   *Split*: ingestion and indexes; evaluation and gates; serving, adapters, cost and energy; observability and the game day.
     -   *Deliverables*: a repository with one-command deployment, the dashboard, an 8-page cost and carbon report, a live game day in which another team injects a regression. *Chapters*: ch. 1–8, 10.
     -   *Success*: TTFT P99 within the SLO under replayed load; the freshness SLA met on replayed edits; the injected regression detected and rolled back in under 15 minutes; cost and Wh per request within 25 % of Propositions 4.1 and 10.1.
@@ -1051,7 +1053,7 @@ The order matters: one does not buy green GPUs before having shortened the outpu
 
     -   (a) $2 \times 32 \times 8 \times 128 \times 2 = 131{,}072$ bytes, i.e. 128 KiB per token; $60 \times 2^{30} / 2^{17} = 491{,}520$ tokens.
     -   (b) $491{,}520 / 1{,}800 \approx 273$ requests.
-    -   (c) $W = 0.5 + 300 \times 0.05 = 15.5$ s, so $\lambda \le 273 / 15.5 \approx 17.6$ requests/s. Check: 273 sequences at 20 tokens/s each decode about 5,460 tokens/s, close to $R = 17.6 \times 300 \approx 5{,}280$ tokens/s.
+    -   (c) $W = 0.5 + 299 \times 0.05 \approx 15.5$ s (299 gaps after the first token), so $\lambda \le 273 / 15.5 \approx 17.6$ requests/s. Check: 273 sequences at 20 tokens/s each decode about 5,460 tokens/s, close to $R = 17.6 \times 300 \approx 5{,}280$ tokens/s.
     -   (d) Proposition 4.1 gives $278 \times 3 / 5{,}280 \approx 0.16$ €/Mt; per request, $3 / (17.6 \times 3600) \approx 4.7 \times 10^{-5}$ €, about 5 cents per thousand requests.
 3.  **Question (5 points).** Two models are scored on the same $n$ i.i.d. items.
 

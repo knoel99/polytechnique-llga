@@ -99,3 +99,4 @@ Year 1 projects map onto three official Period 2 vehicles in one team repository
 - `python3 tools/check_gates.py` passes. It includes the projects-section and projects-page gates.
 - `python3 tools/check_progression.py` passes: hours and the words-per-hour band hold after the additions.
 - Each page edit was reviewed by an independent agent (diff, maths, facts, references).
+- Second reading (October 2026): every page was then read again in full by an independent reviewer, who checked the maths, facts and references and ran the code. On the last 37 pages, reviewers raised 327 points and fixed 278 in place; the remaining points are low severity or not defects. Points that span several pages (a stale title, a contradiction between two pages, a claim to check against the paper) were fixed afterwards, each with its own independent check.

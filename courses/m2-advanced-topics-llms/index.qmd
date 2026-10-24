@@ -242,7 +242,7 @@ The methodological remedy: report jointly (i) the raw score, (ii) the score on r
 
 ### 1.2. LLM judges: useful, biased, calibratable
 
-MT-Bench (Zheng et al., 2023) validates the LLM judge: GPT-4 agrees with expert human verdicts more than 80% of the time, the same level as the agreement between two humans (about 81%). This legitimizes its industrial use (ML Ops module ch. 5), but the biases are systematic.
+MT-Bench (Zheng et al., 2023) validates the LLM judge: GPT-4 agrees with expert human verdicts more than 80% of the time, the same level as the agreement between two humans (about 81%, ties excluded). This legitimizes its industrial use (ML Ops module ch. 5), but the biases are systematic.
 
 :::: recap
 ::: recap-title
@@ -400,7 +400,7 @@ the "NTK-by-parts" rule replaces each frequency by
 $$
 \theta_i' = \bigl(1-\gamma(r_i)\bigr)\,\frac{\theta_i}{s} + \gamma(r_i)\,\theta_i .
 $$
-Pairs that turn less than once over $L$ are interpolated as in PI; pairs that turn many times are kept (extrapolated). YaRN then divides the attention logits by a temperature $t$:
+Pairs that turn less than once over $L$ are interpolated as in PI; pairs that turn more than $\beta$ times are kept (extrapolated), and those in between are blended. YaRN then divides the attention logits by a temperature $t$:
 $$
 \mathrm{softmax}\Bigl(\frac{q_m^\top k_n}{t\,\sqrt{d}}\Bigr), \qquad \sqrt{1/t} = 0.1\,\ln s + 1,
 $$
@@ -489,7 +489,7 @@ What a model sees is limited by its context window, and what it learned is froze
 
 ### 4.2. Three papers, three ideas of memory
 
--   **Memorizing Transformers (Wu et al., 2022)**: an attention layer, *non-differentiable*, looks up its keys/values in an external memory of $(k, v)$ pairs by nearest neighbors (kNN) over *past* tokens — including other documents. The memory is a FIFO cache, appended with the $(k, v)$ pairs of every processed segment. Effective for perplexity, but non-differentiable: no gradient reaches the stored pairs, which go stale as the parameters change.
+-   **Memorizing Transformers (Wu et al., 2022)**: an attention layer, *non-differentiable*, looks up its keys/values in an external memory of $(k, v)$ pairs by nearest neighbors (kNN) over *past* tokens of the same document. The memory is a FIFO cache, appended with the $(k, v)$ pairs of every processed segment and cleared at each new document. Effective for perplexity, but non-differentiable: no gradient reaches the stored pairs, which go stale as the parameters change.
 -   **Generative Agents (Park et al., 2023)**: 25 simulated agents in a virtual small town; each agent owns a timestamped *memory stream*; retrieval scores each memory by a **weighted sum of recency, importance and relevance** (Proposition 4.1); a **reflection** process periodically synthesizes the memories into higher-level beliefs ("I should organize a party"), re-injected as memories. The conceptual architecture of every memory-equipped conversational agent.
 -   **MemGPT (Packer et al., 2023)**: the model becomes its own *operating system*: main context (RAM) vs external storage (disk), paging driven by function calls the LLM triggers itself (`core_memory_append`, `archival_memory_insert`…). Memory management becomes a *learned/instructed behavior* — the ancestor of the "agent + notepad" loops.
 -   **GraphRAG (Edge et al., 2024)**: *structured* memory — an entity graph extracted by an LLM, communities detected (Leiden), hierarchical summaries; global questions ("which themes?") become a map-reduce over the community summaries, where vector RAG falls apart (cf. Graph ML module ch. 10 for the graph foundations; ML Ops module ch. 6 for the indexing cost).
@@ -633,7 +633,7 @@ a discrete convolution with kernel $\overline K_s = C \bar A^s \bar B$, where th
 
 ### 6.2. Mamba: making the state *selective*
 
-The LTI SSM is a *fixed filter*: it cannot choose to memorize or forget depending on the content. **Mamba** (Gu & Dao, 2023) makes $\Delta_t, \bar B_t, C_t$ *functions of the input* (linear projections of $u_t$): the selection.
+The LTI SSM is a *fixed filter*: it cannot choose to memorize or forget depending on the content. **Mamba** (Gu & Dao, 2023) makes $\Delta_t, B_t, C_t$ *functions of the input* (linear projections of $u_t$, through a softplus for $\Delta_t$), hence $\bar A_t, \bar B_t$ too: the selection.
 
 Cascade consequence: the convolution (prop. 6.2) is destroyed (the kernel depends on position) → back to a recurrence, but *parallelizable* via the **prefix scan** (box below) with fused GPU kernels ("hardware-aware"): $\mathcal{O}(L)$ training, $\mathcal{O}(1)$ inference per token and *constant* state memory — the selling point against the transformer's KV cache (cf. ML Ops module ch. 3).
 
@@ -650,7 +650,7 @@ Finally, Mamba embeds the SSM *inside* a *gated* MLP-style block. Mamba-2 (SSD) 
 ### 6.3. RWKV and the hybrids
 
 ::: prop
-[Proposition 6.3 — RWKV: attention linearized into an RNN (Peng et al., 2023)]{.tag} At each step, RWKV-4 computes from the current token a receptance $r_t$, a key $k_t$ and a value $v_t$ (linear projections, used channel by channel). Its time-mixing operator "WKV" is a softmax-like average of the past values, with weights $e^{k_i}$ that decay by a factor $e^{-w}$ per step:
+[Proposition 6.3 — RWKV: attention linearized into an RNN (Peng et al., 2023)]{.tag} At each step, RWKV-4 computes from the current token, mixed with the previous one (token shift), a receptance $r_t$, a key $k_t$ and a value $v_t$ (linear projections, used channel by channel). Its time-mixing operator "WKV" is a softmax-like average of the past values, with weights $e^{k_i}$ that decay by a factor $e^{-w}$ per step:
 $$
 \mathrm{wkv}_t = \frac{\sum_{i<t} e^{-(t-1-i)w + k_i}\, v_i \;+\; e^{u + k_t}\, v_t}{\sum_{i<t} e^{-(t-1-i)w + k_i} \;+\; e^{u + k_t}} ,
 $$
@@ -742,7 +742,7 @@ and its derivative for the $(j+1)$ factor, the sum reduces exactly to $\frac{1-\
 :::
 
 ::: note
-[Critical analysis]{.tag} The gain depends on three clocks: $\alpha$ (small/large agreement — high on ordinary text, low on tricky code or creative outputs); the cost ratio $c$ (verifying $\gamma$ tokens costs more than one decoding step — prefilling); $\gamma$ (too large = many rejections at the last rank).
+[Critical analysis]{.tag} The gain depends on three clocks: $\alpha$ (small/large agreement — high on ordinary text, low on tricky code or creative outputs); the cost ratio $c$ of one draft step to one target step (an iteration costs about $\gamma c + 1$ target steps); $\gamma$ (too large = many rejections at the last rank).
 
 Leviathan et al. give the optimal $\gamma$ as a function of $(\alpha, c)$ — a lab exercise. Descendants: *self-speculation* (the model verifies itself via skipped layers), multiple heads (Medusa), trees — to be documented in your tech watch.
 :::
@@ -813,7 +813,7 @@ Measured conclusion: LLMs have a preliminary graphical *intuition*, not an algor
 :::
 
 ::: prop
-[Proposition 8.1 — Encoding is a first-order variable (Fatemi et al., 2024)]{.tag} "Talk like a Graph" systematically studies *how* to serialize a graph: nine encodings (edge lists, incidence lists, named people as friends or co-authors…), several question phrasings and graph generators, on PaLM 2. Findings:
+[Proposition 8.1 — Encoding is a first-order variable (Fatemi et al., 2024)]{.tag} "Talk like a Graph" systematically studies *how* to serialize a graph: nine encodings (edge lists, incidence lists, named people as friends or co-authors…), several question phrasings and graph generators, on PaLM 62B and PaLM 2. Findings:
 
 1.  the right encoding raises accuracy by 4.8% to 61.8% depending on the task — e.g. listing each node with its neighbours (incident encoding) gives 53.8% on "connected nodes", against 19.8% for an edge list;
 2.  integer node names help counting tasks (degree, numbers of nodes and edges); asking an application question ("are these two people friends?") often beats the graph phrasing;
@@ -832,7 +832,7 @@ Takeaway: serializing a graph is a design act, not a formality.
 3.  mean-pool and project its output into one *soft token* (the graph token), placed before the textualized subgraph and the question;
 4.  train the GNN and the projector with the LLM frozen (prompt tuning), or with LoRA on the LLM as well.
 
-Reported on ExplaGraphs/SceneGraphs/WebQSP: better answers and **fewer hallucinations** (SceneGraphs: 62% fully valid answers against 8% for prompt tuning). On WebQSP, retrieval keeps about 18 of 1,371 nodes and cuts the prompt from about 100k to 600 tokens.
+Reported on ExplaGraphs/SceneGraphs/WebQSP: better answers and **fewer hallucinations** (SceneGraphs: 62% of answers cite only existing nodes and edges, against 8% for prompt tuning). On WebQSP, retrieval keeps about 18 of 1,371 nodes and cuts the prompt from about 100k to 600 tokens.
 :::
 
 A second family, **graph instruction tuning**, teaches a frozen LLM to read graph tokens, as LLaVA teaches it to read image tokens.
@@ -860,7 +860,7 @@ The last column uses the taxonomy of [Graph ML 10.2](../m1p2-graph-ml/index.html
 
 ### 8.4. LLMs that complete knowledge graphs
 
-Many true triples $(h, r, t)$ are missing from any knowledge graph. *KG completion* ranks candidate tails $t$ for a query $(h, r, ?)$. Embeddings such as RotatE (Graph ML ch. 6) score triples by geometry alone; an LLM adds the entities' text and its pre-training knowledge.
+Many true triples $(h, r, t)$ are missing from any knowledge graph. *KG completion* ranks candidate tails $t$ for a query $(h, r, ?)$. Embeddings such as TransE (Graph ML ch. 6) or its rotation variant RotatE score triples by geometry alone; an LLM adds the entities' text and its pre-training knowledge.
 
 -   **Triples as text** (KG-BERT, Yao, Mao & Luo, 2019): a fine-tuned BERT scores "head [SEP] relation [SEP] tail", written with entity descriptions — one forward pass per candidate.
 -   **Instruction tuning** (KG-LLM, Yao et al., 2023): LLaMA-7B and ChatGLM-6B, fine-tuned on triples written as prompts, beat ChatGPT and GPT-4 on triple classification and relation prediction.
@@ -951,7 +951,7 @@ For a reliable agent, three levers: shorten the chains (composite tools), make e
 The seminar ends with problems that no one has solved yet: the finite stock of human text, the risk of training on generated data, and updating a model without retraining it. Each is a source of internship and thesis topics.
 
 ::: ex
-[Today's readings]{.tag} P. Villalobos, J. Sevilla, L. Heim, et al., *Will we run out of data? Limits of LLM scaling based on human-generated data*, ICML 2024 (arXiv:2211.04325, revised 2024; first version 2022); I. Shumailov et al., *AI models collapse when trained on recursively generated data* (the "curse of recursion"), Nature 2024; H. Yu et al., *Continual Learning of Large Language Models: A Comprehensive Survey*, 2024 (arXiv:2402.01344).
+[Today's readings]{.tag} P. Villalobos, A. Ho, J. Sevilla, et al., *Will we run out of data? Limits of LLM scaling based on human-generated data*, ICML 2024 (arXiv:2211.04325, revised 2024; first version 2022); I. Shumailov et al., *AI models collapse when trained on recursively generated data* (the "curse of recursion"), Nature 2024; H. Yu et al., *Continual Learning of Large Language Models: A Comprehensive Survey*, 2024 (arXiv:2402.01344).
 :::
 
 ### 10.1. Data exhaustion
@@ -1002,7 +1002,7 @@ The Yu et al. (2024) survey maps the field; the honest assessment: no scheme dom
 9.  **★★ MoE routing (ch. 5).** Load Mixtral (open weights) and instrument the router; measure the load distribution per expert over 3 corpora (code, math, prose); reproduce the specialization figure — and its variability; implement the auxiliary loss of Switch on a toy MoE and show the balancing.
 10. **★★ SSM scan (ch. 6).** Implement the SSM recurrence then the prefix scan (prop. 6.2 for the LTI case; selective version for Mamba); compare the GPU memory of the three modes (recurrence / FFT convolution / scan) on L = 8k; test the exact recall of a distant association — transformer vs SSM (the ch. 6 critique).
 11. **★★ Agents (ch. 9).** A ReAct agent with 3 tools, one of them unreliable (bad output); measure per-step $p$ and the $p^k$ law (prop. 9.2); add Reflexion and measure gain vs cost; multi-agent ablation: 2 "specialized" agents vs 1 agent with the same token budget.
-12. **★★★ Graph encodings (ch. 8).** Reproduce "Talk like a Graph" on 3 NLGraph tasks × 4 encodings (code from ch. 8); test the hypothesis "it is the structure, not the length" by matching lengths; a light G-Retriever: replace the PCST with a weighted shortest path and compare.
+12. **★★★ Graph encodings (ch. 8).** Reproduce "Talk like a Graph" on 3 NLGraph tasks × the 3 encodings of the ch. 8 code, plus one of the paper's nine encodings that the code does not cover (friendship, for instance); test the hypothesis "it is the structure, not the length" by matching lengths; a light G-Retriever: replace the PCST with a weighted shortest path and compare.
 13. **★★★ Mini-review (ch. 10).** Write a 4-page "position paper": *"In 2030, will knowledge live in the weights, the context or the index?"* — drawing on at least six chapters of the seminar and two modules of the master.
 14. **★★★ Graph tokens and LLM knowledge-graph completion (ch. 8).** A reading half and a reproduction half.
     -   Reading: compare GraphGPT and LLaGA (Definition 8.3) with the grid of ch. 0 — what is trained, what is frozen, and what the zero-shot transfer tables really support.
@@ -1021,7 +1021,7 @@ The projects exercise objectives O3 (large language models) and O5 (graphs × LL
     -   Implement a reusable harness: the 13-gram overlap detector of ch. 1 run against a public pre-training sample (a shard of Dolma, Soldaini et al., 2024), and 20 or more regenerated variants of GSM8K items (Cobbe et al., 2021) with new numbers and names. Report each score as the raw / variant / overlap triple of Proposition 1.2.
     -   Calibrate an open LLM judge on the 3.3k expert votes of the MT-Bench human judgments (Zheng et al., 2023), in both answer orders; measure agreement, the position-flip rate and a verbosity bias (pad correct answers).
     -   Models: two or three open instruction models of 1–8B parameters, on a free GPU tier.
-    -   Deliverables: code, a 4–6 page report, a 10-minute talk. Success: every score given with a 95% interval and its variant gap; the judge's agreement with humans, with an interval, set against the 81% human–human level.
+    -   Deliverables: code, a 4–6 page report, a 10-minute talk. Success: every score given with a 95% interval and its variant gap; the judge's agreement with humans, with an interval, set against the 81% human–human level (ties excluded).
 
 2.  **[Solo · ≈ 20 h] Paper study: speculative decoding meets 4-bit quantization (Leviathan, Kalman and Matias, 2023).** Question: does Theorem 7.2 predict the measured speedup, and what does quantizing the target cost in acceptance and quality? Chapters used: ch. 7, 1.
     -   Implement speculative sampling with residual resampling (Definition 7.1) for a pair that shares a tokenizer, such as Qwen2.5-0.5B-Instruct as draft and Qwen2.5-3B-Instruct as target, on a free T4 GPU.
@@ -1031,13 +1031,13 @@ The projects exercise objectives O3 (large language models) and O5 (graphs × LL
 
 ### Group projects {#projects-group}
 
-1.  **[Group of 4 · ≈ 30 h each] Paper study: serialize, retrieve or encode? A KG-QA bake-off around G-Retriever (He et al., 2024).** Question: under a fixed token budget, when does a structural component beat serialization or long context — the open question of 8.3? The subject connects this module to [Graph ML ch. 10](../m1p2-graph-ml/index.html#ch10) and [Advanced GNN 8.3](../m2-advanced-gnn/index.html#ch8), and is a light version of Y2.1. Chapters used: ch. 3, 4, 8.
+1.  **[Group of 4 · ≈ 30 h each] Paper study: serialize, retrieve or encode? A KG-QA bake-off around G-Retriever (He et al., 2024).** Question: under a fixed token budget, when does a structural component beat serialization or long context — the open question of ch. 8? The subject connects this module to [Graph ML ch. 10](../m1p2-graph-ml/index.html#ch10) and [Advanced GNN 8.3](../m2-advanced-gnn/index.html#ch8), and is a light version of Y2.1. Chapters used: ch. 3, 4, 8.
     -   Data: the WebQSP and SceneGraphs splits released with G-Retriever; one open LLM of 1–8B parameters for all systems.
     -   Member 1: serialization — Talk-like-a-Graph encodings of the 2-hop subgraph (Proposition 8.1), and a long-context baseline that stuffs the graph up to the budget (ch. 3).
     -   Member 2: GraphRAG — Leiden communities, their summaries, local and global search (ch. 4; Graph ML 10.1).
     -   Member 3: a light G-Retriever — PCST or shortest-path subgraph, a GNN and one graph token, frozen LLM (Definition 8.2).
     -   Member 4: the harness — Hit@1, a hallucination rate (answers naming entities absent from the graph), tokens and cost per query, an LLM judge calibrated as in ch. 1.
-    -   Deliverables: code, a 6–8 page report, a 15-minute talk. Success: the four systems at the same budget, Hit@1 with intervals per question type, and a reasoned answer to the open question of 8.3 for these data.
+    -   Deliverables: code, a 6–8 page report, a 15-minute talk. Success: the four systems at the same budget, Hit@1 with intervals per question type, and a reasoned answer to the open question of ch. 8 for these data.
 
 2.  **[Group of 3 · ≈ 30 h each] Does RLVR teach graph algorithms or just select them?** Question: the "select or create" debate of ch. 2, on the master's own domain. The subject connects this module to [LLMs ch. 5](../m2-large-language-models/index.html#ch5) (GRPO) and [Reinforcement Learning ch. 5](../m1p2-reinforcement-learning/index.html#ch5). Chapters used: ch. 2, 8.
     -   Tasks: NLGraph-style connectivity, shortest path and topological sort on random NetworkX graphs, with rewards checked exactly by NetworkX (Definition 2.2). Train on 5–15 nodes; test on 20–40 nodes and on an unseen encoding (Proposition 8.1).
@@ -1104,7 +1104,7 @@ The rubric grades the continuous part (portfolio and project); the written exam,
 -   **MoE.** N. Shazeer et al., [Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer](https://arxiv.org/abs/1701.06538), ICLR 2017; W. Fedus, B. Zoph, N. Shazeer, [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961), JMLR 2022; A. Q. Jiang et al., [Mixtral of Experts](https://arxiv.org/abs/2401.04088), 2024; DeepSeek-AI, [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437), 2024.
 -   **Alternative architectures.** A. Gu, K. Goel, C. Ré, [Efficiently Modeling Long Sequences with Structured State Spaces](https://arxiv.org/abs/2111.00396) (S4), ICLR 2022; A. Gu, T. Dao, [Mamba: Linear-Time Sequence Modeling with Selective State Spaces](https://arxiv.org/abs/2312.00752), 2023; B. Peng et al., [RWKV: Reinventing RNNs for the Transformer Era](https://arxiv.org/abs/2305.13048), Findings of EMNLP 2023; S. De et al., [Griffin: Mixing Gated Linear Recurrences with Local Attention for Efficient Language Models](https://arxiv.org/abs/2402.19427), ICML 2024; O. Lieber et al. (AI21), [Jamba: A Hybrid Transformer-Mamba Language Model](https://arxiv.org/abs/2403.19887), 2024; G. E. Blelloch, *Prefix Sums and Their Applications*, technical report CMU-CS-90-190, Carnegie Mellon University, 1990.
 -   **Efficiency.** Y. Leviathan, M. Kalman, Y. Matias, [Fast Inference from Transformers via Speculative Decoding](https://arxiv.org/abs/2211.17192), ICML 2023; C. Chen et al., [Accelerating Large Language Model Decoding with Speculative Sampling](https://arxiv.org/abs/2302.01318), 2023; E. Frantar, S. Ashkboos, T. Hoefler, D. Alistarh, [GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers](https://arxiv.org/abs/2210.17323), ICLR 2023; J. Lin et al., [AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration](https://arxiv.org/abs/2306.00978), MLSys 2024; Y. LeCun, J. S. Denker, S. A. Solla, *Optimal Brain Damage*, NeurIPS 2 (1990); B. Hassibi, D. G. Stork, *Second Order Derivatives for Network Pruning: Optimal Brain Surgeon*, NeurIPS 5 (1993).
--   **LLMs × graphs (the LLGA core).** H. Wang et al., [Can Language Models Solve Graph Problems in Natural Language?](https://arxiv.org/abs/2305.10037) (NLGraph), NeurIPS 2023; B. Fatemi, J. Halcrow, B. Perozzi, [Talk like a Graph: Encoding Graphs for Large Language Models](https://arxiv.org/abs/2310.04560), ICLR 2024; X. He et al., [G-Retriever: Retrieval-Augmented Generation for Textual Graph Understanding and Question Answering](https://arxiv.org/abs/2402.07630), NeurIPS 2024; S. Pan et al., [Unifying Large Language Models and Knowledge Graphs: A Roadmap](https://arxiv.org/abs/2306.08302), IEEE TKDE 2024; W. Chen et al., [Large Language Models on Graphs: A Comprehensive Survey](https://arxiv.org/abs/2312.02783), 2023; J. Tang et al., [GraphGPT: Graph Instruction Tuning for Large Language Models](https://arxiv.org/abs/2310.13023), SIGIR 2024; R. Chen, T. Zhao, A. Jaiswal, N. Shah, Z. Wang, [LLaGA: Large Language and Graph Assistant](https://arxiv.org/abs/2402.08170), ICML 2024; L. Yao, C. Mao, Y. Luo, [KG-BERT: BERT for Knowledge Graph Completion](https://arxiv.org/abs/1909.03193), 2019; L. Yao, J. Peng, C. Mao, Y. Luo, [Exploring Large Language Models for Knowledge Graph Completion](https://arxiv.org/abs/2308.13916), 2023 (ICASSP 2025); Y. Wei, Q. Huang, J. T. Kwok, Y. Zhang, [KICGPT: Large Language Model with Knowledge in Context for Knowledge Graph Completion](https://arxiv.org/abs/2402.02389), Findings of EMNLP 2023.
+-   **LLMs × graphs (the LLGA core).** H. Wang et al., [Can Language Models Solve Graph Problems in Natural Language?](https://arxiv.org/abs/2305.10037) (NLGraph), NeurIPS 2023; B. Fatemi, J. Halcrow, B. Perozzi, [Talk like a Graph: Encoding Graphs for Large Language Models](https://arxiv.org/abs/2310.04560), ICLR 2024; X. He et al., [G-Retriever: Retrieval-Augmented Generation for Textual Graph Understanding and Question Answering](https://arxiv.org/abs/2402.07630), NeurIPS 2024; S. Pan et al., [Unifying Large Language Models and Knowledge Graphs: A Roadmap](https://arxiv.org/abs/2306.08302), IEEE TKDE 2024; W. Chen et al., [Large Language Models on Graphs: A Comprehensive Survey](https://arxiv.org/abs/2312.02783), 2023; J. Tang et al., [GraphGPT: Graph Instruction Tuning for Large Language Models](https://arxiv.org/abs/2310.13023), SIGIR 2024; R. Chen, T. Zhao, A. Jaiswal, N. Shah, Z. Wang, [LLaGA: Large Language and Graph Assistant](https://arxiv.org/abs/2402.08170), ICML 2024; Z. Sun, Z.-H. Deng, J.-Y. Nie, J. Tang, [RotatE: Knowledge Graph Embedding by Relational Rotation in Complex Space](https://arxiv.org/abs/1902.10197), ICLR 2019; L. Yao, C. Mao, Y. Luo, [KG-BERT: BERT for Knowledge Graph Completion](https://arxiv.org/abs/1909.03193), 2019; L. Yao, J. Peng, C. Mao, Y. Luo, [Exploring Large Language Models for Knowledge Graph Completion](https://arxiv.org/abs/2308.13916), 2023 (ICASSP 2025); Y. Wei, Q. Huang, J. T. Kwok, Y. Zhang, [KICGPT: Large Language Model with Knowledge in Context for Knowledge Graph Completion](https://arxiv.org/abs/2402.02389), Findings of EMNLP 2023.
 -   **Agents.** S. Yao et al., [ReAct: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629), ICLR 2023; T. Schick et al., [Toolformer: Language Models Can Teach Themselves to Use Tools](https://arxiv.org/abs/2302.04761), NeurIPS 2023; N. Shinn et al., [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366), NeurIPS 2023; Q. Wu et al., [AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation](https://arxiv.org/abs/2308.08155), 2023; G. Li et al., [CAMEL: Communicative Agents for "Mind" Exploration of Large Language Model Society](https://arxiv.org/abs/2303.17760), NeurIPS 2023.
 -   **Evaluation.** C. Xu, S. Guan, D. Greene, M.-T. Kechadi, [Benchmark Data Contamination of Large Language Models: A Survey](https://arxiv.org/abs/2406.04244), 2024; L. Zheng et al., [Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena](https://arxiv.org/abs/2306.05685), NeurIPS 2023; P. Wang et al., [Large Language Models are not Fair Evaluators](https://arxiv.org/abs/2305.17926), ACL 2024; P. Liang et al., [Holistic Evaluation of Language Models](https://arxiv.org/abs/2211.09110) (HELM), TMLR 2023.
--   **Open problems.** P. Villalobos, J. Sevilla, L. Heim, et al., [Will we run out of data? Limits of LLM scaling based on human-generated data](https://arxiv.org/abs/2211.04325), ICML 2024 (first version 2022; [Epoch AI](https://epoch.ai) project); I. Shumailov et al., [AI models collapse when trained on recursively generated data](https://arxiv.org/abs/2305.17493), Nature 2024; H. Yu et al., [Continual Learning of Large Language Models: A Comprehensive Survey](https://arxiv.org/abs/2402.01344), 2024.
+-   **Open problems.** P. Villalobos, A. Ho, J. Sevilla, T. Besiroglu, L. Heim, M. Hobbhahn, [Will we run out of data? Limits of LLM scaling based on human-generated data](https://arxiv.org/abs/2211.04325), ICML 2024 (first version 2022; [Epoch AI](https://epoch.ai) project); I. Shumailov et al., [AI models collapse when trained on recursively generated data](https://arxiv.org/abs/2305.17493), Nature 2024; H. Yu et al., [Continual Learning of Large Language Models: A Comprehensive Survey](https://arxiv.org/abs/2402.01344), 2024.
