@@ -820,6 +820,168 @@ In production, combine several indicators and weight by social behavior to avoid
 11. **★★ Dynamic assistance.** Design a rubber-banding controller: input = normalized distance $d$ to the player; output = speed bonus $v \in [0.9, 1.15]$; impose hysteresis (distinct rise/fall thresholds) and inertia — write the equations and discuss the tuning so that an average player notices nothing.
 12. **★★★ Project.** In Python (sandbox provided): a grid world with obstacles, 20 boids-navmesh agents; implement (a) A\* + path following, (b) a survival BT (flee a predator, eat, wander), (c) an MCTS predator (5 ms per decision) on a discretized version of the game; measure survival rate per configuration and compute time per frame — deliver a report with the chapter 5 checklist.
 
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+
+The official assessment is not communicated: no SynapseS 2026–2027 sheet matches this announced slot, and the fiche (row "Official sheet") records "period (dates), language and assessment methods: not communicated".
+
+The scheme below is one possible design consistent with the session plan.
+:::
+
+### A classical assessment {#projects-exam}
+
+With nothing communicated, the proposal uses the master's balanced default: a written exam, a graded practical exercise built on the real-time checklist of section 5.3, and the project of Ex. 12. Every chapter is taught in class, so the exam may cover all of them.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Written exam | 40 % | 2 h, no documents, one handwritten A4 sheet, calculator allowed | ch. 0–9 |
+| Practical exercise | 25 % | 3 h on a laptop, after session 6: bring an over-budget scene back under its AI budget, graded against the eight points of the checklist of section 5.3, with frame-time traces before and after | ch. 1–5 |
+| Project | 35 % | [Ex. 12](#ex) or one card of [the list below](#projects-list): code, report with the checklist of chapter 5, presentation in session 12 | ch. 1–9 |
+
+**Resit.** A 2 h written exam of the same format replaces the exam mark; the practical and project marks are kept.
+
+**Sample questions.** Five questions of 4 points each make a 20-point paper of 2 h.
+
+**Q1 (4 pts) — Fixed step and accumulator (ch. 1).** A game simulates at $\Delta t = 1/60$ s with the accumulator loop of Proposition 1.3, starting from an empty accumulator. Three frames last 20, 50 and 10 ms.
+
+\(a) How many ticks run in each frame, and what is the interpolation factor $\alpha$ after the third? (b) Why does a replay give the same sequence of states? (c) What goes wrong with a variable step $x \mathrel{+}= v\,\delta t$?
+
+::: proof
+[Marking points]{.tag}
+
+-   Frame 1: the accumulator holds 20 ms, so 1 tick runs and 3.33 ms remain; frame 2: 53.33 ms, so 3 ticks and 3.33 ms remain (1 pt).
+-   Frame 3: 13.33 ms, below one step, so no tick runs and the frame is rendered with $\alpha = 13.33/16.67 = 0.8$ (1 pt). Common error: rounding the number of ticks up.
+-   Tick $j$ always starts from the state left by tick $j - 1$, with the same $\Delta t$ and the inputs stamped for tick $j$; only the number of ticks per frame depends on timing (1 pt).
+-   With a variable step, roundings change from one run to the next, so replays and lockstep networking diverge, and a long frame can make explicit integration unstable; the bound of 5 ticks per frame prevents the spiral of death (1 pt).
+:::
+
+**Q2 (4 pts) — Heuristics on an 8-connected grid (ch. 2).** On an empty 8-connected grid (straight moves of cost 1, diagonal moves of cost $\sqrt2$), the goal lies 3 cells away in $x$ and 5 in $y$.
+
+\(a) Give the true cost $h^*$. (b) Compute the octile, Euclidean and Manhattan heuristics; which are admissible? (c) Why does an admissible but smaller heuristic make A\* slower?
+
+::: proof
+[Marking points]{.tag}
+
+-   With no obstacle, 3 diagonal moves and 2 straight moves are optimal: $h^* = 3\sqrt2 + 2 \approx 6.24$ (1 pt).
+-   Octile: $6.24$, exact here; Euclidean: $\sqrt{34} \approx 5.83$; both are at most $h^*$, hence admissible (1 pt).
+-   Manhattan: $8 > 6.24$; it overestimates, so Proposition 2.1 no longer applies and A\* may return a longer path (1 pt). Common error: calling Manhattan admissible because it is admissible on 4-connected grids.
+-   A\* expands the nodes whose $f = g + h$ is below the optimal cost; a smaller $h$ puts more nodes below that threshold, hence more expansions — $h = 0$ is Dijkstra (1 pt).
+:::
+
+**Q3 (4 pts) — UCT by hand (ch. 6).** The root has 30 visits and three children: A ($N = 20$, $W = 12$), B ($N = 6$, $W = 4$), C ($N = 4$, $W = 1$); $c = 0.7$ and $\ln 30 \approx 3.40$.
+
+\(a) Compute the three UCT values and say which child is explored. (b) Its rollout is lost: recompute with $\ln 31 \approx 3.43$. (c) Comment.
+
+::: proof
+[Marking points]{.tag}
+
+-   A: $0.600 + 0.289 = 0.889$; B: $0.667 + 0.527 = 1.194$; C: $0.250 + 0.646 = 0.896$ (1 pt).
+-   B is explored: it has the largest value, from a good mean and a large bonus (1 pt). Common error: forgetting the square root in the bonus.
+-   After the loss, B has $N = 7$, $W = 4$: $0.571 + 0.490 = 1.062$; A: $0.890$; C: $0.899$. B is still chosen (1 pt).
+-   B's bonus shrinks like $N^{-1/2}$ and its mean dropped; C, not retried, now overtakes A because $\ln N$ keeps growing in its bonus: no child is ever eliminated for good (Proposition 6.3) (1 pt).
+:::
+
+**Q4 (4 pts) — An AI budget (ch. 1 and 5).** 400 NPCs run at 60 frames/s with an AI budget of 2 ms per frame; one behavior-tree evaluation costs 15 µs, and path following costs 1 µs per NPC and per frame.
+
+\(a) What does evaluating every tree at every frame cost? (b) With decisions re-evaluated at 5 Hz and spread evenly over the frames, how many trees are evaluated per frame, and at what cost? (c) Does the whole AI fit in its budget? (d) Name two further levers from chapters 1 and 5.
+
+::: proof
+[Marking points]{.tag}
+
+-   Every tree at every frame: $400 \times 15$ µs $= 6$ ms, three times the budget (1 pt).
+-   At 5 Hz: $400 \times 5 / 60 \approx 33$ trees per frame, that is $0.5$ ms (1 pt).
+-   Path following still runs every frame: $400 \times 1$ µs $= 0.4$ ms, so $0.9$ ms in total, within the budget, which leaves $1.1$ ms for path requests (1 pt). Common error: staggering the actions too — the legs follow every frame, only the decisions are staggered.
+-   Any two of: AI levels of detail (a trivial state machine far from the player), asynchronous path requests with a fixed number of expansions per frame, contiguous data in an ECS, indexed spatial queries (1 pt).
+:::
+
+**Q5 (4 pts) — Screening for aimbots (ch. 9).** A suspect's $n = 50$ reaction times are compared with $m = 200$ reference human times by the Mann–Whitney test of Example 9.1, and every suspect time is below every human time.
+
+\(a) Define $U$ and give its mean and variance when both samples come from the same distribution. (b) Compute $U$ and the standardized $z$. (c) The test runs every week on 10,000 players at the 1 % level: how many innocent players are flagged if nobody cheats, and what level would Bonferroni use? (d) Why does a tiny p-value not prove cheating?
+
+::: proof
+[Marking points]{.tag}
+
+-   $U$ counts the pairs with $X_i > Y_j$, a tie counting ½; under the null, $\mathbb{E}[U] = nm/2$ and $\mathrm{Var}(U) = nm(n + m + 1)/12$ (1 pt).
+-   $U = 0$, $\mathbb{E}[U] = 5000$ and the standard deviation is $\sqrt{50 \times 200 \times 251 / 12} \approx 457$, so $z \approx -10.9$ (1 pt).
+-   About $10\,000 \times 0.01 = 100$ innocent players per week; Bonferroni tests each player at $0.01/10\,000 = 10^{-6}$ (1 pt). Common error: reading the 1 % level as "1 % of the flagged players are innocent".
+-   The test says that the times differ from the reference sample, not why: an exceptional player, a different input device or a biased reference sample also give a small $U$, so indicators are combined and a human reviews the case (1 pt).
+:::
+
+### Projects {#projects-list}
+
+House rules: public or fully specified synthetic data, a laptop CPU or one free Colab T4, open-weight models only (no paid API), and only what this module, its prerequisites and the mandatory courses of period 2 teach (sessions stated). Levels ★/★★/★★★ are those of the exercises; for a 36 h / 4.5 ECTS course, a ★ card takes 8–15 h per student, ★★ 15–25 h and ★★★ 25–35 h.
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★ · solo · Heuristics on real game maps {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | On the benchmark queries of 10 game maps, compare Dijkstra ($h = 0$), A\* with the Euclidean and octile heuristics, and A\* with the inadmissible Manhattan heuristic; report node expansions, the path-cost gap to the optimal length stored with each query (0 for admissible heuristics) and the P50/P99 time per query, against Dijkstra. Extends [Ex. 2 and Ex. 9](#ex). |
+| Data | [Moving AI Lab grid benchmarks](https://movingai.com/benchmarks/grids.html), *Dragon Age: Origins* set — maps distributed for research with BioWare's permission, cite Sturtevant (2012) — 156 maps with their query files (0.8 MB and 2 MB zipped); loading: `curl -O https://movingai.com/benchmarks/dao/dao-map.zip` and `dao-scen.zip`. The stored optima use diagonal cost $\sqrt2$ and forbid cutting corners through walls: apply the same rule. |
+| Chapters | [ch. 0](#ch0) (binary heaps), [ch. 2](#ch2) (Proposition 2.1, Example 2.2, the A\* code), [ch. 5](#ch5) (profiling: P99, not the mean) |
+| Deliverables | notebook, 4-page report with expansions and timings per heuristic |
+| Effort and compute | ≈ 12 h per student · laptop CPU, longest run ≤ 20 min |
+| Objectives served | O4 (search on graphs), O7 (measured performance) |
+| Specific criterion | Replaces the protocol row: maps chosen before any timing, at least 3 repetitions of every timing, intervals on the P99 by bootstrap over queries. |
+| Going further | Add a consistent heuristic precomputed with landmarks (differential heuristic) and measure the gain in expansions. |
+
+#### P2 · ★★ · solo · 200 agents under a 2 ms budget {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | Move 200 agents to random goals on one *Dragon Age* map at 30 Hz and keep the AI under 2 ms per frame: compare full A\* per request, HPA\* with 16 × 16 clusters, and asynchronous A\* with a fixed number of expansions per frame, each followed by local avoidance; report the P99 AI time per frame, the path-length overhead against the optimum, and collisions per minute, against synchronous full A\*. Extends [Ex. 12](#ex) (a). |
+| Data | The Moving AI maps of P1 (same licence) and a seeded generator: starts and goals drawn uniformly among free cells with `numpy.random.default_rng(seed)`, seeds 0–4, a new goal drawn on arrival, 5 minutes of game time per run. |
+| Chapters | [ch. 1](#ch1) (budget, fixed step), [ch. 2](#ch2) (sections 2.2–2.3), [ch. 4](#ch4) (steering), [ch. 5](#ch5) (profiling and the checklist of section 5.3) |
+| Deliverables | notebook or small repository, 4-page report with frame-time traces |
+| Effort and compute | ≈ 22 h per student · laptop CPU, longest run ≤ 30 min |
+| Objectives served | O7 (engineering under a real-time budget) |
+| Specific criterion | Replaces the reproducibility row: deterministic replays (same seed, same frame trace), checked by a hash of the final state. |
+| Going further | Replace steering by ORCA through the [Python-RVO2](https://github.com/sybrenstuvel/Python-RVO2) bindings (Apache 2.0), and add an AI level of detail. |
+
+#### P3 · ★★ · group · MCTS under a millisecond budget against a small AlphaZero {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | On Connect Four, measure the win rate against fixed opponents as a function of the time budget per move (0.5, 1, 2, 5 and 20 ms) for UCT with random rollouts, UCT with a heuristic rollout policy, and a small AlphaZero-style agent (PUCT guided by a policy–value network trained by self-play); report win, draw and loss rates with binomial intervals over 400 games per pairing, and the P99 time per move, against UCT with random rollouts. |
+| Data | Generated, no external data: [OpenSpiel](https://openspiel.readthedocs.io/) — Apache 2.0 — `pyspiel.load_game("connect_four")`, all games seeded. |
+| Chapters | [ch. 6](#ch6) (Definition 6.1, Proposition 6.3, section 6.3), [ch. 7](#ch7) (self-play, section 7.2); [RL section 4.2](../m1p2-reinforcement-learning/index.html#ch4) (PUCT, RL session 6) and [RL ch. 6](../m1p2-reinforcement-learning/index.html#ch6) (value networks, RL session 9), mandatory in the same period; intervals of [Refresher Statistics 6.1](../m1p1-refresher-statistics/index.html#confidence-intervals) |
+| Deliverables | repository with a one-command run, 6–8-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 20 h per student (3–4 students) · laptop CPU or one free Colab T4 for self-play, longest run ≤ 3 h |
+| Objectives served | O7 (decisions under a latency budget), O1 (search and learning combined) |
+| Specific criterion | Replaces the protocol row: opponents and budgets fixed before the experiments, 3 seeds of self-play training, first-player advantage balanced by swapping colours. |
+| Going further | Determinized MCTS (section 6.3) on an imperfect-information game of OpenSpiel, such as Kuhn poker, and the gap to the exact equilibrium. |
+
+#### P4 · ★★★ · group · A conversational NPC under a latency budget {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Build an NPC that answers players from a team-written lore bible — BM25 retrieval of lore passages, a small open model in 4-bit with a persona prompt, an end-of-turn guardrail, and a behavior-tree fallback when the model is late; report P50/P99 time to first token and to the full reply, lore-consistency accuracy on 200 questions with gold answers, and the success rate of 50 prompt-injection attempts, against the same model without retrieval and without guardrail. |
+| Data | Synthetic and fully specified: a lore bible of about 50 pages (about 25,000 words: 20 characters, 10 places, a timeline of 30 events) written by the team under CC BY 4.0, then 200 questions with gold answers and 50 injection prompts, all frozen before the first experiment. Model: [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) — Apache 2.0; retrieval: [rank-bm25](https://pypi.org/project/rank-bm25/) — Apache 2.0. |
+| Chapters | [ch. 9](#ch9) (section 9.1 and its constraints table), [ch. 1](#ch1) and [ch. 5](#ch5) (latency budget, no blocking call on the main thread), [ch. 3](#ch3) (fallback behavior); BM25 of [NLP ch. 2](../m1p2-nlp-text-mining/index.html#ch2) (NLP session 3) and decoder models of [NLP ch. 7](../m1p2-nlp-text-mining/index.html#ch7) (NLP sessions 8–9), mandatory in the same period |
+| Deliverables | repository with a one-command run, 6–8-page report, 10-minute oral with a live demo and individual questions |
+| Effort and compute | ≈ 30 h per student (3–4 students) · one free Colab T4, or a laptop CPU with 4-bit inference; longest run ≤ 1 h |
+| Objectives served | O3 (LLM inference and evaluation), O7 (a shipped feature under a budget), O8 (injection and moderation) |
+| Responsible AI | Players can type anything and may be minors: log only with consent, filter inputs and outputs, publish the failure cases of the injection test, and never give the NPC the voice or name of a real person. |
+| Going further | Dense retrieval with a sentence encoder (NLP ch. 7), a 7B model in 4-bit, and a graph of the lore's characters for multi-hop questions ([Graph ML ch. 10](../m1p2-graph-ml/index.html#ch10)). |
+
+### End-of-year projects {#projects-capstone}
+
+None of the [Year-1 integrative projects](../m1-integrative-projects/index.html) or [Year-2 capstones](../m2-projet-transverse/index.html) requires this announced slot. Its pathfinding and budget engineering transfer directly to the delivery project [Y1-5](../m1-integrative-projects/index.html#y1-5) (A\* on a city graph, and its sub-second re-routing variant), and its latency discipline to the voice assistant of capstone [C4](../m2-projet-transverse/index.html#c4) (a P95 below 1.5 s) and to the routing service of [C5](../m2-projet-transverse/index.html#c5).
+
 ## References {#refs}
 
 -   S. Rabin (ed.), [Game AI Pro](https://www.gameaipro.com) (vol. 1–7) — the freely accessible chapters: behavior trees, utility, navigation, AI LOD.

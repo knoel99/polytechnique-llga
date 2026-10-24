@@ -1480,11 +1480,110 @@ Historical remedies: Wasserstein-GAN (transportation distance instead of JSD —
 LLMs, for their part, remain autoregressive: $\mathbb{P}(x_t \mid x_{<t})$, cross-entropy loss over tokens (LLMs module, M2).
 :::
 
+### 9.4. Diffusion in one page {#diffusion}
+
+A GAN generates in one shot and pays with an unstable game; a VAE is stable but its samples are blurry. Diffusion models (Sohl-Dickstein et al., 2015; Ho et al., 2020) take a third route: destroy the data with noise in many small steps, and train a network to undo one step at a time.
+
+Each step is a plain regression, so training is as stable as supervised learning; the price is paid at sampling time.
+
+::: def
+[Definition 9.7 — Forward (noising) process]{.tag} Choose a schedule $0 < \beta_1 < \dots < \beta_T < 1$, and set $\alpha_t = 1 - \beta_t$ and $\bar\alpha_t = \prod_{s \le t}\alpha_s$. Starting from a data point $x_0$, each step shrinks the signal and adds Gaussian noise:
+$$
+q(x_t \mid x_{t-1}) = \mathcal{N}\big(\sqrt{\alpha_t}\,x_{t-1},\ \beta_t I\big).
+$$
+Nothing is learned in this process.
+:::
+
+::: prop
+[Proposition 9.8 — Closed form of the forward process]{.tag} For every $t$,
+$$
+q(x_t \mid x_0) = \mathcal{N}\big(\sqrt{\bar\alpha_t}\,x_0,\ (1 - \bar\alpha_t)\, I\big), \qquad\text{that is}\qquad x_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\varepsilon, \quad \varepsilon \sim \mathcal{N}(0, I).
+$$
+:::
+
+::: proof
+By induction on $t$; the case $t = 1$ is the definition. If $x_{t-1} = \sqrt{\bar\alpha_{t-1}}\,x_0 + \sqrt{1-\bar\alpha_{t-1}}\,\varepsilon'$, then
+$$
+x_t = \sqrt{\alpha_t}\,x_{t-1} + \sqrt{\beta_t}\,\varepsilon_t = \sqrt{\bar\alpha_t}\,x_0 + \sqrt{\alpha_t(1-\bar\alpha_{t-1})}\,\varepsilon' + \sqrt{1 - \alpha_t}\,\varepsilon_t .
+$$
+The last two terms are independent centred Gaussians, so their sum is Gaussian with variance
+$$
+\alpha_t(1 - \bar\alpha_{t-1}) + 1 - \alpha_t = 1 - \bar\alpha_t .
+$$
+[∎]{.qed}
+:::
+
+Two consequences. Any noise level is sampled in one step, without simulating the chain. And with the schedule of Ho et al. ($T = 1\,000$, $\beta_t$ rising linearly from $10^{-4}$ to $0.02$), $\sum_t \beta_t \approx 10$ and $\bar\alpha_T \approx 4 \times 10^{-5}$: $x_T$ is pure noise to excellent accuracy, which is where sampling starts.
+
+A network $\varepsilon_\theta(x_t, t)$ receives the noisy point and the step, and is trained to predict the noise that was added:
+
+::: key
+[Key result — the noise-prediction loss]{.tag}
+$$
+\mathcal{L}(\theta) = \mathbb{E}_{x_0,\ t \sim \mathcal{U}\{1, \dots, T\},\ \varepsilon}\,\big\|\varepsilon - \varepsilon_\theta\big(\sqrt{\bar\alpha_t}\,x_0 + \sqrt{1-\bar\alpha_t}\,\varepsilon,\ t\big)\big\|^2 .
+$$
+:::
+
+Ho et al. show that the ELBO of section 9.2, written for the whole chain, is a sum of KL divergences between Gaussians, each a weighted squared error on $\varepsilon$; dropping the weights gives this loss, which trains better. The derivation is in [Multimodal Generative AI ch. 3](../m1p2-multimodal-genai/index.html#ch3).
+
+::: thm
+[Algorithm 9.9 — Ancestral sampling]{.tag} Draw $x_T \sim \mathcal{N}(0, I)$. For $t = T, \dots, 1$, draw $z \sim \mathcal{N}(0, I)$ (and set $z = 0$ at the last step), then
+$$
+x_{t-1} = \frac{1}{\sqrt{\alpha_t}}\Big(x_t - \frac{\beta_t}{\sqrt{1-\bar\alpha_t}}\,\varepsilon_\theta(x_t, t)\Big) + \sqrt{\beta_t}\, z .
+$$
+The first term removes the predicted noise; the second re-injects a little fresh noise, which keeps the chain a sampler rather than a deterministic denoiser.
+:::
+
+**Cost.** One network evaluation per step: $T = 1\,000$ forward passes per sample, against one for a VAE or a GAN. Deterministic samplers (DDIM) and distillation bring this down to 10–50 steps ([Multimodal Generative AI ch. 4](../m1p2-multimodal-genai/index.html#ch4)).
+
+::: def
+[Definition 9.10 — Classifier-free guidance (Ho & Salimans, 2022)]{.tag} Train $\varepsilon_\theta(x_t, t, c)$ on pairs $(x_0, c)$, where $c$ is a class or a text prompt, and replace $c$ by an empty token $\varnothing$ with probability about $10\%$: one network learns both the conditional and the unconditional prediction. At sampling, use in place of $\varepsilon_\theta$
+$$
+\tilde\varepsilon = \varepsilon_\theta(x_t, t, \varnothing) + w\,\big(\varepsilon_\theta(x_t, t, c) - \varepsilon_\theta(x_t, t, \varnothing)\big).
+$$
+The weight $w = 1$ gives plain conditional sampling; $w > 1$ (7.5 by default in Stable Diffusion) pushes the samples towards the condition and trades diversity for fidelity, at the price of two network evaluations per step.
+:::
+
+The lab of session 12 trains a DDPM on a mixture of eight Gaussians in the plane, in a few minutes on a laptop CPU. Replacing the small MLP by a U-Net and the points by images gives an image DDPM; [Graph ML ch. 9](../m1p2-graph-ml/index.html#ch9) transposes the same idea to graphs.
+
+```python
+import math, torch, torch.nn as nn
+
+torch.manual_seed(0)
+def mixture(n):                                   # 8 Gaussians on the circle of radius 2
+    a = 2 * math.pi * torch.randint(0, 8, (n,)) / 8
+    return 2 * torch.stack([a.cos(), a.sin()], 1) + 0.1 * torch.randn(n, 2)
+
+T = 200                                           # steps t = 0..T-1 in code, 1..T in the text
+beta = torch.linspace(1e-4, 0.08, T); alpha = 1 - beta; abar = torch.cumprod(alpha, 0)
+net = nn.Sequential(nn.Linear(3, 128), nn.SiLU(), nn.Linear(128, 128), nn.SiLU(), nn.Linear(128, 2))
+opt = torch.optim.Adam(net.parameters(), lr=1e-3)
+eps_hat = lambda x, t: net(torch.cat([x, t.float().unsqueeze(1) / T], 1))   # epsilon_theta(x_t, t)
+
+for step in range(5000):                          # training: a plain regression on the noise
+    x0 = mixture(256); t = torch.randint(0, T, (256,)); eps = torch.randn_like(x0)
+    a = abar[t].unsqueeze(1)
+    xt = a.sqrt() * x0 + (1 - a).sqrt() * eps     # closed form (proposition 9.8)
+    loss = ((eps - eps_hat(xt, t))**2).mean()     # noise-prediction loss
+    opt.zero_grad(); loss.backward(); opt.step()
+
+with torch.no_grad():                             # ancestral sampling (algorithm 9.9): T network calls
+    x = torch.randn(2000, 2)
+    for t in reversed(range(T)):
+        e = eps_hat(x, torch.full((2000,), t))
+        x = (x - beta[t] / (1 - abar[t]).sqrt() * e) / alpha[t].sqrt()
+        if t > 0: x = x + beta[t].sqrt() * torch.randn_like(x)
+r = x.norm(dim=1)                                 # about 96 % of the samples within 0.3 of the circle,
+print(((r - 2).abs() < 0.3).float().mean())       # spread over the 8 modes (no mode collapse)
+```
+
+The four families side by side:
+
 | Family | Principle | Sampling | In the program |
 |---|---|---|---|
-| VAE | ELBO, Gaussian latent | decoder from $z \sim \mathcal{N}$ | Multimodal GenAI |
-| GAN | adversarial min-max | implicit | Multimodal GenAI |
-| Diffusion | iterative noising/denoising | (reverse) process | Multimodal GenAI |
+| VAE | ELBO, Gaussian latent | decoder from $z \sim \mathcal{N}$ | here 9.2; Multimodal GenAI |
+| GAN | adversarial min-max | implicit, one pass | here 9.3; Multimodal GenAI |
+| Diffusion | iterative noising/denoising | $T$ denoising steps (algorithm 9.9) | here 9.4; Multimodal GenAI ch. 3–4 |
 | Autoregressive | modeling $\mathbb{P}(x_t \mid x_{<t})$ | token by token | LLMs (M2), Graph GenAI |
 
 ## 10. Research at DaSciM (Vazirgiannis, Lutzeyer, Zhu) {#ch10}

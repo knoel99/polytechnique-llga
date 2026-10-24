@@ -53,6 +53,7 @@ format:
 -   [9. Honest benchmarking](#ch9)
 -   [10. Choosing your method: guide and open questions](#ch10)
 -   [Exercises / Labs](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -124,7 +125,7 @@ M2 module offered in period 1, outside the recommended track, designed as an app
 
 **24 h in class (assumed) = 8 sessions of 3 h.** The SynapseS 2026–2027 catalogue publishes no sheet and no teaching hours for this module; 24 h is the M2 volume published for the Large Language Models course (CSC_53432_EP: 24 h, 2 ECTS) and is assumed here, and the session split below is our proposal for covering these notes in that time.
 
-Level 1 = foundations (reminders, first results), 2 = core methods (boosting engines, encodings, deep tabular models), 3 = recent research and open questions (tabular foundation models, LLMs on tables, benchmarking controversies); the level never goes down from one session to the next.
+Level 1 = foundations (reminders, first results), 2 = core methods (the boosting engines and their derivations, encodings), 3 = recent research and open questions (deep tabular models, tabular foundation models, LLMs on tables, benchmarking controversies); the level never goes down from one session to the next.
 
 | Session | Hours | Level | Content | Practice |
 |---|---|---|---|---|
@@ -132,9 +133,9 @@ Level 1 = foundations (reminders, first results), 2 = core methods (boosting eng
 | 2 | 3 h | 2 | ch. 2 Boosting as functional gradient descent; ch. 3.1 XGBoost: leaf weights and split gain | Ex. 1 |
 | 3 | 3 h | 2 | ch. 3.2–3.3 LightGBM (histograms, GOSS, EFB) and CatBoost (oblivious trees, ordered statistics) | Ex. 4 |
 | 4 | 3 h | 2 | ch. 4 Encoding categorical and numerical columns; target leakage | Ex. 2 (central lab) |
-| 5 | 3 h | 2 | ch. 5 Deep tabular: regularized MLPs, FT-Transformer, TabNet, NODE | Ex. 7 (start: GBDT and FT-Transformer baselines) |
+| 5 | 3 h | 3 | ch. 5 Deep tabular: regularized MLPs, FT-Transformer, TabNet, NODE | Ex. 7 (start: GBDT and FT-Transformer baselines) |
 | 6 | 3 h | 3 | ch. 6 TabPFN: prior-fitted networks and in-context learning on tables | Ex. 8 |
-| 7 | 3 h | 3 | ch. 7 LLMs and tables: serialization, TabLLM, text-to-SQL; ch. 8 Synthetic tabular data | Ex. 5, 6 |
+| 7 | 3 h | 3 | ch. 7 LLMs and tables: serialization, TabLLM, SQL recap and text-to-SQL; ch. 8 Synthetic tabular data, differential privacy recap | Ex. 5, 6 |
 | 8 | 3 h | 3 | ch. 9 Honest benchmarking; ch. 10 Choosing your method, open questions | Ex. 7 (conclusions and decision guide) |
 
 **Self-study, outside the 24 h**: none — every chapter is covered in class; the labs (Ex. 2 and 7 in particular) are the personal work expected alongside.
@@ -567,6 +568,36 @@ Two critical properties: the **column order** influences the prediction (the mod
 [Study 7.2 — TabLLM (Hegselmann et al., 2023)]{.tag} In **few-shot** (typically $\leq 64$ examples), an LLM (T0/GPT-3.5, textual serializations) predicts tables better than dedicated deep methods and rivals GBDTs; the advantage reverses as soon as data abounds — the per-row token cost becomes prohibitive and the semantic prior no longer compensates for the statistical capacity. The LLM wins where *every example is expensive* (medical annotation, industry); the GBDT where data is massive.
 :::
 
+::: recap
+[Recap — SQL in one screen]{.tag} A relational database stores tables whose rows are identified by a *primary key* (PK); a *foreign key* (FK) is a column holding the primary key of a row of another table. The schema used below has three tables:
+
+  Table     Columns
+  --------- ----------------------------------------------------------
+  clients   client_id (PK), country
+  orders    order_id (PK), client_id (FK → clients), date, margin
+  refunds   order_id (FK → orders), amount
+
+The question of the code below, "top 5 clients by margin in 2025, excluding refunds", reads in SQL:
+
+```sql
+SELECT c.client_id, SUM(o.margin) AS total_margin
+FROM clients AS c
+JOIN orders AS o ON o.client_id = c.client_id
+LEFT JOIN refunds AS r ON r.order_id = o.order_id
+WHERE o.date >= '2025-01-01' AND o.date < '2026-01-01'
+  AND r.order_id IS NULL
+GROUP BY c.client_id
+ORDER BY total_margin DESC
+LIMIT 5;
+```
+
+-   `JOIN … ON` keeps the pairs of rows whose keys match. `LEFT JOIN` also keeps the orders without a refund, with `NULL` in the refund columns, so the test `r.order_id IS NULL` selects exactly them: an *anti-join*.
+-   `WHERE` filters rows *before* grouping; `GROUP BY` forms one group per client, and an aggregate (`SUM`, `COUNT`, `AVG`) summarizes each group; `HAVING` would filter the groups themselves.
+-   `ORDER BY … DESC LIMIT 5` returns the five largest totals.
+
+Schema linking (definition 7.3) is precisely the mapping of "clients", "margin", "2025" and "excluding refunds" onto these tables, this column, this filter and this anti-join. Full treatment in the [DBMS notes](../m1p1-dbms/index.html#ch2), ch. 2 (notes kept for reference, not an offered course).
+:::
+
 ::: def
 [Definition 7.3 — Text-to-SQL and schema linking]{.tag} When the table is a database, the LLM becomes an *interface*: producing SQL from a question in natural language.
 
@@ -608,16 +639,28 @@ Real tables are often too small, too unbalanced or too sensitive to be shared. T
 [Example 8.2 — Three families of generators]{.tag}
 
 -   **GAN/VAE**: CTGAN/TVAE (Xu et al., 2019) — "mode-based" normalization of multimodal columns (GMM) and a conditional classifier for categoricals.
--   **Diffusion**: TabDDPM (Kotelnikov et al., ICML 2023) — Gaussian diffusion for numericals, multinomial diffusion for categoricals (cf. Image Synthesis module for the diffusion foundation), with missing-value imputation as a bonus.
+-   **Diffusion**: TabDDPM (Kotelnikov et al., ICML 2023) — Gaussian diffusion for numericals, multinomial (discrete) diffusion for categoricals, with missing-value imputation as a bonus. The Gaussian part is the DDPM of [Deep Learning](../m1p1-deep-learning/index.html#ch9) ch. 9, [Deep Learning P2](../m1p2-deep-learning-p2/index.html#dl-generative) §7.3 or [Multimodal GenAI](../m1p2-multimodal-genai/index.html#ch3) ch. 3; the categorical part is a discrete diffusion like DiGress ([Graph ML](../m1p2-graph-ml/index.html#ch9) 9.5).
 -   **Language models**: GReaT (Borisov et al., ICLR 2023) — one fine-tunes an LM on rows serialized as text with *random column order*; generating = sampling conditioned completions — the most faithful on dependencies, the most exposed to memorization (cf. LLMs module for LM memorization).
 :::
 
 ::: prop
 [Proposition 8.3 — Synthetic ≠ anonymous]{.tag} A generator trained by maximum likelihood *memorizes*: rare rows (atypical individuals) can be reproduced almost verbatim.
 
-The formal safeguard is **differential privacy** (cf. Emerging ML module ch. 5): training the generator in DP (Gaussian mechanism on gradients) guarantees an $(\varepsilon, \delta)$ — at the price of a measurable fidelity loss.
+The formal safeguard is **differential privacy** (recap below): training the generator in DP (Gaussian mechanism on gradients) guarantees an $(\varepsilon, \delta)$ — at the price of a measurable fidelity loss.
 
 In practice one combines: DP when the guarantee is required, membership inference audits and nearest-record distances otherwise, and documentation of both (regulation; cf. ML Ops module).
+:::
+
+::: recap
+[Recap — differential privacy]{.tag} Two datasets are *neighbors* if they differ in one row. A randomized mechanism $M$ is $(\varepsilon, \delta)$-differentially private if, for all neighbors $D, D'$ and every set $E$ of outputs,
+$$
+\mathbb{P}\big(M(D) \in E\big) \leq e^{\varepsilon}\, \mathbb{P}\big(M(D') \in E\big) + \delta .
+$$
+The *Gaussian mechanism* adds noise to a statistic of $\ell_2$-sensitivity $\Delta_2$; for $\varepsilon < 1$ it is $(\varepsilon, \delta)$-DP as soon as
+$$
+\sigma \geq \sqrt{2 \ln(1.25/\delta)}\; \Delta_2 / \varepsilon .
+$$
+DP-SGD applies it to training: each per-example gradient is clipped to a norm $C$, which bounds the sensitivity of their sum (by $C$ when one row is added or removed), then Gaussian noise is added and the privacy loss is accounted over the steps. *Post-processing*: anything computed from a DP output stays DP, so every table sampled from a generator trained with DP-SGD inherits its guarantee. Full treatment: [Emerging ML](../m1p1-emerging-ml/index.html#ch5) ch. 5 (M1) and [Privacy and Uncertainty Quantification](../m2-privacy-uncertainty/index.html#ch1) ch. 1–4 (M2, same period).
 :::
 
 ::: note
