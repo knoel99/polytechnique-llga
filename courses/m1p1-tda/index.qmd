@@ -1050,7 +1050,8 @@ dgm = {k: st.persistence_intervals_in_dimension(k) for k in (0, 1)}
 h1 = dgm[1][np.argsort(dgm[1][:, 1] - dgm[1][:, 0])[-1]]   # longest H1 bar
 print("main hole: birth %.3f, death %.3f" % tuple(h1))
 # expected: birth ~0.15 (largest gap), death ~1.6 (close to sqrt(3)) -- cf. example 5.2
-gudhi.plot_persistence_barcode(st.persistence()); gudhi.plot_persistence_diagram(st.persistence())
+pers = st.persistence(homology_coeff_field=2)   # keep F2 for the plots (GUDHI's default is 11)
+gudhi.plot_persistence_barcode(pers); gudhi.plot_persistence_diagram(pers)
 ```
 
 ```python
@@ -1066,7 +1067,8 @@ D0 = ripser(sample_circle(200, 1, .05))['dgms']
 D1 = ripser(sample_circle(200, 1, .05))['dgms']
 print("d_b(H1) =", round(bottleneck(D0[1], D1[1]), 3))   # ~ 0.05-0.1: order of the noise
 
-# vary sigma: d_b grows linearly -- numerical illustration of th. 7.1
+# vary sigma: d_b is smallest near the reference noise 0.05 and grows as sigma
+# moves away from it -- numerical illustration of th. 7.1
 for sigma in (.01, .05, .1, .2):
     D = ripser(sample_circle(200, 1, sigma))['dgms']
     print(f"sigma={sigma:4.2f}  d_b={bottleneck(D0[1], D[1]):.3f}")
@@ -1239,7 +1241,7 @@ The projects exercise mainly O4 (graph-structured data: graph filtrations, graph
 ### Solo projects {#projects-solo}
 
 1.  **[Solo · ≈ 20 h] Persistent homology from scratch, then fast.** Papers: Chen and Kerber (2011), *Persistent homology computation with a twist*; Bauer (2021), *Ripser*.
-    -   *Question*: how much of ripser's speed comes from the clearing ("twist") optimisation alone, and how much from never storing the boundary matrix?
+    -   *Question*: how much of ripser's speed comes from the clearing ("twist") optimisation alone, and how much from its other ingredients: cohomology, an implicit boundary matrix that is never stored, and apparent pairs?
     -   *Work*: in NumPy, build the Rips filtration up to dimension 2 and its boundary matrix (Definition 4.3), and reduce it with the standard algorithm (Theorem 4.4). Then add clearing: reduce the dimensions from the highest down, and when column $j$ ends with $\mathrm{low}(j) = i$, set column $i$ to zero without reducing it, since a simplex that gives birth has a zero reduced column.
     -   *Data*: Example 4.5, then noisy samples of a circle, a sphere and a torus, checked against GUDHI.
     -   *Success*: diagrams identical to GUDHI's (bottleneck distance below $10^{-9}$) on every test cloud; time and memory curves against $n$ and the maximal dimension for both reductions and for ripser, with the gain of clearing explained.
@@ -1253,10 +1255,10 @@ The projects exercise mainly O4 (graph-structured data: graph filtrations, graph
 
 3.  **[Solo · ≈ 20 h] Which bars are signal? Confidence sets for persistence diagrams, reproduced.** Paper: Fasy, Lecci, Rinaldo, Wasserman, Balakrishnan and Singh (2014), *Confidence sets for persistence diagrams*, Annals of Statistics.
     -   *Question*: can a bootstrap band separate the true holes from noise without knowing the shape, as the bootstrap note of ch. 7 promises?
-    -   *Work*: implement the subsampling band of the paper. The 95 % quantile $c$ of the Hausdorff distance between subsamples and the full cloud estimates $d_H$ to the hidden shape, and Proposition 7.3 turns it into the bottleneck bound $2c$ for Rips diagrams. Add the bottleneck bootstrap as a variant: the 95 % quantile of $d_B$ between replica diagrams and the full diagram.
+    -   *Work*: implement the subsampling band of the paper. With $q$ the 95 % quantile of the Hausdorff distance between subsamples of size $b \ll n$ and the full cloud, the paper bounds $d_H$ to the hidden shape by $c = 2q$ (its Theorem 3, stated for Čech diagrams). Proposition 7.3 turns it into the bottleneck bound $2c$ for Rips diagrams. Add the bottleneck bootstrap as a variant: the 95 % quantile of $d_B$ between replica diagrams and the full diagram.
     -   *Rule*: a point farther from the diagonal than the bound, in the sup norm, cannot be matched to it, so its bar is declared significant (Definition 5.3).
     -   *Data*: circle, two circles, sphere and torus at increasing noise levels, then one real cloud of your choice (for example a 3D scan from the Stanford repository).
-    -   *Success*: an empirical coverage close to 95 % on synthetic shapes whose true diagram is known, and significant bars matching the Betti numbers of the shape at low noise.
+    -   *Success*: on noiseless and low-noise circles, whose true Rips diagram is known (one $H_1$ point $(0, r\sqrt{3})$ for radius $r$, Example 5.2), an empirical coverage of at least 95 %, with its excess reported, since the paper calls the subsampling band very conservative; and significant bars matching the Betti numbers of each shape at low noise.
     -   *Deliverables*: code, 4–6 page report, 10-minute talk. Chapters: [ch. 5](#ch5), [ch. 7](#ch7), [ch. 9](#ch9).
 
 ### Group projects {#projects-group}
@@ -1270,14 +1272,14 @@ The projects exercise mainly O4 (graph-structured data: graph filtrations, graph
 
 2.  **[Group of 3 · ≈ 30 h each] The shape of transformer embedding spaces.** Paper: Naitzat, Zhitnikov and Lim (2020), *Topology of Deep Neural Networks*, JMLR. Connects this course to [Large Language Models](../m2-large-language-models/index.html#ch2) (M2) and to [Text Mining and NLP](../m1p2-nlp-text-mining/index.html) (Period 2).
     -   *Question*: Naitzat et al. found that ReLU networks simplify the topology of the data layer after layer. Does the same hold for the hidden states of a small pretrained transformer, and does fine-tuning change it?
-    -   *Work*: take bert-base-uncased (or GPT-2 small) from Hugging Face and the SST-2 sentences. At every layer, before and after fine-tuning on SST-2, extract sentence vectors (mean of the token states). For each layer and class, compute Rips persistence with the cosine distance (ripser, 1,000-point subsamples, $H_0$ and $H_1$), landscapes, Betti curves and a Mapper graph.
+    -   *Work*: take bert-base-uncased (or GPT-2 small) from Hugging Face and the SST-2 sentences. At every layer, before and after fine-tuning on SST-2, extract sentence vectors (mean of the token states). For each layer and class, compute Rips persistence of the L2-normalised vectors (ripser, 1,000-point subsamples, $H_0$ and $H_1$), landscapes, Betti curves and a Mapper graph. Their Euclidean distance ranks pairs as the cosine distance does but is a metric, which the stability results of ch. 7 need.
     -   *Split*: embeddings and fine-tuning; persistence and statistics; Mapper and interpretation.
     -   *Success*: per-layer summaries with bootstrap bands (ch. 7) over at least 5 subsamples, and every claimed change, between layers or across fine-tuning, larger than its band.
     -   *Deliverables*: code, joint 8–10 page report, 20-minute talk. Chapters: [ch. 2](#ch2), [ch. 5](#ch5), [ch. 6](#ch6), [ch. 7](#ch7), [ch. 9](#ch9).
 
 3.  **[Group of 3 · ≈ 30 h each] A topology-preserving auto-encoder on images.** Paper: Moor, Horn, Rieck and Borgwardt (2020), *Topological Autoencoders*, ICML. Connects this course to [Deep Learning](../m1p1-deep-learning/index.html) (Period 1) and covers the multimedia practice that the official syllabus asks for.
     -   *Question*: does a loss on the 0-dimensional persistence pairs of each mini-batch keep the connectivity of the data in the latent space, and at what cost in reconstruction?
-    -   *Work*: the 0-dimensional pairs of a Rips filtration are the edges of a minimum spanning tree (Definition 2.7), so the loss compares the lengths of the MST edges of the input batch and of the latent batch, in both directions. Implement it in PyTorch with scipy's MST and compare with a plain auto-encoder, PCA and UMAP.
+    -   *Work*: the 0-dimensional pairs of a Rips filtration are the edges of a minimum spanning tree (Definition 2.7). The loss takes the MST edges of the input batch and penalises the squared gap between their lengths in the input space and in the latent space, then does the same with the MST edges of the latent batch. Implement it in PyTorch with scipy's MST and compare with a plain auto-encoder, PCA and UMAP.
     -   *Data*: the nested Spheres of the paper, Fashion-MNIST, and COIL-20 (Nene, Nayar and Murase, 1996), where the 72 views of each rotating object form a loop.
     -   *Split*: loss and training; image experiments; evaluation and the $H_1$ study on COIL-20.
     -   *Success*: over 3 seeds, a better trustworthiness (scikit-learn) and density-KL measure of the paper than the plain auto-encoder on all three datasets, at a reconstruction error within 10 % of it; on COIL-20, the number of objects whose latent trace keeps a long $H_1$ bar, for each method.
@@ -1325,9 +1327,9 @@ Three hours, one handwritten A4 sheet allowed, no electronic device; four questi
 
 4.  **Question (3 points).** A colleague claims that a sensor network covers its domain if and only if $H_1$ of the Rips complex of its communication graph vanishes. Give a counterexample to each direction, and say what the criterion of de Silva and Ghrist uses instead.
 
-    *Expected*: three sensors at the corners of an equilateral triangle of side $s$ equal to the communication radius, with coverage radius $r$ between $s/2$ and $s/\sqrt{3}$: the Rips triangle is filled, so $H_1 = 0$, yet the circumcenter is not covered (Example 2.5).
+    *Expected*: three sensors at the corners of an equilateral triangle of side $s$ equal to the communication radius, with a coverage radius $r$ such that $s/2 \leq r < s/\sqrt{3}$: the Rips triangle is filled, so $H_1 = 0$, yet the circumcenter is not covered (Example 2.5).
 
-    Conversely, four sensors at the corners of a square of side $s$ equal to the communication radius: the diagonals are too long, the Rips complex is a hollow square with $H_1 \neq 0$, yet disks of radius $s/\sqrt{2}$ cover the square.
+    Conversely, four sensors at the corners of a square of side $s$ equal to the communication radius: the diagonals are too long, the Rips complex is a hollow square with $H_1 \neq 0$, yet closed disks of radius $s/\sqrt{2}$ cover the square.
 
     The real criterion is sufficient only: under $r_c \geq r_b/\sqrt{3}$ and a fence $F$, a class of $H_2(R, F)$ with non-zero boundary in $H_1(F)$ proves coverage.
 
@@ -1353,6 +1355,7 @@ Three hours, one handwritten A4 sheet allowed, no electronic device; four questi
 -   F. Chazal, D. Cohen-Steiner, M. Glisse, L. J. Guibas, S. Y. Oudot, [Proximity of Persistence Modules and Their Diagrams](https://dl.acm.org/doi/10.1145/1542362.1542407), SoCG 2009 — algebraic stability (Theorem 7.2; team, ch. 10.2).
 -   P. Bubenik, [Statistical Topological Data Analysis Using Persistence Landscapes](https://jmlr.org/papers/v16/bubenik15a.html), JMLR 16, 2015 — the landscapes of ch. 5.
 -   F. Chazal, B. Fasy, F. Lecci, A. Rinaldo, A. Singh, L. Wasserman, *Stochastic Convergence of Persistence Landscapes and Silhouettes*, SoCG 2013 — the convergence of empirical landscapes (note of ch. 7).
+-   B. T. Fasy, F. Lecci, A. Rinaldo, L. Wasserman, S. Balakrishnan, A. Singh, [Confidence Sets for Persistence Diagrams](https://arxiv.org/abs/1303.7117), Annals of Statistics 42(6), 2014 — the subsampling and bootstrap bands of the note of ch. 7 and of solo project 3.
 -   G. Singh, F. Mémoli, G. Carlsson, [Topological Methods for the Analysis of High Dimensional Data Sets and 3D Object Recognition](https://doi.org/10.2312/SPBG/SPBG07/091-100), Eurographics Symposium on Point-Based Graphics, 2007 — the Mapper paper of ch. 6.
 -   M. Nicolau, A. J. Levine, G. Carlsson, [Topology Based Data Analysis Identifies a Subgroup of Breast Cancers with a Unique Mutational Profile and Excellent Survival](https://doi.org/10.1073/pnas.1102826108), PNAS 108(17), 2011 — Example 6.2.
 -   G. Petri, P. Expert, F. Turkheimer, R. Carhart-Harris, D. Nutt, P. J. Hellyer, F. Vaccarino, [Homological Scaffolds of Brain Functional Networks](https://pmc.ncbi.nlm.nih.gov/articles/PMC4223908/), Journal of the Royal Society Interface 11, 2014 — the neurosciences application of ch. 8.
@@ -1361,6 +1364,7 @@ Three hours, one handwritten A4 sheet allowed, no electronic device; four questi
 -   N. Otter, M. A. Porter, U. Tillmann, P. Grindrod, H. A. Harrington, [A Roadmap for the Computation of Persistent Homology](https://doi.org/10.1140/epjds/s13688-017-0109-5), EPJ Data Science 6:17, 2017 — the practical guide (software, pitfalls) of ch. 9.
 -   M. Carrière, M. Cuturi, S. Oudot, [Sliced Wasserstein Kernel for Persistence Diagrams](https://arxiv.org/abs/1706.03358), ICML 2017 — the kernel of ch. 8.1 (team, ch. 10.4).
 -   M. Carrière, F. Chazal, Y. Ike, T. Lacombe, M. Royer, Y. Umeda, [PersLay: A Neural Network Layer for Persistence Diagrams and New Graph Topological Signatures](https://arxiv.org/abs/1904.09378), AISTATS 2020 — the layer of ch. 8.2.
+-   M. Zaheer, S. Kottur, S. Ravanbakhsh, B. Póczos, R. Salakhutdinov, A. Smola, [Deep Sets](https://arxiv.org/abs/1703.06114), NeurIPS 2017 — the sum form of permutation-invariant set functions (ch. 8.2).
 -   C. Hofer, R. Kwitt, M. Niethammer, A. Uhl, [Deep Learning with Topological Signatures](https://arxiv.org/abs/1707.04041), NeurIPS 2017 — a learned input layer for diagrams, the starting point of the topological losses of ch. 8.
 -   F. Chazal, L. J. Guibas, S. Y. Oudot, P. Škraba, [Persistence-Based Clustering in Riemannian Manifolds](https://geometry.stanford.edu/paper.php?id=cgos-pbcrm-11), Journal of the ACM 60(6), 2013 — ToMATo (ch. 10.3).
 -   U. Bauer, [Ripser: Efficient Computation of Vietoris–Rips Persistence Barcodes](https://arxiv.org/abs/1908.02518), Journal of Applied and Computational Topology 5, 2021 — the fast matrix-free algorithm (ch. 9).

@@ -553,7 +553,7 @@ m(f_{\text{new}}) \geq m(f_{\text{prod}}) - \tau,
 \delta_i = \ell_i(f_{\text{new}}) - \ell_i(f_{\text{prod}}), \qquad i = 1, \dots, n .
 </span> With <span class="math inline">\bar\delta</span> their mean and <span class="math inline">s_\delta</span> their standard deviation, the candidate passes if the upper end of a one-sided 95 % interval stays below the margin: <span class="math display">
 \bar\delta + 1.645\, \frac{s_\delta}{\sqrt n} \;\le\; \tau .
-</span> For a skewed metric (F1, judge win rate, RAGAS score), use instead the 95th percentile of <span class="math inline">\bar\delta</span> over <span class="math inline">10^4</span> bootstrap resamples of the items.</p>
+</span> For a metric that is not a per-item mean (F1) or is far from normal (judge win rate, RAGAS score), use instead the 95th percentile of the metric difference recomputed on <span class="math inline">10^4</span> bootstrap resamples of the items.</p>
 </div>
 <p><em>Worked example</em> — <span class="math inline">n = 1000</span> right/wrong items; the candidate loses 40 items that production gets right and wins 30 that production gets wrong.</p>
 <ul>
@@ -609,11 +609,11 @@ m(f_{\text{new}}) \geq m(f_{\text{prod}}) - \tau,
 <h3 id="memory-the-kv-cache-and-pagedattention">3.2. Memory: the KV cache and PagedAttention</h3>
 <div class="recap">
 <div class="recap-title">
-<p>Recall 3.2 — KV-cache size (proved in <a href="../m2-large-language-models/index.html#kv-cache">LLMs, Proposition 2.4</a>)</p>
+<p>Recall 3.2 — KV-cache size (stated in <a href="../m2-large-language-models/index.html#kv-cache">LLMs, Proposition 2.4</a>)</p>
 </div>
 <p>For a transformer with <span class="math inline">n_{\text{layers}}</span> layers and <span class="math inline">n_{\text{kv}}</span> key/value heads (GQA) of dimension <span class="math inline">d_{\text{head}}</span>, in precision <span class="math inline">b</span> bytes, the cache of a sequence of <span class="math inline">T</span> tokens occupies: <span class="math display">
 M_{\text{KV}} \;=\; 2 \cdot n_{\text{layers}} \cdot n_{\text{kv}} \cdot d_{\text{head}} \cdot b \cdot T \;\text{bytes}.
-</span> The factor 2 counts keys and values; only the K/V heads are cached, however many query heads there are.</p>
+</span> The count is direct: each layer stores, for each token, one key and one value of <span class="math inline">n_{\text{kv}} d_{\text{head}}</span> coefficients each, at <span class="math inline">b</span> bytes per coefficient. Hence the factor 2, and only the K/V heads count, however many query heads there are.</p>
 <p><em>Example</em> (Llama-3-8B: <span class="math inline">n_{\text{layers}}=32</span>, <span class="math inline">n_{\text{kv}}=8</span>, <span class="math inline">d_{\text{head}}=128</span>, fp16 <span class="math inline">b=2</span>): <span class="math inline">2\times32\times8\times128\times2 = 131,072</span> bytes ≈ 128&nbsp;KiB <strong>per token</strong>, i.e.&nbsp;1 GiB for 8,192 tokens — as much memory as the weights of a small quantized model.</p>
 </div>
 <p>Continuous batching therefore makes memory occupancy oscillate at every iteration (sequences entering/leaving). Allocating the KV as one maximal contiguous block (maximum output length reserved in advance) wastes.</p>
@@ -682,10 +682,12 @@ L_t = \frac{1}{t}\int_0^t N(u)\,du,
 <span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>    ttft <span class="op">=</span> [r[<span class="dv">0</span>] <span class="cf">for</span> r <span class="kw">in</span> res <span class="cf">if</span> r[<span class="dv">0</span>] <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>]</span>
 <span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    tpot <span class="op">=</span> [r[<span class="dv">1</span>] <span class="cf">for</span> r <span class="kw">in</span> res <span class="cf">if</span> r[<span class="dv">1</span>] <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span>]</span>
 <span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"failed streams: </span><span class="sc">{</span>conc <span class="op">-</span> <span class="bu">len</span>(tpot)<span class="sc">}</span><span class="ss">"</span>)</span>
-<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"conc=</span><span class="sc">{</span>conc<span class="sc">}</span><span class="ss">  TTFT p50/p99 = </span><span class="sc">{</span>p(ttft,<span class="fl">.5</span>)<span class="sc">:.2f}</span><span class="ss">/</span><span class="sc">{</span>p(ttft,<span class="fl">.99</span>)<span class="sc">:.2f}</span><span class="ss">s"</span></span>
-<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>          <span class="ss">f"  TPOT p99 = </span><span class="sc">{</span>p(tpot,<span class="fl">.99</span>)<span class="op">*</span><span class="fl">1e3</span><span class="sc">:.0f}</span><span class="ss">ms"</span>)</span>
-<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> conc <span class="kw">in</span> (<span class="dv">1</span>, <span class="dv">4</span>, <span class="dv">16</span>, <span class="dv">64</span>, <span class="dv">256</span>): asyncio.run(main(conc))</span></code></pre></div>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="kw">not</span> tpot:</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>        <span class="cf">return</span>                                                <span class="co"># every stream failed</span></span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"conc=</span><span class="sc">{</span>conc<span class="sc">}</span><span class="ss">  TTFT p50/p99 = </span><span class="sc">{</span>p(ttft,<span class="fl">.5</span>)<span class="sc">:.2f}</span><span class="ss">/</span><span class="sc">{</span>p(ttft,<span class="fl">.99</span>)<span class="sc">:.2f}</span><span class="ss">s"</span></span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>          <span class="ss">f"  TPOT p99 = </span><span class="sc">{</span>p(tpot,<span class="fl">.99</span>)<span class="op">*</span><span class="fl">1e3</span><span class="sc">:.0f}</span><span class="ss">ms"</span>)</span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> conc <span class="kw">in</span> (<span class="dv">1</span>, <span class="dv">4</span>, <span class="dv">16</span>, <span class="dv">64</span>, <span class="dv">256</span>): asyncio.run(main(conc))</span></code></pre></div>
 <table class="caption-top">
 <thead>
 <tr class="header">
@@ -811,8 +813,8 @@ V \;\ge\; V^\star = \frac{F + C_{\text{train}}/H}{a - b}.
 <ul>
 <li><strong>API</strong>: <span class="math inline">a = 0.0015 + 0.0012 = 0.0027</span> € per request, i.e.&nbsp;810 € a month.</li>
 <li><strong>Fine-tuned 8B</strong> (LoRA, ch.&nbsp;7) on one GPU at 2 €/h, always on: <span class="math inline">F \approx 1{,}460</span> € a month, <span class="math inline">C_{\text{train}} \approx 600</span> € (data curation and GPU) over <span class="math inline">H = 6</span> months, and <span class="math inline">b \approx 0</span>, since one batched GPU serves millions of requests a month (Proposition 4.1). Then <span class="math inline">V^\star \approx 1{,}560 / 0.0027 \approx 580</span> k requests a month, about 19 k a day.</li>
-<li><strong>Distilled 1B student</strong> on a small GPU at 0.6 €/h: <span class="math inline">F \approx 440</span> € a month and <span class="math inline">C_{\text{train}} \approx 370</span> € (100 k teacher answers bought from the API, plus training). Then <span class="math inline">V^\star \approx 500 / 0.0027 \approx 185</span> k requests a month, about 6 k a day.</li>
-<li><strong>Verdict</strong>: at 10 k requests a day only the distilled student pays off, and only if it passes the paired gate (Definition 2.3) against the API model. A GPU idle at night still bills <span class="math inline">F</span>: utilization moves <span class="math inline">V^\star</span> more than the token prices do.</li>
+<li><strong>Distilled 1B student</strong> on a small GPU at 0.6 €/h: <span class="math inline">F \approx 440</span> € a month and <span class="math inline">C_{\text{train}} \approx 370</span> € (100 k teacher answers bought from the API, plus training), over the same <span class="math inline">H = 6</span> months. Then <span class="math inline">V^\star \approx 500 / 0.0027 \approx 185</span> k requests a month, about 6 k a day.</li>
+<li><strong>Verdict</strong>: at 10 k requests a day only the distilled student pays off, and only if it passes the paired gate (Definition 2.3) against the API model. A GPU idle at night still bills <span class="math inline">F</span>: scaling it down off-peak moves <span class="math inline">V^\star</span> as much as a change in token prices does.</li>
 </ul>
 <h2 id="ch5">5. Evaluation in production: drift and monitoring</h2>
 <p>A model that passed every test at release time degrades silently when the world it serves changes. This chapter defines the kinds of drift, gives the statistics that detect them, and organizes monitoring and LLM-based evaluation in production.</p>
@@ -835,7 +837,7 @@ V \;\ge\; V^\star = \frac{F + C_{\text{train}}/H}{a - b}.
 <p>The classic detectors: PSI/KL per feature (interpretable, bin by bin), the Kolmogorov–Smirnov test for continuous features, the MMD distance between feature distributions (<a href="../m1p2-graph-ml/index.html#ch9">Graph ML 9.6</a>, which uses it to compare generated graphs), and stream detectors (ADWIN) for online signals.</p>
 <p><strong>Kolmogorov–Smirnov in three lines.</strong> Compare a reference window of <span class="math inline">n</span> values with a current window of <span class="math inline">m</span> values through the largest gap between their empirical distribution functions: <span class="math display">
 D = \sup_x \bigl|\widehat F_{\text{ref}}(x) - \widehat F_{\text{cur}}(x)\bigr| .
-</span> Under “same continuous law”, <span class="math inline">D\sqrt{nm/(n+m)}</span> follows the Kolmogorov distribution, whose 95 % quantile is about 1.36: alert when <span class="math inline">D &gt; 1.36\,\sqrt{(n+m)/(nm)}</span>.</p>
+</span> Under “same continuous law” and for large windows, <span class="math inline">D\sqrt{nm/(n+m)}</span> approximately follows the Kolmogorov distribution, whose 95 % quantile is about 1.36: alert when <span class="math inline">D &gt; 1.36\,\sqrt{(n+m)/(nm)}</span>.</p>
 <p>For an LLM, the “features” to monitor are: prompt length, language, topics (lightweight classifier), presence of injected documents, truncation rate — <em>and</em> output proxies: refusal rate, “I don’t know” rate, median answer length, JSON parse failure rate.</p>
 <p>Without online labels, one monitors <em>symptoms</em>; the true metrics come from feedback and sampling.</p>
 <h3 id="monitoring-three-time-loops">5.2. Monitoring: three time loops</h3>
@@ -1228,7 +1230,7 @@ r\,(d_{\text{out}} + d_{\text{in}}) \text{ parameters instead of } d_{\text{out}
 <li><strong>Quantization</strong>: ~2-4× on the energy throughput per token (cf.&nbsp;LLMs ch.&nbsp;6).</li>
 <li><strong>Batching</strong>: the same GPU delivers more tokens per Wh in batch (ch.&nbsp;3). Proposition 4.1 holds with the power drawn, <span class="math inline">P</span> watts (GPU, host share and PUE), in place of the price <span class="math inline">c</span> €/h, since <span class="math inline">P</span> watts for one hour is <span class="math inline">P</span> Wh: <span class="math display">
 \text{energy/Mt} \;=\; \frac{P}{R} \cdot \frac{10^6}{3600} \;\approx\; 278 \cdot \frac{P}{R} \;\; \text{Wh/Mt}.
-</span> At <span class="math inline">P = 500</span> W and <span class="math inline">R = 2{,}000</span> tokens/s this is about 70 Wh/Mt; at batch 1 (<span class="math inline">R \approx 60</span>), about 2.3 kWh/Mt — the same factor of 30 as on the bill.</li>
+</span> At <span class="math inline">P = 500</span> W and <span class="math inline">R = 2{,}000</span> tokens/s this is about 70 Wh/Mt; at batch 1 (<span class="math inline">R \approx 60</span>) and the same power, about 2.3 kWh/Mt — the factor of 30 of the bill. A lightly loaded GPU draws less power, so the real energy factor is somewhat smaller.</li>
 <li><strong>Geographic and temporal scheduling</strong>: moving the nightly batches to the low-carbon-mix regions at the right moment.</li>
 </ol>
 <p>The order matters: one does not buy green GPUs before having shortened the outputs.</p>
@@ -1258,7 +1260,7 @@ r\,(d_{\text{out}} + d_{\text{in}}) \text{ parameters instead of } d_{\text{out}
 <li><strong>[Solo · ≈ 20 h] How many false rollbacks? Statistically sound evaluation gates.</strong> Which gate blocks real regressions without “dancing on the noise”, and can an LLM judge be trusted as its sensor? A paper study of Zheng et al., “Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena” (NeurIPS 2023).
 <ul>
 <li><em>Implement</em>: four gates — Hoeffding (Proposition 2.2), the paired gate (Definition 2.3, normal and bootstrap), McNemar, and Wald’s sequential probability ratio test (1945). Measure the false-rollback rate and the detection power against <span class="math inline">n</span>, on simulated correlated losses and on real model pairs.</li>
-<li><em>Data</em>: per-item outcomes of two small open models (for example Qwen2.5-0.5B- and 1.5B-Instruct) on GSM8K (Cobbe et al., 2021) and MMLU (Hendrycks et al., 2021), logged by lm-evaluation-harness; the MT-Bench human judgments released with the paper, to measure a judge’s position and length biases.</li>
+<li><em>Data</em>: per-item outcomes of small open models (for example Qwen2.5-1.5B-Instruct against its own 4-bit version, a near-tie, and against Qwen2.5-0.5B-Instruct, a clear regression) on GSM8K (Cobbe et al., 2021) and MMLU (Hendrycks et al., 2021), logged by lm-evaluation-harness; the MT-Bench human judgments released with the paper, to measure a judge’s position and length biases.</li>
 <li><em>Deliverables</em>: a small gate library with tests, a 4–6 page report, a 10-minute talk. <em>Chapters</em>: ch.&nbsp;2, 5.3.</li>
 <li><em>Success</em>: error-rate curves with intervals that match the theory on simulations; the judge’s agreement with humans measured with and without ties, as in the paper; the sign-test gate of 5.3 shown to pass an identical candidate and to block a worse one.</li>
 </ul></li>
@@ -1284,7 +1286,7 @@ r\,(d_{\text{out}} + d_{\text{in}}) \text{ parameters instead of } d_{\text{out}
 <ul>
 <li><em>Implement</em>: a hybrid vector + GraphRAG index kept fresh by change data capture (6.1 and the graph-freshness note of 6.3); CI gates from RAGAS and the order-swapped judge (Definition 2.3, 5.3); a multi-LoRA tone adapter (ch.&nbsp;7); OTel tracing and an SLO dashboard with TTFT P99, PSI, cost and Wh per request (ch.&nbsp;3, 5, 8).</li>
 <li><em>Data</em>: the public GitLab Handbook (CC BY-SA 4.0), whose git history replays real document edits; a 300-question golden set written by the team (local, multi-hop and global questions), 30 % held out.</li>
-<li><em>Other modules</em>: GraphRAG from <a href="../m1p2-graph-ml/index.html#ch10">Graph ML ch.&nbsp;10</a>; RAG and LoRA from <a href="../m2-large-language-models/index.html#ch7">Large Language Models</a>, 7 and 4.3.</li>
+<li><em>Other modules</em>: GraphRAG from <a href="../m1p2-graph-ml/index.html#ch10">Graph ML ch.&nbsp;10</a>; RAG (ch.&nbsp;7) and LoRA (4.3) from <a href="../m2-large-language-models/index.html#ch7">Large Language Models</a>.</li>
 <li><em>Split</em>: ingestion and indexes; evaluation and gates; serving, adapters, cost and energy; observability and the game day.</li>
 <li><em>Deliverables</em>: a repository with one-command deployment, the dashboard, an 8-page cost and carbon report, a live game day in which another team injects a regression. <em>Chapters</em>: ch.&nbsp;1–8, 10.</li>
 <li><em>Success</em>: TTFT P99 within the SLO under replayed load; the freshness SLA met on replayed edits; the injected regression detected and rolled back in under 15 minutes; cost and Wh per request within 25 % of Propositions 4.1 and 10.1.</li>
@@ -1324,7 +1326,7 @@ r\,(d_{\text{out}} + d_{\text{in}}) \text{ parameters instead of } d_{\text{out}
 <li><span class="math inline">491{,}520 / 1{,}800 \approx 273</span> requests.</li>
 </ol></li>
 <li><ol start="3" type="a">
-<li><span class="math inline">W = 0.5 + 300 \times 0.05 = 15.5</span> s, so <span class="math inline">\lambda \le 273 / 15.5 \approx 17.6</span> requests/s. Check: 273 sequences at 20 tokens/s each decode about 5,460 tokens/s, close to <span class="math inline">R = 17.6 \times 300 \approx 5{,}280</span> tokens/s.</li>
+<li><span class="math inline">W = 0.5 + 299 \times 0.05 \approx 15.5</span> s (299 gaps after the first token), so <span class="math inline">\lambda \le 273 / 15.5 \approx 17.6</span> requests/s. Check: 273 sequences at 20 tokens/s each decode about 5,460 tokens/s, close to <span class="math inline">R = 17.6 \times 300 \approx 5{,}280</span> tokens/s.</li>
 </ol></li>
 <li><ol start="4" type="a">
 <li>Proposition 4.1 gives <span class="math inline">278 \times 3 / 5{,}280 \approx 0.16</span> €/Mt; per request, <span class="math inline">3 / (17.6 \times 3600) \approx 4.7 \times 10^{-5}</span> €, about 5 cents per thousand requests.</li>

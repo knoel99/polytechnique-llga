@@ -42,6 +42,7 @@ Cette sélection correspond aux tracks *« Graph AI / Structured Generative AI �
 ## Cohérence d'ensemble et projets
 
 - **Analyse de cohérence** (octobre 2026) : chaque page a été lue en entier, puis analysée selon cinq angles : couverture des objectifs du master O1–O8, chaîne des prérequis, redondances et notations, erreurs, projets intégrateurs. Les corrections ont été appliquées page par page et relues par un second agent. Contrat : `specs/coherence-objectives.md`. Analyse complète : `specs/coherence-2026-10/`.
+- **Seconde lecture** (octobre 2026) : les 49 pages ont été relues par un agent indépendant (mathématiques, faits, références, exécution du code). Sur les 37 dernières pages, 327 points ont été relevés et 278 corrigés sur place ; les autres sont de faible gravité ou sans objet. Les points qui touchent plusieurs pages ont été corrigés ensuite, chacun vérifié à nouveau par un autre agent.
 - **Projets et évaluations** : chaque cours scientifique se termine par une section *Projects and assessment* (sujets solo et en groupe, sujet d'examen écrit avec barème, grille d'évaluation).
 - **Projets de fin d'année** : la page `projects/` propose 5 projets intégrateurs de fin de M1 (rattachés aux projets officiels de la période 2) et 5 projets de M2 (format du projet transverse, 8 ECTS).
 - **Notations** : la page `notation/` fixe les conventions communes aux cours.

@@ -602,7 +602,7 @@ An MLP $d \to r d \to d$ has $2 r d^2$ parameters and $4 r d^2$ FLOPs per token 
 
 With $n_E$ experts, the parameters are multiplied by $n_E$; the computation executes only the $k$ selected experts — the factor is $k$.
 
-The routing (a $d \times n_E$ matrix) costs $2 n_E d$, below $4krd^2$ as soon as $r \geq 1$. [∎]{.qed}
+The routing (a $d \times n_E$ matrix) costs $2 n_E d$, below $4krd^2$ as soon as $n_E < 2krd$, which holds by a wide margin in practice. [∎]{.qed}
 :::
 ::::
 
@@ -625,7 +625,7 @@ Under uniform routing, $f_i = P_i = 1/n_E$, so $\sum_i f_i P_i = 1/n_E$ and the 
 
 Added to this are the **capacity** per expert, $k \times (\text{tokens}/n_E) \times$ a capacity factor — beyond it, tokens "overflow" (passed on to the rest of the network) — and per-expert parallelization (expert parallelism: each device holds experts).
 
-The M2 [Large Language Models](../m2-large-language-models/index.html#moe) module states the same layer and the same loss with the same symbols, and its exercise 9 derives the minimum of the loss; this chapter keeps the statements and reads them on vision and character-level models.
+The M2 [Large Language Models](../m2-large-language-models/index.html#moe) module states the same layer and the same loss with the same symbols, and its exercise 9 asks for the minimum of the loss: balance is the minimum when $f_i = P_i$, but not in general (exercise 7 (b) below); this chapter keeps the statements and reads them on vision and character-level models.
 
 ```python
 import torch, torch.nn as nn, torch.nn.functional as F
@@ -739,7 +739,7 @@ def nt_xent(z1, z2, tau=0.5):
     mask = ~torch.eye(2 * N, dtype=torch.bool, device=z.device)
     sim_i = sim.masked_fill(~mask, float("-inf"))
     target = (torch.arange(2 * N, device=z.device) + N) % (2 * N)   # positive of i
-    return F.cross_entropy(sim_i, target)           # softmax over the negatives
+    return F.cross_entropy(sim_i, target)           # softmax over the 2N - 1 other views
 ```
 
 ## 8. Self-supervision II: masking (MAE, BEiT, DINOv2) {#ch8}
@@ -784,15 +784,15 @@ $$
 No gradient reaches the teacher: its weights are a moving average of the student's, $\xi \leftarrow m\,\xi + (1 - m)\,\theta$, and $c$ is a moving average of the teacher's outputs over the batches.
 :::
 
-Centering alone would push the target towards the uniform distribution, and sharpening alone ($T_{\mathrm{te}} \approx 0.04$ against $T_{\mathrm{st}} = 0.1$) towards a one-hot one; together they avoid the collapse of proposition 7.3, in either form, without any negative. The views are two large crops, seen by both networks, and several small crops seen by the student only (multi-crop).
+Centering alone would push the target towards the uniform distribution, and sharpening alone ($T_{\mathrm{te}} \approx 0.04$ against $T_{\mathrm{st}} = 0.1$) towards a one-hot one; together they avoid both collapses, two forms of the constant encoder of proposition 7.3, without any negative. The views are two large crops, seen by both networks, and several small crops seen by the student only (multi-crop).
 
 DINOv2 adds three ingredients to this loss: an **iBOT** term, the same cross-entropy applied to the patch tokens that are masked in the student's input (the masking of section 8.1, inside a distillation); a **KoLeo** regularizer that spreads the features of a batch over the sphere; and Sinkhorn–Knopp centering of the teacher in place of the moving average.
 
   Family                             Signal                          Strengths                                                 Weaknesses
   ---------------------------------- ------------------------------- --------------------------------------------------------- -------------------------------------------------
-  Contrastive (SimCLR, MoCo, DINO)   view matching                   highly discriminative representations                     sensitive to augmentations; negatives to manage
+  Contrastive (SimCLR, MoCo)         view matching                   highly discriminative representations                     sensitive to augmentations; negatives to manage
   Masking (MAE, BEiT)                reconstruction of the missing   little a priori; scalable; strong in dense tasks (seg.)   weaker in "global" linear probing
-  Self-distillation (DINOv2)         self-improved teacher-target    best of both worlds, curated data                         complex recipes
+  Self-distillation (DINO, DINOv2)   self-improved teacher-target    best of both worlds, curated data                         complex recipes
 
 ## 9. Training at scale: recipes and scaling laws {#ch9}
 
@@ -1051,7 +1051,7 @@ Gradient norms are unknown before computing them, so practical schemes use cheap
 
 *Generation.* For a diffusion model (recall box above), **classifier-free guidance** (Ho & Salimans 2022) samples with
 $$
-\tilde\varepsilon = \varepsilon_\theta(x_t, \varnothing) + w\,\big(\varepsilon_\theta(x_t, c) - \varepsilon_\theta(x_t, \varnothing)\big).
+\tilde\varepsilon = \varepsilon_\theta(x_t, t, \varnothing) + w\,\big(\varepsilon_\theta(x_t, t, c) - \varepsilon_\theta(x_t, t, \varnothing)\big).
 $$
 The weight $w = 0$ gives the unconditional model and $w = 1$ the conditional one; a weight $w > 1$ trades diversity for fidelity to the condition $c$, so the distribution actually sampled is no longer the learned one.
 
@@ -1162,9 +1162,9 @@ The seminar closes with an encounter with local research: each instructor presen
 
 ## Projects and assessment {#projects}
 
-**Official assessment.** The fiche above quotes the SynapseS 2026–2027 sheet: “a combination of homework, quizzes and team projects”, with “more details later”, and a numerical grade out of 20. The assessment section of the sheet for the LLGA track is **not displayed** (empty). Everything below is our proposal. The subjects follow the format of chapter 2 — one number, one replication, one budget, the deliverables of section 2.3 — and the written exam can serve as the quiz part.
+**Official assessment.** The fiche above quotes the SynapseS 2026–2027 sheet: “a combination of homework, quizzes and team projects”, with “more details later”, and a numerical grade out of 20. The assessment section of the sheet for the LLGA track is **not displayed** (empty). Everything below is our proposal. The subjects follow the format of chapter 2 — one number, one replication, one budget, the deliverables of section 2.3 (shorter for solo subjects) — and the written exam can serve as the quiz part.
 
-The projects exercise the master objectives **O1** (deep learning foundations: architectures, objectives, scaling), **O7** (hands-on practice under the replication protocol of definition 1.1) and **O8** (trustworthy AI, through the robustness of section 4.5), with **O3** (large language models) through the MoE and scaling subjects and **O2** (generative modelling) through neural fields.
+The projects exercise the master objectives **O1** (deep learning foundations: architectures, objectives, scaling), **O7** (hands-on practice under the replication protocol of definition 1.1) and **O8** (trustworthy AI, through the robustness of section 4.5), with **O3** (large language models) through the MoE and scaling subjects.
 
 No end-of-year capstone uses this elective as a graded work package, but two group subjects double as ablations there: the self-supervised image tower of group project 2 for [Y2.3](../../projects/index.html#y2-3), and the distilled edge model of group project 3 for the efficient-inference part of [Y1.5](../../projects/index.html#y1-5).
 
@@ -1179,7 +1179,7 @@ No end-of-year capstone uses this elective as a graded work package, but two gro
 2.  **[Solo · ≈ 25 h] Paper study: hyperparameter transfer with µP (Yang, Hu et al. 2021, “Tensor Programs V”).** Question: on a small model, does the best learning rate stay put as the width grows under µP, and drift under the standard parametrization?
     -   *Implement*: an MLP (and, as a stretch, a 4-layer transformer) at widths 128 to 4 096, parametrized with the table of section 9.3 by hand or with Microsoft's `mup` package; sweep Adam's learning rate over powers of 2 at every width, in both parametrizations.
     -   *Data and hardware*: CIFAR-10 (Krizhevsky 2009) for the MLP, WikiText-2 (Merity et al. 2017) for the transformer; a laptop or one free T4.
-    -   *Deliverables*: code, a 4–6 page report with loss-versus-learning-rate curves per width (the paper's figure 1, redone), a 10-minute talk.
+    -   *Deliverables*: code, a 4–6 page report with loss-versus-learning-rate curves per width (the format of the paper's figures 1 and 3), a 10-minute talk.
     -   *Chapters*: ch. 1, 9 (exercise 11).
     -   *Success*: three seeds per point; the optimal learning rate located with an interval at each width; the drift under SP and the stability under µP measured in octaves, or an honest explanation if they do not appear.
 3.  **[Solo · ≈ 20 h] Paper study: Fourier features and spectral bias (Tancik et al. 2020).** Question: how does the scale of a Fourier feature mapping set the trade-off between blur and noise when a field interpolates an image?
@@ -1193,9 +1193,9 @@ No end-of-year capstone uses this elective as a graded work package, but two gro
 
 1.  **[Group of 3 · ≈ 30 h each] Recipe or architecture? A fair small-budget ResNet, ConvNeXt and ViT study.** Question: once the training recipe is the same, how much of the gap between the three families — in accuracy and in robustness — is left?
     -   *Implement*: a ResNet-18, a small ConvNeXt and a ViT with 4 × 4 patches, at about 11 M parameters each, trained on CIFAR-100 under one shared modern recipe (AdamW, RandAugment, mixup, label smoothing) and under their native recipes; replay steps 1–3 of the ConvNeXt table (ch. 5) at this scale.
-    -   *Robustness*: PGD-10 and AutoAttack at $\epsilon = 8/255$ on 1 000 test images, mean accuracy on CIFAR-100-C (Hendrycks & Dietterich 2019), to test the claim of Bai et al. (2021).
+    -   *Robustness*, to test the claims of Bai et al. (2021): AutoAttack at $\epsilon = 1/255$ on the standard-trained models (at $8/255$ they all fall to about 0 %); single-step adversarial training at $\epsilon = 8/255$ (FGSM with a random start, Wong, Rice & Kolter 2020) of the ResNet and the ViT under the shared recipe, evaluated with PGD-10 and AutoAttack on 1 000 test images; mean accuracy on CIFAR-100-C (Hendrycks & Dietterich 2019).
     -   *Split*: member A, ResNet and the shared recipe; member B, ViT; member C, ConvNeXt steps and the robustness harness.
-    -   *Data and hardware*: CIFAR-100 and CIFAR-100-C; about 40 T4-hours in all, on the free Kaggle quota of the three members.
+    -   *Data and hardware*: CIFAR-100 and CIFAR-100-C; about 60 T4-hours in all, within the free Kaggle quota of the three members.
     -   *Deliverables*: code, a 6–8 page report (section 2.3), a 15-minute talk.
     -   *Chapters*: ch. 1, 4, 4.5, 5.
     -   *Success*: five seeds per configuration with Welch $t$-tests; the recipe effect and the architecture effect reported separately; every robustness claim backed by AutoAttack.
@@ -1250,7 +1250,7 @@ No end-of-year capstone uses this elective as a graded work package, but two gro
 
 | Criterion | Weight | What earns the marks |
 |---|---|---|
-| Protocol and statistics | 25 % | the eight points of definition 1.1: question, hypothesis, fixed split, metric declared in advance, retrained baseline, at least three seeds with intervals and a named test |
+| Protocol and statistics | 25 % | definition 1.1 applied: question, hypothesis, fixed split, metric declared in advance, retrained baseline, ablations, at least three seeds with intervals and a named test, compute budget |
 | Correct implementation and derivations | 25 % | every count, loss and certificate traced to a result of the course; sanity checks (initial loss, auxiliary loss at balance, FLOPs) logged |
 | Analysis of the gap to the paper | 20 % | paper and replication side by side; each gap attributed to data, recipe, scale or hardware, or flagged as open |
 | Code and reproducibility | 15 % | one command reruns every table and figure; fixed seeds; public data; the GPU-hours reported |
@@ -1270,6 +1270,7 @@ No end-of-year capstone uses this elective as a graded work package, but two gro
 -   T. Wang, P. Isola, "Understanding Contrastive Representation Learning through Alignment and Uniformity on the Hypersphere", ICML 2020.
 -   K. He, X. Chen, S. Xie, Y. Li, P. Dollár, R. Girshick, [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377) (MAE), CVPR 2022.
 -   H. Bao, L. Dong, F. Wei, [BEiT: BERT Pre-Training of Image Transformers](https://arxiv.org/abs/2106.08254), ICLR 2022.
+-   M. Caron, H. Touvron, I. Misra, H. Jégou, J. Mairal, P. Bojanowski, A. Joulin, [Emerging Properties in Self-Supervised Vision Transformers](https://arxiv.org/abs/2104.14294) (DINO), ICCV 2021.
 -   M. Oquab et al., [DINOv2: Learning Robust Visual Features without Supervision](https://arxiv.org/abs/2304.07193), 2023.
 -   A. Howard et al., [MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications](https://arxiv.org/abs/1704.04861), 2017; M. Sandler et al., [MobileNetV2: Inverted Residuals and Linear Bottlenecks](https://arxiv.org/abs/1801.04381), CVPR 2018.
 -   M. Tan, Q. Le, [EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks](https://arxiv.org/abs/1905.11946), ICML 2019.
@@ -1279,7 +1280,7 @@ No end-of-year capstone uses this elective as a graded work package, but two gro
 -   G. Yang, E. J. Hu et al., [Tensor Programs V: Tuning Large Neural Networks via Zero-Shot Hyperparameter Transfer](https://arxiv.org/abs/2203.03466) (µP/muTransfer), NeurIPS 2021.
 -   D. Picard, [torch.manual_seed(3407) is all you need: On the influence of random seeds in deep learning architectures for computer vision](https://arxiv.org/abs/2109.08203), NeurIPS 2021 (workshop) — an author from l'X; X. Bouthillier et al., "Accounting for Variance in Machine Learning Benchmarks", MLSys 2021.
 -   A. Radford et al., [Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020) (CLIP), ICML 2021 — detailed in the Multimodal GenAI module, ch. 5.
--   **Symmetry and robustness (sections 4.4–4.5)**: T. Cohen, M. Welling, [Group Equivariant Convolutional Networks](https://arxiv.org/abs/1602.07576), ICML 2016; S. Kornblith, M. Norouzi, H. Lee, G. Hinton, [Similarity of Neural Network Representations Revisited](https://arxiv.org/abs/1905.00414) (CKA), ICML 2019; S. Ainsworth, J. Hayase, S. Srinivasa, [Git Re-Basin: Merging Models modulo Permutation Symmetries](https://arxiv.org/abs/2209.04836), ICLR 2023; I. Goodfellow, J. Shlens, C. Szegedy, [Explaining and Harnessing Adversarial Examples](https://arxiv.org/abs/1412.6572), ICLR 2015; A. Madry et al., [Towards Deep Learning Models Resistant to Adversarial Attacks](https://arxiv.org/abs/1706.06083), ICLR 2018; F. Croce, M. Hein, [Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks](https://arxiv.org/abs/2003.01690) (AutoAttack), ICML 2020; D. Hendrycks, T. Dietterich, [Benchmarking Neural Network Robustness to Common Corruptions and Perturbations](https://arxiv.org/abs/1903.12261), ICLR 2019; Y. Bai, J. Mei, A. Yuille, C. Xie, [Are Transformers More Robust Than CNNs?](https://arxiv.org/abs/2111.05464), NeurIPS 2021.
+-   **Symmetry and robustness (sections 4.4–4.5)**: T. Cohen, M. Welling, [Group Equivariant Convolutional Networks](https://arxiv.org/abs/1602.07576), ICML 2016; S. Kornblith, M. Norouzi, H. Lee, G. Hinton, [Similarity of Neural Network Representations Revisited](https://arxiv.org/abs/1905.00414) (CKA), ICML 2019; S. Ainsworth, J. Hayase, S. Srinivasa, [Git Re-Basin: Merging Models modulo Permutation Symmetries](https://arxiv.org/abs/2209.04836), ICLR 2023; I. Goodfellow, J. Shlens, C. Szegedy, [Explaining and Harnessing Adversarial Examples](https://arxiv.org/abs/1412.6572), ICLR 2015; A. Madry et al., [Towards Deep Learning Models Resistant to Adversarial Attacks](https://arxiv.org/abs/1706.06083), ICLR 2018; F. Croce, M. Hein, [Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks](https://arxiv.org/abs/2003.01690) (AutoAttack), ICML 2020; D. Hendrycks, T. Dietterich, [Benchmarking Neural Network Robustness to Common Corruptions and Perturbations](https://arxiv.org/abs/1903.12261), ICLR 2019; Y. Bai, J. Mei, A. Yuille, C. Xie, [Are Transformers More Robust Than CNNs?](https://arxiv.org/abs/2111.05464), NeurIPS 2021; E. Wong, L. Rice, J. Z. Kolter, [Fast is better than free: Revisiting adversarial training](https://arxiv.org/abs/2001.03994), ICLR 2020.
 -   **Neural fields and analysis-by-synthesis (sections 10.1–10.2)**: B. Mildenhall et al., [NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis](https://arxiv.org/abs/2003.08934), ECCV 2020; M. Tancik et al., [Fourier Features Let Networks Learn High Frequency Functions in Low Dimensional Domains](https://arxiv.org/abs/2006.10739), NeurIPS 2020; V. Sitzmann et al., [Implicit Neural Representations with Periodic Activation Functions](https://arxiv.org/abs/2006.09661) (SIREN), NeurIPS 2020; S. Liu, T. Li, W. Chen, H. Li, [Soft Rasterizer: A Differentiable Renderer for Image-based 3D Reasoning](https://arxiv.org/abs/1904.01786), ICCV 2019.
 -   **Amortized inference and sampling (sections 10.3–10.4)**: C. Cremer, X. Li, D. Duvenaud, [Inference Suboptimality in Variational Autoencoders](https://arxiv.org/abs/1801.03558), ICML 2018; Y. Kim et al., [Semi-Amortized Variational Autoencoders](https://arxiv.org/abs/1802.02550), ICML 2018; A. Katharopoulos, F. Fleuret, [Not All Samples Are Created Equal: Deep Learning with Importance Sampling](https://arxiv.org/abs/1803.00942), ICML 2018; J. Ho, T. Salimans, [Classifier-Free Diffusion Guidance](https://arxiv.org/abs/2207.12598), 2022; J. Song, C. Meng, S. Ermon, [Denoising Diffusion Implicit Models](https://arxiv.org/abs/2010.02502), ICLR 2021.
 -   **Deep learning and physics (section 10.5)**: M. Raissi, P. Perdikaris, G. E. Karniadakis, "Physics-informed neural networks", *Journal of Computational Physics* 378, 2019; J. Sohl-Dickstein et al., [Deep Unsupervised Learning using Nonequilibrium Thermodynamics](https://arxiv.org/abs/1503.03585), ICML 2015.
