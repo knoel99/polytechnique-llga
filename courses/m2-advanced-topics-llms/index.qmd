@@ -53,6 +53,7 @@ format:
 -   [9. Agents: planning, tools, multi-agents](#ch9)
 -   [10. Open problems](#ch10)
 -   [Exercises / Labs](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -61,7 +62,7 @@ format:
   Module                  Advanced Topics in Large Language Models
   Code                    M2 · P2 (announced) — official code not published (course description not published)
   Team and workload       Instructor: master's team · \~24 h · research seminar: reasoning (CoT, RLVR), long context, memory, MoE, alternative architectures (Mamba), efficiency, the LLMs × graphs crossroads, agents, evaluation, open problems — each chapter organizes the critical reading of a pivot paper.
-  Status in the program   [M2]{.badge .m2}[Outside the recommended track]{.badge .position} · M2 program being finalized
+  Status in the program   [M2]{.badge .m2}[Slot TBC · Graph × LLM route]{.badge .tbc} · M2 program being finalized
   ----------------------- -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 **Audience**: an engineer or researcher who already reads LLM papers and wants a critical filter. **Empirical first**: we start from claims that do not survive a closer look — a "magic" chain-of-thought that fails out of distribution, a million-token context in which information gets lost in the middle — and only then study the work behind them: RLVR, MoE, Mamba, agents, contamination-aware evaluation.
@@ -104,7 +105,7 @@ The following table maps each brochure theme to the course sections; the materia
 
 ### Where this course fits in the program
 
-An M2 module offered in period 2, outside the recommended track: a research seminar, it assumes the foundations are laid and works through readings and discussions rather than ex cathedra lectures. **Prerequisites**: [Large Language Models](../m2-large-language-models/index.html) (architecture, training, alignment — the foundation that every chapter goes beyond) and [Advanced Deep Learning](../m1p2-advanced-deep-learning/index.html), whose architectures and efficiency analyses are reused continuously.
+An announced M2 period-2 slot (TBC), recommended on the Graph × LLM route: a research seminar, it assumes the foundations are laid and works through readings and discussions rather than ex cathedra lectures. **Prerequisites**: [Large Language Models](../m2-large-language-models/index.html) (architecture, training, alignment — the foundation that every chapter goes beyond). [Advanced Deep Learning](../m1p2-advanced-deep-learning/index.html) helps if you took it, but it is one P2 elective among six: LLMs ch. 2–3 cover what this seminar uses.
 
 **Downstream**: it is the direct preparation for the research internship and the PhD — each chapter ends with open questions that are as many internship topics — and for R&D jobs, where the competitive edge is played on a six-month head start in reading the literature.
 
@@ -175,7 +176,7 @@ Prerequisites (M1/M2 modules)
 ::::
 
 ::: def
-[Definition 0.1 — Seminar format]{.tag} One session = one **pivot paper** (read by everyone *before*), dissected in class (method, equations, experiments), then subjected to a structured **critical analysis**: what exact question? what method? what evidence (and counter-evidence)? what do the figures say in detail? what limits — theoretical, experimental, operational? what remains to be done? The reading note (lab 1) is the module's permanent deliverable.
+[Definition 0.1 — Seminar format]{.tag} One session = one **pivot paper** (read by everyone *before*), dissected in class (method, equations, experiments), then subjected to a structured **critical analysis**: what exact question? what method? what evidence (and counter-evidence)? what do the figures say in detail? what limits — theoretical, experimental, operational? what remains to be done? The reading note (lab 1) is the module's permanent deliverable; its weight is proposed in [Projects and assessment](#projects).
 :::
 
 ::: note
@@ -251,7 +252,7 @@ HELM (Liang et al.) answers with the *holistic*: same models, dozens of scenario
 1.  *Goodhart*: every public benchmark becomes a training objective — the value of a score decays with its popularity;
 2.  *Variance*: a leaderboard at ±0.5 points with 500 questions ranks nothing (cf. ML Ops module ch. 2, Hoeffding);
 3.  *Judge the judge*: calibrate each judge on a human golden set *before* using it (measured biases, alternating orders, rubrics);
-4.  *Saturation*: when everyone exceeds 90% accuracy, the benchmark measures noise — move to the dynamic/adversarial evaluations (red teaming of the Security module ch. 10, agents of ch. 9).
+4.  *Saturation*: when everyone exceeds 90% accuracy, the benchmark measures noise — move to the dynamic/adversarial evaluations (red teaming in [Explainability, Security, Privacy of LLMs ch. 10](../m2-explainability-security-privacy-llms/index.html#ch10), agents of ch. 9).
 
 LLGA rule: **no evaluation number without its protocol** — neither in the papers you read, nor in your own.
 :::
@@ -300,7 +301,7 @@ $$
 $$
 (the two successive samplings compose exactly the joint).
 
-The empirical argmax converges to the true argmax as $k \to \infty$ (concentration of frequencies) — it is a special case of the Monte Carlo marginalization seen in the ML module, with the particularity that the latent space is *text*. [∎]{.qed}
+The empirical argmax converges to the true argmax as $k \to \infty$ (concentration of frequencies) — it is Monte Carlo estimation by the law of large numbers ([Refresher Statistics ch. 4](../m1p1-refresher-statistics/index.html#ch4)), with the particularity that the latent space is *text*. [∎]{.qed}
 :::
 
 ### 2.2. Process vs outcome rewards
@@ -348,33 +349,25 @@ A model trained on short sequences must be made to read much longer ones, and on
 ### 3.1. RoPE: position by rotation
 
 ::: def
-[Definition 3.1 — RoPE (Su et al., 2021)]{.tag} Each even coordinate pair $(2i, 2i{+}1)$ of the vector is viewed as a complex number to which a rotation of angle $m\theta_i$ is applied, with $m$ the position of the token and $\theta_i = b^{-2i/d}$ (geometric bases):
+[Definition 3.1 — RoPE (Su et al., 2021)]{.tag} Each coordinate pair $(2i, 2i{+}1)$ of a query or key at position $m$ is rotated by the angle $m\theta_i$, with $\theta_i = b^{-2i/d}$ (base $b$, typically 10,000):
 $$
 q_m = R(m\Theta)\, q, \qquad k_n = R(n\Theta)\, k, \qquad \Theta = \mathrm{diag}(\theta_0, \dots).
 $$
-The attention dot product becomes a function *of the relative position* — and the high frequencies $\theta_i$ resolve the local, the low frequencies the global.
+High frequencies $\theta_i$ resolve local order, low frequencies the global one.
 :::
 
 :::: prop
-[Proposition 3.2 — RoPE encodes only relative position]{.tag} $\langle R(m\Theta)\,q,\; R(n\Theta)\,k \rangle$ depends only on $m - n$ (and on $q, k$). The proof is one line of trigonometry: per coordinate pairs,
+[Proposition 3.2 — RoPE encodes only relative position (recap)]{.tag} For every pair of coordinates,
 
 ::: key
 [Key result — RoPE is relative]{.tag}
 $$
-\langle R(m\theta)q,\, R(n\theta)k\rangle = \langle R((m-n)\theta)\, q,\; k \rangle,
+\langle R(m\theta)q,\, R(n\theta)k\rangle = \langle R((m-n)\theta)\, q,\; k \rangle .
 $$
 :::
 
-since $R(m\theta)^\top R(n\theta) = R((n-m)\theta)$ (composition of the rotations — they commute in the plane).
+The one-line proof (plane rotations are orthogonal and commute) is [LLMs Thm 2.3](../m2-large-language-models/index.html#ch2). What this seminar uses: extending the context amounts to *re-parameterizing the angles*, not to relearning positional embeddings.
 ::::
-
-::: proof
-Plane rotations are orthogonal:
-$$
-\langle R(m\theta)q, R(n\theta)k\rangle = q^\top R(m\theta)^\top R(n\theta)k = q^\top R((n - m)\theta)k.
-$$
-Summing over the coordinate pairs (each pair with its own frequency $\theta_i$), the attention score is a function of $m - n$ only. Engineering consequence: extending the context amounts to *re-parameterizing the angles*, not to relearning positional embeddings. [∎]{.qed}
-:::
 
 ### 3.2. Extending the window: interpolation and YaRN
 
@@ -406,7 +399,7 @@ Xu et al. (ICLR 2024) complete the picture: retrieval *improves* models whatever
 [Critical analysis]{.tag}
 
 1.  "Needle in a haystack" (finding a sentence planted in a long text) is a *retrieval* test, not a long-context reasoning test — multi-document aggregation benchmarks break the scoreboard;
-2.  the KV cache grows linearly with $N$ (cf. ML Ops module ch. 3): "free" LC at the API is an *economic choice* of the provider, not a physical property;
+2.  the KV cache grows linearly with $N$ ([LLMs Prop. 6.2](../m2-large-language-models/index.html#ch6); serving in ML Ops ch. 3): "free" LC at the API is an *economic choice* of the provider, not a physical property;
 3.  RoPE extensions are measured in perplexity *and* in downstream tasks — YaRN shows they can diverge;
 4.  Self-Route relies on the model's self-assessment (meta-cognition): how good is it on adversarial queries?
 
@@ -493,11 +486,11 @@ The *total* parameters grow (capacity), the *active parameters per token* remain
 ::: key
 [Key result — load-balancing loss]{.tag}
 $$
-\mathcal{L}_{\text{aux}} \;=\; \alpha\, N \sum_{i=1}^{N} f_i\, P_i, \qquad \sum_i f_i = \sum_i P_i = 1,
+\mathcal{L}_{\text{aux}} \;=\; \alpha\, N \sum_{i=1}^{N} f_i\, P_i, \qquad \sum_i f_i = \sum_i P_i = 1.
 $$
 :::
 
-whose minimum $\mathcal{L}_{\text{aux}} = \alpha$ is reached at uniform routing $f = P = \mathbf{1}/N$.
+If $(f_i)$ and $(P_i)$ are **similarly ordered** (co-monotone: the most loaded experts are also the most probable), then $\mathcal{L}_{\text{aux}} \ge \alpha$, with equality at uniform routing $f = P = \mathbf{1}/N$. Without this condition the bound can fail: [LLMs ch. 2](../m2-large-language-models/index.html#ch2) and its Ex. 7 give a counterexample.
 
 The loss penalizes the degenerate routing where a few experts capture everything — otherwise the router gradient collapses (the unpicked experts receive no gradient: the rich get richer).
 ::::
@@ -518,7 +511,7 @@ Finally, the dynamic effect: $\partial (f_iP_i)/\partial P_i = f_i \geq 0$ — t
 :::
 
 ::: note
-[Critical analysis — read the hidden assumption]{.tag} The lower bound is only *proved* for co-monotone $(f, P)$: an anti-monotone pair (a very likely but lightly loaded expert) could have a product *below* $1/N$ — the loss is not a symmetric divergence in the strict sense; it is a *load proxy* whose gradient dynamics does most of the work.
+[Critical analysis — read the hidden assumption]{.tag} The lower bound holds only for co-monotone $(f, P)$, as the statement says: an anti-monotone pair (a very likely but lightly loaded expert) can have a product *below* $1/N$ — the loss is not a symmetric divergence in the strict sense; it is a *load proxy* whose gradient dynamics does most of the work.
 
 This is exactly the kind of detail a critical paper reading must catch: what quantity does the loss *actually* measure, under what assumption, and what does its gradient do?
 
@@ -585,7 +578,13 @@ a discrete convolution with kernel $\overline K_s = C \bar A^s \bar B$, where th
 
 The LTI SSM is a *fixed filter*: it cannot choose to memorize or forget depending on the content. **Mamba** (Gu & Dao, 2023) makes $\Delta_t, \bar B_t, C_t$ *functions of the input* (small MLPs on $u_t$): the selection.
 
-Cascade consequence: the convolution (prop. 6.2) is destroyed (the kernel depends on position) → back to a recurrence, but *parallelizable* via the **prefix scan** (associativity of $(\bar A_t, \bar B_t)$ — Blelloch's algorithm; cf. Refresher CS) with fused GPU kernels ("hardware-aware"): $\mathcal{O}(L)$ training, $\mathcal{O}(1)$ inference per token and *constant* state memory — the selling point against the transformer's KV cache (cf. ML Ops module ch. 3).
+Cascade consequence: the convolution (prop. 6.2) is destroyed (the kernel depends on position) → back to a recurrence, but *parallelizable* via the **prefix scan** with fused GPU kernels ("hardware-aware"): $\mathcal{O}(L)$ training, $\mathcal{O}(1)$ inference per token and *constant* state memory — the selling point against the transformer's KV cache ([LLMs Prop. 6.2](../m2-large-language-models/index.html#ch6)).
+
+The scan in two lines: each step $x_t=\bar A_t x_{t-1}+\bar B_t u_t$ is the affine map $(A_t, b_t)=(\bar A_t, \bar B_t u_t)$, and affine maps compose associatively,
+$$
+(A_2, b_2)\circ(A_1, b_1) = (A_2A_1,\; A_2b_1 + b_2).
+$$
+A *prefix scan* computes all the prefixes of an associative operation in $\mathcal{O}(L)$ work and $\mathcal{O}(\log L)$ parallel steps (Blelloch, 1990: an up-sweep of pairwise products over a binary tree, then a down-sweep).
 
 Finally, Mamba embeds the SSM *inside* a *gated* MLP-style block. Mamba-2 (SSD) will reformulate the SSM as a form of linear attention — the loop with attention comes full circle.
 
@@ -603,7 +602,7 @@ At scale: models up to 14B — the largest RNNs ever trained at its publication.
 
 **Hybrids**: pure SSMs lose on **exact recall** tasks (copying an association seen a long time ago: the compressed state has no room to keep everything — a recurring critique, cf. the associative recall studies).
 
-Hence mixed architectures: Jamba (AI21, 2024) interleaves attention + Mamba + MoE blocks (1:7:1) and shows that \~one attention layer in eight suffices to restore recall; Griffin/De et al. (2024) alternate recurrence (RG-LRU) and local attention.
+Hence mixed architectures: Jamba (AI21, 2024) interleaves one attention layer for every seven Mamba layers, with MoE in every other MLP, and shows that this one layer in eight suffices to restore recall; Griffin/De et al. (2024) alternate recurrence (RG-LRU) and local attention.
 
 The 2024-2026 consensus: *attention is irreplaceable for precise retrieval; the SSM excels at long context on a constant memory budget; the hybrid beats both*.
 
@@ -625,7 +624,7 @@ Serving a large model is limited by latency and memory. This session proves why 
 Recap — LLMs module ch. 6
 :::
 
-Inference: memory-bound at decoding, KV cache, quantization of weights (INT8/4). Here we demonstrate the two star *test-time* mechanisms: speculative decoding (which buys latency with a small model) and *aware* quantization of activations (GPTQ, AWQ). For costs and green ops: cf. ML Ops module ch. 4 and 10.
+Inference: memory-bound at decoding, KV cache ([LLMs Prop. 6.2](../m2-large-language-models/index.html#ch6)), quantization of weights (INT8/4); speculative decoding and its exactness proof ([LLMs Thm 6.3](../m2-large-language-models/index.html#ch6)). Here we go one step further on the two star *test-time* mechanisms: the speed-up of speculative decoding (which buys latency with a small model) and weight quantization calibrated on activations (GPTQ, AWQ). For costs and green ops: cf. ML Ops module ch. 4 and 10.
 ::::
 
 ::: ex
@@ -637,7 +636,7 @@ Inference: memory-bound at decoding, KV cache, quantization of weights (INT8/4).
 ::: def
 [Definition 7.1 — Speculative decoding (Leviathan et al., 2023)]{.tag} A *draft* model $q$ (small, fast) generates $\gamma$ tokens; the *target* model $p$ (large, slow) *verifies them in a single parallel pass* (the $\gamma$ positions are checked simultaneously — prefilling); each accepted token is free, the first rejected one is corrected by a residual sample.
 
-**The distribution of $p$ is preserved exactly** (the paper proves it: correction by sampling according to $\mathrm{norm}(\max(0, p - q))$ at the rejection point). Typical ×2-3 speedups at *identical* quality.
+**The distribution of $p$ is preserved exactly** (proved in [LLMs Thm 6.3](../m2-large-language-models/index.html#ch6): correction by sampling according to $\mathrm{norm}(\max(0, p - q))$ at the rejection point). Typical ×2-3 speedups at *identical* quality.
 :::
 
 :::: thm
@@ -685,7 +684,13 @@ $$
 $$
 where $X$ is a sample of calibration activations.
 
-The algorithm proceeds column by column (greedy): quantize a block of weights, compute the error on the outputs, *propagate it* onto the remaining columns via the Cholesky inverse of $H$ — an approximation of the exact method (OBS/OBD, cf. the regularization chapter of the ML module) made GPU-friendly.
+The algorithm proceeds column by column (greedy): quantize a block of weights, compute the error on the outputs, *propagate it* onto the remaining columns via the Cholesky inverse of $H$ — a GPU-friendly approximation of the Optimal Brain Surgeon.
+
+OBS (Hassibi & Stork, 1993) removes one weight $w_q$ and corrects all the others by the second-order optimal update
+$$
+\delta w = -\frac{w_q}{[H^{-1}]_{qq}}\,H^{-1}e_q ,
+$$
+which raises the quadratic loss by $w_q^2/(2[H^{-1}]_{qq})$; GPTQ applies the same update with the quantization error $w_q-\hat w_q$ in place of $w_q$.
 
 Models with billions of parameters are quantized to \~4 bits in a few GPU-hours, with low perplexity losses.
 :::
@@ -706,7 +711,7 @@ Result: robust 4 bits, no exotic per-group hybrid reconstruction, commodity depl
   (recap) Prefix caching   shared KV                        nearly free prefilling                 prefixes actually shared (ML Ops ch. 4)
 
 ::: note
-[Critical analysis]{.tag} Perplexity is a poor downstream proxy: a 4-bit model nearly identical in PPL can lose points on long reasoning or safety (learned refusals are subtle — cf. Security module ch. 6); always re-evaluate after quantization on the golden set (ML Ops module ch. 2). Energy: quantization is the #2 green ops lever (ML Ops ch. 10), after functional sobriety.
+[Critical analysis]{.tag} Perplexity is a poor downstream proxy: a 4-bit model nearly identical in PPL can lose points on long reasoning or safety (learned refusals are subtle — cf. [Explainability, Security, Privacy of LLMs ch. 6](../m2-explainability-security-privacy-llms/index.html#ch6)); always re-evaluate after quantization on the golden set (ML Ops module ch. 2). Energy: quantization is the #2 green ops lever (ML Ops ch. 10), after functional sobriety.
 :::
 
 ## 8. LLMs × graphs: the LLGA crossroads {#ch8}
@@ -829,7 +834,7 @@ For a reliable agent, three levers: shorten the chains (composite tools), make e
 
 1.  *Evaluation*: agent gains are measured on environments (ALFWorld, HumanEval, SWE-bench-like) whose fidelity to the real world is debated — unmodeled costs (ML Ops ch. 4/8), noisy environment, absent adversary.
 2.  *Multi-agent emergence*: when "several agents" beat "one agent", is it emergence — or the effect of a better prompt / more compute? Several ablation studies suggest the second reading: demand honest ablations (a single agent, same token budget).
-3.  *Safety*: every tool is an injection surface (Security module ch. 5-6); multi-agent environments multiply implicit trusts — the least-privilege pattern (ML Ops ch. 8-9) remains the only serious defense.
+3.  *Safety*: every tool is an injection surface ([Explainability, Security, Privacy of LLMs ch. 5–6](../m2-explainability-security-privacy-llms/index.html#ch5)); multi-agent environments multiply implicit trusts — the least-privilege pattern (ML Ops ch. 8-9) remains the only serious defense.
 4.  *RL link*: the LLM agent as a policy — agentic "behaviors" are now trained by RLVR on trajectories (ch. 2): the prompt/training boundary is shifting under our eyes.
 :::
 
@@ -854,7 +859,7 @@ The answers in progress:
 -   **synthetic data** (models generate their own training material — with the risk of **model collapse**: Shumailov et al. show, on toy models and Gaussians, that recursive training on generated data erodes the distribution tails — diversity collapses generation after generation);
 -   **data efficiency** (tokens counted, curriculum, "quality over quantity");
 -   new sources (audio, video, interactions);
--   **rights** — the question becomes legal (AI Act: copyright policy of GPAI — Security module ch. 10) before being purely technical.
+-   **rights** — the question becomes legal (AI Act: copyright policy of general-purpose models — [LLMs 9.6](../m2-large-language-models/index.html#ch9) and [Explainability, Security, Privacy of LLMs ch. 10](../m2-explainability-security-privacy-llms/index.html#ch10)) before being purely technical.
 
 ### 10.2. Continual learning
 
@@ -868,8 +873,8 @@ The Yu et al. (2024) survey maps the field; the honest assessment: no scheme dom
 
 -   **Memory vs context vs weights** (ch. 3-4): where should knowledge be stored — parameters, KV, external index? The marginal cost of each byte differs by three orders of magnitude; the answer will depend on serving economics (ML Ops module ch. 3-4);
 -   **Reasoning beyond the verifiable** (ch. 2): extending reliable rewards beyond math/code;
--   **Safety at scale**: statistical alignment facing competing objectives (Security module ch. 5-6);
--   **Interpretability as a science**: from probing tools (linear probes, sparse autoencoders) to verifiable mechanisms (Security module ch. 1-3);
+-   **Safety at scale**: statistical alignment facing competing objectives ([Explainability, Security, Privacy of LLMs ch. 5–6](../m2-explainability-security-privacy-llms/index.html#ch5));
+-   **Interpretability as a science**: from probing tools (linear probes, sparse autoencoders) to verifiable mechanisms ([Explainability, Security, Privacy of LLMs ch. 1–3](../m2-explainability-security-privacy-llms/index.html#ch1));
 -   **LLGA**: the LLM × graphs confrontation (ch. 8) remains an open construction site — serialization, GNN-LLM hybrids, incremental GraphRAG: *your* internship topics.
 
 ::: note
@@ -880,7 +885,7 @@ The instructors of this proposed course are not confirmed; the cited papers and 
 
 ## Exercises / Labs {#ex}
 
-1.  **★ Reading notes (running thread).** One sheet per session (claim / evidence / costs / reproducibility / LLGA link) on the pivotal paper; two sheets graded in depth: DeepSeek-R1 (ch. 2) and G-Retriever (ch. 8).
+1.  **★ Reading notes (running thread).** One sheet per session (claim / evidence / costs / reproducibility / LLGA link) on the pivotal paper; two sheets graded in depth: DeepSeek-R1 (ch. 2) and G-Retriever (ch. 8), with the rubric of [Projects and assessment](#projects).
 2.  **★ Self-consistency (ch. 2).** On a GSM8K sample: greedy vs self-consistency (k = 5, 20); plot accuracy vs k and accuracy vs cost (tokens); check that voting on the *final answer extracted* beats voting on the raw chain — why?
 3.  **★ Speculative decoding (ch. 7).** Code the draft/verify scheme with residual re-sampling; verify empirically thm. 7.2 (count the tokens/iteration for measured $\alpha$); find the optimal $\gamma$ for $(\alpha, c)$ measured on your machine.
 4.  **★ Contamination (ch. 1).** The ch. 1 n-gram detector on a small corpus; build 20 re-generated variants of a toy benchmark; measure the raw/variant gap for two models — and the judges' asymmetry (alternating order) on MT-Bench-like setups.
@@ -888,21 +893,177 @@ The instructors of this proposed course are not confirmed; the cited papers and 
 6.  **★★ RoPE and extension (ch. 3).** Numerically verify prop. 3.2 (dot products invariant under translation); extend a small model 512 → 2048 by interpolation then by YaRN; compare perplexity and a recall task (needle) before/after.
 7.  **★★ Simulated ring attention (ch. 3).** Implement blockwise attention with ring passing over 4 simulated "GPUs" (processes); verify exactness vs dense attention; measure communication vs compute (overlap).
 8.  **★★ Agent memory (ch. 4).** Build a memory stream with the recency/importance/relevance triptych (prop. 4.1); add the reflection loop; test on 20 simulated sessions; ablation of each component of the score.
-9.  **★★ MoE routing (ch. 5).** Load Mixtral (open weights) and instrument the router; measure the load distribution per expert over 3 corpora (code, math, prose); reproduce the specialization figure — and its variability; implement the auxiliary loss of Switch on a toy MoE and show the balancing.
+9.  **★★ MoE routing (ch. 5).** Load an open MoE (Mixtral needs about 90 GB in bf16; the fully open OLMoE-1B-7B fits one GPU, in 4-bit if needed) and instrument the router; measure the load distribution per expert over 3 corpora (code, math, prose); reproduce the specialization figure — and its variability; implement the auxiliary loss of Switch on a toy MoE and show the balancing.
 10. **★★ SSM scan (ch. 6).** Implement the SSM recurrence then the prefix scan (prop. 6.2 for the LTI case; selective version for Mamba); compare the GPU memory of the three modes (recurrence / FFT convolution / scan) on L = 8k; test the exact recall of a distant association — transformer vs SSM (the ch. 6 critique).
 11. **★★ Agents (ch. 9).** A ReAct agent with 3 tools, one of them unreliable (bad output); measure per-step $p$ and the $p^k$ law (prop. 9.2); add Reflexion and measure gain vs cost; multi-agent ablation: 2 "specialized" agents vs 1 agent with the same token budget.
 12. **★★★ Graph encodings (ch. 8).** Reproduce "Talk like a Graph" on 3 NLGraph tasks × 4 encodings (code from ch. 8); test the hypothesis "it is the structure, not the length" by matching lengths; a light G-Retriever: replace the PCST with a weighted shortest path and compare.
 13. **★★★ Mini-review (ch. 10).** Write a 4-page "position paper": *"In 2030, will knowledge live in the weights, the context or the index?"* — drawing on at least six chapters of the seminar and two modules of the master.
+
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+The official assessment is not displayed: the course fiche records "official code not published (course description not published)", and the "LLGA 2 – Semestre 3" and "Semestre 4" tracks of the SynapseS 2026–2027 catalog still list no courses.
+The scheme below is one possible design consistent with the session plan and with the seminar format of Definition 0.1.
+:::
+
+### A classical assessment {#projects-exam}
+
+A reading seminar has no written exam: the board presentation and its questions play that role, and the reading notes of Definition 0.1 carry the largest weight. The weights are ours.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Reading notes | 30 % | one sheet per session on the five-item grid of ch. 0; two graded in depth (DeepSeek-R1, ch. 2; G-Retriever, ch. 8) with the rubric below, as in [Ex. 1](#ex) | ch. 0–10 |
+| Board presentation | 25 % | one pivot paper presented without slides in 20 minutes, then 10 minutes of questions like the samples below | one chapter |
+| Minimal reproduction | 25 % | one card of the [list below](#projects-list), or Ex. 3, 6, 9 or 12, with a 4-page report | the chapters of the card |
+| Position paper | 20 % | the 4-page paper of [Ex. 13](#ex) | at least six chapters |
+
+**Rubric for a reading note** (one level per grid item; the note's mark is the sum, out of 20).
+
+| Grid item | 1 — missing | 2 — partial | 3 — correct | 4 — critical |
+|---|---|---|---|---|
+| Claim | absent or copied from the abstract | paraphrased, vague | one precise, testable sentence | precise, with its scope and what it does not claim |
+| Evidence | none | benchmarks listed | baselines, ablations and significance checked | evidence weighed, one missing control named |
+| Costs | none | compute or data named | compute, data and energy estimated | costs compared with a baseline method |
+| Reproducibility | none | code or data availability noted | seeds, data and contamination risk checked | a concrete reproduction plan |
+| LLGA link | none | a link named | a link to graphs, RAG or agents argued | an open question formulated |
+
+**Resit.** One new reading note and a 20-minute oral on a pivot paper not presented before; the reproduction and position-paper marks are kept.
+
+**Sample questions.** Five board questions worth 20 points in total; set as a written check, they take 1 h.
+
+**Q1 (4 pts) — Self-consistency.** A model samples a chain $z\sim p(z\mid x)$, then an answer $y\sim p(y\mid x,z)$. Show that the vote frequency of an answer over $k$ independent samples is an unbiased estimator of $p(y\mid x)$ (Prop. 2.1). Why must the vote be taken on the extracted final answer, and what does it cost?
+
+::: proof
+[Marking points]{.tag}
+
+- Each pair $(y_i,z_i)$ follows the joint law, so
+  $$\mathbb{P}(y_i=y)=\sum_z p(z\mid x)\,p(y\mid x,z)=p(y\mid x)$$
+  (2 pts).
+- The frequency is a mean of $k$ indicators, unbiased; by the law of large numbers the majority answer converges to $\arg\max_y p(y\mid x)$ when that maximiser is unique (1 pt).
+- Two chains almost never coincide word for word, so a vote on raw chains is meaningless; the cost is $k$ times the generation tokens (1 pt). Common error: saying the vote estimates $p(z\mid x)$.
+:::
+
+**Q2 (4 pts) — Choosing the draft length.** With acceptance rate $\alpha=0.8$ and a draft step costing $c=0.05$ target forward, compute the expected tokens per target pass (Thm 7.2) and the speed-up for $\gamma\in\{2,4,8\}$. What changes when $\alpha$ drops to 0.5?
+
+::: proof
+[Marking points]{.tag}
+
+- Tokens per pass $(1-\alpha^{\gamma+1})/(1-\alpha)$: 2.44, 3.36 and 4.33 (1.5 pts).
+- Speed-up, tokens per pass divided by $1+\gamma c$: 2.22, 2.80 and 3.09, so $\gamma=8$ is the best of the three (the optimum is flat between 6 and 10) (1.5 pts).
+- At $\alpha=0.5$ the speed-ups are 1.59, 1.62 and 1.43: long drafts are wasted once a rejection is likely, and the gain shrinks to about 1.6 (1 pt). Common error: forgetting the draft cost $\gamma c$.
+:::
+
+**Q3 (4 pts) — Reading the hidden assumption.** Two experts, top-1 routing: 90 % of the tokens have router probabilities $(0.51, 0.49)$ and 10 % have $(0, 1)$. Compute $f$, $P$ and $\mathcal{L}_{\text{aux}}/\alpha$ (Prop. 5.2). What does this say about the statement, and what does auxiliary-loss-free balancing do instead?
+
+::: proof
+[Marking points]{.tag}
+
+- $f=(0.9, 0.1)$ and $P=(0.459, 0.541)$ (1 pt).
+- $N\sum_i f_iP_i=2\times0.467=0.934<1$: below the value at uniform routing (1 pt).
+- Here $f$ and $P$ are oppositely ordered, so Chebyshev's inequality does not apply: the bound of Prop. 5.2 needs the co-monotone condition, and the loss is a load proxy that works through its gradient (1 pt).
+- DeepSeek-V3 adds a per-expert bias to the routing scores, raised or lowered according to the observed load, instead of a differentiable penalty (1 pt). Common error: claiming the uniform point is a global minimum without condition.
+:::
+
+**Q4 (4 pts) — Agent reliability.** An agent needs $k=50$ steps, each succeeding independently with $p=0.98$ (Prop. 9.2). Compute the task success rate, the per-step reliability needed for 90 % task success, and the success rate when every step may be retried once, independently, after a detected failure.
+
+::: proof
+[Marking points]{.tag}
+
+- $0.98^{50}\approx0.364$ (1 pt).
+- $p\ge0.9^{1/50}\approx0.9979$ (1 pt).
+- With one retry a step fails with probability $0.02^2$, so the task succeeds with $(1-0.0004)^{50}\approx0.980$ (1 pt).
+- Retries only help when failures are detected and independent; shortening chains and deterministic tools act on $k$ itself (1 pt). Common error: adding the step failure rates instead of multiplying the successes.
+:::
+
+**Q5 (4 pts) — A contaminated score.** A model scores 85 % on the public GSM8K test and 71 % on re-generated variants of the same problems; 18 % of the test items have a 13-gram overlap with a web corpus, and the model gets 97 % of those right. Compute its accuracy on the items without overlap and interpret the three numbers (Prop. 1.2).
+
+::: proof
+[Marking points]{.tag}
+
+- Solve $0.85=0.18\times0.97+0.82\,x$: $x\approx0.824$ (1.5 pts).
+- The detected overlap explains only about 3 of the 14 points of the raw–variant gap; the rest comes from contamination that n-grams miss (paraphrases, translated copies) or from variants being harder (1.5 pts).
+- Report raw score, variant score and overlap together, and treat the gap as an interval for the true capability, not as noise (1 pt). Common error: concluding from the overlap rate alone that the score is clean.
+:::
+
+### Projects {#projects-list}
+
+House rules: public data, a laptop CPU or one free Colab T4, open models only (inference up to 8B in 4-bit, training up to 1.5B with LoRA), and only what this seminar and its prerequisite (the LLMs module) teach. Levels ★/★★/★★★ are those of the exercises; for this 24 h course a card asks at most 20 h per student. Each card can serve as the minimal reproduction of the assessment.
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★★ · solo · A contamination audit of GSM8K {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | Extends [Ex. 4](#ex): for three open instruction models (up to 8B, 4-bit) with different release dates, report jointly the raw GSM8K accuracy, the accuracy on GSM-Symbolic variants and the 13-gram overlap rate (Prop. 1.2); the success metric is the raw − variant gap with a paired-bootstrap interval, compared across release dates |
+| Data | [GSM8K](https://huggingface.co/datasets/openai/gsm8k) — MIT — 1,319 test problems; [GSM-Symbolic](https://huggingface.co/datasets/apple/GSM-Symbolic) — CC BY-NC-ND 4.0, evaluation only — 5,000 variants from 100 templates; a streamed 1B-token slice of [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) (`sample-10BT`, ODC-By 1.0) as the proxy web corpus; loading: `load_dataset("apple/GSM-Symbolic", "main", split="test")` |
+| Chapters | [ch. 1](#ch1) (Def. 1.1, Prop. 1.2, the n-gram detector); the statistics note of [LLMs 9.1](../m2-large-language-models/index.html#ch9) |
+| Deliverables | notebook and a 4-page report |
+| Effort and compute | ≈ 15 h per student · free Colab T4, longest run ≤ 2 h (store only the test items' n-grams and stream the corpus) |
+| Objectives served | O9 (critical reading of results), O3 (LLM evaluation) |
+| Going further | Measure judge bias on the same answers by swapping the order of two candidates (1.2) |
+
+#### P2 · ★★ · solo · Encoding or structure? Graph prompts at matched length {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | Extends [Ex. 12](#ex): measure the accuracy of a 4-bit 7B model on connectivity, cycle and shortest-path questions for the encodings of Prop. 8.1, first as they come, then padded or trimmed to the same token length; the success metric is the spread of accuracy across encodings at matched length, against the majority answer and an exact BFS (accuracy 1) |
+| Data | Fully specified generator: Erdős–Rényi graphs $G(n,p)$ with $n\in\{8,12,16,20\}$, $p\in\{0.15,0.3\}$, 50 graphs per cell, `numpy.random.default_rng(0)`, ground truth by BFS / Dijkstra; optional comparison with the [NLGraph](https://huggingface.co/datasets/tasksource/nlgraph) test set (1,000 questions; the mirror's card states no licence, so use it for evaluation only after checking the authors' repository) |
+| Chapters | [ch. 8](#ch8) (Prop. 8.1 and its code), [ch. 1](#ch1) (protocol); graph basics from [Graph ML ch. 0](../m1p2-graph-ml/index.html#ch0) |
+| Deliverables | notebook and a 4-page report |
+| Effort and compute | ≈ 15 h per student · free Colab T4, Qwen2.5-7B-Instruct-AWQ, longest run ≤ 2 h |
+| Objectives served | O5 (LLMs on graphs), O9 (testing a published claim) |
+| Going further | Add the Build-a-Graph prompt of NLGraph (8.1) and test whether it narrows the gap between encodings |
+
+#### P3 · ★★★ · group (3–4) · Mini-RLVR: GRPO on a countdown game {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | Extends [Ex. 5](#ex): train Qwen2.5-0.5B-Instruct with GRPO and LoRA on a verifiable arithmetic game (reward: correct format and exact value), and report the test success rate, the mean response length and the number of reward-hacking cases per 100 rewarded samples along training, against the untrained model and best-of-8 sampling |
+| Data | Fully specified generator: draw 3 or 4 integers uniformly in 1..99 (`numpy.random.default_rng(0)`), combine them once each with +, −, ×, ÷ in a random expression tree, keep it when the value is an integer target in 1..999 with exact divisions only; 20,000 training and 500 test instances, deduplicated. The public [Countdown-Tasks-3to4](https://huggingface.co/datasets/Jiayi-Pan/Countdown-Tasks-3to4) set follows the same idea, but its card states no licence |
+| Chapters | [ch. 2](#ch2) (Def. 2.2, DeepSeek-R1, critical analysis); [LLMs ch. 4–5](../m2-large-language-models/index.html#ch5) (LoRA box, Thm 5.3) |
+| Deliverables | repository with a one-command run, a 10-page report, a 10-minute oral with individual questions |
+| Effort and compute | ≈ 15 h per student · free Colab T4 (TRL `GRPOTrainer`, group size 8), longest run ≤ 3 h |
+| Objectives served | O3 (post-training with verifiable rewards), O9 (reproducing a pivot result) |
+| Going further | Compare outcome and process rewards (2.2) with a small step verifier |
+
+#### P4 · ★★★ · group (3–4) · G-Retriever-lite: soft tokens against text retrieval {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Extends [Ex. 12](#ex): answer WebQSP questions with (i) text retrieval over the verbalised triples, (ii) a PCST subgraph written as text, (iii) the same subgraph encoded by a GAT and passed as one soft token through a projector (Def. 8.2), on Qwen2.5-0.5B-Instruct with LoRA; report Hits@1 and the hallucination rate (answers absent from the retrieved subgraph) with bootstrap intervals |
+| Data | [RoG-webqsp](https://huggingface.co/datasets/rmanluo/RoG-webqsp) — WebQSP questions (a free Microsoft Research release) with Freebase subgraphs (Freebase data was released under CC BY); the card states no licence, so keep to teaching and research use — 2,826 / 246 / 1,628 train / validation / test questions; loading: `load_dataset("rmanluo/RoG-webqsp")`; PCST with `pcst_fast`, GAT with PyTorch Geometric |
+| Chapters | [ch. 8](#ch8) (Def. 8.2, 8.3), [ch. 4](#ch4) (GraphRAG as memory); [LLMs 7.4](../m2-large-language-models/index.html#ch7) (graphs as soft tokens), [Graph ML ch. 5](../m1p2-graph-ml/index.html#ch5) (message passing) |
+| Deliverables | repository with a one-command run, a 10-page report, a 10-minute oral with individual questions |
+| Effort and compute | ≈ 15 h per student · free Colab T4, longest run ≤ 3 h |
+| Objectives served | O5 (graph × LLM hybrids), O4 (GNNs) |
+| Going further | The harder multi-hop questions of CWQ, and a hop-count analysis of when the subgraph beats text retrieval |
+
+### End-of-year projects {#projects-capstone}
+
+Three Year-2 capstones of the transverse project use this seminar: [C1](../m2-projet-transverse/index.html#c1) (medical-information assistant: Self-Route between RAG and long context, 3.4, and PCST subgraph retrieval, ch. 8), [C5](../m2-projet-transverse/index.html#c5) (last-mile planning agent: the reliability of action chains, Prop. 9.2) and [C8](../m2-projet-transverse/index.html#c8) (public-agency assistant: RAG or long context, 3.4, and memory, ch. 4). Their research variants are natural position-paper topics (Ex. 13).
 
 ## References {#refs}
 
 -   **Reasoning.** J. Wei et al., [Chain-of-Thought Prompting Elicits Reasoning in Large Language Models](https://arxiv.org/abs/2201.11903), NeurIPS 2022; X. Wang et al., [Self-Consistency Improves Chain of Thought Reasoning in Language Models](https://arxiv.org/abs/2203.11171), ICLR 2023; H. Lightman et al., [Let's Verify Step by Step](https://arxiv.org/abs/2305.20050), ICLR 2024; DeepSeek-AI (D. Guo et al.), [DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning](https://arxiv.org/abs/2501.12948), 2025 (also in Nature, 2025); N. Lambert et al., [Tulu 3: Pushing Frontiers in Open Language Model Post-Training](https://arxiv.org/abs/2411.15124), 2024.
 -   **Long context.** J. Su et al., [RoFormer: Enhanced Transformer with Rotary Position Embedding](https://arxiv.org/abs/2104.09864), 2021; S. Chen et al., [Extending Context Window of Large Language Models via Positional Interpolation](https://arxiv.org/abs/2306.15595), 2023; B. Peng et al., [YaRN: Efficient Context Window Extension of Large Language Models](https://arxiv.org/abs/2309.00071), 2023; H. Liu, M. Zaharia, P. Abbeel, [Ring Attention with Blockwise Transformers for Near-Infinite Context](https://arxiv.org/abs/2310.01889), NeurIPS 2023; N. F. Liu et al., [Lost in the Middle: How Language Models Use Long Contexts](https://arxiv.org/abs/2307.03172), TACL 2024; Z. Li et al., [Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach](https://arxiv.org/abs/2407.16833), EMNLP 2024 industry; P. Xu et al., [Retrieval meets Long Context Large Language Models](https://arxiv.org/abs/2310.03025), ICLR 2024.
 -   **Memory.** Y. Wu et al., [Memorizing Transformers](https://arxiv.org/abs/2203.08913), ICLR 2022; J. S. Park et al., [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442), UIST 2023; C. Packer et al., [MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560), 2023; D. Edge et al., [From Local to Global: A Graph RAG Approach to Query-Focused Summarization](https://arxiv.org/abs/2404.16130), 2024 (cf. Graph ML module ch. 10).
--   **MoE.** N. Shazeer et al., [Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer](https://arxiv.org/abs/1701.06538), ICLR 2017; W. Fedus, B. Zoph, N. Shazeer, [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961), JMLR 2022; A. Q. Jiang et al., [Mixtral of Experts](https://arxiv.org/abs/2401.04088), 2024; DeepSeek-AI, [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437), 2024.
+-   **MoE.** N. Shazeer et al., [Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer](https://arxiv.org/abs/1701.06538), ICLR 2017; W. Fedus, B. Zoph, N. Shazeer, [Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961), JMLR 2022; A. Q. Jiang et al., [Mixtral of Experts](https://arxiv.org/abs/2401.04088), 2024; N. Muennighoff et al., [OLMoE: Open Mixture-of-Experts Language Models](https://arxiv.org/abs/2409.02060), 2024 (Ex. 9); DeepSeek-AI, [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437), 2024.
 -   **Alternative architectures.** A. Gu, K. Goel, C. Ré, [Efficiently Modeling Long Sequences with Structured State Spaces](https://arxiv.org/abs/2111.00396) (S4), ICLR 2022; A. Gu, T. Dao, [Mamba: Linear-Time Sequence Modeling with Selective State Spaces](https://arxiv.org/abs/2312.00752), 2023; B. Peng et al., [RWKV: Reinventing RNNs for the Transformer Era](https://arxiv.org/abs/2305.13048), Findings of EMNLP 2023; S. De et al., [Griffin: Mixing Gated Linear Recurrences with Local Attention for Efficient Language Models](https://arxiv.org/abs/2402.19427), ICML 2024; O. Lieber et al. (AI21), [Jamba: A Hybrid Transformer-Mamba Language Model](https://arxiv.org/abs/2403.19887), 2024.
--   **Efficiency.** Y. Leviathan, M. Kalman, Y. Matias, [Fast Inference from Transformers via Speculative Decoding](https://arxiv.org/abs/2211.17192), ICML 2023; C. Chen et al., [Accelerating Large Language Model Decoding with Speculative Sampling](https://arxiv.org/abs/2302.01318), 2023; E. Frantar, S. Ashkboos, T. Hoefler, D. Alistarh, [GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers](https://arxiv.org/abs/2210.17323), ICLR 2023; J. Lin et al., [AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration](https://arxiv.org/abs/2306.00978), MLSys 2024.
+-   **Efficiency.** Y. Leviathan, M. Kalman, Y. Matias, [Fast Inference from Transformers via Speculative Decoding](https://arxiv.org/abs/2211.17192), ICML 2023; C. Chen et al., [Accelerating Large Language Model Decoding with Speculative Sampling](https://arxiv.org/abs/2302.01318), 2023; E. Frantar, S. Ashkboos, T. Hoefler, D. Alistarh, [GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers](https://arxiv.org/abs/2210.17323), ICLR 2023; J. Lin et al., [AWQ: Activation-aware Weight Quantization for LLM Compression and Acceleration](https://arxiv.org/abs/2306.00978), MLSys 2024. Background: B. Hassibi, D. G. Stork, Second order derivatives for network pruning: Optimal Brain Surgeon, NeurIPS 1992 (proceedings 1993); G. E. Blelloch, Prefix sums and their applications, Carnegie Mellon technical report CMU-CS-90-190, 1990.
 -   **LLMs × graphs (the LLGA core).** H. Wang et al., [Can Language Models Solve Graph Problems in Natural Language?](https://arxiv.org/abs/2305.10037) (NLGraph), NeurIPS 2023; B. Fatemi, J. Halcrow, B. Perozzi, [Talk like a Graph: Encoding Graphs for Large Language Models](https://arxiv.org/abs/2310.04560), ICLR 2024; X. He et al., [G-Retriever: Retrieval-Augmented Generation for Textual Graph Understanding and Question Answering](https://arxiv.org/abs/2402.07630), NeurIPS 2024; S. Pan et al., [Unifying Large Language Models and Knowledge Graphs: A Roadmap](https://arxiv.org/abs/2306.08302), IEEE TKDE 2024; W. Chen et al., [Large Language Models on Graphs: A Comprehensive Survey](https://arxiv.org/abs/2312.02783), 2023.
 -   **Agents.** S. Yao et al., [ReAct: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629), ICLR 2023; T. Schick et al., [Toolformer: Language Models Can Teach Themselves to Use Tools](https://arxiv.org/abs/2302.04761), NeurIPS 2023; N. Shinn et al., [Reflexion: Language Agents with Verbal Reinforcement Learning](https://arxiv.org/abs/2303.11366), NeurIPS 2023; Q. Wu et al., [AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation](https://arxiv.org/abs/2308.08155), 2023; G. Li et al., [CAMEL: Communicative Agents for "Mind" Exploration of Large Language Model Society](https://arxiv.org/abs/2303.17760), NeurIPS 2023.
--   **Evaluation.** C. Xu, S. Guan, D. Greene, M.-T. Kechadi, [Benchmark Data Contamination of Large Language Models: A Survey](https://arxiv.org/abs/2406.04244), 2024; L. Zheng et al., [Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena](https://arxiv.org/abs/2306.05685), NeurIPS 2023; P. Wang et al., [Large Language Models are not Fair Evaluators](https://arxiv.org/abs/2305.17926), ACL 2024; P. Liang et al., [Holistic Evaluation of Language Models](https://arxiv.org/abs/2211.09110) (HELM), TMLR 2023.
+-   **Evaluation.** C. Xu, S. Guan, D. Greene, M.-T. Kechadi, [Benchmark Data Contamination of Large Language Models: A Survey](https://arxiv.org/abs/2406.04244), 2024; L. Zheng et al., [Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena](https://arxiv.org/abs/2306.05685), NeurIPS 2023; P. Wang et al., [Large Language Models are not Fair Evaluators](https://arxiv.org/abs/2305.17926), ACL 2024; P. Liang et al., [Holistic Evaluation of Language Models](https://arxiv.org/abs/2211.09110) (HELM), TMLR 2023. For P1: I. Mirzadeh et al., [GSM-Symbolic](https://arxiv.org/abs/2410.05229), ICLR 2025.
 -   **Open problems.** P. Villalobos, J. Sevilla, L. Heim, et al., [Will we run out of data? Limits of LLM scaling based on human-generated data](https://arxiv.org/abs/2211.04325), 2022 ([Epoch AI](https://epoch.ai) project); I. Shumailov et al., [AI models collapse when trained on recursively generated data](https://arxiv.org/abs/2305.17493), Nature 2024; H. Yu et al., [Continual Learning of Large Language Models: A Comprehensive Survey](https://arxiv.org/abs/2402.01344), 2024.

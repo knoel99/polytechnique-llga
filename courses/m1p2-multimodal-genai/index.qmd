@@ -52,6 +52,7 @@ format:
 -   [8. Beyond images: video, sound, robot actions, 3D, multimodal LLMs](#ch8)
 -   [9. Course research notes (Kalogeiton et al.)](#ch9)
 -   [Exercises](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -105,7 +106,7 @@ Every element of the description now has a section in these notes. Our extension
 
 Module of period 2 of M1 (teaching volume not displayed on the 2026–2027 sheet; 36 h and 4.5 ECTS per the LLGA curriculum wiki): an option explicitly **recommended for the LLGA track**, of which Xi Wang is the official head ("responsable" on the 2026–2027 sheet). Official prerequisites: not displayed on the sheet. This is where the master's program shifts from learning representations to multimodal generation.
 
--   **Prerequisites** — [Deep Learning](../m1p1-deep-learning/index.html) for architectures and training (the review section covers probabilities, networks and the ELBO, hence VAEs and GANs); the [Signal Processing](../m1p1-signal-processing/index.html) module is useful for the signal and spectrogram processing mobilized by the audio and video extensions.
+-   **Prerequisites** — [Deep Learning](../m1p1-deep-learning/index.html) for architectures and training. It is the Deep Learning course of every student of this option, taken in P1: Deep Learning P2 belongs to the same P2 choose-1 group. Its chapter 9 (VAE, GAN) is recalled, not re-proved, in chapters 0–2, and the review section covers probabilities, networks and the ELBO. The [Signal Processing](../m1p1-signal-processing/index.html) module is useful for the signal and spectrogram processing mobilized by the audio and video extensions.
 -   **Downstream modules** — it directly grounds [Control in Generative AI](../m2-control-generative-ai/index.html) (M2), which teaches how to steer these generative models; it prepares [Advanced Topics in Large Language Models](../m2-advanced-topics-llms/index.html) (M2) for multimodal LLMs, and [Speech Technology for Conversational AI](../m2-speech-technology/index.html) (M2) for speech generation.
 
 ### Course outline
@@ -151,7 +152,7 @@ No session-by-session programme is published either, so the split below is our p
 -   Train a small VAE on a simple dataset before tackling GANs: the contrast between the two ways of learning to generate is very instructive.
 -   For each model, write down in black and white the loss function and the sampling algorithm: in generative modeling, these two lines summarize everything.
 -   Follow the thread of latent spaces: VAEs, then latent diffusion, then CLIP form a progression, not three independent chapters.
--   Take this module alongside [Machine learning with Optimal Transport and Algorithmic Fairness](../m1p2-optimal-transport/index.html) (same period): the Wasserstein distance, the Wasserstein-GAN and the FID illuminate one another there.
+-   Optional reading: chapter 2 of [Machine learning with Optimal Transport and Algorithmic Fairness](../m1p2-optimal-transport/index.html#ch2) develops the Wasserstein distance behind the Wasserstein-GAN and the FID. That course belongs to the same choose-1 group as this one, so this page states the two results it uses as cited theorems (Construction 2.4 and the FID note of chapter 2).
 -   Redo the exercises of each section before moving on to the next, and keep the chapter on evaluation, costs and ethics as a critical reading grid for everything else.
 
 ::: note
@@ -160,21 +161,21 @@ No session-by-session programme is published either, so the split below is our p
 
 ## 0. Review: probabilities, networks, ELBO {#ch0}
 
-This module builds the entire edifice of multimodal generative models on four bricks: **Gaussians** (the only probabilistic object diffusion will need), the **evidence lower bound** (ELBO), the **reparameterization trick** (making sampling differentiable) and **encoder-decoder architectures** (CNN, U-Net, attention). We prove them here once and for all: they will be reused in the five following chapters.
+This module builds the entire edifice of multimodal generative models on four bricks: **Gaussians** (the only probabilistic object diffusion will need), the **evidence lower bound** (ELBO), the **reparameterization trick** (making sampling differentiable) and **encoder-decoder architectures** (CNN, U-Net, attention). We state them here and prove the Gaussian facts that diffusion needs; the ELBO and the reparameterization trick, proved in [Deep Learning ch. 9](../m1p1-deep-learning/index.html#ch9), are recalled in a box. All four are reused in the five following chapters.
 
 :::: recap
 ::: recap-title
 Reminders from previous modules
 :::
 
--   **ELBO / VAE** (Deep Learning, ch. 9):
+-   **ELBO / VAE** ([Deep Learning, ch. 9](../m1p1-deep-learning/index.html#ch9)):
     $$
     \mathbb{E}_q[\log p_\theta(x\mid z)] - \mathrm{KL}(q_\phi(z\mid x) \| p(z));
     $$
     reparameterization trick;
 -   **CNN**: convolutions, U-Net (encoder-decoder skip connections);
 -   **Transformers & cross-attention**: image queries, text keys/values — the mechanism that "injects" the prompt into a generator;
--   **Gaussians**: additive noise, $\mathcal{N}(0,1)$, reparameterization — diffusion is just a chain of Gaussian noises (Refresher Statistics, chains);
+-   **Gaussians**: additive noise, $\mathcal{N}(0,1)$, reparameterization — diffusion is just a chain of Gaussian noises ([Refresher in Statistics, ch. 3](../m1p1-refresher-statistics/index.html#ch3); Markov chains: [Reinforcement Learning, ch. 0](../m1p2-reinforcement-learning/index.html#ch0));
 -   **EM / PCA** (Machine Learning module): the VAE is a probabilistic cousin of PCA — alternating maximization of a lower bound, principal axes = latent directions.
 ::::
 
@@ -214,16 +215,14 @@ $$
 The gap between $\log p_\theta(x)$ and the bound is exactly the KL: maximizing the ELBO brings $q_\phi$ closer to the true posterior *and* maximizes the likelihood.
 ::::
 
-::: proof
-We write the integral as an expectation under $q_\phi$, then apply the concavity of the logarithm (Jensen's inequality: $\log \mathbb{E}[U] \ge \mathbb{E}[\log U]$):
+::: recap
+[Recap — where the ELBO comes from]{.tag} The proof takes two lines. Write $p_\theta(x)$ as the expectation, under $q_\phi$, of the ratio $p_\theta(x\mid z)\,p(z)/q_\phi(z)$, and apply Jensen's inequality to the concave logarithm: this gives the bound. For the exact gap, factor the joint law inside the logarithm,
 $$
-\log p_\theta(x) = \log \int p_\theta(x\mid z)\, p(z)\, dz = \log \mathbb{E}_{q_\phi}\!\left[\frac{p_\theta(x\mid z)\,p(z)}{q_\phi(z\mid x)}\right] \ge \mathbb{E}_{q_\phi}\!\left[\log \frac{p_\theta(x\mid z)\,p(z)}{q_\phi(z\mid x)}\right] = \mathrm{ELBO}_\phi(x).
+p_\theta(x\mid z)\,p(z) = p_\theta(x)\,p_\theta(z\mid x),
 $$
-Moreover
-$$
-\log \frac{p_\theta(x\mid z)p(z)}{q_\phi(z)} = \log p_\theta(x) + \log\frac{p_\theta(z\mid x)}{q_\phi(z)};
-$$
-taking the expectation under $q_\phi$, the second term becomes $-\mathrm{KL}(q_\phi \| p_\theta(z\mid x))$, hence the exact decomposition. [∎]{.qed}
+so that what remains besides $\log p_\theta(x)$ is the expectation of the log-ratio of $p_\theta(z\mid x)$ to $q_\phi$, which is minus the KL to the true posterior.
+
+The full proof is theorem 9.2 of [Deep Learning ch. 9](../m1p1-deep-learning/index.html#ch9), with the reparameterization (proposition 9.3) and the Gaussian KL (proposition 9.4). That is the Deep Learning course of every student of this option; the P2 notes prove the same bound in [section 7.3](../m1p2-deep-learning-p2/index.html#dl-generative) (proposition 7.8). What is new here is how the bound is used: conditional, hierarchical and quantized latents (chapter 1), then the per-step ELBO of diffusion (chapter 3).
 :::
 
 ::: def
@@ -292,14 +291,7 @@ The tension between the two structures the latent space: without the KL, $q$ can
 :::
 
 ::: proof
-The decomposition is already the form obtained in thm. 0.2; what matters is seeing where each term comes from. Expand
-$$
-\mathbb{E}_{q}\big[\log \frac{p_\theta(x\mid z)\,p(z)}{q_\phi(z\mid x)}\big]:
-$$
-$$
-\mathbb{E}_q[\log p_\theta(x\mid z)] + \mathbb{E}_q[\log p(z)] - \mathbb{E}_q[\log q_\phi(z\mid x)] = \mathbb{E}_q[\log p_\theta(x\mid z)] - \mathrm{KL}(q_\phi \| p),
-$$
-where we recognize the definition $\mathrm{KL}(q\|p) = \mathbb{E}_q[\log q - \log p]$.
+The decomposition is the definition of the ELBO in theorem 0.2, split into the expectation of $\log p_\theta(x\mid z)$ and that of $\log p(z) - \log q_\phi(z\mid x)$, which is minus the KL (Deep Learning ch. 9 expands it). What matters for the labs is the form of each term.
 
 When $p_\theta(x\mid z)$ is a diagonal Gaussian of mean $D_\theta(z)$ and fixed variance $\sigma^2$, the reconstruction term equals
 $$
@@ -407,26 +399,14 @@ $D$ classifies "real/fake", $G$ forges counterfeits. In practice one uses the *n
     the global minimum is attained only for $p_g = p_{\mathrm{data}}$: *at equilibrium, the generator exactly reproduces the data distribution*.
 :::
 
-::: proof
-**(i)** The problem separates pointwise: for each $x$, maximize
+::: recap
+[Recap — the GAN equilibrium, proved in Deep Learning ch. 9]{.tag} For a fixed generator the value separates point by point. Maximizing $p_{\mathrm{data}}\log D + p_g\log(1-D)$ over $D \in (0,1)$ gives $D^*$; substituting it, and adding and subtracting $\log 2$ in each term, turns the value into $-\log 4$ plus twice the Jensen–Shannon divergence
 $$
-u(D) = p_{\mathrm{data}}(x)\log D + p_g(x)\log(1-D)
+\mathrm{JS}(p\|q) = \tfrac12\mathrm{KL}\big(p\,\|\,\tfrac{p+q}{2}\big) + \tfrac12\mathrm{KL}\big(q\,\|\,\tfrac{p+q}{2}\big),
 $$
-over $D \in (0,1)$. The derivative $u'(D) = \frac{p_{\mathrm{data}}}{D} - \frac{p_g}{1-D}$ vanishes at
-$$
-D^* = \frac{p_{\mathrm{data}}}{p_{\mathrm{data}} + p_g}
-$$
-(a maximum, since $u \to -\infty$ at the boundaries).
+which is non-negative, at most $\log 2$, and zero only when $p = q$.
 
-**(ii)** Substituting: $V(D^*) = p\log\frac{p}{p+q} + q\log\frac{q}{p+q}$. Subtracting and adding $(p+q)\log\frac{1}{2}$, we obtain
-$$
-V(D^*) = -\log 4 + \Big[p\log\frac{2p}{p+q} + q\log\frac{2q}{p+q}\Big] = -\log 4 + 2\,\mathrm{JS}(p\|q),
-$$
-where
-$$
-\mathrm{JS}(p\|q) = \tfrac12\mathrm{KL}(p\|\tfrac{p+q}{2}) + \tfrac12\mathrm{KL}(q\|\tfrac{p+q}{2})
-$$
-(definition; it is a KL toward a probability law, hence always finite). Since $\mathrm{JS} \ge 0$ with equality iff $p = q$, the minimax value is $-\log 4$, attained only when the generator matches the target law. [∎]{.qed}
+The full proof is theorem 9.6 of [Deep Learning ch. 9](../m1p1-deep-learning/index.html#ch9), and proposition 7.9 of the [P2 notes](../m1p2-deep-learning-p2/index.html#dl-generative). This chapter spends its time on what follows from it: mode collapse, the Wasserstein critic and its gradient penalty, StyleGAN and CycleGAN.
 :::
 
 ::: ex
@@ -446,7 +426,7 @@ $$
 :::
 
 ::: thm
-[Construction 2.4 — WGAN: Wasserstein to the rescue of JS]{.tag} When the supports of $p$ and $q$ are disjoint or "nearly" so, JS is constant (value $\log 2$) and its gradient vanishes: no more learning signal. The Wasserstein distance $W_1$, on the other hand, stays informative. By the Kantorovich–Rubinstein duality (OT module):
+[Construction 2.4 — WGAN: Wasserstein to the rescue of JS]{.tag} When the supports of $p$ and $q$ are disjoint or "nearly" so, JS is constant (value $\log 2$) and its gradient vanishes: no more learning signal. The Wasserstein distance $W_1$, on the other hand, stays informative. We use it through the Kantorovich–Rubinstein duality, a cited theorem (Villani 2003, ch. 1):
 $$
 W_1(p, q) = \sup_{\|f\|_L \le 1}\ \mathbb{E}_{p}[f(x)] - \mathbb{E}_{q}[f(x)],
 $$
@@ -462,7 +442,7 @@ Sketch of the duality: for every 1-Lipschitz $f$ and every coupling $\gamma$ of 
 $$
 \mathbb{E}_p[f] - \mathbb{E}_q[f] = \mathbb{E}_{\gamma}[f(x) - f(y)] \le \mathbb{E}_{\gamma}[\|x - y\|];
 $$
-taking the infimum over the couplings gives $\le W_1$, hence $\sup \le W_1$; the hard part (the equality, attained by an optimal Kantorovich potential) belongs to the Lagrangian duality of transport — outside the syllabus, see the OT module.
+taking the infimum over the couplings gives $\le W_1$, hence $\sup \le W_1$. The converse inequality, attained by an optimal Kantorovich potential, is the cited theorem: it comes from the Lagrangian duality of transport, outside this syllabus (optional reading: proposition 4.2 of the [Optimal Transport notes](../m1p2-optimal-transport/index.html#ch4), an option of the same choose-1 group).
 
 **The Lipschitz constraint in practice: gradient penalty.** Weight clipping (original WGAN) enforces Lipschitzness too brutally. Instead we penalize the deviation of the gradient norm from 1 *on interpolations* $\tilde x = \epsilon x + (1-\epsilon)\hat x$ between data $x$ and generation $\hat x$:
 $$
@@ -503,7 +483,7 @@ $$
 $$
 \mathrm{FID} = \|\mu_r - \mu_g\|^2 + \mathrm{tr}\big(\Sigma_r + \Sigma_g - 2(\Sigma_r\Sigma_g)^{1/2}\big) \;=\; W_2^2\ \text{(Bures) between the two Gaussians}
 $$
-— a direct application of the Wasserstein-Bures distance of the OT module; analysis of sampling biases in ch. 7.
+— by the closed form of $W_2$ between Gaussians, a cited theorem (Dowson & Landau 1982; the trace term is the squared Bures distance between the covariances, and its proof is optional reading in theorem 2.7 of the [Optimal Transport notes](../m1p2-optimal-transport/index.html#ch2)); analysis of sampling biases in ch. 7.
 
 **Why diffusion eventually dominated**: stable loss (a simple denoising MSE), no equilibrium to maintain, natural diversity — but GANs remain unbeatable in speed (1 step) and live on in super-resolution and editing.
 :::
@@ -759,7 +739,7 @@ Generating = integrating this ODE backward: this is the theoretical bridge betwe
     where $m$ is the mask (the RePaint mixing rule; variants relax it at the end of the chain).
 
 ::: prop
-[DiT: when the transformer replaces the U-Net]{.tag} The latent image is cut into $2\times2$ patches that are "tokenized" (like a ViT); each block = self-attention over the patches + MLP, *modulated by time and condition* via adaLN-Zero:
+[DiT: when the transformer replaces the U-Net]{.tag} The latent image is cut into $2\times2$ patches, each flattened and linearly projected to a token, and position embeddings are added (the ViT recipe, recapped in ch. 5); each block = self-attention over the patches + MLP, *modulated by time and condition* via adaLN-Zero:
 $$
 h \leftarrow h + \alpha_1\,\mathrm{Attn}\big(\gamma_1 h + \beta_1\big), \qquad h \leftarrow h + \alpha_2\,\mathrm{MLP}\big(\gamma_2 h + \beta_2\big),
 $$
@@ -791,6 +771,14 @@ class DiTBlock(torch.nn.Module):
 ## 5. CLIP and vision-language alignment {#ch5}
 
 To steer an image generator with a sentence, text and images must be comparable: a caption and the picture it describes should map to nearby vectors. CLIP learns such a shared space from 400 million captioned images found on the web; this chapter derives its contrastive loss and shows what the shared space makes possible.
+
+::: recap
+[Recap — the Vision Transformer (ViT)]{.tag} A ViT reads an image as a sequence of tokens. The image is cut into square patches of side $P$ (typically 14 or 16 pixels), so an $H \times W$ image gives $N = HW/P^2$ patches. Each patch is flattened and mapped by one linear layer to a vector of dimension $d$; in code, this is a convolution with kernel size and stride $P$.
+
+A learned `[CLS]` token is prepended, and learned position embeddings are added, since attention by itself ignores where a patch comes from. Standard transformer blocks follow (self-attention and MLP, pre-norm, residual connections: [Deep Learning ch. 6](../m1p1-deep-learning/index.html#ch6)), and the final state of the `[CLS]` token summarizes the image. A $224 \times 224$ image cut into $16 \times 16$ patches gives 196 patch tokens, 197 with `[CLS]`.
+
+CLIP's image encoder is a ViT whose `[CLS]` output is projected into the shared space, and the DiT of ch. 4 applies the same patching to latents. Optional reading: [Advanced Deep Learning ch. 4](../m1p2-advanced-deep-learning/index.html#ch4), an option of the same choose-1 group, reads the ViT paper in full.
+:::
 
 ::: thm
 [CLIP (Radford et al., 2021)]{.tag} Encode images and texts *jointly* in a shared space: an image encoder (ViT) and a text encoder (transformer); 400M (image, caption) pairs collected from the web; **contrastive** learning (InfoNCE) on massive batches (up to 32k pairs).
@@ -916,7 +904,7 @@ A generator produces a distribution rather than a single answer, so its quality 
   IS              quality × diversity (classifier KL)                         sensitive to the classifier's dominant class
   Human studies   pairwise preferences (Elo)                                  costly, annotator biases — the final standard
 
-The FID inherits the geometry of $W_2$ (OT module): the part
+The FID inherits the geometry of $W_2$ (the cited theorem of the FID note, ch. 2): the part
 $$
 \mathrm{tr}\big(\Sigma_r + \Sigma_g - 2(\Sigma_r\Sigma_g)^{1/2}\big)
 $$
@@ -1125,7 +1113,7 @@ Let us also mention [Don't drop your samples!](https://arxiv.org/abs/2405.20324)
     $$
 7.  **★ Truncation.** For a StyleGAN whose $w$ approximately follows a centered Gaussian, show that the rule $w' = \bar w + \psi(w - \bar w)$, $\psi \in [0,1]$, reduces the variance of the generated style and comment on the quality/diversity trade-off as $\psi \to 0$.
 8.  **★★ DDPM ELBO.** Decompose the log-likelihood $\log p_\theta(x_0)$ into per-step terms and show that the noise MSE dominates (the KLs between Gaussians are closed-form).
-9.  **★★ FID and Wasserstein.** Recall the formula for $W_2^2$ between Gaussians (OT module) and show that the FID is an estimate of it (features; sampling bias).
+9.  **★★ FID and Wasserstein.** Recall the formula for $W_2^2$ between Gaussians (the cited theorem of the FID note, ch. 2) and show that the FID is an estimate of it (features; sampling bias).
 10. **★★ Noise vs mean.** Parameterize the denoiser as predicting $x_0$ ($\hat x_0 = x_\theta(x_t, t)$); express the corresponding loss and explain when this parameterization is preferable (small $t$, vivid colors).
 11. **★★ InfoNCE temperature.** In the contrastive loss of ch. 5, show the effect of $\tau \to 0$ (peaked distribution, gradients concentrated on the hardest negatives) and of $\tau \to \infty$ (uniform gradients, slowed learning).
 12. **★★ Video and audio budgets.** (a) Redo Example 8.2 for a 10-second clip at 24 fps and $768 \times 768$, with the same compression and patch sizes; give $N$, the full-attention pair count and the factorized one. (b) For a codec at 50 frames per second with 4 codebooks of 2048 entries, compute the bitrate, the number of tokens of a 30-second music clip and the number of decoding steps with and without the delay pattern of Example 8.4.
@@ -1245,10 +1233,175 @@ Consequence: the denoising MSE is a regression onto the conditional score; integ
 $$
 W_2^2 = \|\mu_1 - \mu_2\|^2 + \mathrm{tr}\big(\Sigma_1 + \Sigma_2 - 2(\Sigma_1^{1/2}\Sigma_2\Sigma_1^{1/2})^{1/2}\big)
 $$
-(proof: the diagonal case by rotation, then the general one — OT module).
+(Dowson & Landau 1982; proof: the diagonal case by rotation, then the general one — optional reading in the Optimal Transport notes, theorem 2.7). The FID writes the trace term with $(\Sigma_1\Sigma_2)^{1/2}$: the two traces are equal, since $\Sigma_1\Sigma_2$ and $\Sigma_1^{1/2}\Sigma_2\Sigma_1^{1/2}$ have the same eigenvalues.
 
 The FID is exactly this formula applied to the Gaussians *fitted to the Inception features* of the two image sets — an approximation of $W_2$ both through the features (transport happens only in the backbone's space) and through the moment estimates ($\hat\mu, \hat\Sigma$ on N samples: the FID is *biased upward* at small N — always compare at equal cohort size).
 :::
+
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+The official assessment (SynapseS 2026–2027, sheet of CSC_52002_EP, as quoted in the "Assessment" row of the fiche) is: "Not displayed: the 2026–2027 sheet gives no assessment modality, and its LLGA section shows no resit rule or pass threshold (those displayed belong to other programs)".
+The scheme below is one possible design consistent with the session plan.
+:::
+
+### A classical assessment {#projects-exam}
+
+Since nothing is displayed, this proposal follows the balanced default of these notes: a written exam on the in-class chapters, the two labs of the session plan, and a group project. All weights are ours.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Written exam | 40 % | 2 h, no documents, one handwritten A4 sheet | ch. 0–7 |
+| Lab notebooks | 20 % | two notebooks, 10 % each: the MiniVAE of ch. 1 with a β sweep (session 2); DDPM against DDIM with 1000, 50 and 20 steps, FID at equal N (session 8) | ch. 1, 3–4, 7 |
+| Group project | 40 % | [Ex. 14](#ex) or one card below, teams of 3–4; 6-page report, 10-minute demo with individual questions, one ethics paragraph (ch. 7) | ch. 3–8 |
+
+**Resit.** A 2 h written exam of the same format replaces the exam grade; the lab and project grades are kept.
+
+**Sample questions.** Five questions of 4 points (20 in total), one possible 2 h paper.
+
+**Q1 (4 pts) — The forward process in numbers.** Prove the closed form of $q(x_t \mid x_0)$ (model 3.1). With a constant schedule $\beta_t = 0.02$, compute $\bar\alpha_t$ and the signal-to-noise ratio $\bar\alpha_t/(1-\bar\alpha_t)$ at $t = 10$ and at $t = 50$.
+
+::: proof
+[Marking points]{.tag}
+
+-   Induction with property 0.1: the mean is $\sqrt{\bar\alpha_t}\,x_0$ and the variances add up to $1 - \bar\alpha_t$ (1.5 pts).
+-   $\bar\alpha_{10} = 0.98^{10} \approx 0.817$, signal-to-noise ratio $\approx 4.47$ (1 pt).
+-   $\bar\alpha_{50} = 0.98^{50} \approx 0.364$, ratio $\approx 0.57$: after 50 steps the noise already dominates (1 pt).
+-   Consequence for training: any $t$ is reached by one noising, without simulating the chain (0.5 pt). Common error: adding the standard deviations instead of the variances.
+:::
+
+**Q2 (4 pts) — Classifier-free guidance as a score.** Show that the rule of theorem 4.1 is, up to the factor $-\sqrt{1-\bar\alpha_t}$, the score of
+$$
+p_w(x_t \mid c) \propto p(x_t \mid c)^{w}\, p(x_t)^{1-w} .
+$$
+What happens at $w = 0$, at $w = 1$ and for $w > 1$?
+
+::: proof
+[Marking points]{.tag}
+
+-   The score of $p_w$ is $w\,\nabla\log p(x_t \mid c) + (1-w)\,\nabla\log p(x_t)$, since the normalizing constant does not depend on $x_t$ (1 pt).
+-   Replacing each score by its denoiser (theorem 3.3) gives the CFG combination of the conditional and unconditional predictions (1.5 pts).
+-   $w = 0$ gives the unconditional model, $w = 1$ the conditional one (0.5 pt).
+-   For $w > 1$ the condition is over-weighted: the law is more peaked, prompt fidelity rises and diversity falls (1 pt). Common error: a sign error, forgetting that the noise prediction is *minus* a multiple of the score.
+:::
+
+**Q3 (4 pts) — InfoNCE by hand.** Two image–caption pairs have the cosine similarities below (rows: images, columns: captions).
+$$
+C = \begin{pmatrix} 0.9 & 0.1 \\ 0.3 & 0.8 \end{pmatrix}
+$$
+Compute the symmetric InfoNCE loss of chapter 5 at $\tau = 1$, then at $\tau = 0.1$, and explain what the temperature changes in the gradient.
+
+::: proof
+[Marking points]{.tag}
+
+-   With two candidates, each of the four terms is $\log(1 + e^{-\Delta/\tau})$, where $\Delta$ is the margin of the positive over the negative in its row or column (1 pt).
+-   At $\tau = 1$ the margins 0.8 and 0.5 (rows), 0.6 and 0.7 (columns) give the terms 0.371, 0.474, 0.437 and 0.403, whose mean is the loss, $\mathcal{L} \approx 0.421$ (1.5 pts).
+-   At $\tau = 0.1$ the same terms range from $3 \times 10^{-4}$ to $7 \times 10^{-3}$, so $\mathcal{L} \approx 0.0026$ (1 pt).
+-   The weight of a negative in the gradient is its softmax probability: at $\tau = 0.1$ it is 0.0067 for the hardest negative (0.3 against 0.8) and almost zero for the others, so the gradient concentrates on hard negatives; at $\tau = 1$ it is still 0.38 (0.5 pt). Common error: dividing by $N$ instead of $2N$, which doubles the loss.
+:::
+
+**Q4 (4 pts) — A video token budget.** A clip of 49 frames at $256 \times 256$ is encoded by a causal 3D VAE with $c_t = 4$ and $c_s = 8$, then cut into $2 \times 2$ patches (definition 8.1). Give the number of latent frames, the tokens per frame, the total number of tokens $N$, and the number of attention pairs with full and with factorized attention.
+
+::: proof
+[Marking points]{.tag}
+
+-   $F' = 48/4 + 1 = 13$ latent frames of $32 \times 32$ (1 pt).
+-   $S = 16 \times 16 = 256$ tokens per frame, so $N = 3\,328$ (1 pt).
+-   Full attention compares $N^2 \approx 1.11 \times 10^7$ pairs; factorized attention needs
+    $$
+    13 \cdot 256^2 + 256 \cdot 13^2 \approx 8.95 \times 10^5
+    $$
+    pairs, about 12 times fewer (1.5 pts).
+-   The spatial term is 95 % of the factorized cost here; the gain grows with the number of frames (0.5 pt). Common error: forgetting the first frame kept on its own, which gives 12 latent frames.
+:::
+
+**Q5 (4 pts) — Reading an evaluation, then releasing images.** A report compares two generators: model A has an FID of 14.2 computed on 2,000 samples, model B an FID of 11.9 on 50,000 samples, both with Inception features, and concludes that B is better. Is the conclusion supported? The images of B will be published online: which transparency measure does the European AI Act ask for, and what can implement it?
+
+::: proof
+[Marking points]{.tag}
+
+-   The FID is biased upward at small N: A's value on 50,000 samples would be lower, so the two numbers cannot be compared (1.5 pts).
+-   Recompute both at equal N, with the same backbone, preprocessing and reference set; add CLIPScore or a human study, since the FID is blind to the text (1 pt).
+-   The AI Act asks for transparency: generated content must be marked as such, and the model documented (0.5 pt).
+-   Means: C2PA signed metadata and an invisible watermark robust to re-compression; neither is infallible alone, hence defense in depth (1 pt). Common error: reading a lower FID at a different N as a smaller distance.
+:::
+
+### Projects {#projects-list}
+
+Every project uses public data or a fully specified generator and runs on a laptop CPU or one free Colab T4 GPU, with only this module, Deep Learning (P1) and, where stated, Graph ML (mandatory in the same period). Levels ★/★★/★★★ are those of the exercises and efforts are per student; [Ex. 14](#ex) remains the default group project, and the group cards are alternatives to it.
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★ · solo · Zero-shot sound classification with CLAP {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | Classify the 50 classes of ESC-50 with CLAP (definition 8.5) zero-shot, with one prompt and with an ensemble of 5 prompts, and with a logistic-regression probe on the frozen CLAP audio embeddings; report accuracy as mean ± standard deviation over the 5 official folds, and the per-category gap between zero-shot and probe. |
+| Data | [ESC-50](https://huggingface.co/datasets/ashraq/esc50) (mirror of K. J. Piczak's 2015 release) — CC BY-NC 3.0 — 2,000 clips of 5 s in 50 classes and 5 folds, 245 MB zipped; loading: `datasets.load_dataset("ashraq/esc50")` |
+| Chapters | [ch. 5](#ch5) (symmetric InfoNCE, zero-shot classification, temperature), [ch. 8](#ch8) (definition 8.5) |
+| Deliverables | notebook and 4-page report |
+| Effort and compute | ≈ 12 h per student · laptop CPU or one T4; embedding the 2,000 clips with `laion/clap-htsat-unfused` takes ≤ 15 min |
+| Objectives served | O5 (multimodal alignment: audio and text), O7 (reusing a pretrained model) |
+| Responsible AI | Non-commercial licence: teaching use only. The clips come from Freesound, and CLAP's training data also draw on Freesound, so report the risk of train–test overlap; a few classes are human sounds (crying baby, coughing), with no identification of people. |
+| Going further | Text-to-audio retrieval (Recall@1 and Recall@5) with captions built from the class names. |
+
+#### P2 · ★★ · solo · Guided diffusion on pathology images {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | Train a class-conditional DDPM with condition dropout on PathMNIST (28 × 28, 9 tissue classes) and sample with guidance weights $w \in \{0, 1, 2, 4\}$; report the FID at equal N = 10,000, the accuracy on the real test images of a classifier trained on synthetic images only against the same classifier trained on real images, and a nearest-neighbour copy rate. |
+| Data | [MedMNIST+ (PathMNIST)](https://zenodo.org/records/10519652) — CC BY 4.0 — 107,180 images of 28 × 28 pixels in 9 classes; loading: `medmnist.PathMNIST(split="train", download=True)` |
+| Chapters | [ch. 3](#ch3) (model 3.2, theorem 3.3), [ch. 4](#ch4) (theorem 4.1, construction 4.2), [ch. 7](#ch7) (FID at equal N, ethics); [Deep Learning ch. 4](../m1p1-deep-learning/index.html#ch4) (classifier) |
+| Deliverables | notebook and 4-page report |
+| Effort and compute | ≈ 22 h per student · one T4; a U-Net of about 10M parameters trains in ≤ 2 h, and 10,000 samples with 50 DDIM steps take about 10 min per weight |
+| Objectives served | O2 (diffusion and guidance), O6 (healthcare: pathology), O8 (memorization and synthetic data) |
+| Specific criterion | Replaces the Protocol row (25 %): FID and accuracy at equal N, 3 sampling seeds, and the copy rate defined before the experiment as the share of samples closer to a training image than the 1st percentile of the nearest-neighbour distances between training images |
+| Responsible AI | Synthetic pathology images are for research only, with no clinical use; a high copy rate means memorized training images, which matters for patient privacy. |
+| Going further | BloodMNIST (17,092 images, 8 cell types), or DDIM inversion of real images. |
+
+#### P3 · ★★ · group · Can a vision-language model read a graph? {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | On seeded drawings of random graphs with $n \in \{6, 12, 24, 48\}$ nodes, ask three questions — is the graph connected, what is the degree of node 0, what is the shortest-path length from node 0 to node 1 (or "no path") — to Qwen2-VL-2B on the image, to Qwen2.5-1.5B on the edge list as text, and to a GCN trained on 5,000 generated graphs; report accuracy with 95 % intervals per question and per $n$, against chance. |
+| Data | Synthetic generator: for each $n$, 300 Erdős–Rényi graphs `networkx.gnp_random_graph(n, log(n)/n, seed=s)` and 300 two-block stochastic block models (probability 2 log(n)/n within blocks, 0.2 log(n)/n between), seeds 0–599, drawn with `spring_layout(G, seed=s)` at 512 × 512 pixels with node labels; answers computed with networkx |
+| Chapters | [ch. 5](#ch5) (image encoders, contrastive alignment), 8.4 (multimodal LLMs: projector, two-stage training); [Graph ML ch. 5](../m1p2-graph-ml/index.html#ch5) (GCN, mandatory, session 6) |
+| Deliverables | repository with one-command run, 8-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 20 h per student (3–4 students) · one T4: 7,200 queries to the vision-language model (4 sizes × 600 graphs × 3 questions), about 1 h in fp16; the GCN trains on a CPU in minutes |
+| Objectives served | O5 (LLMs, graphs and images combined), O4 (graph structure) |
+| Specific criterion | Replaces the Protocol row (25 %): prompts fixed before the experiment, answers parsed by a script, class balance and chance level reported for each question and $n$, 3 generation seeds |
+| Going further | The prompting formats of [Graph ML ch. 10](../m1p2-graph-ml/index.html#ch10) (session 12), or robustness to the layout (circular against spring) for the same graphs. |
+
+#### P4 · ★★★ · group · Text-to-molecule retrieval with a contrastive bridge {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Train a CLIP-style model that aligns a graph encoder of molecules with a frozen text encoder (SciBERT) through linear projections and the symmetric InfoNCE loss; report the mean reciprocal rank and Hits@10 of text-to-molecule retrieval among the 3,300 test molecules, against the same model with a Morgan-fingerprint MLP instead of the graph encoder, and with a fixed instead of a learned temperature. |
+| Data | [ChEBI-20](https://huggingface.co/datasets/OpenBioML/chebi_20) — descriptions from ChEBI (CC BY 4.0), keyed by PubChem identifier — 33,008 (SMILES, description) pairs split 26,407 / 3,301 / 3,300; loading: `pandas.read_csv("hf://datasets/OpenBioML/chebi_20/train.csv", sep="\t")`, graphs built with RDKit |
+| Chapters | [ch. 5](#ch5) (symmetric InfoNCE, temperature, Ex. 11); [Graph ML ch. 5](../m1p2-graph-ml/index.html#ch5) (message passing, mandatory, session 6), here with sum aggregation |
+| Deliverables | repository with one-command run, 8-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 30 h per student (3–4 students) · one T4; text embeddings computed once (about 10 min), each training run ≤ 30 min |
+| Objectives served | O5 (graph–text alignment), O6 (chemistry and pharma), O4 (molecular graphs) |
+| Responsible AI | Retrieving molecules from text has dual-use potential (toxic compounds): give no synthesis route, and keep the attribution that ChEBI's licence requires. |
+| Going further | Zero-shot property prompts ("a molecule soluble in water") scored against measured solubilities. |
+
+### End-of-year projects {#projects-capstone}
+
+In Year 1, the Graph × LLM route variants of four [integrative projects](../m1-integrative-projects/index.html) use chapter 5: compound–description features learned CLIP-style in [Y1-1](../m1-integrative-projects/index.html#y1-1), CLIP item images for cold start in [Y1-4](../m1-integrative-projects/index.html#y1-4), an InfoNCE temperature study in [Y1-6](../m1-integrative-projects/index.html#y1-6), and image–report contrastive retrieval in [Y1-7](../m1-integrative-projects/index.html#y1-7). Card P4 above is a rehearsal of Y1-6.
+
+In Year 2, the guidance of chapter 4 underlies the guided molecule generator of [C3](../m2-projet-transverse/index.html#c3), developed in Control in Generative AI, and the codec tokens and CLAP of section 8.2, with the watermarking and transparency of chapter 7, serve the voice assistant of [C4](../m2-projet-transverse/index.html#c4).
 
 ## References {#refs}
 
@@ -1261,6 +1414,7 @@ The FID is exactly this formula applied to the Gaussians *fitted to the Inceptio
 -   J. Song et al., [DDIM](https://arxiv.org/abs/2010.02502), ICLR 2021; Y. Song et al., [Score-Based Generative Modeling through SDEs](https://arxiv.org/abs/2011.13456), ICLR 2021; C. Lu et al., [DPM-Solver](https://arxiv.org/abs/2206.00927), NeurIPS 2022.
 -   R. Rombach et al., [High-Resolution Image Synthesis with Latent Diffusion Models](https://arxiv.org/abs/2112.10752), CVPR 2022 — Stable Diffusion; W. Peebles & S. Xie, [DiT](https://arxiv.org/abs/2212.09748), ICCV 2023; L. Zhang et al., [ControlNet](https://arxiv.org/abs/2302.05543), ICCV 2023.
 -   A. Radford et al., [Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020) (CLIP), ICML 2021; A. van den Oord et al., [Representation Learning with Contrastive Predictive Coding](https://arxiv.org/abs/1807.03748) (InfoNCE), 2018; R. Girdhar et al., [ImageBind](https://arxiv.org/abs/2305.05665), CVPR 2023.
+-   C. Villani, *Topics in Optimal Transportation*, Graduate Studies in Mathematics 58, AMS, 2003 — the Kantorovich–Rubinstein duality cited in Construction 2.4; D. C. Dowson & B. V. Landau, "The Fréchet distance between multivariate normal distributions", *Journal of Multivariate Analysis* 12, 1982 — the closed form behind the FID.
 -   J. Ho & T. Salimans, [Classifier-Free Diffusion Guidance](https://arxiv.org/abs/2207.12598), 2022; B. Mildenhall et al., [NeRF](https://arxiv.org/abs/2003.08934), ECCV 2020; J. Li et al., [BLIP-2](https://arxiv.org/abs/2301.12597) (Q-Former), ICML 2023; H. Liu et al., [LLaVA](https://arxiv.org/abs/2304.08485) (linear projector), NeurIPS 2023.
 -   **Video (section 8.1)**: J. Ho et al., [Video Diffusion Models](https://arxiv.org/abs/2204.03458), NeurIPS 2022; A. Blattmann et al., [Align your Latents: High-Resolution Video Synthesis with Latent Diffusion Models](https://arxiv.org/abs/2304.08818) (Video LDM), CVPR 2023; T. Unterthiner et al., [Towards Accurate Generative Models of Video: A New Metric & Challenges](https://arxiv.org/abs/1812.01717) (FVD), 2018.
 -   **Sound (section 8.2)**: N. Zeghidour et al., [SoundStream](https://arxiv.org/abs/2107.03312), 2021; A. Défossez et al., [High Fidelity Neural Audio Compression](https://arxiv.org/abs/2210.13438) (EnCodec), 2022; Z. Borsos et al., [AudioLM](https://arxiv.org/abs/2209.03143), 2023; J. Copet et al., [Simple and Controllable Music Generation](https://arxiv.org/abs/2306.05284) (MusicGen), NeurIPS 2023; H. Liu et al., [AudioLDM](https://arxiv.org/abs/2301.12503), ICML 2023; J. Kong et al., [HiFi-GAN](https://arxiv.org/abs/2010.05646), NeurIPS 2020.

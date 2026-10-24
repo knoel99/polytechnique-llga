@@ -51,6 +51,7 @@ format:
 -   [7. Scaling and compute](#ch7)
 -   [8. Course research notes — CMAP (El Mhamdi, Dieuleveut)](#ch8)
 -   [Exercises](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -125,7 +126,7 @@ Recommended option of the LLGA track in Year 1 · Period 1 (36 h, 4.5 ECTS). The
 
 The two refreshers ([Refresher in Statistics](../m1p1-refresher-statistics/index.html), [Refresher in Computer Science](../m1p1-refresher-cs/index.html)) are its upstream prerequisites. The course unit is shared with the engineering cycle (X), the MJH master, exchange programs, the MScT Visual Computing and Creative AI track, and (according to the assessment sections of the sheet) the MScT IoT and TRAI tracks.
 
-Downstream, this module opens three directions. [Privacy and Uncertainty Quantification](../m2-privacy-uncertainty/index.html) (M2) extends the differential privacy seen here toward private inference and uncertainty quantification; [ML Ops and LLM Engineering Principles](../m2-mlops-llm-engineering/index.html) (M2) picks up scaling and the systems viewpoint for industrializing LLMs; [Reinforcement Learning and Autonomous Agents](../m1p2-reinforcement-learning/index.html) (Period 2) draws on the same questions of collaboration and multiple agents, up to multi-agent RL.
+Downstream, this module opens three directions. [Privacy and Uncertainty Quantification](../m2-privacy-uncertainty/index.html) (M2) extends the differential privacy seen here toward private inference and uncertainty quantification; [ML Ops and LLM Engineering Principles](../m2-mlops-llm-engineering/index.html) (M2) picks up the systems viewpoint (serving, cost, monitoring) for industrializing LLMs, while the scaling laws of ch. 7 are treated in full in [Large Language Models, ch. 3](../m2-large-language-models/index.html#ch3); [Reinforcement Learning and Autonomous Agents](../m1p2-reinforcement-learning/index.html) (Period 2) draws on the same questions of collaboration and multiple agents, up to multi-agent LLM systems (its ch. 7).
 
 ### Course outline
 
@@ -415,6 +416,26 @@ Each "forgotten" coordinate is eventually sent once its accumulated residual ent
 **Hogwild!** (Recht et al., 2011): lock-free SGD on shared memory, valid for *sparse* problems (concurrent updates rarely collide); Lian et al. (2015): asynchronous SGD retains the $1/\sqrt T$ and the linear speedup up to constant staleness — asynchrony pays off when clock variance dominates.
 :::
 
+::: recap
+[Recap — graph Laplacian and spectral gap]{.tag} Take a graph on $n$ nodes with adjacency matrix $A$ and degree matrix $D = \mathrm{diag}(d_1, \dots, d_n)$. Its **Laplacian** is $\mathcal{L} = D - A$, and its quadratic form sums the squared disagreements across edges:
+$$
+x^\top \mathcal{L}\, x = \sum_{\{i, j\} \in E} (x_i - x_j)^2 \;\geq\; 0 .
+$$
+So $\mathcal{L}$ is symmetric positive semidefinite, with eigenvalues $0 = \lambda_1 \leq \lambda_2 \leq \dots \leq \lambda_n$ and $\mathcal{L}\mathbf{1} = 0$.
+
+The form vanishes exactly on the vectors that are constant on each connected component, hence $\lambda_2 > 0$ if and only if the graph is connected. Two extremes:
+$$
+\lambda_2(\text{cycle } C_n) = 2 - 2\cos\tfrac{2\pi}{n} \approx \tfrac{4\pi^2}{n^2}, \qquad \lambda_2(\text{complete } K_n) = n .
+$$
+For $n = 100$ this is 0.0039 against 100.
+
+The gossip matrix $W = I - \gamma\mathcal{L}$ is symmetric with rows summing to 1, hence doubly stochastic once $\gamma \leq 1/d_{\max}$ makes its entries nonnegative. The disagreement then shrinks by a factor $e$ about every $1/(\gamma\lambda_2)$ rounds: about 760 rounds on the 100-cycle with $\gamma = 1/3$.
+
+On $K_n$ with $\gamma = 1/n$, one gets $W = \tfrac1n \mathbf{1}\mathbf{1}^\top$: exact averaging in one round.
+
+Full treatment in Period 2: [Graph ML, ch. 0](../m1p2-graph-ml/index.html#ch0) (Definition 0.4) and [ch. 4](../m1p2-graph-ml/index.html#ch4) (Theorem 4.2, Fiedler); nothing in this module requires it.
+:::
+
 ::: thm
 [Theorem 2.6 — Decentralized: gossip and the graph spectrum]{.tag} Without a server: the workers form a communication graph $\mathcal{G}$ (adjacency matrix $A$, Laplacian $\mathcal{L}$) and exchange with their neighbors. *Gossip aggregation* (matrix $W$ doubly stochastic, e.g. $W = I - \gamma \mathcal{L}$),
 $$
@@ -427,7 +448,7 @@ $$
 $$
 \rho(W) = \max_{i \neq 1} |\lambda_i(W)| = 1 - \gamma\lambda_2(\mathcal{L}) \ \ (\gamma \text{ small enough}),
 $$
-where $\lambda_2(\mathcal{L})$, the second smallest eigenvalue of the Laplacian, is the *spectral gap* (algebraic connectivity of the graph — see the Graph ML module, spectrum chapter; chain = slow, complete graph = fast, expander = nearly optimal).
+where $\lambda_2(\mathcal{L})$, the second smallest eigenvalue of the Laplacian, is the *spectral gap* (algebraic connectivity of the graph — recap box above; chain = slow, complete graph = fast, expander = nearly optimal).
 
 **Decentralized SGD** (D-PSGD, Lian et al., ICML 2017) interleaves local SGD steps and gossip: it retains the $\mathcal{O}(1/\sqrt T)$ rate of the centralized version *and* its linear speedup, with local exchanges instead of the global all-reduce — it *would beat* the centralized version in wall-clock time as soon as the graph is well connected and bandwidth is limited.
 :::
@@ -439,7 +460,7 @@ where $\lambda_2(\mathcal{L})$, the second smallest eigenvalue of the Laplacian,
   Decentralized (gossip)     neighborhood only    excellent                  factor $1/\lambda_2$ in the rate
 
 ::: note
-[LLM connection]{.tag} A typical LLM training run mobilizes thousands of GPUs: the choices of data-parallel vs pipeline vs tensor (splitting the model itself, ZeRO: sharding of optimizer states) are choices of algebra and communication — lab topics in this module, explored further in M2 (ML Ops). The methods of this chapter (quantization, error feedback) apply as-is to LLM gradients.
+[LLM connection]{.tag} A typical LLM training run mobilizes thousands of GPUs: the choices of data-parallel vs pipeline vs tensor (splitting the model itself, ZeRO: sharding of optimizer states) are choices of algebra and communication — treated in [Deep Learning P2](../m1p2-deep-learning-p2/index.html#ch2), ch. 2–4 (Period 2), and at deployment scale in M2 (ML Ops); this module has no lab on them. The methods of this chapter (quantization, error feedback) apply as-is to LLM gradients.
 :::
 
 ## 3. Federated learning {#ch3}
@@ -479,13 +500,18 @@ This is a structural bias of \~20% that does *not* vanish as the number of round
 ::::
 
 ::: thm
-[Theorem 3.3 — Convergence of FedAvg (strongly convex setting, statement)]{.tag} Under (A1)-(A3) per client and bounded heterogeneity, the Theorem-0.1-style analysis applied to FedAvg (Li et al., 2020) yields, with $E$ local steps per round of $K$ clients:
+[Theorem 3.3 — Convergence of FedAvg (strongly convex setting, statement)]{.tag} Assume each $F_k$ is $\mu$-strongly convex and $L$-smooth, with stochastic gradients of variance at most $\sigma_k^2$ and second moment at most $G^2$, and weights $p_k = n_k/n$. Measure heterogeneity by
 $$
-\mathbb{E}\big[F(\theta_R)\big] - F^\star \;\leq\; \mathcal{O}\Big(\frac{D^2}{\eta E R}\Big) + \mathcal{O}\Big(\frac{\sigma^2}{\mu^2 K E R}\Big) + \mathcal{O}\big(\Gamma\big), \qquad \Gamma = F^\star - \sum_k \frac{n_k}{n} F_k^\star \ \text{(or equivalent)},
+\Gamma = F^\star - \sum_k p_k F_k^\star \;\geq\; 0 .
 $$
-where the **heterogeneity term** $\Gamma > 0$ measures the gap between the global optimum and the local optima: it is the analytic manifestation of Theorem 3.2.
+Li et al. (2020) analyse FedAvg with full participation, $E$ local steps per round and the *decaying* step $\eta_t = 2/(\mu(\gamma + t))$, where $\kappa = L/\mu$, $\gamma = \max(8\kappa, E)$ and $t$ counts local steps. After $T$ local steps:
+$$
+\mathbb{E}\big[F(\theta_T)\big] - F^\star \;\leq\; \frac{\kappa}{\gamma + T - 1}\Big(\frac{2B}{\mu} + \frac{\mu\gamma}{2}\, D^2\Big), \qquad B = \sum_k p_k^2 \sigma_k^2 + 6L\,\Gamma + 8(E - 1)^2 G^2 .
+$$
 
-The first two terms decrease with the rounds (communication gain: $E$ steps for 1 exchange); the third is a bias that only a *correction* (SCAFFOLD) or a *penalty* (FedProx) can mitigate.
+*Reading.* The **heterogeneity term** $\Gamma$, the analytic trace of Theorem 3.2, and the number $E$ of local steps only inflate the constant $B$: with a decaying step, FedAvg still reaches the optimum, at rate $\mathcal{O}(1/T)$.
+
+With a *constant* step and $E > 1$, the bias of Theorem 3.2 does not vanish — Li et al. show that decaying the step is then necessary. A *correction* (SCAFFOLD) or a *penalty* (FedProx) attacks the drift itself, at constant step.
 :::
 
 ::: prop
@@ -536,6 +562,12 @@ Pragmatic version: local fine-tuning of the federated model (standard in product
 
 ::: note
 [Applications and LLMs]{.tag} Healthcare (hospital consortia, data that cannot be centralized), mobile keyboards (next-word prediction, Gboard), finance. For LLMs: federating *LoRA adapters* (the model is frozen, only the small rank-$r$ matrices $A, B$ are exchanged) — demonstrated for instruction tuning (FedIT, Zhang et al., 2023); open questions: heterogeneity of local instructions, noise from small batches, privacy of prompts (chapter 5), robustness to hostile clients (chapter 4). M2 project topic.
+
+**LoRA in one line** (Hu et al., 2022): a pre-trained matrix $W_0 \in \mathbb{R}^{d \times k}$ stays frozen and only a low-rank update is learned,
+$$
+W = W_0 + \Delta W, \qquad \Delta W = BA, \quad B \in \mathbb{R}^{d \times r},\ A \in \mathbb{R}^{r \times k},\ r \ll \min(d, k) .
+$$
+A client therefore sends $r(d + k)$ numbers per matrix instead of $dk$: for $d = k = 4096$ and $r = 8$, 65,536 instead of 16.8 million, 256 times fewer. Full treatment: [Deep Learning, ch. 7](../m1p1-deep-learning/index.html#ch7) (its session 10, later in the period) and [Large Language Models, ch. 4](../m2-large-language-models/index.html#ch4).
 :::
 
 ```python
@@ -795,7 +827,7 @@ DP bounds this signal: the influence of an example on any output is capped by cl
 :::
 
 ::: note
-[Why LLGA cares]{.tag} LLMs memorize training fragments (extraction attacks); DP training (DP-SGD on fine-tuning) is an active defense — and the M2 module "Explainability, Security, Privacy of LLMs" extends exactly this chapter. In the federated setting, DP and secure aggregation (4.5) combine: cryptographic masks against the server, DP against *a posteriori* adversaries. Graph confidentiality (node-DP, edge-DP) protects social networks — see the Graph ML module. Multi-agent systems (see the Reinforcement Learning module, ch. 7) raise the same question: what do interaction logs leak?
+[Why LLGA cares]{.tag} LLMs memorize training fragments (extraction attacks); DP training (DP-SGD on fine-tuning) is an active defense — and the M2 module "Explainability, Security, Privacy of LLMs" extends exactly this chapter. In the federated setting, DP and secure aggregation (4.5) combine: cryptographic masks against the server, DP against *a posteriori* adversaries. Graph confidentiality (node-DP, edge-DP) protects social networks — see [Advanced GNN, ch. 7](../m2-advanced-gnn/index.html#ch7) (7.4, M2). Multi-agent systems (see the Reinforcement Learning module, ch. 7) raise the same question: what do interaction logs leak?
 :::
 
 ## 6. Collaboration, personalization, fairness {#ch6}
@@ -856,6 +888,8 @@ $$
 \text{Chinchilla: } L = E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}},
 $$
 with for Chinchilla $\alpha \approx 0.34$, $\beta \approx 0.28$, and $E \approx 1.69$ the irreducible loss (entropy of language); $A, B, N_c, D_c$ are calibrated constants. Training compute is billed $C \approx 6\,N D$ FLOPs (2 passes × 3 per parameter/token).
+
+The two forms are not interchangeable: Kaplan et al. fit the joint power law of the first display, while the additive form with an irreducible term $E$ is that of Hoffmann et al. (Chinchilla). The reference treatment on this site is [Large Language Models, ch. 3](../m2-large-language-models/index.html#ch3) (3.2); this chapter keeps what an M1 student needs, $C \approx 6ND$ and $D^\star \approx 20\,N^\star$ (Theorem 7.2).
 :::
 
 :::: thm
@@ -873,6 +907,8 @@ $$
 :::
 
 That is: **N and D grow together, almost like $\sqrt C$**, with a ratio $D^\star/N^\star \approx 20$ tokens per parameter (empirical value: \~1.4T tokens for 70B parameters).
+
+The exponents 0.45 and 0.55 follow from the rounded values $\alpha = 0.34$ and $\beta = 0.28$; the paper reports 0.46 and 0.54 for this fit, from its unrounded estimates — the values quoted in [Large Language Models, 3.2](../m2-large-language-models/index.html#ch3).
 
 Counter-intuitive but verified: Chinchilla (70B) beats Gopher (280B) trained on the same compute; the models of the Kaplan generation were *undertrained* (too many parameters, too few tokens per parameter).
 
@@ -937,11 +973,11 @@ Methodological lesson: *impossibility first* — characterize what no GAR can do
 $$
 \bar\theta_n = \tfrac{2}{n}\sum_{t > n/2} \theta_t .
 $$
-With step size $\eta \propto 1/\sqrt n$, it reaches
+With a *constant* step size (of the order of $1/R^2$, where $R^2$ bounds the squared norm of the inputs), it reaches
 $$
 \mathbb{E}\big[F(\bar\theta_n)\big] - F^\star \;\leq\; \mathcal{O}\Big(\frac{d\,\sigma^2}{n}\Big) \qquad \text{(minimax rate, without knowing } \sigma^2 \text{ or the spectrum)},
 $$
-where plain SGD with a constant step size plateaus at $\sigma/\sqrt n$ (Theorem 0.1) and would require exact knowledge of the constants to be optimal.
+whereas constant-step SGD without averaging stalls at a floor of order $\eta\sigma^2$ (Theorem 0.1), and reaching $\sigma D/\sqrt n$ requires a step tuned to the horizon and to unknown constants.
 
 *Idea.* Averaging decouples bias and variance: the individual iterates remain noisy, but their average estimates the optimum asymptotically *without bias* (the noise averages out at rate $1/n$, the deterministic dynamics converge fast). It is the tool that makes SGD "parameter-free" — behind the practical optimizers of the module and the optimal Nadaraya-Watson-type rates in the nonparametric setting.
 :::
@@ -949,7 +985,7 @@ where plain SGD with a constant step size plateaus at $\sigma/\sqrt n$ (Theorem 
 ::: thm
 [Work 8.4 — Federated-EM (Dieuleveut, Fort, Moulines, Robin, NeurIPS 2021)]{.tag} First federated extension of the EM algorithm to models with latent variables (Gaussian mixtures, HMMs): each client computes its local E statistics, the server aggregates and performs the M step.
 
-*Result.* A version with **control variates** (the SCAFFOLD/SVRG motif — Propositions 0.3 and 3.5!) corrects heterogeneity and variance: convergence is proven toward a neighborhood of the optimum at rate $\mathcal{O}(1/R)$ in rounds, with radius controlled by heterogeneity and mitigated by the correction — the same theorem as 3.3, transposed to EM steps.
+*Result.* A version with **control variates** (the SCAFFOLD/SVRG motif — Propositions 0.3 and 3.5!) corrects heterogeneity and variance: convergence is proven toward a neighborhood of the optimum at rate $\mathcal{O}(1/R)$ in rounds, with radius controlled by heterogeneity and mitigated by the correction — the drift of Theorem 3.2 and its correction (Algorithm 3.5), transposed to EM steps.
 
 Applications: federated GMMs in healthcare, federated HMMs in telephony; extended by Federated Majorize-Minimization (2025), which unifies these constructions beyond the server parameter.
 :::
@@ -1023,16 +1059,18 @@ Our suggested sequence (the coordinator chooses the actual papers): session 10, 
     $$
     \theta^{(k)} \leftarrow \theta^{(k)} + \gamma \sum_{j \in \mathcal{N}(k)}(\theta^{(j)} - \theta^{(k)})
     $$
-    on a cycle then on a complete graph; relate the speed to the second eigenvalue of the Laplacian (spectrum = Graph ML module).
+    on a cycle then on a complete graph; relate the speed to the second eigenvalue of the Laplacian (recap box before Theorem 2.6).
 8.  **★★ Exact SCAFFOLD on the quadratic.** On the example of Theorem 3.2, show that with the exact control variates $c_k - c = a_k(\theta - z_k) - \bar a(\theta - \bar z)$, the corrected local update uses the *global* gradient — and hence that the fixed point becomes $\theta^\star$ again.
 9.  **★★ Krum in practice.** Implement Krum (code of ch. 4), then the "dimension-by-dimension" attack: show that an attacker who sends the honest mean gradient plus an alternating $\pm\delta$ per coordinate traps the coordinate-wise median but not (immediately) Krum; discuss.
 10. **★★ Composition.** Prove Theorem 5.3 in the case of three nested mechanisms, then compute the total budget of 100 queries that are $\varepsilon_0$-DP under simple composition; comment on the gap with advanced composition ($\sim\sqrt T$).
 11. **★★ Chinchilla on paper.** Redo the derivation of Theorem 7.2 with $\alpha = 0.34$, $\beta = 0.28$: compute the exponents of $N^\star$ and $D^\star$ in $C$.
 
     For $C = 10^{23}$ FLOPs, deduce an order of magnitude of $N^\star$ (with the constants of the paper: $A \approx 406$, $B \approx 410$) and the tokens/parameters ratio.
-12. **★★★ Research project (the official assessment).** Choose one open question of chapters 2 to 7 — for instance robust aggregation when honest clients are heterogeneous (Theorem 3.2 meets Algorithm 4.3), DP-SGD for federated LoRA adapters, or compression with error feedback in both directions.
+12. **★★★ Research project.** Choose one open question of chapters 2 to 7 — for instance robust aggregation when honest clients are heterogeneous (Theorem 3.2 meets Algorithm 4.3), DP-SGD for federated LoRA adapters, or compression with error feedback in both directions.
 
     Reproduce the baseline result of the reference paper on a small benchmark, propose one modification, and report both what the theory of the course predicts and what you observe. Chapter 8 lists leads from the instructors' own work.
+
+    The format (a research project assessed on its presentation and report) is the assessment text shown in the MScT IoT section of the SynapseS sheet; the LLGA section of the sheet is empty. A possible grading, and four candidate topics, are proposed in [Projects and assessment](#projects).
 
 ::: note
 [Solutions — exercises 1, 2, 3, 4, 6, 10, 11]{.tag}
@@ -1102,6 +1140,167 @@ D^\star \approx 1.1 \times 10^{12} \ \text{tokens}, \qquad N^\star \approx 1.5 \
 $$
 The ratio $D^\star/N^\star$ comes out between 20 and 80 depending on the fitting method of the paper (IsoFLOP vs parametric) — two figures, one single lesson: at a fixed budget, *feed the model with tokens* rather than inflating the parameters.
 :::
+
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment. The official assessment (SynapseS 2026–2027, MScT IoT section; the LLGA section of the sheet is empty) is: "final grade based on the presentation and the report of the research project prepared during the course unit". The projects below are candidate topics for the official project, to be validated by the teaching team.
+:::
+
+### A classical assessment {#projects-exam}
+
+The proposal follows the only published mode: the group research project of [Ex. 12](#ex) is the whole grade, split along the structure of the sheet (question, paper reading, report, presentation). A quiz after session 8 is formative and ungraded.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Question sheet | 10 % | one page in the form of Definition 1.1, drafted in session 2, fixed in session 9 | 1.1 and the chosen theme |
+| Paper critique | 15 % | the five-point grid of Definition 8.6, written, on one paper of sessions 10–12 | ch. 8 |
+| Project report | 50 % | 8–10 pages: reproduction of a baseline, one modification, theory against observation | ch. 0–6 and the theme |
+| Presentation | 25 % | 20 minutes per group, a reviewer group, then individual questions | ch. 0–5 |
+| Formative quiz | 0 % | 45 minutes after session 8, ungraded; questions like those below | ch. 0–5 |
+
+**Resit.** The sheet allows a resit for its other listed degrees, keeping the better of the two grades. Proposal: an individual 30-minute oral on the project and on one proof of ch. 0–5.
+
+**Sample questions.** Five questions, 20 points in total. The formative quiz uses two of them (45 minutes), and the individual questions of the presentation draw on the others. Ch. 7 (self-study) is not examined.
+
+**Q1 (4 pts) — The constant-step SGD rate.** Under (A1)–(A3) with $\eta \leq 1/(2L)$, start from the recursion of step 2 of Theorem 0.1,
+$$
+\mathbb{E}\|\theta_{t+1} - \theta^\star\|^2 \leq \mathbb{E}\|\theta_t - \theta^\star\|^2 - 2\eta(1 - \eta L)\,\mathbb{E}[f(\theta_t) - f^\star] + \eta^2\sigma^2 .
+$$
+Derive the bound on the average suboptimality, then choose $\eta$ for a horizon $T$ when $\sigma > 0$.
+
+::: proof
+[Marking points]{.tag}
+
+-   Since $\eta \leq 1/(2L)$, the factor $2\eta(1 - \eta L)$ is at least $\eta$ (1 pt).
+-   Summing over $t = 0, \dots, T-1$, the distances telescope and their sum is at most $D^2$ (1 pt).
+-   Dividing by $\eta T$ gives the bound $D^2/(\eta T) + \eta\sigma^2$ (1 pt).
+-   Balancing the two terms gives $\eta = D/(\sigma\sqrt T)$ and the bound $2\sigma D/\sqrt T$, valid while this step stays below $1/(2L)$ (1 pt). Common error: forgetting the condition on the step, which is what produces the $LD^2/T$ term.
+:::
+
+**Q2 (4 pts) — Client drift by hand.** Two clients hold the losses
+$$
+F_1(\theta) = \tfrac12\, \theta^2, \qquad F_2(\theta) = 2(\theta - 1)^2,
+$$
+that is, $a_1 = 1$, $z_1 = 0$, $a_2 = 4$, $z_2 = 1$ in the notation of Theorem 3.2. FedAvg uses exact local gradients, the step $\eta = 0.1$ and equal weights.
+
+(a) Give the minimiser $\theta^\star$ of $F = \tfrac12(F_1 + F_2)$. (b) Give the fixed point of FedAvg for $E = 5$ local steps. (c) Same question for $E = 1$, and conclude.
+
+::: proof
+[Marking points]{.tag}
+
+-   (a) $\theta^\star = \sum_k a_k z_k / \sum_k a_k = 4/5 = 0.8$ (1 pt).
+-   (b) By Theorem 3.2, $c_1 = 0.9^5 \approx 0.590$ and $c_2 = 0.6^5 \approx 0.078$, so $\theta_\infty = 0.922 / (0.410 + 0.922) \approx 0.693$, a bias of about 0.11 (2 pts).
+-   (c) With $E = 1$, $1 - c_k = \eta a_k$, so the fixed point is the curvature-weighted mean, exactly $\theta^\star = 0.8$: the drift comes from several local steps on clients of different curvatures (1 pt). Common error: averaging the local optima, $(0 + 1)/2 = 0.5$, which is the limit of very many local steps, not the answer for $E = 5$.
+:::
+
+**Q3 (4 pts) — Median against two attackers.** Seven clients send one coordinate each; the five honest values are 0.8, 1.0, 1.1, 1.2 and 1.4, and the two Byzantine clients both send 100. (a) Compute the mean, the median and the trimmed mean that removes the two largest and the two smallest values. (b) Check Theorem 4.2. (c) How far can the two attackers move the median at most, whatever they send?
+
+::: proof
+[Marking points]{.tag}
+
+-   (a) Mean $205.5/7 \approx 29.4$; median 1.2; trimmed mean of $\{1.1, 1.2, 1.4\}$, about 1.23 (1 pt for the mean and median, 1 pt for the trimmed mean).
+-   (b) The honest values lie in $[0.8, 1.4]$ with mean 1.1; the median and the trimmed mean both lie in this interval, so their gap to the honest mean is at most $1.4 - 0.8 = 0.6$, as Theorem 4.2 states (1 pt).
+-   (c) Sending both values below 0.8 makes the median 1.0, sending both above 1.4 makes it 1.2: whatever they send, the median stays between the second and the fourth smallest honest values, in $[1.0, 1.2]$, so its error against the honest mean is at most 0.1 here (1 pt). Common error: claiming that the median ignores the attackers entirely.
+:::
+
+**Q4 (4 pts) — Budgets of differential privacy.** (a) A count is released with Laplace noise for $\varepsilon = 0.1$: what is the typical error? (b) Ten such counts are released on the same data: what is the total budget under sequential composition? (c) Which noise level does the Gaussian mechanism need for a query of $\ell_2$ sensitivity 1 at $\varepsilon = 1$, $\delta = 10^{-5}$? (d) Why does DP-SGD clip every per-example gradient?
+
+::: proof
+[Marking points]{.tag}
+
+-   (a) The sensitivity is 1, so the noise is $\mathrm{Lap}(1/\varepsilon)$ with $\mathbb{E}|Z| = 1/\varepsilon = 10$: an error of about ten individuals (1 pt).
+-   (b) Theorem 5.3 adds the budgets: $10 \times 0.1 = 1$ (1 pt).
+-   (c) The condition of Theorem 5.4 (Gaussian case) gives
+    $$
+    \sigma \;\geq\; \frac{\Delta_2 \sqrt{2\ln(1.25/\delta)}}{\varepsilon} = \sqrt{2 \ln (1.25 \times 10^5)} \approx 4.84 \quad (1\ \text{pt}).
+    $$
+-   (d) Clipping to norm $C$ bounds the $\ell_2$ sensitivity of the sum of gradients (by $C$ when one example is added or removed, $2C$ when one is replaced), which is what calibrates the Gaussian noise $\sigma C$ (1 pt). Common error: saying that clipping itself brings privacy, without noise.
+:::
+
+**Q5 (4 pts) — Ring or complete graph?** Twenty workers run gossip averaging with $W = I - \gamma\mathcal{L}$ and $\gamma = 1/3$. (a) For the cycle $C_{20}$, compute $\lambda_2$ and the contraction factor per round. (b) About how many rounds divide the disagreement by 100? (c) What happens on the complete graph $K_{20}$ with $\gamma = 1/20$? (d) When is the ring still the better choice?
+
+::: proof
+[Marking points]{.tag}
+
+-   (a) From the recap box before Theorem 2.6, $\lambda_2 = 2 - 2\cos(2\pi/20) \approx 0.098$; the largest eigenvalue of $\mathcal{L}$ is 4, and $|1 - 4\gamma| = 1/3$, so the contraction factor is $1 - \gamma\lambda_2 \approx 0.967$ (1 pt).
+-   (b) $\ln 100 / (-\ln 0.967) \approx 139$ rounds (about 141 with the approximation $\ln 100/(\gamma\lambda_2)$) (1 pt).
+-   (c) $W = \tfrac{1}{20}\mathbf{1}\mathbf{1}^\top$: exact averaging in one round, but every worker talks to 19 others (1 pt).
+-   (d) When bandwidth or latency per link dominates: each ring round costs two messages per worker, so decentralised SGD (Lian et al.) can win in wall-clock time despite the factor $1/\lambda_2$ (1 pt). Common error: concluding from (b) alone that gossip on a ring is always slower.
+:::
+
+### Projects {#projects-list}
+
+Every project uses public data or a fully specified generator, runs on a laptop CPU or one free Colab T4, and needs only this module, its prerequisites and the mandatory [Machine Learning](../m1p1-machine-learning/index.html) course of the same period (logistic regression, ch. 3.1, session 5). Each card is a candidate topic for the research project and extends [Ex. 12](#ex); levels are those of the exercises, and the effort is per student.
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★★ · solo · Does the spectral gap predict decentralised training time? {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | For logistic regression on a9a with $K \in \{16, 64\}$ workers, report the number of iterations and the simulated wall-clock time for decentralised SGD to reach a suboptimality of $10^{-3}$ on ring, 2-D torus, random 4-regular and complete graphs, against the $1/\lambda_2$ prediction and against centralised all-reduce SGD (Theorem 2.2). Extends [Ex. 12](#ex) and [Ex. 7](#ex). |
+| Data | [a9a (LIBSVM)](https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html) — derived from [UCI Adult](https://archive.ics.uci.edu/dataset/2/adult), CC BY 4.0 — 32,561 training examples, 123 binary features; loading: `sklearn.datasets.load_svmlight_file("a9a")` after download. Graphs from `networkx` generators with seed 0; bandwidth model: latency 1 ms plus 10 Gbit/s per link. |
+| Chapters | [ch. 0](#ch0) (Theorem 0.1), [ch. 2](#ch2) (Theorems 2.2 and 2.6, recap box on the Laplacian, communication note); logistic regression: [Machine Learning ch. 3](../m1p1-machine-learning/index.html#ch3) (session 5) |
+| Deliverables | One notebook and a 4-page report |
+| Effort and compute | ≈ 20 h per student · laptop CPU (NumPy simulation), longest run ≤ 20 min |
+| Objectives served | O1 (optimisation theory), O4 (graph spectra), O7 (systems trade-offs) |
+| Responsible AI | Census-derived data: used only as an optimisation benchmark, with no prediction about people reported. |
+| Going further | Add staleness (Proposition 2.5) or compressed gossip (Theorem 2.3 with Proposition 2.4). |
+
+#### P2 · ★★ · solo · Robust aggregation when honest clients disagree {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | First check the predicted bias of about $0.14\,\zeta$ of the coordinate-wise median (worked example of 1.1; measured slope within 10 %), then report the test accuracy of FedAvg with the mean (no attack, baseline), the median, the trimmed mean and Krum under the "a little is enough" attack (Baruch et al., 2019) on Fashion-MNIST split across 20 clients, for Dirichlet label splits with $\alpha \in \{0.1, 1, 100\}$. Extends [Ex. 12](#ex). |
+| Data | Synthetic quadratics of 1.1, fully specified: $K = 20$, $f = 2$, $d = 10$, honest optima drawn from a Gaussian of standard deviation $\zeta \in \{0, 0.5, 1, 2\}$, seeds 0–9. [Fashion-MNIST](https://huggingface.co/datasets/zalando-datasets/fashion_mnist) — MIT licence — 70,000 grey-level images of 28 × 28 pixels, 10 classes; loading: `datasets.load_dataset("zalando-datasets/fashion_mnist")`. Model: multinomial logistic regression. |
+| Chapters | [1.1](#research-question), [ch. 3](#ch3) (Algorithm 3.1, Theorem 3.2), [ch. 4](#ch4) (Theorem 4.2, Algorithm 4.3, Proposition 4.4), [ch. 8](#ch8) (Works 8.1–8.2) |
+| Deliverables | One notebook and a 4-page report |
+| Effort and compute | ≈ 25 h per student · laptop CPU or one T4, longest run ≤ 30 min per configuration |
+| Objectives served | O8 (robustness), O9 (a hypothesis written before the experiment) |
+| Going further | Bulyan (Work 8.2), and a small CNN once the Deep Learning course (P1 ch. 4 or P2) is taken. |
+
+#### P3 · ★★ · group · Client drift on naturally partitioned data {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | Report the mean and the worst-decile client accuracy of FedAvg, FedProx, SCAFFOLD and Ditto on FEMNIST partitioned by writer, for $E \in \{1, 5, 20\}$ local steps and 3 seeds, against FedAvg with $E = 1$ (distributed SGD, Ex. 3) and centralised training. Extends [Ex. 12](#ex). |
+| Data | [FEMNIST (LEAF) on Flower Datasets](https://huggingface.co/datasets/flwrlabs/femnist) — BSD-2-Clause — 814,277 handwritten characters, 62 classes, partitioned by `writer_id`; loading: `FederatedDataset(dataset="flwrlabs/femnist", partitioners={"train": NaturalIdPartitioner(partition_by="writer_id")})` from `flwr_datasets`, at most 100 writers per run. Model: multinomial logistic regression. |
+| Chapters | [ch. 0](#ch0), [ch. 2](#ch2), [ch. 3](#ch3) (Algorithm 3.1, Theorem 3.2, Proposition 3.4, Algorithm 3.5, Proposition 3.6), [ch. 6](#ch6) (fairness across participants) |
+| Deliverables | A repository with a one-command run, an 8-page report and a 10-minute oral with individual questions |
+| Effort and compute | ≈ 20 h per student (3–4 students) · laptop CPU (Flower simulation), longest run ≤ 1 h |
+| Objectives served | O7 (federated engineering), O8 (fairness across clients), O6 (communication: cross-device learning) |
+| Responsible AI | The data are the handwriting of real writers: keep each writer's data on its client, report the worst-client accuracy as a subgroup error, never try to identify writers. |
+| Going further | Top-$k$ compression with error feedback (Proposition 2.4) on the uplink, or the Shakespeare next-character task once recurrent networks are taught (Deep Learning ch. 5). |
+
+#### P4 · ★★★ · group · Private federated pathology classification {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Report the accuracy of DP-SGD (Algorithm 5.5) inside FedAvg across 5 synthetic "hospitals" for $\varepsilon \in \{1, 2, 4, 8, \infty\}$ at $\delta = 10^{-5}$, and the advantage (true-positive minus false-positive rate) of a shadow-model membership-inference attack for each $\varepsilon$, against non-private FedAvg and against each hospital training alone. Extends [Ex. 12](#ex). |
+| Data | [PathMNIST (MedMNIST v2)](https://medmnist.com/) — CC BY 4.0 — 107,180 colon-pathology patches of 28 × 28 pixels, 9 tissue classes; loading: `pip install medmnist`, then `medmnist.PathMNIST(split="train", download=True)`; split into 5 hospitals by a Dirichlet label split with $\alpha = 0.5$, seed 0. Model: multinomial logistic regression trained with Opacus or a NumPy DP-SGD. |
+| Chapters | [ch. 3](#ch3) (cross-silo setting), [ch. 4](#ch4) (Proposition 4.5, optional), [ch. 5](#ch5) (Definition 5.1, Theorems 5.3–5.4, Algorithm 5.5, membership inference) |
+| Deliverables | A repository with a one-command run, an 8-page report and a 10-minute oral with individual questions |
+| Effort and compute | ≈ 30 h per student (3–4 students) · laptop CPU or one T4, longest run ≤ 1 h |
+| Objectives served | O6 (healthcare), O8 (privacy, with an empirical audit), O7 |
+| Specific criterion | Privacy accounting stated for every run (accountant, $\varepsilon$, $\delta$, sampling rate, number of steps) replaces the row "Question and success metric", which this card already fixes. |
+| Responsible AI | The patches come from de-identified patients (NCT-CRC-HE-100K): no clinical claim; report per-hospital accuracy as a subgroup error, and explain what a given $\varepsilon$ means for one patient. |
+| Going further | A small CNN once the Deep Learning course is taken; DP-SGD on LoRA adapters of a small language model (M2). |
+
+### End-of-year projects {#projects-capstone}
+
+On the Graph × LLM route, this module is a route component of two [Year-1 integrative projects](../m1-integrative-projects/index.html): federated training across three simulated banks, then DP-SGD, in [Y1-2](../m1-integrative-projects/index.html#y1-2) (ch. 3 and 5), and federated user factors in the recommender of [Y1-4](../m1-integrative-projects/index.html#y1-4) (ch. 3). Project P3 rehearses their federated part, and P4 the DP-SGD part of Y1-2. In Year 2, ch. 5 is the M1 background of the capstone [C7](../m2-projet-transverse/index.html#c7) (DP-LoRA fine-tuning on tickets, canary exposure and utility against $\varepsilon$).
 
 ## References {#refs}
 

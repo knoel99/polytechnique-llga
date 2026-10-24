@@ -52,6 +52,7 @@ format:
 -   [8. The signal for modern ML](#ch8)
 -   [9. The teacher's research: from signals to optimal transport](#ch9)
 -   [Exercises](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -1174,8 +1175,28 @@ $$
     $$
     h \leftarrow \sigma(\tilde D^{-1/2}\tilde A \tilde D^{-1/2} h W)
     $$
-    is a convolution in the spectral sense — the Kipf & Welling filter is a degree-1 polynomial of the Laplacian; expanded in the Graph ML module.
--   **Positional encodings**: the sine/cosine of transformers ($\mathrm{PE}(p, 2i) = \sin(p/10000^{2i/d})$…) = Fourier bases; positional encodings on graphs (LapEig) reuse the eigenvectors of the Laplacian — Fourier again, see the Graph ML module.
+    is a convolution in the spectral sense — the Kipf & Welling filter is a degree-1 polynomial of the Laplacian (box below, with $\tilde A = A + I$; developed in [Graph ML ch. 4](../m1p2-graph-ml/index.html#ch4), Period 2).
+-   **Positional encodings**: the sine/cosine of transformers ($\mathrm{PE}(p, 2i) = \sin(p/10000^{2i/d})$…) = Fourier bases; positional encodings on graphs (LapEig) reuse the eigenvectors of the Laplacian — Fourier again (box below).
+:::
+
+::: note
+[Background — Fourier on a graph]{.tag}
+
+A signal can also live on the nodes of a graph instead of a time axis: one speed per road sensor, with a weight $a_{ij} \geq 0$ on each link. With the adjacency matrix $A$ and the degree matrix $D$ (the row sums of $A$ on the diagonal), the **graph Laplacian** is $L = D - A$, and
+$$
+x^\top L\,x = \sum_{\text{edges } \{i,j\}} a_{ij}\,(x_i - x_j)^2 \;\geq\; 0 .
+$$
+
+So $L$ is symmetric positive semidefinite. Its orthonormal eigenvectors $u_k$, with eigenvalues $0 = \lambda_1 \leq \dots \leq \lambda_n$, play the role of the complex exponentials: since $u_k^\top L u_k = \lambda_k$, a small $\lambda_k$ is a signal that varies slowly across the edges, a *low graph frequency*.
+
+On a path of three nodes the eigenvalues are $0, 1, 3$, with eigenvectors proportional to $(1, 1, 1)$, $(1, 0, -1)$ and $(1, -2, 1)$.
+
+The **graph Fourier transform** is $\hat x = U^\top x$ with $U = [u_1, \dots, u_n]$, and a graph filter multiplies each coefficient by a gain, as the frequency response does in ch. 1:
+$$
+y = g(L)\,x = U\,\mathrm{diag}\big(g(\lambda_1), \dots, g(\lambda_n)\big)\,U^\top x .
+$$
+
+The low-pass gain $g(\lambda) = 1/(1 + \tau\lambda)$ minimizes $\|y - x\|^2 + \tau\, y^\top L y$: it is the Wiener filter of ch. 7 for unit white noise and a signal whose graph spectrum is $1/(\tau\lambda)$. A polynomial gain $\sum_{k \leq K} \theta_k \lambda^k$ needs no eigenvectors and mixes each node with its $K$-hop neighbours only; the Kipf & Welling layer is $g(\lambda) = 1 - \lambda$ for the normalized Laplacian of the graph with self-loops.
 :::
 
 ::: note
@@ -1328,6 +1349,168 @@ One "transports" the distribution of the spectra of one half toward the other: t
 
     Welch: Hann window (first lobe −31 dB, decay −18 dB/octave) ⇒ the leakage of the 50 Hz line falls below −60 dB; $L \approx 2N/1024$ segments ⇒ the standard deviation of the estimator divided by $\sqrt{L}$: the line at 80 Hz exceeds the detection threshold. Code: `scipy.signal.welch` as in ch. 7.
 12. **★★★ Project — denoising and spectral loss.** Denoise a recording (white noise added): spectrogram → time-frequency masking (attenuate the cells below an energy threshold) → reconstruction by ISTFT; SNR before/after, musical artifacts. Then compare the *distributions* of original/denoised spectrograms by Gaussian $W_2$ (formula of ch. 8, POT: `ot.gaussian.wass2`) — direct preparation of the M1P2 module.
+
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+The official assessment (SynapseS 2026–2027, description of the sheet, quoted in the fiche) is: "Lab reports (40%) and a final theoretical and practical written exam (60%)". The LLGA section of the sheet displays no modality.
+The projects below are optional practice, ungraded unless the teaching team decides otherwise.
+:::
+
+### A classical assessment {#projects-exam}
+
+This proposal keeps the official split. The lab reports are the four labs of the session plan, and the written exam has a theoretical part and a practical part, as the sheet says.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Lab reports | 40 % | four notebooks with a 2-page report each, 10 % each | session 2 (generating and filtering an audio signal), session 8 (spectrogram of a chirp), session 9 (AR(1) noise and its spectrum), session 12 (Ex. 12, denoising by masking) |
+| Written exam | 60 % | 3 h, no documents, one handwritten A4 sheet; part A derivations (35 % of the paper), part B hand computations (35 %), part C practical reading of plots (30 %) | ch. 0–8 (ch. 9 is self-study) |
+
+**Resit.** A 3 h written exam of the same format replaces the exam grade; the lab grade is kept.
+
+**Sample questions.** Five questions of 4 points each (20 points) form a 1 h 30 paper that mixes parts A, B and C; the full exam adds longer derivations of the same kind.
+
+**Q1 (4 pts) — Stability of a recursive filter.** A digital filter is defined by
+$$
+y_n = -0.5\,y_{n-1} + x_n .
+$$
+Give its transfer function, its pole and its impulse response. Prove that it is BIBO stable. Compute the gain at $\nu = 0$ and at $\nu = \tfrac12$, and say whether the filter is low-pass or high-pass.
+
+::: proof
+[Marking points]{.tag}
+
+- $H(z) = 1/(1 + 0.5\,z^{-1})$, single pole at $z = -0.5$ (1 pt).
+- Geometric expansion for $|z| > 0.5$: $h_n = (-0.5)^n$ for $n \geq 0$, and $0$ before (1 pt).
+- $\sum_n |h_n| = \sum_n 0.5^n = 2 < \infty$, hence BIBO stable by Theorem 1.3, as Theorem 5.5 predicts for a pole inside the unit disk (1 pt).
+- $|H(0)| = 1/1.5 \approx 0.67$ and $|H(\tfrac12)| = 1/|1 - 0.5| = 2$: the filter amplifies the fast alternations, it is high-pass (1 pt). Common error: calling it low-pass because $|a| < 1$; stability depends on $|a|$, the type of filter on the sign of $a$.
+:::
+
+**Q2 (4 pts) — A 4-point DFT and a circular convolution.** Take $x = (1, 1, 0, 0)$ and $h = (1, -1, 0, 0)$. Compute the DFT of $x$ and check Parseval's identity. Compute the circular convolution $y = x \circledast h$ directly, then check that its DFT is the product of the two DFTs.
+
+::: proof
+[Marking points]{.tag}
+
+- With $\omega = e^{-i\pi/2} = -i$: $X = (2,\ 1 - i,\ 0,\ 1 + i)$ (1.5 pts).
+- Parseval: $\sum_n |x_n|^2 = 2$ and $\tfrac14(4 + 2 + 0 + 2) = 2$ (0.5 pt).
+- $y_n = \sum_m x_m h_{(n-m) \bmod 4}$ gives $y = (1, 0, -1, 0)$ (1 pt).
+- $H = (0,\ 1 + i,\ 2,\ 1 - i)$, so $X_k H_k = (0, 2, 0, 2)$, which is the DFT of $y$ computed directly (Proposition 5.2) (1 pt). Common error: taking $\omega = +i$, which conjugates the spectrum, or forgetting the factor $1/N$ of the inverse DFT, which gives $(4, 0, -4, 0)$.
+:::
+
+**Q3 (4 pts) — Diagnosing a silent recording.** A sensor delivers
+$$
+x(t) = \sin(2\pi \cdot 1000\, t) + \sin(2\pi \cdot 7000\, t),
+$$
+sampled at $f_s = 8$ kHz without an anti-aliasing filter. Every recorded sample is zero. Explain why, say whether any processing after sampling can recover the 1 kHz component, and propose two fixes.
+
+::: proof
+[Marking points]{.tag}
+
+- Proposition 4.2: 7 kHz is seen at $|7 - 8| = 1$ kHz (1 pt).
+- At $t = n/f_s$,
+  $$
+  \sin(2\pi \cdot 7n/8) = \sin(2\pi n - 2\pi n/8) = -\sin(2\pi n/8),
+  $$
+  which cancels the 1 kHz term exactly (1 pt).
+- Nothing after sampling can help: the samples are those of the zero signal, and two different signals with the same samples cannot be told apart (end of the proof of Theorem 4.1) (1 pt).
+- Fixes: an analog low-pass filter below 4 kHz before the converter (Example 4.3), which keeps the 1 kHz component; or $f_s > 14$ kHz to keep both (1 pt). Common error: proposing a digital low-pass filter after sampling.
+:::
+
+**Q4 (4 pts) — Wiener filtering of a red noise.** The signal $X$ is the AR(1) process of chapter 7 with $\rho = 0.9$ and unit innovation variance. One observes $Y = X + V$, where the noise is white with variance 1 and uncorrelated with the signal. Compute the Wiener gain at the frequencies 0 and $\tfrac12$, and interpret.
+
+::: proof
+[Marking points]{.tag}
+
+- $S_X(\nu) = 1/|1 - 0.9\,e^{-i2\pi\nu}|^2$, so $S_X(0) = 100$ and $S_X(\tfrac12) = 1/1.9^2 \approx 0.277$; $S_V = 1$ (1 pt).
+- Wiener filter $H = S_X/(S_X + S_V)$ (1 pt).
+- $H(0) = 100/101 \approx 0.99$ and $H(\tfrac12) = 0.277/1.277 \approx 0.22$, that is about $-13$ dB (1 pt).
+- Interpretation: the filter is low-pass because the signal dominates the noise at low frequencies only; it keeps the slow variations and removes most of the fast ones, which are mostly noise (1 pt). Common error: writing $|H|^2$ or $S_X/S_V$.
+:::
+
+**Q5 (4 pts) — Reading a spectral estimate.** A recording of $N = 20\,000$ samples at $f_s = 500$ Hz is analysed by a raw periodogram and by Welch's method with Hann segments of $M = 1024$ samples and 50 % overlap. Give the bin width of each, the number $L$ of Welch segments and the relative standard deviation of each estimate. A colleague sees one periodogram bin 6 dB above its neighbours and calls it a line: comment.
+
+::: proof
+[Marking points]{.tag}
+
+- Bin widths: $f_s/N = 0.025$ Hz for the periodogram, $f_s/M \approx 0.49$ Hz for Welch (1 pt).
+- $L = \lfloor (N - M)/(M/2) \rfloor + 1 = 38$ segments (1 pt).
+- Relative standard deviation: about 100 % for the periodogram whatever $N$ (Theorem 7.5), about $1/\sqrt{38} \approx 16$ % for Welch (overlap makes the gain slightly smaller) (1 pt).
+- Under the $\chi^2_2/2$ law of the proof of Theorem 7.5, a noise bin exceeds 4 times its mean (6 dB) with probability $e^{-4} \approx 1.8$ %, so about 180 of the 10,000 bins do so by chance: not significant before a Welch estimate confirms it (1 pt). Common error: reading the periodogram as if its variance decreased with $N$.
+:::
+
+### Projects {#projects-list}
+
+Every project uses public data, a laptop CPU or one free Colab T4 GPU, and only what this module, its prerequisites and the mandatory Machine Learning course of the same period teach. Levels ★ to ★★★ are those of the exercises, and the efforts are per student (★ 8–15 h, ★★ 15–25 h, ★★★ 25–35 h).
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★ · solo · A spread-spectrum watermark in speech {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | Add a secret ±1 pseudo-random sequence to speech at a chosen embedding SNR, detect it by correlation with the key (a matched filter), and report the detection rate at a 1 % false-alarm rate, from 20 to 40 dB of embedding SNR, under low-pass filtering, resampling and added noise, against the no-attack baseline. |
+| Data | [LibriSpeech test-clean](https://www.openslr.org/12) — CC BY 4.0 — 2,620 utterances, 5.4 h, 346 MB; loading: `torchaudio.datasets.LIBRISPEECH("data", url="test-clean", download=True)` |
+| Chapters | [ch. 1](#ch1) (convolution and correlation), [ch. 4](#ch4) (resampling and aliasing), [ch. 5](#ch5) (FIR design, Example 5.6), [ch. 7](#ch7) (white noise; the detection threshold from the correlation of unmarked clips) |
+| Deliverables | notebook and 4-page report, with a short listening check on 5 clips |
+| Effort and compute | ≈ 12 h per student · laptop CPU, longest run ≤ 10 min |
+| Objectives served | O8 (provenance of audio), O7 (implementation) |
+| Responsible AI | LibriSpeech reads public-domain LibriVox audiobooks; a watermark proves the origin of a file, not the consent of the speaker, and must not be sold as a deepfake detector |
+| Going further | Shape the watermark spectrum with the Mel bands of ch. 8 to make it less audible, and compare with the learned watermarks of [Speech Technology](../m2-speech-technology/index.html) (M2). |
+
+#### P2 · ★★ · solo · ECG cleaning and beat classification across patients {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | Clean two-lead ECGs with a 60 Hz notch and a 0.5–40 Hz band-pass filter, describe each beat by RR intervals, Welch band powers and AR(4) Yule–Walker coefficients, classify the AAMI classes N, S and V with a logistic regression, and report per-class sensitivity on unseen patients against an RR-intervals-only baseline. |
+| Data | [MIT-BIH Arrhythmia Database](https://physionet.org/content/mitdb/1.0.0/) — Open Data Commons Attribution 1.0, open access without credentials — 48 half-hour records of 47 subjects at 360 Hz, about 110,000 annotated beats; loading: `wfdb.rdrecord("100", pn_dir="mitdb")` and `wfdb.rdann("100", "atr", pn_dir="mitdb")` |
+| Chapters | [ch. 1](#ch1), [ch. 4](#ch4), [ch. 5](#ch5) (FIR and IIR design, poles, Theorem 5.5), [ch. 7](#ch7) (Welch, Yule–Walker); logistic regression from [Machine Learning ch. 3](../m1p1-machine-learning/index.html#ch3) (session 5 of that course) |
+| Deliverables | notebook and 4-page report |
+| Effort and compute | ≈ 22 h per student · laptop CPU, longest run ≤ 5 min |
+| Objectives served | O6 (healthcare), O7 (implementation) |
+| Specific criterion | Replaces the protocol row: the inter-patient split of de Chazal et al. (2004), 22 training and 22 test records with the 4 paced records excluded, is required, and a random split of beats scores 0 on that row |
+| Responsible AI | Recordings from 1975–1979 at one Boston hospital, with no demographic balance: report errors per record, and make no clinical claim |
+| Going further | A 1D convolutional network on the cleaned beats ([Deep Learning ch. 4](../m1p1-deep-learning/index.html#ch4), or [Deep Learning P2](../m1p2-deep-learning-p2/index.html#dl-cnn)), with the same split. |
+
+#### P3 · ★★ · group (3–4) · Keyword spotting with a hand-built Mel front end {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | Extend [Ex. 7](#ex) into a full front end (STFT, Mel bank, log, DCT) in NumPy, check it against torchaudio (maximum absolute difference of the log-Mel features), classify 10 keywords with a logistic regression on stacked MFCCs, and report accuracy, its drop under resampling and added noise, and CPU latency per one-second clip, against the same classifier on torchaudio features. |
+| Data | [Speech Commands v2](https://www.tensorflow.org/datasets/catalog/speech_commands) — CC BY 4.0 — 105,829 one-second clips of 35 words from 2,618 speakers at 16 kHz; loading: `torchaudio.datasets.SPEECHCOMMANDS("data", download=True)` |
+| Chapters | [ch. 4](#ch4) (resampling), [ch. 6](#ch6) (Definition 6.1), [ch. 8](#ch8) (Mel and MFCC pipeline), [Ex. 7](#ex); logistic regression from [Machine Learning ch. 3](../m1p1-machine-learning/index.html#ch3) |
+| Deliverables | repository with a one-command run, 8-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 20 h per student · laptop CPU, longest run ≤ 20 min |
+| Objectives served | O5 (audio as a modality), O7 (implementation, latency) |
+| Responsible AI | Clips recorded by consenting volunteers and released under CC BY 4.0; report the spread of accuracy across speakers, and keep processing on the device for an always-listening use |
+| Going further | A small convolutional network on log-Mel images ([Deep Learning ch. 4](../m1p1-deep-learning/index.html#ch4) or [Deep Learning P2](../m1p2-deep-learning-p2/index.html#dl-cnn)) under the same latency budget. |
+
+#### P4 · ★★★ · group (3–4) · Graph low-pass imputation of traffic sensors {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Hide 20 % of the valid readings of 207 traffic sensors, impute them by graph low-pass filtering on the sensor graph (box "Fourier on a graph" of ch. 8), by a per-sensor AR predictor in time (ch. 7) and by both, and report the MAE on the hidden readings against the per-sensor mean baseline. |
+| Data | [METR-LA, DCRNN release](https://github.com/liyaguang/DCRNN) (Li et al., ICLR 2018) — research use, code under MIT; a [CSV copy on Zenodo](https://zenodo.org/records/5724362) is deposited under CC BY 4.0 — speeds of 207 Los Angeles loop detectors every 5 min, March–June 2012, 34,272 time steps (72 MB as CSV); about 8 % of the values are zeros that mark missing readings; loading: `pd.read_csv("METR-LA.csv", index_col=0)`, and the sensor graph from `adj_mx_METR-LA.pkl` (the `adj_mx.pkl` of the repository) |
+| Chapters | [ch. 5](#ch5) (filters), [ch. 7](#ch7) (Yule–Walker prediction, Wiener filter), [ch. 8](#ch8) (graph Fourier box) |
+| Deliverables | repository with a one-command run, 10-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 28 h per student · laptop CPU (the 207 × 207 eigendecomposition is instant), longest run ≤ 15 min |
+| Objectives served | O4 (signals on graphs), O6 (logistics and mobility) |
+| Specific criterion | The cutoff of the graph filter and the AR order are chosen on a validation mask disjoint from the test mask, and the frequency response is plotted against the eigenvalues (replaces the row "Correct use of the course results") |
+| Going further | A graph convolutional network on the same masks, with [Graph ML ch. 5](../m1p2-graph-ml/index.html#ch5) in Period 2. |
+
+### End-of-year projects {#projects-capstone}
+
+In Year 1, the AI-systems route adds this module as the extra component of the [integrative projects](../m1-integrative-projects/index.html#y1-1); [Y1-3](../m1-integrative-projects/index.html#y1-3) (rumour detection) uses the Welch spectrum of ch. 7 on the activity of each thread. In Year 2, the voice-assistant capstone [C4](../m2-projet-transverse/index.html#c4) and the public-agency capstone [C8](../m2-projet-transverse/index.html#c8) start from the STFT and Mel material of ch. 6 and 8 (and from the watermark of P1), developed in Speech Technology.
 
 ## References {#refs}
 

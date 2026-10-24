@@ -54,6 +54,7 @@ format:
 -   [10. Optimizing the training of networks](#ch10)
 -   [11. Course research notes — CMAP (Chamon, Dieuleveut)](#ch11)
 -   [Exercises](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -106,7 +107,11 @@ The sheet publishes no session-by-session programme and no prerequisites; its of
 
 ### Where this course fits in the program
 
-An option of period 2 of M1, outside the recommended track. Official prerequisites: not communicated (the “Prerequisites” tab of the SynapseS sheet is empty). The module assumes the foundation of the P1 [Machine Learning](../m1p1-machine-learning/index.html) course, in particular the convex analysis basics revisited in chapter 0. It directly feeds three neighboring courses: [Deep Learning (P2 variant)](../m1p2-deep-learning-p2/index.html), whose analysis of parallel training builds on the rates established here; [Emerging Subjects in ML & Collaborative Learning](../m1p1-emerging-ml/index.html), where distributed SGD extends the stochastic chapter; and [Optimization and Responsible AI for Sustainability](../m1p2-responsible-ai-sustainability/index.html), which reinvests optimization under resource constraints.
+An option of period 2 of M1, outside the recommended track. Official prerequisites: not communicated (the “Prerequisites” tab of the SynapseS sheet is empty). The module assumes the foundation of the P1 [Machine Learning](../m1p1-machine-learning/index.html) course, in particular the convex analysis basics revisited in chapter 0, and the training recipes of [Deep Learning](../m1p1-deep-learning/index.html#ch3) (ch. 3), which every student of this option took in P1. Students who took [Emerging Subjects in ML and Collaborative Learning](../m1p1-emerging-ml/index.html#ch0) in P1 have already met there the constant-step SGD bound of chapter 5.
+
+The module shares material with [Deep Learning (P2 variant)](../m1p2-deep-learning-p2/index.html), whose analysis of parallel training uses the same rates. The two courses belong to the same choose-1 group, so no student takes both, and each page is self-contained.
+
+Downstream, it serves the constrained RL of [Reinforcement Learning and Autonomous Agents](../m1p2-reinforcement-learning/index.html#ch6) (same period, Definition 6.5) and, in M2, the Adam memory budget and fine-tuning learning rates of [Large Language Models](../m2-large-language-models/index.html) and the clipped, noisy SGD of [Privacy and Uncertainty Quantification](../m2-privacy-uncertainty/index.html). The [Optimization and Responsible AI for Sustainability](../m1p2-responsible-ai-sustainability/index.html) notes, kept for reference, reinvest optimization under resource constraints.
 
 ### Course outline
 
@@ -165,7 +170,7 @@ Level 1 = foundations (reviews, definitions, first worked examples), 2 = core th
 
 :::: recap
 ::: recap-title
-L3 reminders — the essentials of convex analysis (see Machine Learning module, ch. 0; Optimal Transport module, ch. 0)
+L3 reminders — the essentials of convex analysis (see Machine Learning module, ch. 0)
 :::
 
 -   **Convexity**: $f\colon \mathbb{R}^d \to \mathbb{R}$ is convex if
@@ -440,12 +445,12 @@ kappa = 200.0
 A = np.diag([1.0, kappa])          # L = kappa, mu = 1, condition number = kappa
 grad = lambda x: A @ x
 traj = gradient_descent(grad, np.array([9.0, 9.0]), step=1.0/kappa)
-err = 0.5 * np.sum(traj**2 * np.array([1.0, kappa]), axis=1)
-print(err[-1] / err[0])   # ~ (1 - 1/kappa)**400 ~ 0.14: slow!
+err = 0.5 * traj[:, 0]**2          # error along the flat direction u (v is killed in one step)
+print(err[-1] / err[0])   # = (1 - 1/kappa)**400 ~ 0.13: slow!
 # optimal step for a quadratic: 2/(mu + L)
 traj_opt = gradient_descent(grad, np.array([9.0, 9.0]), step=2.0/(1.0+kappa))
-err_opt = 0.5 * np.sum(traj_opt**2 * np.array([1.0, kappa]), axis=1)
-print(err_opt[-1] / err_opt[0])    # ~ ((kappa-1)/(kappa+1))**400 ~ 0.02: better
+err_opt = 0.5 * traj_opt[:, 0]**2
+print(err_opt[-1] / err_opt[0])    # = ((kappa-1)/(kappa+1))**400 ~ 0.02: better
 ```
 
 ## 3. Conditioning and Nesterov acceleration {#ch3}
@@ -819,7 +824,7 @@ import numpy as np
 rng = np.random.default_rng(1)
 n, d = 20_000, 50
 X = rng.normal(size=(n, d)) / np.sqrt(d)
-y = X @ rng.normal(size=d) + 0.3*rng.normal(size=n)
+y = (X @ rng.normal(size=d) + 0.3*rng.normal(size=n) > 0).astype(float)   # labels in {0, 1}
 
 def sgd_logreg(eta, epochs=20, b=32):
     w = np.zeros(d); losses = []
@@ -834,9 +839,10 @@ def sgd_logreg(eta, epochs=20, b=32):
         losses.append(np.mean(np.logaddexp(0, -(2*y-1)*(X@w))))  # exact risk
     return losses
 
-for eta in (0.01, 0.1, 1.0):
+for eta in (0.01, 1.0, 30.0):
     print(eta, "->", sgd_logreg(eta)[-1])
-# expected: step too small = slow; too large = high plateau (eta*sigma^2 term)
+# expected: 0.01 too small = slow (loss ~0.48 after 20 epochs); 30 too large =
+# higher, noisy plateau (~0.21 vs ~0.20 at eta = 1: the eta*sigma^2 term)
 ```
 
 ### SGD without convexity: approximate stationary points
@@ -982,7 +988,7 @@ If $\|e_0\| \leq \mu/M$, the error at least halves at every step — and then de
 | convergence | global, linear/$k^2$ | local quadratic | superlinear (in practice: fast linear) |
 | scale invariance | no (suffers from $\kappa$) | yes (affine invariant) | almost |
 
-Newton is not global: far from the minimum, the direction can be bad — hence *damped Newton* (step by line search) and the "self-concordant" analysis (Nesterov–Nemirovski) which gives a globally convergent version; this is the heart of interior-point LP/QP solvers (see the Responsible AI module, ch. 4).
+Newton is not global: far from the minimum, the direction can be bad — hence *damped Newton* (step by line search) and the "self-concordant" analysis (Nesterov–Nemirovski) which gives a globally convergent version; this is the heart of interior-point LP/QP solvers (Boyd & Vandenberghe, *Convex Optimization*, ch. 11).
 :::
 
 ::: def
@@ -1087,16 +1093,16 @@ The multiplier $\lambda^\star = 1$ is also the price of the constraint: tighteni
 :::
 
 ::: ex
-[Example 8.5 — SVM: the constraint that becomes a penalty, that becomes a dual]{.tag} Hard-margin SVM (see the Machine Learning module, ch. 3): $\min \tfrac12\|w\|^2$ subject to $y_i w^\top x_i \geq 1$.
+[Example 8.5 — SVM: the constraint that becomes a penalty, that becomes a dual]{.tag} Hard-margin SVM with a bias (see the Machine Learning module, ch. 3): $\min \tfrac12\|w\|^2$ subject to $y_i (w^\top x_i + b) \geq 1$.
 
-1.  The Wolfe dual gives the box problem
+1.  The Wolfe dual is
     $$
-    \max_\alpha -\tfrac12\|X^\top(\alpha\odot y)\|^2 + \mathbf{1}^\top\alpha \quad \text{subject to} \quad \alpha \geq 0,\ \alpha \perp y
+    \max_\alpha -\tfrac12\|X^\top(\alpha\odot y)\|^2 + \mathbf{1}^\top\alpha \quad \text{subject to} \quad \alpha \geq 0,\ \alpha \perp y ,
     $$
-    — a projection onto a simplex: projected descent of theorem 8.3.
+    the orthogonality coming from the bias. The feasible set is a polyhedral cone cut by a hyperplane, and projecting onto it is cheap: $\alpha = (v - \nu y)_+$, with the scalar $\nu$ found by a one-dimensional search. Projected descent (theorem 8.3) applies; the soft margin only adds the box $\alpha \leq C$.
 2.  The regularized primal (hinge):
     $$
-    \min \tfrac1n\sum \max(0, 1 - y_i w^\top x_i) + \lambda\|w\|^2
+    \min \tfrac1n\sum \max\big(0, 1 - y_i (w^\top x_i + b)\big) + \lambda\|w\|^2
     $$
     is a special case of the $f + g$ form of ch. 4 — this time with a non-smooth $f$, solved by subgradient or by duality (SVRG shines there too).
 
@@ -1279,7 +1285,7 @@ AdamW (Loshchilov–Hutter, 2019) corrects the weight-decay interaction — weig
 2.  *local PL inequality*: along trajectories, an analogue of the Polyak–Łojasiewicz condition (ch. 2) often holds empirically, which restores local linear convergence "as if";
 3.  *SGD noise*: the stationary regime (prop. 5.4) sweeps narrow passes and selects flat minima that generalize better.
 
-None of the three is a general theorem — this is precisely the research frontier of the field (and the angle of attack of the Deep Learning P2 module for the efficiency part, see Deep Learning P2 module, ch. 8).
+None of the three is a general theorem — this is precisely the research frontier of the field. For the efficiency side, chapter 8 of the Deep Learning P2 notes, an alternative to this module in the same choose-1 group, is optional reading.
 :::
 
 ::: note
@@ -1415,6 +1421,169 @@ Proposed cross-cutting reading: connect ch. 5 to the Emerging ML module (ch. 0, 
 
     Conclude on the superiority of the multiplier (which "remembers" the constraint) over the penalty (which forgets it).
 
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+
+The official assessment (SynapseS 2026–2027, fiche row "Official sheet", stated for the LLGA track) is: "written final exam without calculator, one handwritten A4 sheet allowed and to be handed in with the exam (numerical grade out of 20, resit allowed)".
+
+The projects below are optional practice, ungraded unless the teaching team decides otherwise.
+:::
+
+### A classical assessment {#projects-exam}
+
+The sheet allows only the written exam, so the whole grade rests on it; labs and projects prepare it. The internal structure of the paper below is ours.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Written final exam | 100 % | 3 h, no calculator, one handwritten A4 sheet handed in with the copy; Part A (8 pts): two proofs among Theorems 2.2, 2.3, 4.4, 5.2 (constant step) and 7.1; Part B (7 pts): computations with closed forms; Part C (5 pts): short interpretation and diagnosis questions | ch. 0–10 (in class) |
+| Labs, exercises and projects | 0 % (formative) | the labs of sessions 4 and 11, the exercises, the projects below; a mock exam in session 12 trains the A4 sheet | sessions 1–12 |
+
+**Resit.** A written exam of the same format, as the sheet allows.
+
+**Sample questions.** Five questions worth 20 points form a 3-hour paper. Without a calculator, the paper gives $\ln 10 \approx 2.3$.
+
+**Q1 (5 pts) — Linear convergence under strong convexity.** Let $f$ be $\mu$-strongly convex and $L$-smooth, and run gradient descent with step $1/L$. Prove that
+$$
+f(x_{k+1}) - f^\star \leq \Big(1 - \frac{\mu}{L}\Big)\big(f(x_k) - f^\star\big),
+$$
+and deduce a bound on $f(x_k) - f^\star$ in terms of $\kappa = L/\mu$.
+
+::: proof
+[Marking points]{.tag}
+
+-   Minimising over $x$ the quadratic lower bound given by strong convexity yields the Polyak–Łojasiewicz inequality $\|\nabla f(x)\|^2 \geq 2\mu\,(f(x) - f^\star)$ (1.5 pts).
+-   The descent lemma at step $1/L$ gives (1.5 pts)
+    $$
+    f(x_{k+1}) \leq f(x_k) - \frac{1}{2L}\|\nabla f(x_k)\|^2 .
+    $$
+-   Combining the two gives the factor $1 - \mu/L$ (1 pt).
+-   Iterating, with $1 - 1/\kappa \leq e^{-1/\kappa}$, gives $f(x_k) - f^\star \leq e^{-k/\kappa}\,(f(x_0) - f^\star)$ (1 pt). Common error: using the descent lemma with a step larger than $1/L$, where the constant $\tfrac12$ is lost.
+:::
+
+**Q2 (4 pts) — Counting iterations before running them.** A ridge regression has $L = 50$ and $\mu = 0.5$.
+
+(a) How many gradient-descent iterations does Theorem 2.3 require to divide $f(x_0) - f^\star$ by $10^4$? (b) And the accelerated scheme of chapter 3? (c) Above which step size does gradient descent diverge along the steepest direction?
+
+::: proof
+[Marking points]{.tag}
+
+-   $\kappa = 100$, and $e^{-k/\kappa} \leq 10^{-4}$ requires $k \geq \kappa \ln 10^4 = 100 \times 4 \times 2.3 = 920$ iterations (2 pts).
+-   Acceleration replaces $\kappa$ by $\sqrt{\kappa} = 10$: about 92 iterations (1 pt).
+-   Along the eigenvalue $L$ the error is multiplied by $|1 - tL|$, which exceeds 1 as soon as $t > 2/L = 0.04$ (1 pt). Common error: answering $1/L$, which is the safe step of the theorems, not the divergence threshold.
+:::
+
+**Q3 (4 pts) — Proximal steps by hand.** (a) Compute the proximal operator of $\lambda|\cdot|$ with $\lambda = 1$ at the points 3, −0.5 and −2. (b) Compute the proximal operator of the indicator of $[-1, 1]$ at 2.5. (c) For
+$$
+F(x) = \tfrac12 (x - 3)^2 + |x| ,
+$$
+perform one ISTA step from $x_0 = 0$ with step $t = 1$, and check that the result minimises $F$.
+
+::: proof
+[Marking points]{.tag}
+
+-   Soft thresholding $\mathrm{sign}(z)\max(|z| - 1, 0)$ gives $2$, $0$ and $-1$ (1.5 pts).
+-   The prox of an indicator is the projection: $1$ (0.5 pt).
+-   Gradient step $0 - 1 \times (0 - 3) = 3$, then soft thresholding at level $t = 1$: $x_1 = 2$ (1 pt).
+-   Optimality (Proposition 1.2): at $x = 2$, $0 \in (x - 3) + \partial|x| = \{-1 + 1\}$, so $x_1$ is the minimiser (1 pt). Common error: thresholding at $\lambda$ instead of $t\lambda$.
+:::
+
+**Q4 (4 pts) — Multipliers and saddle points.** (a) Solve $\min \tfrac12 x^2$ subject to $x \geq 2$ by duality: dual function, optimal multiplier, absence of duality gap, the Uzawa update and its convergence condition, and the meaning of the multiplier. (b) On the bilinear game $\mathcal{L}(x, y) = xy$ with step $\eta = 0.5$, by which factor does each method multiply $x_k^2 + y_k^2$: gradient descent–ascent, extragradient?
+
+::: proof
+[Marking points]{.tag}
+
+-   The Lagrangian $\tfrac12 x^2 + \lambda(2 - x)$ is minimised at $x(\lambda) = \lambda$, so $d(\lambda) = 2\lambda - \tfrac12\lambda^2$, maximised at $\lambda^\star = 2$ with $d(\lambda^\star) = 2 = f(x^\star)$: no gap (1 pt).
+-   Uzawa: $\lambda_{k+1} = [(1 - \rho)\lambda_k + 2\rho]_+$; the error is multiplied by $|1 - \rho|$, so it converges for $0 < \rho < 2$ (1 pt).
+-   Price of the constraint: requiring $x \geq 2 + \delta$ raises the optimal value by about $\lambda^\star \delta = 2\delta$ (0.5 pt).
+-   Gradient descent–ascent: factor $1 + \eta^2 = 1.25$, the iterates spiral out; extragradient: factor $1 - \eta^2 + \eta^4 = 0.8125$, they converge (1.5 pts). Common error: concluding that a smaller step saves gradient descent–ascent.
+:::
+
+**Q5 (3 pts) — Reading training runs.** (a) Why does an $\ell_2$ penalty added to the gradient of Adam not act as the weight decay of AdamW? (b) What happens to the AdaGrad iterates if the loss is multiplied by 100? (c) A training loss decreases for 200 steps, then oscillates and becomes NaN: give the first two checks.
+
+::: proof
+[Marking points]{.tag}
+
+-   In Adam the penalty gradient is divided by $\sqrt{\hat v_k}$, so weights with large past gradients are decayed less; AdamW applies the decay as a separate proximal step on $\tfrac{\lambda}{2}\|x\|^2$ (Definition 10.1), the same for every weight (1 pt).
+-   The iterates do not change, up to $\varepsilon$: the steps are scale-free (Example 10.5) (1 pt).
+-   A learning rate above the local stability threshold (divide it by 10) and a missing warmup; then gradient clipping (1 pt). Common error: blaming overfitting, which does not produce NaN.
+:::
+
+### Projects {#projects-list}
+
+Every project uses public data, runs on a laptop CPU or one free Colab T4, and needs only this module and its prerequisites (Machine Learning, Deep Learning in P1). Levels ★, ★★ and ★★★ are those of the exercises, every effort is given per student, and, because the official assessment is the written exam alone, the grid below is a formative feedback grid.
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★ · solo · Sparse biomarkers: ISTA, FISTA and restart on gene-expression data {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | Fit an $\ell_1$-regularised logistic regression on leukaemia gene-expression profiles with ISTA, FISTA and FISTA with adaptive restart. Report the empirical slopes of the suboptimality against $1/k$ and $1/k^2$ (Theorem 4.4), the number of iterations to reach $10^{-6}$ against the subgradient method (Theorem 4.6), and the stability of the selected genes (Jaccard index over 20 bootstrap resamples). |
+| Data | [LIBSVM leu](https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html#leu) — the normalised version of Golub et al. (1999), distributed freely for research — 38 training and 34 test patients, 7,129 genes; loading: `sklearn.datasets.load_svmlight_file("leu")` after downloading `leu.bz2` |
+| Chapters | [ch. 1](#ch1) (subdifferential, Example 1.4), [ch. 4](#ch4) (Definition 4.3, Theorems 4.4 and 4.6, Example 4.5), [Exercise 2](#ex) |
+| Deliverables | notebook and 4-page report |
+| Effort and compute | ≈ 12 h per student · laptop CPU, longest run ≤ 5 min |
+| Objectives served | O1 (rates checked against the theory), O6 (health and biology) |
+| Responsible AI | Patient data released by the original study for research; with 72 patients no clinical claim is possible, and the instability of the selected genes is a result to report |
+| Going further | L-BFGS on a smoothed version of the problem (ch. 7) at equal time |
+
+#### P2 · ★★ · solo · Variance reduction on sparse text {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | For $\ell_2$-regularised logistic regression on sparse bag-of-words features, count the gradient evaluations needed to reach a relative suboptimality of $10^{-6}$ with SGD (decreasing steps), SAGA, SVRG and AdaGrad. Compare them with the $(n + \kappa)\log(1/\varepsilon)$ prediction of Theorem 6.3 and with full-batch gradient descent, which needs about $n\kappa \log(1/\varepsilon)$, as the regularisation (hence $\kappa$) varies. |
+| Data | [LIBSVM rcv1.binary and news20.binary](https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html) — research use (derived from RCV1-v2, Lewis et al. 2004, and from 20 Newsgroups) — 20,242 documents × 47,236 features and 19,996 × 1,355,191, sparse; loading: `sklearn.datasets.load_svmlight_file("rcv1_train.binary")` |
+| Chapters | [ch. 5](#ch5) (Theorem 5.2), [ch. 6](#ch6) (Definitions 6.1–6.2, Theorem 6.3), [ch. 10](#ch10) (Definition 10.3, Example 10.5), [Exercise 7](#ex) |
+| Deliverables | notebook and 4-page report |
+| Effort and compute | ≈ 20 h per student · laptop CPU, longest run ≤ 20 min |
+| Objectives served | O1 (complexity theory), O7 (large sparse data) |
+| Specific criterion | Every curve against gradient evaluations, not epochs or seconds, with the theoretical slope overlaid (replaces "Protocol") |
+| Going further | Sampling the examples in proportion to their smoothness constants |
+
+#### P3 · ★★ · group · Fairness-constrained logistic regression {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | Train an income classifier under the constraint "demographic parity gap ≤ 0.05", the gap being the difference of positive-prediction rates between two groups. Compare the multiplier method (Uzawa, then gradient descent–ascent) with the quadratic penalty (Proposition 8.2): accuracy, violation of the constraint on train and test over 3 seeds, and the multiplier read as the price of fairness (Example 8.4), against unconstrained logistic regression. |
+| Data | [Folktables](https://pypi.org/project/folktables/) ACSIncome — MIT package over the public microdata of the US Census American Community Survey — California 2018, 195,665 adults, 10 features; loading: `ACSDataSource(survey_year="2018", horizon="1-Year", survey="person").get_data(states=["CA"], download=True)`, then `ACSIncome.df_to_numpy(...)` |
+| Chapters | [ch. 0](#ch0) (duality), [ch. 8](#ch8) (Definitions 8.1 and 8.6, Proposition 8.2, Example 8.4), [Exercise 9](#ex); the empirical duality gap of ch. 11 for the train–test comparison |
+| Deliverables | repository with one-command run, 8-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 20 h per student · laptop CPU, longest run ≤ 15 min |
+| Objectives served | O8 (fairness), O6 (public institutions), O1 (duality in practice) |
+| Specific criterion | The constraint is smoothed for training (gap of mean predicted probabilities) and evaluated on hard decisions on the test set; both gaps are reported and the difference is discussed (replaces "Results and analysis") |
+| Responsible AI | Census microdata are public but describe real people: report errors per group, explain why demographic parity can hide unequal error rates, and draw no individual-level conclusion |
+| Going further | A constraint on equalised odds, and the transfer of the constraint from California to Texas |
+
+#### P4 · ★★ · group · Optimisers for LoRA fine-tuning {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Fine-tune GPT-2 small with LoRA for review sentiment and compare AdamW, SGD with momentum and AdaGrad: test accuracy over 3 seeds, sensitivity to the learning rate by random search over a log-uniform range (ch. 9), and a warmup ablation. Baseline: logistic regression on frozen GPT-2 features, a convex problem whose rates the module proves. |
+| Data | [Amazon polarity](https://huggingface.co/datasets/fancyzhx/amazon_polarity) — Apache 2.0 as tagged on the Hugging Face Hub — 3.6M training and 400,000 test reviews, subsampled to 20,000 and 5,000 (seed 0); loading: `load_dataset("fancyzhx/amazon_polarity", split="train", streaming=True)`; model [GPT-2 small](https://huggingface.co/openai-community/gpt2) (MIT) with [PEFT](https://huggingface.co/docs/peft/index) |
+| Chapters | [ch. 3](#ch3) (momentum), [ch. 5](#ch5) (the plateau of Theorem 5.2), [ch. 9](#ch9) (random search), [ch. 10](#ch10) (Definitions 10.1 and 10.3, the schedule note); prerequisite: LoRA in [Deep Learning ch. 7](../m1p1-deep-learning/index.html#ch7) |
+| Deliverables | repository with one-command run, 8-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 20 h per student · free Colab T4, longest run ≤ 30 min |
+| Objectives served | O3 (LLM fine-tuning), O7 (training engineering) |
+| Responsible AI | Reviews are user-generated text: no attempt to identify authors; report the error by review length, where sentiment models often fail |
+| Going further | Batch-size scaling and the limits of the linear rule (ch. 10) |
+
+### End-of-year projects {#projects-capstone}
+
+No Year-1 integrative project or Year-2 capstone requires this module, which is one option of the P2 choose-1 group. Students who took it can bring the multipliers of chapter 8 to the driver-workload fairness of [Y1-5](../m1-integrative-projects/index.html#y1-5) (a constraint on route lengths) and to the Pareto front of molecular objectives of [C3](../m2-projet-transverse/index.html#c3), and the analysis of clipped, noisy SGD (chapter 5) to the differentially private fine-tuning of [C7](../m2-projet-transverse/index.html#c7).
+
 ## References {#refs}
 
 -   Y. Nesterov, *Introductory Lectures on Convex Optimization: A Basic Course*, Kluwer, 2004 — *the* reference for ch. 2–3 (lower bounds, acceleration).
@@ -1428,6 +1597,7 @@ Proposed cross-cutting reading: connect ch. 5 to the Emerging ML module (ch. 0, 
 -   A. Defazio, F. Bach, S. Lacoste-Julien, [SAGA: A Fast Incremental Gradient Method with Support for Non-Strongly Convex Composite Objectives](https://arxiv.org/abs/1407.0202), NeurIPS 2014.
 -   B. O'Donoghue, E. Candès, [Adaptive Restart for Accelerated Gradient Schemes](https://arxiv.org/abs/1204.1438), Foundations of Computational Mathematics, 2015.
 -   J. Nocedal, S. Wright, *Numerical Optimization*, 2nd ed., Springer, 2006 — Newton, BFGS, L-BFGS (ch. 7).
+-   S. Boyd, L. Vandenberghe, [Convex Optimization](https://web.stanford.edu/~boyd/cvxbook/), Cambridge University Press, 2004 — interior-point methods (its ch. 11), cited in ch. 7.
 -   D. P. Kingma, J. Ba, [Adam: A Method for Stochastic Optimization](https://arxiv.org/abs/1412.6980), ICLR 2015.
 -   I. Loshchilov, F. Hutter, [Decoupled Weight Decay Regularization](https://arxiv.org/abs/1711.05101) (AdamW), ICLR 2019.
 -   Z. You, I. Gitman, B. Ginsburg, [Large Batch Training of Convolutional Networks](https://arxiv.org/abs/1708.03888) (LARS), 2017.

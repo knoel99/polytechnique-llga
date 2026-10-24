@@ -138,12 +138,13 @@ When a section is weak, reproduce its numerical example, run the code, and then 
 -   [8. Bayesian statistics](#ch8)
     -   [Credible interval vs confidence interval](#credible-vs-confidence)
 -   [9. From statistics to machine learning](#ch9)
+    -   [Empirical risk minimization](#erm)
+    -   [Likelihood to cross-entropy, entropy and KL](#likelihood-cross-entropy)
+-   [10. Missing data: mechanisms, baselines and research](#ch10)
     -   [Missingness mechanisms](#missingness)
     -   [Selected research](#missing-data-research)
--   [10. Missing data: mechanisms, baselines and research](#ch10)
-    -   [Empirical risk minimization](#erm)
-    -   [Likelihood to cross-entropy](#likelihood-cross-entropy)
 -   [Exercises](#ex)
+-   [Projects and assessment](#projects)
 -   [Exit checkpoint and connections](#exit)
     -   [Graph × LLM transfer check](#exit-checkpoint)
     -   [Where to go next—and what remains](#connections)
@@ -1378,6 +1379,12 @@ print(f"F = {F:.3f}, p = {p:.4f}")
     \mathbb{P}(\text{at least one false positive})=1-0.95^{20}\approx64\%.
     $$
     **Bonferroni** tests each of $m$ hypotheses at $\alpha/m$ (union bound, no independence needed; conservative). **Benjamini-Hochberg** controls the false discovery rate under independence or positive dependence. Repeatedly choosing prompts, graph variants or configurations on one evaluation set is the same selection problem — a final p-value does not erase that history.
+-   **The Benjamini-Hochberg procedure.** Sort the $m$ p-values as $p_{(1)}\leq\dots\leq p_{(m)}$ and let $k$ be the largest index with
+    $$
+    p_{(k)}\leq\frac{k}{m}\,\alpha .
+    $$
+    Reject the $k$ hypotheses with the smallest p-values, or none if no index qualifies. Under the same independence or positive-dependence conditions, the expected proportion of false discoveries among the rejections is then at most $\alpha$.
+-   **Where these rules are reused.** Comparing many models, prompts or seeds in [Large Language Models ch. 9](../m2-large-language-models/index.html#ch9), and reporting errors subgroup by subgroup in [Machine Learning ch. 4](../m1p1-machine-learning/index.html#ch4), are multiple-testing problems: this section is the reference for both.
 :::
 
 ::: recap
@@ -1399,6 +1406,8 @@ y=X\beta^\star+\varepsilon,
 \beta^\star\in\mathbb{R}^p,\quad y,\varepsilon\in\mathbb{R}^n.
 $$
 $p$ counts all coefficients, intercept included. For inference, treat $X$ as fixed with full column rank, $n>p$, and $\varepsilon\sim\mathcal{N}(0,\sigma^2I_n)$; least-squares *fitting* itself needs no Gaussian noise.
+
+[Machine Learning ch. 2](../m1p1-machine-learning/index.html#ch2) teaches the same model in class, writing $\theta$ for $\beta$; it is the reference for least squares and Gauss-Markov. Read this chapter before that session: its additions are the proof of the exact Gaussian inference (theorem 7.3) and the prediction interval (proposition 7.7).
 
 ### 7.1. Least squares: the geometry of projection {#least-squares}
 
@@ -1432,21 +1441,13 @@ Hence the residual lies in $\mathrm{Im}(X)^\perp$ — the normal equations — a
 :::
 
 ::: proof
-Write a linear unbiased estimator as $\delta=Cy$, where $CX=I_p$. Set $D=C-(X^\top X)^{-1}X^\top$, so $DX=0$. Then $\delta=\hat\beta+Dy$, and
-$$
-CC^\top=(X^\top X)^{-1}+DD^\top,
-$$
-because the cross term $(X^\top X)^{-1}X^\top D^\top=(X^\top X)^{-1}(DX)^\top$ vanishes.
-
-Therefore
+*Sketch.* A linear unbiased estimator can be written $\delta=\hat\beta+Dy$ with $DX=0$. The cross term between $\hat\beta$ and $Dy$ then vanishes, so
 $$
 \mathrm{Cov}(\delta)
-=\mathrm{Cov}(\hat\beta)+\sigma^2DD^\top
-\succcurlyeq \mathrm{Cov}(\hat\beta)
-=\sigma^2(X^\top X)^{-1}.
+=\sigma^2(X^\top X)^{-1}+\sigma^2DD^\top
+\succcurlyeq \mathrm{Cov}(\hat\beta).
 $$
-
-The matrix $DD^\top$ is positive semidefinite, so every linear combination has at least as much variance under $\delta$. For Gaussian noise, the log-likelihood in $\beta$ is $-\frac1{2\sigma^2}\|y-X\beta\|^2+\text{const.}$: maximizing it is least squares. [∎]{.qed}
+The full proof, in its projection form for every combination $c^\top\beta$, is Theorem 2.3 of [Machine Learning](../m1p1-machine-learning/index.html#ch2), session 3. For Gaussian noise, the log-likelihood in $\beta$ is $-\frac1{2\sigma^2}\|y-X\beta\|^2+\text{const.}$: maximizing it is least squares. [∎]{.qed}
 :::
 
 ### 7.2. Inference on the coefficients
@@ -1698,7 +1699,7 @@ $$
 \qquad
 \hat{\mathcal{R}}_n(\theta)=\frac1n\sum_i\ell_\theta(X_i,Y_i).
 $$
-ERM minimizes the observed average hoping for low population risk (unsupervised: omit $Y$).
+ERM minimizes the observed average hoping for low population risk (unsupervised: omit $Y$). [Machine Learning ch. 1](../m1p1-machine-learning/index.html#ch1) writes the same loss as $\ell(Y,f(X))$.
 :::
 
 ::: proof
@@ -1763,6 +1764,55 @@ The simulation knows $f$ and repeats the training experiment, so it can separate
 :::
 
 ### 9.3. MLE to cross-entropy: the exact bridge {#likelihood-cross-entropy}
+
+The bridge uses three quantities that the rest of the site reuses without redefining them: entropy, cross-entropy and the Kullback-Leibler divergence. This page is their reference.
+
+::: def
+[Entropy, cross-entropy and KL divergence in one page]{.tag} Let $p$ and $q$ be probability mass functions on a finite or countable set. The **entropy** of $p$ and the **cross-entropy** from $p$ to $q$ are
+$$
+H(p)=-\sum_y p(y)\log p(y),
+\qquad
+\mathrm{CE}(p,q)=-\sum_y p(y)\log q(y).
+$$
+The **Kullback-Leibler divergence** of $q$ from $p$ is
+$$
+\mathrm{KL}(p\,\|\,q)=\sum_y p(y)\log\frac{p(y)}{q(y)},
+$$
+with the conventions $0\log0=0$ and $\mathrm{KL}=+\infty$ if $q(y)=0$ for some $y$ with $p(y)>0$. When $H(p)$ is finite, subtracting the definitions gives
+$$
+\mathrm{CE}(p,q)=H(p)+\mathrm{KL}(p\,\|\,q).
+$$
+For densities, sums become integrals: the differential entropy can then be negative, but the KL divergence keeps the properties below. Applying the definitions to $p(\cdot\mid x)$ and averaging over $X$ gives the conditional entropy $H(Y\mid X)$ and the expected KL used in theorem 9.4.
+:::
+
+::: prop
+[Gibbs inequality]{.tag} $\mathrm{KL}(p\,\|\,q)\geq0$, with equality if and only if $p=q$. KL is not symmetric, so it is not a distance.
+:::
+
+::: proof
+We use **Jensen's inequality**: for a convex function $\varphi$ and an integrable variable $Z$, $\varphi(\mathbb{E}Z)\leq\mathbb{E}\,\varphi(Z)$; if $\varphi$ is strictly convex, equality forces $Z$ to be almost surely constant.
+
+Assume $q>0$ on $S=\{y:p(y)>0\}$, otherwise the divergence is infinite. Let $Y\sim p$ and $Z=q(Y)/p(Y)$. Since $-\log$ is strictly convex,
+$$
+\mathrm{KL}(p\,\|\,q)=\mathbb{E}[-\log Z]
+\geq-\log\mathbb{E}[Z]
+=-\log\sum_{y\in S}q(y)
+\geq-\log1=0.
+$$
+Equality in Jensen forces $q=cp$ on $S$, and equality in the last step forces $q(S)=1$, hence $c=1$ and $q=p$. [∎]{.qed}
+:::
+
+::: ex
+[Example 9.3b — Two coins, both directions]{.tag} Take $p=(\tfrac12,\tfrac12)$ and $q=(\tfrac34,\tfrac14)$, in nats. Then
+$$
+\mathrm{KL}(p\,\|\,q)=\tfrac12\log\tfrac23+\tfrac12\log2=\tfrac12\log\tfrac43\approx0.144,
+\qquad
+\mathrm{KL}(q\,\|\,p)=\tfrac34\log\tfrac32+\tfrac14\log\tfrac12\approx0.131 .
+$$
+Also $H(p)=\log2\approx0.693$ and $\mathrm{CE}(p,q)\approx0.837$, which is $0.693+0.144$.
+
+The same KL appears in EM ([Machine Learning ch. 7](../m1p1-machine-learning/index.html#ch7)), in the ELBO of VAEs ([Deep Learning P1 ch. 9](../m1p1-deep-learning/index.html#ch9) or [Deep Learning P2](../m1p2-deep-learning-p2/index.html#dl-generative)), in trust-region policy updates ([Reinforcement Learning ch. 5](../m1p2-reinforcement-learning/index.html#ch5)) and in the KL penalty of LLM post-training ([Large Language Models ch. 5](../m2-large-language-models/index.html#ch5)).
+:::
 
 ::: thm
 [Theorem 9.4 — Maximizing likelihood = minimizing empirical cross-entropy]{.tag} For a conditional model $p_\theta(y\mid x)$,
@@ -2092,18 +2142,33 @@ Key takeaways — chapter 10
     iff $X$ has independent columns. Thus $X^\top X$ is positive definite and invertible. Reproduce the same result geometrically using theorem 7.1.
     :::
 
-14. **★★ Gauss-Markov in dimension 1.** In $y_i=\mu+\varepsilon_i$, with zero-mean uncorrelated errors of common variance $\sigma^2$, show that the sample mean has minimum variance among linear unbiased estimators $\sum_iw_iy_i$.
+14. **★★ Confidence interval or prediction interval?** Fit $y=\beta_0+\beta_1x$ by least squares to the five points $x=(0,1,2,3,4)$, $y=(1,3,4,6,6)$. Under the Gaussian model, give the 95% confidence interval for the mean response and the 95% prediction interval for a new observation, at $x_0=2$ and at $x_0=5$.
+
+    Which interval shrinks to a point as $n\to\infty$? The one-parameter Gauss-Markov exercise is Exercise 2 of [Machine Learning](../m1p1-machine-learning/index.html#ex).
 
     ::: sol
-    Unbiasedness requires $\sum_iw_i=1$. Cauchy-Schwarz gives
+    With $\bar x=2$, $\bar y=4$, $S_{xx}=10$ and $S_{xy}=13$, the fit is $\hat\beta_1=1.3$ and $\hat\beta_0=1.4$.
+
+    The residuals are $(-0.4,0.3,0,0.7,-0.6)$, so the residual sum of squares is $1.1$ and
     $$
-    \mathrm{Var}\Big(\sum_iw_iy_i\Big)
-    =\sigma^2\sum_iw_i^2
-    \geq\sigma^2\frac{(\sum_iw_i)^2}{n}
-    =\frac{\sigma^2}{n}
-    =\mathrm{Var}(\bar Y).
+    \hat\sigma^2=\frac{1.1}{n-p}=\frac{1.1}{3}\approx0.367,
+    \qquad
+    \hat\sigma\approx0.606,
+    \qquad
+    t_{0.975,3}\approx3.182 .
     $$
-    Equality holds iff all weights equal $1/n$. This is the one-parameter case of theorem 7.2.
+    For a simple regression, the term of proposition 7.7 is
+    $$
+    x_0^\top(X^\top X)^{-1}x_0=\frac1n+\frac{(x_0-\bar x)^2}{S_{xx}} .
+    $$
+    It equals $0.2$ at $x_0=2$ and $1.1$ at $x_0=5$.
+
+    | $x_0$ | $\hat y_0$ | 95% CI for the mean | 95% prediction interval |
+    |---|---|---|---|
+    | 2 | 4.0 | $4.0\pm0.86=[3.14,4.86]$ | $4.0\pm2.11=[1.89,6.11]$ |
+    | 5 | 7.9 | $7.9\pm2.02=[5.88,9.92]$ | $7.9\pm2.79=[5.11,10.69]$ |
+
+    Both intervals widen away from $\bar x$, and $x_0=5$ is an extrapolation outside the observed design. As $n$ grows, the confidence interval shrinks to a point, while the prediction interval keeps the individual noise term and tends to $\hat y_0\pm1.96\,\sigma$.
     :::
 
 15. **★★★ Missing data.** In a MAR setting where $X_2$ is more often missing for large $X_1$, explain why consistently estimating and imputing $\mathbb{E}[X_2\mid X_1]$ can recover $\mathbb{E}[X_2]$ but underestimate $\mathrm{Var}(X_2)$. State the required overlap or extrapolation assumption. What addition addresses the missing conditional variance?
@@ -2114,6 +2179,182 @@ Key takeaways — chapter 10
     Let $m(X_1)=\mathbb{E}[X_2\mid X_1]$. Replacing a missing value by $m(X_1)$ preserves its conditional mean and hence the marginal mean by the tower property. But it removes residual variation around that mean. Stochastic imputation adds a draw from the estimated conditional residual law; calibrated conditional variance, not arbitrary noise, is required. Proper multiple imputation also accounts for uncertainty in the fitted imputation model.
     :::
 
+
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+The official assessment (SynapseS 2026–2027, sheet `APM_51438_EP`, assessment section, reported in [Sources and scope](#sources-scope)) is: "Grade format: numeric /20 (and US letter grade). The section for the LLGA track is empty: no assessment form, resit rule or pass threshold is displayed for LLGA."
+The scheme below is one possible design consistent with the session plan.
+:::
+
+### A classical assessment {#projects-exam}
+
+The sheet displays no modality, so this proposal uses the balanced default of these notes: a written test on the four in-class sessions, one simulation notebook and one short project. If the teaching team keeps the refresher ungraded, the same three pieces can serve as self-assessment before Machine Learning.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Written test | 50 % | 2 h, no documents, one handwritten A4 sheet, basic calculator | ch. 1, 2, 4, 5 (sessions 1–4) |
+| Simulation notebook | 20 % | one reproducible notebook with 2–3 pages of comments: the coverage study of Ex. 6 or the bootstrap of section 4.1 | ch. 4, 6.1 |
+| Project | 30 % | one card of the [list below](#projects-list), solo or group | the chapters named on the card |
+
+**Resit.** One possible rule: a 2 h written test of the same format replaces the written-test mark; the notebook and project marks are kept.
+
+**Sample questions.** A sample paper has five questions for 20 points in 2 hours. Each question tests an in-class chapter and mixes a derivation, a hand computation and an interpretation.
+
+**Q1 (4 pts) — Screening with the denominator visible.** A disease has prevalence 2 %. A test has sensitivity 90 % and specificity 97 %. (a) Out of 10,000 people, give the expected numbers of true positives, false positives, false negatives and true negatives. (b) Compute the probability of disease after a positive result, then after a negative result. (c) A second test, independent of the first conditionally on disease status, is also positive. What is the probability of disease now?
+
+::: proof
+[Marking points]{.tag}
+
+-   (a) 180 true positives, 294 false positives, 20 false negatives and 9,506 true negatives (1 pt).
+-   (b) $\mathbb{P}(D\mid+)=180/474\approx0.380$ (1 pt) and $\mathbb{P}(D\mid-)=20/9{,}526\approx0.0021$ (1 pt).
+-   (c) Bayes' formula with both likelihoods squared (1 pt):
+    $$
+    \frac{0.9^2\times0.02}{0.9^2\times0.02+0.03^2\times0.98}=\frac{0.0162}{0.017082}\approx0.948 .
+    $$
+    Common error: answering (b) with the sensitivity, 0.90, which swaps $\mathbb{P}(+\mid D)$ and $\mathbb{P}(D\mid+)$.
+:::
+
+**Q2 (4 pts) — A change of variables and two inequalities.** (a) Let $X\sim\mathcal{E}(\lambda)$ and $Y=\sqrt X$. Find the density of $Y$, check that it integrates to 1, and compute $\mathbb{P}(Y\leq1)$. (b) A latency $X\geq0$ has mean 50 ms and standard deviation 10 ms. Bound $\mathbb{P}(X\geq80)$ with Markov's inequality, then with Chebyshev's. Which bound is informative, and why?
+
+::: proof
+[Marking points]{.tag}
+
+-   (a) The map is increasing on $(0,\infty)$ with $g^{-1}(y)=y^2$ and Jacobian $2y$, so theorem 2.4 gives (1 pt)
+    $$
+    f_Y(y)=2\lambda y\,e^{-\lambda y^2},\qquad y>0 .
+    $$
+    Common error: forgetting the factor $2y$.
+-   (a) The substitution $u=\lambda y^2$ gives total mass 1, and (1 pt)
+    $$
+    \mathbb{P}(Y\leq1)=\mathbb{P}(X\leq1)=1-e^{-\lambda}.
+    $$
+-   (b) Markov: $\mathbb{P}(X\geq80)\leq50/80=0.625$ (1 pt).
+-   (b) Chebyshev: $\{X\geq80\}\subseteq\{|X-50|\geq30\}$, so the bound is $100/900\approx0.111$. It is informative because it uses the variance, while Markov uses only the mean (1 pt).
+:::
+
+**Q3 (5 pts) — The CLT and the delta method for a rate.** Waiting times between requests are modelled as iid $\mathcal{E}(\lambda)$. From $n=100$ observations, $\bar x=2.5$ s.
+
+(a) State the CLT for $\bar X_n$ and give its approximate law in terms of $\lambda$. (b) For $\hat\lambda=1/\bar X_n$, use the delta method to find the asymptotic standard deviation, estimate it, and give an approximate 95 % interval for $\lambda$. (c) The 100 times come from 5 servers, 20 each, and times on one server are positively correlated. Which step fails, and is the interval too wide or too narrow?
+
+::: proof
+[Marking points]{.tag}
+
+-   (a) Here $\mu=1/\lambda$ and $\sigma^2=1/\lambda^2$, so the CLT gives (1 pt)
+    $$
+    \bar X_n\approx\mathcal{N}\big(1/\lambda,\,1/(n\lambda^2)\big).
+    $$
+-   (b) With $g(\mu)=1/\mu$ and $g'(\mu)=-1/\mu^2$, theorem 4.6 gives the asymptotic variance $\sigma^2g'(\mu)^2/n=\lambda^2/n$ (1 pt).
+-   (b) Plug-in: $\hat\lambda=0.4$ per second and standard deviation $0.4/10=0.04$ (1 pt), hence the interval (1 pt)
+    $$
+    0.4\pm1.96\times0.04=[0.32,\,0.48].
+    $$
+-   (c) The independence behind the CLT and behind $\mathrm{Var}(\bar X_n)=\sigma^2/n$ fails. Positive covariances add terms to the variance, so the interval is too narrow (1 pt). Common error: answering that $n=100$ is large enough.
+:::
+
+**Q4 (5 pts) — Bernoulli: MLE, Fisher information, Cramér-Rao.** Let $X_1,\dots,X_n$ be iid Bernoulli($p$) with $0<p<1$. (a) Derive the MLE. (b) Compute the Fisher information of one observation with both identities of theorem 5.6. (c) State the Cramér-Rao bound for unbiased estimators and show that $\hat p$ attains it. (d) A model errs on 100 of 400 independent test items: estimate its error rate and the standard error.
+
+::: proof
+[Marking points]{.tag}
+
+-   (a) $\ell(p)=k\log p+(n-k)\log(1-p)$ with $k=\sum_iX_i$; the score equation gives $\hat p=k/n$, and $\ell''<0$ confirms a maximum (1 pt).
+-   (b) With $f_p(x)=p^x(1-p)^{1-x}$, the score is $s(p)=(X-p)/\big(p(1-p)\big)$, whose variance is $1/\big(p(1-p)\big)$ (1 pt).
+-   (b) Curvature identity (1 pt):
+    $$
+    -\mathbb{E}[\partial_p^2\log f_p(X)]=\frac{\mathbb{E}X}{p^2}+\frac{1-\mathbb{E}X}{(1-p)^2}=\frac1{p(1-p)} .
+    $$
+-   (c) The bound is $1/(nI(p))=p(1-p)/n$, which is exactly $\mathrm{Var}(\hat p)$: the estimator is efficient (1 pt).
+-   (d) $\hat p=0.25$ and standard error $\sqrt{0.25\times0.75/400}\approx0.0217$ (1 pt). Common error: plugging $p=0.5$ into the standard error.
+:::
+
+**Q5 (2 pts) — How many observations do you really have?** A team reports an accuracy over $n=30$ questions with the iid standard error $\sigma/\sqrt n$. The questions come from 3 documents, 10 per document. Two questions of the same document have correlation $\rho=0.5$; questions of different documents are independent; all variances equal $\sigma^2$. Using the variance formula of the note at the end of chapter 4, by what factor is the true standard error larger?
+
+::: proof
+[Marking points]{.tag}
+
+-   There are $3\times\binom{10}{2}=135$ correlated pairs, so (1 pt)
+    $$
+    \mathrm{Var}(\bar X_n)=\frac{30\sigma^2+2\times135\times0.5\,\sigma^2}{900}=\frac{165\,\sigma^2}{900}.
+    $$
+-   The ratio to $\sigma^2/30$ is $5.5$: the standard error is $\sqrt{5.5}\approx2.35$ times larger, and the 30 questions carry about as much information as $30/5.5\approx5.5$ independent ones (1 pt). Common error: dropping the factor 2 in front of the covariance sum.
+:::
+
+### Projects {#projects-list}
+
+House rules: public data or a fully specified simulation, a laptop CPU, and only what this refresher, its working background and the Machine Learning sessions of the same period teach. Levels ★/★★/★★★ are those of the exercises, and a 12 h refresher caps the effort at 12 h per student.
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★ · solo · Base rates in screening, with three intervals {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | Report the sensitivity and specificity of a one-feature threshold test with three 95 % intervals (normal approximation, percentile bootstrap, Beta(1,1) posterior), then its positive predictive value at 1 %, 10 % and 50 % prevalence, against the baseline that reads the sample's own 37 % prevalence. |
+| Data | [Breast Cancer Wisconsin (Diagnostic)](https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic) — CC BY 4.0 — 569 tumours (212 malignant, 357 benign), 30 features; loading: `sklearn.datasets.load_breast_cancer(return_X_y=True)` |
+| Chapters | [ch. 1.3](#bayes), [ch. 4.1](#bootstrap), [ch. 6.1](#confidence-intervals), [ch. 8.1 and 8.3](#credible-vs-confidence) |
+| Deliverables | notebook + 4-page report |
+| Effort and compute | ≈ 8 h per student · laptop CPU, longest run ≤ 1 min (5,000 bootstrap resamples) |
+| Objectives served | O6 (healthcare screening), O1 (statistical foundations) |
+| Specific criterion | The threshold is chosen on one random half of the data and every interval is computed on the other half; replaces the Protocol row (25 %). |
+| Responsible AI | De-identified cytology data from one clinic, on a referred population rather than a screening one: no clinical claim, and the gap between the two prevalences is the main stated limit. |
+| Going further | Add the Wilson score interval and plot the positive predictive value against prevalence with its credible band. |
+
+#### P2 · ★★ · solo · Coverage collapse under graph dependence {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | Measure the coverage of nominal 95 % intervals for a mean when nodes of the same community share a random effect: the iid t interval of 6.1 (baseline) against a bootstrap that resamples whole communities, for within-community correlation $\rho\in\{0,0.2,0.5\}$, over 1,000 simulated datasets. |
+| Data | Fully specified simulation: [`networkx.stochastic_block_model`](https://networkx.org/documentation/stable/reference/generated/networkx.generators.community.stochastic_block_model.html) (BSD licence) with sizes `[100]*10`, edge probability 0.1 inside and 0.005 between communities, `seed=0`; node values $Y_i=\sqrt\rho\,U_{b(i)}+\sqrt{1-\rho}\,\varepsilon_i$ with $U_b,\varepsilon_i$ iid $\mathcal{N}(0,1)$, dataset $r$ drawn with `numpy.random.default_rng(r)` for $r=0,\dots,999$ |
+| Chapters | [ch. 4](#ch4) (variance of a mean of dependent terms), [ch. 4.1](#bootstrap), [ch. 6.1](#confidence-intervals), [Ex. 6](#ex) |
+| Deliverables | notebook + 4-page report |
+| Effort and compute | ≈ 8 h per student · laptop CPU, longest run ≤ 5 min |
+| Objectives served | O4 (graph-structured data), O1 (uncertainty quantification) |
+| Specific criterion | The simulated iid coverage is compared with the prediction of the design effect $1+(m-1)\rho$ for communities of size $m$, derived from the ch. 4 note; replaces the Correct-use row (25 %). |
+| Going further | Resample communities found by label propagation on the edges ([Refresher CS 7.7](../m1p1-refresher-cs/index.html#ch7)) instead of the planted ones, and measure the coverage lost to misassigned nodes. |
+
+#### P3 · ★★ · solo · A/A test with peeking on bandit logs {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | Split the impressions of a uniformly random recommender at random into two identical arms, and measure the false-positive rate of a two-proportion z-test read once at day 7 (baseline, nominal 5 %) against the same test read every day; then count the items flagged among 80 per-item comparisons with and without Benjamini-Hochberg, and with a Beta-Bernoulli decision rule. |
+| Data | [Open Bandit Dataset](https://research.zozo.com/data.html) — CC BY 4.0 — uniform-random policy, "all" campaign: 1,374,327 impressions over 7 days, 80 items, click rate 0.35 %; one 413 MB archive, CSV files read with `pandas.read_csv` |
+| Chapters | [ch. 6.2–6.3](#ch6), [ch. 6.6](#multiple-testing), [ch. 8.1–8.3](#ch8), [Ex. 7](#ex) |
+| Deliverables | notebook + 4-page report |
+| Effort and compute | ≈ 12 h per student · laptop CPU with 8 GB RAM, 200 random A/A splits in ≤ 15 min |
+| Objectives served | O6 (e-commerce, recommendation), O7 (online experimentation in industry) |
+| Responsible AI | Pseudonymous impressions released for research: no attempt to re-identify users, and the conclusions concern the testing procedure, not users or items. |
+| Going further | Plant a 10 % click-rate lift in one arm and compare the power of the daily test with a Bonferroni correction across the 7 looks. |
+
+#### P4 · ★★ · group (3–4) · Does the graph help? A paired comparison on Cora {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Compare a logistic regression on the word features $X$ (baseline) with the same model on $[X,D^{-1}AX]$, on the same test nodes: report the accuracy gain with a paired bootstrap interval, an exact binomial test on the discordant nodes, and a bootstrap that resamples communities. |
+| Data | [Cora](https://linqs.org/datasets/#cora) — public research dataset, no licence stated (cite Sen et al., 2008) — 2,708 papers, 5,278 undirected citation links, 1,433 binary word features, 7 classes; loading: [`torch_geometric.datasets.Planetoid(root, "Cora")`](https://pytorch-geometric.readthedocs.io/en/latest/generated/torch_geometric.datasets.Planetoid.html) |
+| Chapters | [ch. 3](#ch3) (binomial law), [ch. 4.1](#bootstrap), [ch. 6.2](#ch6), [ch. 6.6](#multiple-testing), [ch. 9.1](#erm); logistic regression from [Machine Learning ch. 3](../m1p1-machine-learning/index.html#ch3) (session 5); neighbour averaging from the [Refresher CS exit checkpoint](../m1p1-refresher-cs/index.html#exit); communities by label propagation ([Refresher CS 7.7](../m1p1-refresher-cs/index.html#ch7)) |
+| Deliverables | repository with one-command run + 6–8-page report + 10-minute oral with individual questions |
+| Effort and compute | ≈ 10 h per student (features, graph features and split, paired tests, clustered bootstrap: one owner each) · laptop CPU, longest run ≤ 5 min |
+| Objectives served | O4 (graph learning baseline), O5 (text features combined with a graph) |
+| Specific criterion | The split is fixed before any fit, and the neighbour average uses node features only, never labels; replaces the Protocol row (25 %). |
+| Going further | Add a two-hop average $D^{-1}AD^{-1}AX$, or repeat the study on a subgraph of ogbn-arxiv. |
+
+### End-of-year projects {#projects-capstone}
+
+No Year-1 integrative project lists this refresher as a component, yet all eight ([Y1-1](../m1-integrative-projects/index.html#y1-1) to [Y1-8](../m1-integrative-projects/index.html#y1-8)) ask for at least three seeds and intervals in week 2 and an ablation in week 5: the bootstrap of section 4.1, the paired comparison of P4 and the rules of section 6.6 are the tools. [Y1-3](../m1-integrative-projects/index.html#y1-3) evaluates leave-one-event-out, so that dependent threads of one event never sit on both sides of the split: the situation of P2.
+
+In Year 2, every capstone of the transverse project ([C1](../m2-projet-transverse/index.html#c1) to [C8](../m2-projet-transverse/index.html#c8)) is graded on quality against baselines with confidence intervals. The research questions of [C1](../m2-projet-transverse/index.html#c1) (does a knowledge-graph subgraph beat text retrieval?) and [C8](../m2-projet-transverse/index.html#c8) (does graph expansion help?) compare two systems on the same questions, the paired design of P4.
 
 ## Exit checkpoint and connections {#exit}
 
@@ -2151,10 +2392,10 @@ Before starting Machine Learning — after the four sessions and the self-study 
 | Destination | What this page supplies | What remains |
 |---|---|---|
 | [Machine Learning](../m1p1-machine-learning/index.html) | Empirical risk, likelihood losses, bias/variance, regression, uncertainty interpretation. | Validation, regularization, optimization, model selection — a pointwise CLT is not a generalization guarantee. |
-| [Deep Learning](../m1p1-deep-learning/index.html) (after ML) | Conditional log-likelihood, cross-entropy, random-vector notation, optional Bayesian foundations. | Batched derivatives, chain rule, representation learning — the NN refresher is entry preparation, not DL equivalence. |
-| [Graph ML via the catalogue](../../index.html) | Independence checks, observation mechanisms, absent ≠ negative evidence. | Relational baselines, message passing, transductive/inductive protocols. |
-| [Probability / Monte Carlo](../m1p1-probability-monte-carlo/index.html) | Probability spaces, convergence, elementary simulation. | Measure-theoretic depth, dependent sampling, as needed. |
-| [Statistical Learning Theory](../m1p1-statistical-learning-theory/index.html) | LLN/CLT, inequalities, pointwise vs uniform. | Finite-sample concentration and complexity bounds. |
+| Deep Learning, in [P1](../m1p1-deep-learning/index.html) or in [P2](../m1p2-deep-learning-p2/index.html) (after ML) | Conditional log-likelihood, cross-entropy and KL, random-vector notation, optional Bayesian foundations. | Batched derivatives, chain rule, representation learning — the [NN refresher](../m1p1-refresher-neural-nets/index.html) is entry preparation, not DL equivalence. |
+| [Graph ML](../m1p2-graph-ml/index.html) (P2) | Independence checks, observation mechanisms, absent ≠ negative evidence. | Relational baselines, message passing, transductive/inductive protocols. |
+| [Probability / Monte Carlo](../m1p1-probability-monte-carlo/index.html) — notes kept for reference, not offered in the 2026–2027 LLGA lists | Probability spaces, convergence, elementary simulation. | Measure-theoretic depth, dependent sampling, as needed; Markov chains are taught in [Reinforcement Learning ch. 0](../m1p2-reinforcement-learning/index.html#ch0). |
+| [Statistical Learning Theory](../m1p1-statistical-learning-theory/index.html) — notes kept for reference, not offered in the 2026–2027 LLGA lists | LLN/CLT, inequalities, pointwise vs uniform. | Finite-sample concentration and complexity bounds; the offered treatment is [Machine Learning ch. 0 and ch. 8](../m1p1-machine-learning/index.html#ch8). |
 
 Main route: **refreshers as needed → Machine Learning → Deep Learning**, then the graph and language branches. Bayesian inference, missing-data research and further probability are selective extensions, not universal prerequisites. Return to the [reading route](#reading-route) when a module exposes a gap.
 
