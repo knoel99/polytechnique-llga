@@ -727,6 +727,160 @@ These questions feed the master's internship/lab topics.
 7.  **★★★ Symmetric benchmark (ch. 5-6-9).** On 8-10 OpenML datasets (Grinsztajn suite): XGBoost/LightGBM/CatBoost with an equal tuning budget (Optuna, 100 trials), FT-Transformer (tokenizer + periodic embeddings), TabPFN. Same folds, 5 seeds, mean ± standard deviation, paired test, total time reported — write the "TabZilla-style" conclusion (ch. 9) then the decision guide (ch. 10) on these data.
 8.  **★★★ Prior and in-context (ch. 6).** Generate tables from random SCMs (def. 6.2 — DAG skeleton, piecewise mechanisms, marginal transformations); train a small PFN transformer to predict $p(y \mid x, \mathcal{D})$; show in-context learning (performance curve vs context size) and test sensitivity to the prior (Gaussian vs causal prior — when does the PFN fail?).
 
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+The official assessment is not published (SynapseS 2026–2027; fiche of this page, row "Code"): "Not published — the module is announced in period 1 by the master's brochure; the 2026-2027 SynapseS course description has not been published (the S3/S4 tracks of the catalog are currently empty)." The fiche has no assessment row.
+The scheme below is one possible design consistent with the session plan.
+:::
+
+### A classical assessment {#projects-exam}
+
+Since no mode is published, this design follows the balanced default of these notes, with a larger project share because the module is built around a benchmark: a short written exam, the central lab and one project.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Written exam | 40 % | 1.5 h, no documents, one handwritten A4 sheet | ch. 0–10 |
+| Graded lab | 20 % | Ex. 2 (target-encoding leakage): auto-checked notebook and 1-page note | session 4 |
+| Project | 40 % | Ex. 7 (symmetric benchmark) or one card of the [list below](#projects-list); 4-page report and 10-minute oral | sessions 5–8 |
+
+**Resit.** A 1.5 h written exam on ch. 0–10 replaces the exam component; the lab and project marks are kept, and a missing project can be handed in once more and graded on the same grid.
+
+**Sample questions.** Five questions of 4 points each, a 20-point paper of 1.5 h.
+
+**Q1 (4 pts) — XGBoost by hand.** Squared loss $L(y, a) = \tfrac12 (y - a)^2$, current prediction 0 for four examples sorted by a feature, with targets 1, 1, 5, 5; regularization $\lambda = 1$ and $\gamma = 0$.
+
+(a) Give the $g_i$ and $h_i$. (b) Give the optimal weight of the root, and of the two leaves of the split {1, 2} | {3, 4}. (c) Compute the gain of this split and of the split {1} | {2, 3, 4}. Which one is chosen, and what changes with $\gamma = 3$?
+
+::: proof
+[Marking points]{.tag}
+
+- (a) $g_i = a_i - y_i = (-1, -1, -5, -5)$ and $h_i = 1$ (0.5 pt).
+- (b) Root: $12/(4 + 1) = 2.4$. Leaves: $2/3 \approx 0.67$ and $10/3 \approx 3.33$, the leaf means 1 and 5 shrunk toward 0 by $\lambda$ (1.5 pts).
+- (c) With theorem 3.2 (1.5 pts):
+  $$
+  \mathrm{Gain}_{\{1,2\}} = \tfrac12\Big[\tfrac{4}{3} + \tfrac{100}{3} - \tfrac{144}{5}\Big] \approx 2.93, \qquad \mathrm{Gain}_{\{1\}} = \tfrac12\Big[\tfrac{1}{2} + \tfrac{121}{4} - \tfrac{144}{5}\Big] = 0.975 .
+  $$
+  The first split is chosen; with $\gamma = 3$ its gain becomes $2.93 - 3 < 0$ and the node is not split (0.5 pt). Common error: forgetting $\lambda$ in the parent term.
+:::
+
+**Q2 (4 pts) — GOSS.** A node holds 1,000 examples, with $a = 0.2$ and $b = 0.1$. (a) How many examples are kept with their large gradients, how many are sampled among the others, and with which weight? (b) Show that the weighted gradient sum of a leaf is unbiased. (c) In a leaf, the kept gradients sum to −5.0 and the sampled ones to 0.4: estimate the gradient sum of the leaf.
+
+::: proof
+[Marking points]{.tag}
+
+- (a) 200 kept, 100 sampled uniformly among the remaining 800, weight $(1 - a)/b = 8$ (1 pt).
+- (b) Each of the 800 small-gradient examples is sampled with probability $100/800 = b/(1 - a)$, so the expected weighted sum of the sampled part of a leaf is $8 \times \tfrac18$ times its full sum; adding the kept part gives the full sum (proposition 3.5) (2 pts).
+- (c) $-5.0 + 8 \times 0.4 = -1.8$ (1 pt). Common errors: the weight $b/(1 - a)$, or amplifying the gradients but not the Hessians.
+:::
+
+**Q3 (4 pts) — A leakage diagnosis.** A churn model encodes a `customer_id` column by target encoding computed on the whole training set, then runs a 5-fold cross-validation. It obtains a training AUC of 0.99, a CV AUC of 0.97 and a test AUC of 0.61. (a) Diagnose. (b) Why did the cross-validation not reveal it? (c) Give two repairs.
+
+::: proof
+[Marking points]{.tag}
+
+- (a) Target leakage: for unique or rare identifiers, the encoding is (almost) the row's own target, which the model copies (example 4.2) (1.5 pts).
+- (b) The encoding was computed before the split, so the targets of each validation fold are inside its own features: the CV measures the leak, not the generalization (1 pt).
+- (c) Two of: out-of-fold encoding computed inside each CV fold with the smoothing $m$ (proposition 4.3); CatBoost's ordered target statistics (definition 3.8); dropping the identifier (1.5 pts). Common error: "the model overfits, add regularization".
+:::
+
+**Q4 (4 pts) — Monotone invariance.** (a) State proposition 1.3 and prove it for one split. (b) Which of these transformations can change the predictions of a GBDT: a log of a positive column, a standardization, a rank transform, the square of a column with negative values, a one-hot encoding of a categorical column? (c) Why do the first three matter for an MLP?
+
+::: proof
+[Marking points]{.tag}
+
+- (a) For a strictly increasing $g$, $x \leq t$ if and only if $g(x) \leq g(t)$: each split has an image split, so the partitions and the leaf values coincide (1.5 pts).
+- (b) Log, standardization and rank preserve the order: the training partition is unchanged (only test values falling between two training values may be routed differently). The square is not monotone on negative values (it merges −2 and 2), and one-hot encoding changes the candidate splits: both can change the model (1.5 pts).
+- (c) An MLP adds and multiplies values, so scale and heavy tails change both its optimization and its function class (1 pt).
+:::
+
+**Q5 (4 pts) — Reading a benchmark.** On six datasets, the mean AUC differences between TabPFN and a tuned XGBoost (5 seeds each) are +0.010, +0.004, −0.002, +0.006, +0.001 and −0.003. (a) Compute the mean difference, the paired $t$ statistic (two-sided 5 % critical value for 5 degrees of freedom: 2.571) and the sign test. (b) Conclude. (c) Name two checks of ch. 9 to make before writing "TabPFN wins".
+
+::: proof
+[Marking points]{.tag}
+
+- (a) Mean 0.0027 and standard deviation 0.0050, so $t = 0.0027 / (0.0050/\sqrt{6}) \approx 1.32 < 2.571$; 4 positive signs out of 6 give a two-sided sign-test $p$-value of 44/64 ≈ 0.69 (2 pts).
+- (b) Statistically tied on these datasets: choose by cost and constraints (example 9.1) (1 pt).
+- (c) Two of: the same tuning budget for both, folds and preprocessing shared and fitted inside the CV, deduplicated datasets, total time to prediction counted, no reuse of the test set (1 pt).
+:::
+
+### Projects {#projects-list}
+
+Every project uses public data, a laptop CPU or one free Colab T4 GPU, and only what this module and its prerequisites (Machine Learning, one Deep Learning course, Graph ML, the mandatory LLM course of the same period) teach. Levels ★/★★/★★★ are those of the exercises, and the effort stays at most 20 h per student, as for a 24 h / 2 ECTS course.
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★★ · solo · A symmetric credit-scoring benchmark {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | On two credit tables, compare XGBoost, LightGBM and CatBoost (50 Optuna trials each), an FT-Transformer with the same budget and TabPFN v2 without tuning: report AUC and Brier score (mean ± standard deviation over 5 seeds), paired tests against tuned XGBoost as the baseline and the total time to prediction, then a one-page decision memo (ch. 10). |
+| Data | [German credit (OpenML credit-g)](https://www.openml.org/d/31) — CC BY 4.0 (UCI Statlog) — 1,000 rows, 20 features; loading: `fetch_openml("credit-g", version=1, as_frame=True)`. [Default of credit card clients](https://archive.ics.uci.edu/dataset/350/default+of+credit+card+clients) — CC BY 4.0 — 30,000 rows, 23 features; loading: `fetch_ucirepo(id=350)` from `ucimlrepo`. TabPFN v2 weights ([Prior-Labs/TabPFN-v2-clf](https://huggingface.co/Prior-Labs/TabPFN-v2-clf), Apache 2.0 with attribution) on a 10,000-row subsample of the second table |
+| Chapters | [ch. 3](#ch3), [ch. 4](#ch4), [ch. 5](#ch5), [ch. 6](#ch6), [ch. 9](#ch9) (protocol rules, example 9.1), [ch. 10](#ch10); extends Ex. 7 ([exercises](#ex)) |
+| Deliverables | notebook, 4-page report and 1-page decision memo |
+| Effort and compute | ≈ 18 h per student · laptop CPU for the GBDTs, free Colab T4 for the FT-Transformer and TabPFN, longest run ≤ 60 min |
+| Objectives served | O6 (finance), O7 (decision memo), O1 (benchmark statistics) |
+| Responsible AI | credit-g contains sex (through `personal_status`) and age: report AUC and approval rate per group, and state in the memo that creditworthiness scoring is a high-risk use under Annex III of the AI Act. |
+| Going further | Cost per 1,000 predictions, and calibration of the chosen model (Privacy and Uncertainty Quantification ch. 7). |
+
+#### P2 · ★★ · solo · Synthetic hospital tables {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | Generate synthetic versions of a hospital-encounter table with CTGAN, TVAE and TabDDPM: report fidelity (per-column KS or TV distance, correlation gap, real-versus-synthetic detection AUC), utility (TSTR AUC for 30-day readmission against the TRTR baseline) and privacy (distance to the closest record, membership-inference AUC). |
+| Data | [Diabetes 130-US hospitals 1999–2008](https://archive.ics.uci.edu/dataset/296/diabetes+130-us+hospitals+for+years+1999-2008) — CC BY 4.0 — 101,766 encounters, 47 features; loading: `fetch_ucirepo(id=296)` from `ucimlrepo`; generators from [SDV](https://github.com/sdv-dev/SDV) (CTGAN, TVAE; Business Source License, free for non-production use) and the [TabDDPM code](https://github.com/yandex-research/tab-ddpm) (MIT) |
+| Chapters | [ch. 8](#ch8) (definition 8.1, example 8.2, proposition 8.3 and the privacy recap), [ch. 9](#ch9); extends Ex. 6 |
+| Deliverables | notebook and 4-page report |
+| Effort and compute | ≈ 18 h per student · free Colab T4, longest run ≤ 90 min (TabDDPM on a 30,000-row training subsample) |
+| Objectives served | O2 (generative models), O6 (health), O8 (privacy) |
+| Specific criterion | Replaces the protocol row: the generators see the training split only, and TSTR and the attack use a real held-out split that no generator has seen (25 %). |
+| Responsible AI | De-identified but real patient records: release no synthetic row without the distance and attack audit, and report the TSTR utility per age group and per value of the `race` field, since rare groups are both the worst modelled and the most exposed. |
+| Going further | A generator trained with DP-SGD and its fidelity–privacy curve for ε in {1, 4, 8} (Privacy and Uncertainty Quantification ch. 4). |
+
+#### P3 · ★★ · group (3–4) · Text-to-SQL audit {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | On BIRD mini-dev, compare three prompts for a 7B code model in 4-bit — the schema only, the schema with three sample rows per table, and the schema with one execution-guided retry after an SQL error: report the execution accuracy with bootstrap intervals per difficulty level, and a schema-linking error taxonomy on 100 failures, against the schema-only baseline. |
+| Data | [BIRD mini-dev](https://huggingface.co/datasets/birdsql/bird_mini_dev) — CC BY-SA 4.0 — 500 question–SQL pairs on 11 SQLite databases; loading: `load_dataset("birdsql/bird_mini_dev")["mini_dev_sqlite"]`, with the databases of the BIRD dev archive linked from [bird-bench.github.io](https://bird-bench.github.io/); model [Qwen2.5-Coder-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct) (Apache 2.0) in 4-bit |
+| Chapters | [ch. 7](#ch7) (the SQL recap, definition 7.3, the structural-limits note), [ch. 9](#ch9) |
+| Deliverables | repository with a one-command run, 8-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 10 h per student · free Colab T4, longest run ≤ 2 h (500 questions under three prompts) |
+| Objectives served | O3 (LLM evaluation), O7 (natural-language interface to databases) |
+| Specific criterion | Replaces the course-results row: the taxonomy separates schema-linking errors (table, column, join), value errors and logic errors, with two annotators and their agreement (25 %). |
+| Responsible AI | Run the generated SQL as a read-only user with a timeout: a model that writes queries must never modify or exfiltrate data; discuss what such queries could expose on a real customer base. |
+| Going further | Grammar-constrained SQL decoding (Control in Generative AI ch. 3, same period), and Spider for the clean-schema comparison. |
+
+#### P4 · ★★★ · group (3–4) · Relational deep learning on Formula 1 data {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | On the rel-f1 database, compare hand-written temporal aggregations fed to LightGBM with a heterogeneous GraphSAGE trained end to end on the graph of rows and keys: report the test AUC of the driver-dnf task and the MAE of the driver-position task (5 seeds, mean ± standard deviation), against the LightGBM baseline, and the hours spent on feature engineering. |
+| Data | [RelBench rel-f1](https://huggingface.co/datasets/stanford-star/relbench-v1) — CC BY-NC-SA 3.0 (Ergast data) — 9 tables, 97,606 rows, temporal splits at 2005 and 2010; loading: `relbench.load_dataset("rel-f1")` with [relbench](https://pypi.org/project/relbench/) 3.0.2 (MIT) |
+| Chapters | [ch. 4](#ch4), [ch. 9](#ch9), [ch. 10](#ch10); GNNs: [Graph ML](../m1p2-graph-ml/index.html#ch5) ch. 5 (GraphSAGE, R-GCN) and ch. 7 (neighbor sampling) |
+| Deliverables | repository with a one-command run, 8-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 15 h per student · free Colab T4, longest run ≤ 60 min |
+| Objectives served | O4 (graph learning), O5 (graphs combined with tables), O7 (industrial relational data) |
+| Specific criterion | Replaces the protocol row: every hand-written feature uses only rows dated before the prediction time, checked by a test that shifts the timestamps (25 %). |
+| Responsible AI | The drivers are named people: publish aggregate scores only, no per-driver risk ranking, and keep the non-commercial licence of the data. |
+| Going further | Another RelBench database with a different licence profile, such as rel-stack (CC BY-SA 4.0). |
+
+### End-of-year projects {#projects-capstone}
+
+Two Year-2 capstones of the transverse project use this module: the payments-compliance capstone [C2](../m2-projet-transverse/index.html#c2) stacks a GBDT with a temporal GNN and calibrates its alerts (ch. 3, 4, 9), and the last-mile capstone [C5](../m2-projet-transverse/index.html#c5) predicts travel times with a GBDT before conformalizing them (ch. 3). The module brings to both the leakage-free encodings and the symmetric benchmark protocol of ch. 4 and 9.
+
 ## References {#refs}
 
 -   **Boosting and engines.** J. Friedman, [Greedy Function Approximation: A Gradient Boosting Machine](https://projecteuclid.org/journals/annals-of-statistics/volume-29/issue-5/Greedy-Function-Approximation-A-Gradient-Boosting-Machine/10.1214/aos/1013203451.full), Annals of Statistics 2001; J. Friedman, [Stochastic Gradient Boosting](https://www.sciencedirect.com/science/article/abs/pii/S0167947301000659), Computational Statistics & Data Analysis 2002; Y. Freund & R. Schapire, [A Decision-Theoretic Generalization of On-Line Learning and an Application to Boosting](https://www.sciencedirect.com/science/article/pii/S002200009791504X), JCSS 1997; T. Chen & C. Guestrin, [XGBoost: A Scalable Tree Boosting System](https://arxiv.org/abs/1603.02754), KDD 2016; G. Ke, Q. Meng, T. Finley, et al., [LightGBM: A Highly Efficient Gradient Boosting Decision Tree](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree), NeurIPS 2017; L. Prokhorenkova, G. Gusev, A. Vorobev, et al., [CatBoost: Unbiased Boosting with Categorical Features](https://arxiv.org/abs/1706.09516), NeurIPS 2018.

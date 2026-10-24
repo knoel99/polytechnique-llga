@@ -799,6 +799,163 @@ In detection, stickers glued to a sign can make an object disappear from the out
 11. **★★ Data choice.** For a vehicle-counting system on a European road (day/night, rain), propose: a starting training set, a splitting protocol, an augmentation plan, a subgroup evaluation method, and two monitoring metrics in production.
 12. **★★★ Project.** Complete pipeline on a free set (a COCO subset or public drone images): fine-tuning of a modern YOLO, ONNX export, INT8 quantization, latency/mAP measurement before/after, then a one-page report in "industrial datasheet" format (error costs included, cf. example 7.1).
 
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+The official assessment (no SynapseS 2026–2027 sheet exists for this announced slot; section "Where this course fits" of this page) is: "period and assessment modalities: not communicated".
+The scheme below is one possible design consistent with the session plan.
+:::
+
+### A classical assessment {#projects-exam}
+
+With nothing displayed, the proposal is a balanced default: a written exam, two graded labs and a project built on Ex. 12.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Written exam | 40 % | 2 h, no documents, one handwritten A4 sheet | ch. 0–9: IoU, NMS, AP, focal loss, segmentation metrics, tracking metrics, stereo, quantization, cost-based thresholds |
+| Two lab notebooks | 20 % | 10 % each: session 4 (fine-tune a small detector and compute its mAP) and session 11 (ONNX export and INT8 quantization, latency measured as in Ex. 8 and 10) | ch. 1–2 and 8 |
+| Project | 40 % | [Ex. 12](#ex) or a card below: one-page datasheet and 6-page report 25 %, 10-minute oral 15 % | the whole module |
+
+**Resit.** A 2 h written exam of the same format replaces the exam grade; the lab and project grades are kept.
+
+**Sample questions.** Five questions of 4 points each (20 points), about 1 h 30 in total.
+
+**Q1 (4 pts) — How unforgiving is IoU?** A ground-truth box $g = (0, 0, 10, 10)$ and a prediction of the same size shifted horizontally by 2 pixels: compute their IoU. Then, for two boxes of width $w$ and equal height shifted horizontally by $\delta$, find the largest shift accepted at the threshold $\tau$. Evaluate it for a pedestrian 12 pixels wide at the thresholds 0.5 and 0.95.
+
+::: proof
+[Marking points]{.tag}
+
+- Intersection $8 \times 10 = 80$, union $100 + 100 - 80 = 120$, so IoU $= 2/3 \approx 0.67$ (Definition 0.1) (1 pt).
+- For $0 \leq \delta \leq w$, the heights cancel: IoU $= (w - \delta)/(w + \delta)$ (1 pt).
+- Hence IoU $\geq \tau$ if and only if
+  $$
+  \delta \leq w\,\frac{1 - \tau}{1 + \tau} \quad (1 \text{ pt}).
+  $$
+- For $w = 12$: a shift of 4 px is accepted at 0.5, but only 0.31 px at 0.95. The high COCO thresholds demand sub-pixel boxes on small objects (Note "Why multiple thresholds") (1 pt). Common error: dividing the intersection by the area of one box only.
+:::
+
+**Q2 (4 pts) — AP, and what NMS changes.** One class has 3 ground truths, and the detections sorted by decreasing score are TP, TP, FP, TP, FP at the IoU threshold 0.5. Compute precision, recall and the all-point AP. The false positive of rank 3 is a duplicate of the first box, which it overlaps with IoU 0.7: what does NMS at $\tau = 0.5$ change?
+
+::: proof
+[Marking points]{.tag}
+
+- Precision 1, 1, 0.67, 0.75, 0.6; recall 1/3, 2/3, 2/3, 1, 1 (1.5 pts).
+- The interpolated precision is 1 up to recall 2/3, then 0.75, so AP $= \tfrac13 + \tfrac13 + \tfrac13 \times 0.75 \approx 0.92$ (Definition 2.1) (1 pt).
+- NMS removes the duplicate (IoU $0.7 > 0.5$): the list becomes TP, TP, TP, FP, the precision is 1 up to recall 1, and AP $= 1$ (1 pt).
+- A high-scoring duplicate costs AP although every object is found; too low an NMS threshold would instead remove true neighbours (Note "Limits of greedy NMS") (0.5 pt). Common error: interpolating with the precision of the same rank instead of the maximum to the right.
+:::
+
+**Q3 (4 pts) — Why the focal loss.** An image produces 100,000 easy background anchors with $p_t = 0.9$ and 100 hard anchors with $p_t = 0.1$. Compare the total cross-entropy of the two groups, then their total focal loss with $\gamma = 2$ and $\alpha = 1$ (Definition 1.4), and conclude.
+
+::: proof
+[Marking points]{.tag}
+
+- Cross-entropy: $-\ln 0.9 \approx 0.105$ and $-\ln 0.1 \approx 2.303$, so totals of about 10,536 (easy) and 230 (hard): the easy anchors make 98 % of the loss (1.5 pts).
+- Focal weights $(1 - p_t)^2$: 0.01 and 0.81, a ratio of 81 (0.5 pt).
+- Focal-loss totals: about 105 (easy) and 187 (hard), so the hard anchors now make 64 % of the loss (1 pt).
+- The loss now concentrates on the rare informative anchors, which lets a single-stage detector train without hard-negative mining (RetinaNet) (1 pt). Common error: applying the factor to $p_t$ instead of $1 - p_t$.
+:::
+
+**Q4 (4 pts) — Which tracker?** A sequence has 1,000 ground-truth boxes. Tracker A has 120 FN, 60 FP, 20 ID switches and 820 IDTP; tracker B has 80 FN, 40 FP, 60 ID switches and 700 IDTP. Compute MOTA and IDF1 for each (Definition 5.2). Which tracker would you deploy to count the distinct customers entering a shop, and which for a per-frame collision warning?
+
+::: proof
+[Marking points]{.tag}
+
+- MOTA: $1 - 200/1000 = 0.80$ for A and $1 - 180/1000 = 0.82$ for B (1 pt).
+- IDFN $= 1000 -$ IDTP and IDFP $=$ predicted boxes $-$ IDTP, with 940 predicted boxes for A and 960 for B: IDFN 180 and 300, IDFP 120 and 260 (1 pt).
+- IDF1 $= 1640/1940 \approx 0.85$ for A and $1400/1960 \approx 0.71$ for B (1 pt).
+- Counting distinct people needs stable identities: A, by IDF1. A per-frame warning needs a box in every frame: B, by MOTA and its fewer misses (1 pt). Common error: reading MOTA as an identity metric.
+:::
+
+**Q5 (4 pts) — The range of a stereo rig.** A vehicle stereo rig has $f = 1000$ px and $B = 0.3$ m, and measures disparities to ±0.25 px. Give the depth at a disparity of 15 px and its error, the distance at which the error reaches 1 m, and that distance when the baseline is doubled.
+
+::: proof
+[Marking points]{.tag}
+
+- $Z = fB/d = 300/15 = 20$ m (Proposition 6.2) (1 pt).
+- By the key result of 6.2,
+  $$
+  \Delta Z = \frac{Z^2\,\Delta d}{fB} = \frac{400 \times 0.25}{300} \approx 0.33 \text{ m} \quad (1 \text{ pt}).
+  $$
+- The error stays below 1 m as long as
+  $$
+  Z \leq \sqrt{fB\,\Delta Z/\Delta d} = \sqrt{1200} \approx 34.6 \text{ m} \quad (1 \text{ pt}).
+  $$
+- Doubling $B$ multiplies this distance by $\sqrt 2$, to about 49 m; beyond it, LiDAR (6.3) or fusion (6.4) takes over (1 pt). Common error: assuming the error grows linearly with distance.
+:::
+
+### Projects {#projects-list}
+
+Every project uses public data, a laptop CPU or one free Colab T4 GPU, and only what this module and its prerequisites teach. Levels are those of the exercises, and the efforts are per student (★ 8–15 h, ★★ 15–25 h, ★★★ 25–35 h).
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★ · solo · A stereo depth error budget {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | Compute disparity maps by OpenCV block matching and by semi-global matching on the 10 Middlebury 2014 training scenes, convert them to depth, and report the bad-2.0 pixel rate and the measured depth error against the law $\Delta Z = Z^2 \Delta d/(fB)$ of ch. 6, semi-global matching against block matching. |
+| Data | [Middlebury 2014 stereo datasets](https://vision.middlebury.edu/stereo/data/scenes2014/) — free research use, no explicit licence (cite Scharstein et al., GCPR 2014) — 23 scenes with ground-truth disparities, about 3000 × 2000 px; loading: `cv2.imread("im0.png")`, `cv2.imread("disp0.pfm", cv2.IMREAD_UNCHANGED)` and `calib.txt`, with depth $Z = Bf/(d + d_{\text{offs}})$ as the page explains |
+| Chapters | [ch. 6](#ch6) (Definition 6.1, Proposition 6.2 and its key result, the semi-global pipeline); geometry in [Image Analysis and Computer Vision ch. 6](../m1p1-computer-vision/index.html#ch6) |
+| Deliverables | notebook and 4-page report |
+| Effort and compute | ≈ 12 h per student · laptop CPU (images downsampled by 4), longest run ≤ 10 min |
+| Objectives served | O7 (3D perception), O9 (benchmark protocol) |
+| Going further | A learned stereo network of the PSM-Net family on the same scenes, at equal resolution. |
+
+#### P2 · ★★ · solo · Industrial anomaly detection with a cost-driven threshold {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | Extend [Ex. 12](#ex) to inspection: fit a feature-distance anomaly detector (PatchCore in anomalib) on three MVTec AD categories, choose the threshold that minimizes the expected cost of Example 7.1 on a validation split, and report image and pixel AUROC, the cost at that threshold against the threshold 0.5, and the ONNX INT8 CPU latency (P50 and P99) against FP32, in the datasheet format of Ex. 12. |
+| Data | [MVTec AD](https://www.mvtec.com/company/research/datasets/mvtec-ad) — CC BY-NC-SA 4.0 — 5,354 images in 15 categories with pixel-level defect masks; loading: the MVTec AD datamodule of `anomalib` (Apache 2.0) with `category="screw"`, which downloads the data |
+| Chapters | [ch. 4](#ch4) (4.3 pitfalls), [ch. 7](#ch7) (7.1, Example 7.1), [ch. 8](#ch8) (8.1–8.4, Definition 8.1, Example 8.2) |
+| Deliverables | notebook, one-page datasheet and 4-page report |
+| Effort and compute | ≈ 20 h per student · free Colab T4 for feature extraction, laptop CPU for the latency, longest run ≤ 30 min |
+| Objectives served | O6 (manufacturing), O7 (deployment) |
+| Going further | An autoencoder baseline ([Deep Learning ch. 9](../m1p1-deep-learning/index.html#ch9)) to show where the reconstruction error fails on textures. |
+
+#### P3 · ★★ · group (3–4) · A tracking benchmark on shared detections {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | Run SORT, DeepSORT-style appearance matching and ByteTrack on the same public detections of the 7 MOT17 training sequences, tune them by leave-one-sequence-out, and report HOTA, IDF1 and MOTA per sequence against SORT as the baseline. |
+| Data | [MOT17](https://motchallenge.net/data/MOT17/) — CC BY-NC-SA 3.0 (some third-party sequences add their own conditions) — 14 sequences, 7 with public ground truth, each with three public detection sets (DPM, Faster R-CNN, SDP); loading: `numpy.loadtxt("gt/gt.txt", delimiter=",")` and `det/det.txt`; metrics with [TrackEval](https://github.com/JonathonLuiten/TrackEval) (MIT) |
+| Chapters | [ch. 5](#ch5) (5.1–5.4, the Kalman recap, Definition 5.2); the assignment problem in [Refresher CS ch. 7](../m1p1-refresher-cs/index.html#ch7) |
+| Deliverables | repository with a one-command run, 10-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 20 h per student · laptop CPU, appearance embeddings on a free Colab T4, longest run ≤ 30 min |
+| Objectives served | O7 (vision systems), O8 (surveillance risks) |
+| Responsible AI | Pedestrians filmed in public places: use the data for benchmarking only, never to re-identify people across sources; report errors by crowd density; mass tracking of people falls under the AI Act restrictions of 9.2 |
+| Going further | Replace the constant-velocity Kalman model by a learned motion model and measure the gain on the sequences filmed by a moving camera. |
+
+#### P4 · ★★★ · group (3–4) · Polyp segmentation, U-Net versus fine-tuned SAM {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Train a U-Net and fine-tune the mask decoder of SAM, with box prompts derived from the masks, on the 1,000 HyperKvasir polyp images, and report Dice and HD95 (the 95th percentile of boundary distances) by lesion size and image quality, and the Dice drop under FGSM at $\varepsilon = 2/255$ and $8/255$, against the U-Net baseline. |
+| Data | [HyperKvasir, segmented images](https://osf.io/mh9sj/) — CC BY 4.0 — 1,000 colonoscopy images of polyps with their masks (the Kvasir-SEG set); loading: download the `segmented-images` folder from OSF, then `PIL.Image.open` on each image and mask pair |
+| Chapters | [ch. 3](#ch3) (3.2 U-Net, 3.5 SAM, Example 3.1), [ch. 7](#ch7) (7.3 medical imaging), [ch. 9](#ch9) (9.1 FGSM, 9.2 bias) |
+| Deliverables | repository with a one-command run, 10-page report, 10-minute oral with individual questions |
+| Effort and compute | ≈ 30 h per student · free Colab T4 (SAM ViT-B, decoder only), longest run ≤ 1.5 h |
+| Objectives served | O6 (healthcare), O8 (robustness, subgroup errors) |
+| Responsible AI | De-identified examinations from a Norwegian hospital, released openly; report errors by lesion size and image quality, the subgroups where a miss costs most; make no clinical claim; use torchvision and the Apache-2.0 SAM code rather than the AGPL Ultralytics stack |
+| Going further | Calibrate the mask probabilities and add an abstention rule for low-confidence images. |
+
+### End-of-year projects {#projects-capstone}
+
+This module is an announced slot, so the end-of-year projects do not assume it. When it runs, the healthcare-imaging project [Y1-7](../m1-integrative-projects/index.html#y1-7) can use its segmentation and evaluation chapters (ch. 2, 3 and 9) as a variant of the AI-systems route. The Year-2 capstones ([C1](../m2-projet-transverse/index.html#c1) to [C8](../m2-projet-transverse/index.html#c8)) do not use it directly, although its deployment chapter prepares their serving and latency work.
+
 ## References {#refs}
 
 -   R. Szeliski, [Computer Vision: Algorithms and Applications](https://szeliski.org/book/), 2nd ed., Springer, 2022 — the reference textbook, free online.
