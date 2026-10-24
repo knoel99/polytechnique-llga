@@ -248,7 +248,7 @@ print("probe accuracy:", probe.score(Xte, yte))          # ~0.9 on POS in layer 
 
 Alain & Bengio (2016) launched the method on image classifiers: the linear separability of the classes increases monotonically with depth. Probes of transformer language models later found another profile: linguistic properties peak at intermediate layers and fade toward the output, whose layers specialize in predicting the next token (Liu et al., NAACL 2019; Tenney, Das & Pavlick, ACL 2019, for the order in which properties appear).
 
-Since then, probes have mapped: early syntactic positions, named entities, world-fact relations ("the Eiffel Tower is in Paris") manipulated by *subspace edits*, linearly decodable language and sentiment... The emerging hypothesis: the residual stream is a communication channel where each head writes to and reads from relatively linear subspaces.
+Probes have also mapped: early syntactic positions, named entities, world-fact relations ("the Eiffel Tower is in Paris") manipulated by *subspace edits*, linearly decodable language and sentiment... The emerging hypothesis: the residual stream is a communication channel where each head writes to and reads from relatively linear subspaces.
 
 ### 1.2. The trap: information ≠ use
 
@@ -267,7 +267,7 @@ High accuracy with low selectivity = the probe memorizes, not the model; only a 
 :::
 
 ::: def
-[Definition 1.3 — Activation patching (Meng et al., 2022; Wang et al., 2023)]{.tag} Run the model on a *clean* prompt $x$ and on a *corrupted* prompt $\tilde x$ that differs only in the information studied ("The Eiffel Tower is in" against "The Colosseum is in").
+[Definition 1.3 — Activation patching (Meng et al., 2022; Wang et al., 2023)]{.tag} Run the model on a *clean* prompt $x$ and on a *corrupted* prompt $\tilde x$ that differs only in the information studied, with the same number of tokens: "When Mary and John went to the store, John gave a drink to" (answer: Mary) against the same sentence with "Mary gave a drink to" (answer: John).
 
 Cache the activation $a(x)$ of one component — a head, an MLP output, or the residual stream at a given layer and position — then rerun on $\tilde x$ with that activation overwritten by $a(x)$. With $m$ a metric of the output, such as the logit difference between the two answers, the restored fraction is
 $$
@@ -305,7 +305,7 @@ Course takeaway: attention is a *source of hypotheses*, not a proof — attentio
 :::
 
 ::: ex
-[Example 2.2 — Induction heads (the positive result)]{.tag} Some attention patterns are genuinely *functional*: a "previous" head spots the past token $A$, an "induction" head writes "after $A$, repeat what followed $A$" — a mechanism identified (Olsson et al., 2022) as the support of *in-context learning* (the model can thereby complete patterns never seen in training, cf. LLMs module ch. 3). Here attention analysis *plus* causal ablation closed the case.
+[Example 2.2 — Induction heads (the positive result)]{.tag} Some attention patterns are genuinely *functional*: a "previous" head spots the past token $A$, an "induction" head writes "after $A$, repeat what followed $A$" — a mechanism identified (Olsson et al., 2022) as the support of *in-context learning* (the model can thereby complete patterns never seen in training, cf. [LLMs module 4.0](../m2-large-language-models/index.html#icl)). Here attention analysis *plus* causal ablation closed the case.
 :::
 
   Technique              Question                         Cost                  Guarantee
@@ -372,26 +372,60 @@ def sae_loss(h):                       # h: batch of activations (frozen)
 
 Chapters 1–3 look inside the model; a user or an auditor more often asks why the model gave *this* answer to *this* prompt. This chapter attributes an output to the input tokens, with the guarantees and the pitfalls of each method.
 
-:::: recap
-::: recap-title
-M1 recap — feature attributions
+### 4.1. Perturbation methods: LIME and KernelSHAP {#lime-shap}
+
+Perturbation methods treat the model as a black box: they switch parts of the input off and watch the output move. [Machine Learning 6.4](../m1p1-machine-learning/index.html#explain-trees) gave the tabular versions: permutation importance for the global question, and TreeSHAP, which computes Shapley values exactly by walking down the trees. Neither transfers to an LLM: shuffling a column means nothing for a prompt, and there are no trees to walk.
+
+Write $z' \in \{0,1\}^M$ for a coalition of the $M$ interpretable features (tokens, words or passages), $h_x(z')$ for the input in which the features with $z'_i = 0$ are replaced by a baseline, and $F$ for the scalar output explained.
+
+::: def
+[Definition 4.1 — LIME (Ribeiro, Singh & Guestrin, 2016)]{.tag} Sample coalitions $z'$ around $x$, query $F(h_x(z'))$ for each, and fit a linear surrogate $g(z') = \phi_0 + \sum_i \phi_i z'_i$ by weighted least squares:
+$$
+\hat g \;=\; \arg\min_{g} \sum_{z'} \pi_x(z')\,\bigl(F(h_x(z')) - g(z')\bigr)^2 + \Omega(g),
+\qquad
+\pi_x(z') = \exp\!\Bigl(-\frac{D(x, h_x(z'))^2}{\sigma^2}\Bigr).
+$$
+The coefficients $\phi_i$ are the explanation. The distance $D$, the kernel width $\sigma$ and the penalty $\Omega$ (for instance, keep $K$ features) are free choices, and the explanation moves with them.
 :::
 
-**LIME** (Ribeiro et al., 2016): perturb the input, fit a local linear model, read its coefficients. **SHAP** (Lundberg & Lee, 2017): Shapley values from game theory — the only attribution satisfying the axioms (efficiency, symmetry, dummy, additivity). Exponential cost in the number of features → sampling (KernelSHAP) or structure (TreeSHAP).
-::::
-
 ::: thm
-[Theorem 4.1 — Shapley: existence and uniqueness]{.tag} There exists a unique family of attributions satisfying the four axioms (efficiency $\sum_i \phi_i = F(x) - F(\emptyset)$, symmetry, null player, additivity), given by:
+[Theorem 4.2 — Shapley: existence and uniqueness (ML Theorem 6.6)]{.tag} Let $N$ be the set of the $M$ features. There exists a unique family of attributions satisfying the four axioms (efficiency $\sum_i \phi_i = F(x) - F(\emptyset)$, symmetry, null player, additivity), given by:
 $$
-\phi_i \;=\; \sum_{S \subseteq N \setminus \{i\}} \frac{|S|!\,(n - |S| - 1)!}{n!}\, \bigl[F(S \cup \{i\}) - F(S)\bigr].
+\phi_i \;=\; \sum_{S \subseteq N \setminus \{i\}} \frac{|S|!\,(M - |S| - 1)!}{M!}\, \bigl[F(S \cup \{i\}) - F(S)\bigr].
 $$
 For an LLM, $F(S)$ = the model's output when only the tokens $S$ of the prompt are kept (the others replaced by a baseline) — each evaluation of $F$ costs one forward pass: exact SHAP is out of reach, one samples the coalitions.
 :::
 
-### 4.1. The king method for LLMs: integrated gradients
+::: prop
+[Proposition 4.3 — KernelSHAP is LIME with the Shapley kernel (Lundberg & Lee, 2017)]{.tag} In Definition 4.1, take $\Omega = 0$, the squared loss and the weight
+$$
+\pi(z') \;=\; \frac{M - 1}{\binom{M}{|z'|}\,|z'|\,(M - |z'|)} ,
+$$
+which is infinite for $|z'| = 0$ and $|z'| = M$: these two coalitions force $\phi_0 = F(\emptyset)$ and $\sum_i \phi_i = F(x) - F(\emptyset)$. Then the weighted least-squares solution over all $2^M$ coalitions is exactly the vector of Shapley values of Theorem 4.2.
+
+KernelSHAP samples coalitions according to this weight and solves the regression on the sample: a few hundred forward passes instead of $2^M$.
+:::
+
+::: ex
+[Example 4.4 — Three tokens, two explainers]{.tag} A prompt has three tokens; $F(S)$ is the probability of the answer when only the tokens of $S$ are kept.
+
+| $S$ | ∅ | {1} | {2} | {3} | {1, 2} | {1, 3} | {2, 3} | {1, 2, 3} |
+|---|---|---|---|---|---|---|---|---|
+| $F(S)$ | 0 | 0.1 | 0.2 | 0 | 0.7 | 0.3 | 0.4 | 1 |
+
+Theorem 4.2, with weight 1/3 for a coalition $S$ of size 0 or 2 and 1/6 for size 1, gives
+$$
+\phi = \Bigl(\tfrac{11}{30},\ \tfrac{14}{30},\ \tfrac{5}{30}\Bigr) \approx (0.37,\ 0.47,\ 0.17),
+$$
+which add up to $F(N) - F(\emptyset) = 1$; KernelSHAP over the 8 coalitions returns exactly these values.
+
+LIME with $\Omega = 0$ and $D$ = the fraction of tokens removed returns (0.51, 0.61, 0.25) at $\sigma = 0.5$ and (0.39, 0.49, 0.18) at $\sigma = 2$. The ranking is the same, but the magnitudes depend on the width and add up to 1.37 and 1.05 instead of 1.
+:::
+
+### 4.2. The king method for LLMs: integrated gradients
 
 ::: def
-[Definition 4.2 — Integrated Gradients (Sundararajan et al., 2017)]{.tag} For a scalar output $F$ (logit of the predicted token, probability of a class) and an input $x$ with baseline $x'$:
+[Definition 4.5 — Integrated Gradients (Sundararajan et al., 2017)]{.tag} For a scalar output $F$ (logit of the predicted token, probability of a class) and an input $x$ with baseline $x'$:
 $$
 \mathrm{IG}_i(x) \;=\; (x_i - x'_i) \int_0^1 \frac{\partial F}{\partial x_i}\Bigl(x' + \alpha\,(x - x')\Bigr)\, d\alpha \;\approx\; (x_i - x'_i)\,\frac{1}{k}\sum_{j=1}^{k} \nabla_{x_i} F\Bigl(x' + \tfrac{j}{k}(x - x')\Bigr).
 $$
@@ -399,7 +433,7 @@ For text: $x$ = the token embeddings; $x'$ = the embedding of a neutral token ("
 :::
 
 ::: thm
-[Theorem 4.3 — Completeness axiom of IG]{.tag}
+[Theorem 4.6 — Completeness axiom of IG]{.tag}
 $$
 \sum_i \mathrm{IG}_i(x) \;=\; F(x) - F(x').
 $$
@@ -421,10 +455,10 @@ $$
 \sum_i \mathrm{IG}_i = \int_0^1 g'(\alpha)\,d\alpha = g(1) - g(0) = F(x) - F(x') .
 $$
 
-(The same argument, applied to the path, gives the completeness of all "path" methods; IG is the one that additionally satisfies the implementation-invariance axiom — independence of the gradients under reparameterization.) [∎]{.qed}
+(The same argument, applied to any path from $x'$ to $x$, gives the completeness of all *path methods*. Every path method is also implementation-invariant — two networks that compute the same function get the same attributions — because it uses only the gradients of that function. What singles out IG, the straight-line path, is **symmetry preservation**: two variables that play symmetric roles in $F$ and take equal values in $x$ and in $x'$ receive equal attributions. IG is the only path method with this property (Sundararajan et al., 2017, Theorem 1).) [∎]{.qed}
 :::
 
-### 4.2. Attributions for an LLM: uses and pitfalls
+### 4.3. Attributions for an LLM: uses and pitfalls
 
 -   **Use 1 — debugging a RAG**: on "why does the model cite this passage?", per-token IG over the context shows which sentences carry the answer — and detects "ghost" citations (the model answers *against* the majority attribution → hallucination suspect);
 -   **Use 2 — analyzing a refusal**: which tokens trigger the safety refusal? (natural interface with ch. 6);
@@ -470,10 +504,18 @@ Alignment defenses (refusals learned by RLHF/DPO — LLMs module ch. 5) are *sta
 The classic families: *personas* (DAN), encode/decode (base64, morse...), multi-turn (gradually building up the context), "end of conversation" via special tokens (cf. LLMs module ch. 1).
 
 ::: def
-[Attack 5.1 — GCG: universal suffixes (Zou et al., 2023)]{.tag} **Greedy Coordinate Gradient**: continuously optimize an adversarial suffix $s$ appended to the forbidden request, by gradient on the embeddings, projecting at each step onto the most promising token (guided discrete search):
+[Attack 5.1 — GCG: universal suffixes (Zou et al., 2023)]{.tag} **Greedy Coordinate Gradient** searches a *discrete* adversarial suffix $s$ (about twenty tokens) appended to the forbidden request:
 $$
 s^{\star} \;\approx\; \arg\max_s\; \log p_{\theta}\bigl(\,\text{"Sure, here is how…"} \mid \text{request} \oplus s\,\bigr).
 $$
+Each iteration has three steps:
+
+1.  the gradient of this objective with respect to the one-hot indicator of each suffix token gives, at every position, a shortlist of the top-$k$ substitutions;
+2.  a batch of candidate suffixes, each differing from $s$ by one random swap drawn from these shortlists, is scored by forward passes;
+3.  the best candidate replaces $s$.
+
+The gradient only *proposes* swaps; the forward passes *decide*. There is no continuous optimization in embedding space.
+
 The suffix is *transferable*: learned on an open-weight model, it often jailbreaks production models (alignments share blind spots). We do not reproduce suffixes here — one builds them only against one's own open models, as in the red-teaming lab (exercise 11).
 :::
 
@@ -555,7 +597,11 @@ Exposure measures the *search shortcut* offered to the attacker: +20 bits ≈ th
 ### 7.2. Attacking: the GPT-2 extraction
 
 ::: ex
-[Experiment 7.3 — Carlini et al., USENIX Security 2021]{.tag} With the open-weight GPT-2 (1.5B), the authors generate \~200,000 outputs at high temperature, filter by a "surprise" score (memorized sequences are abnormally *fluent* — efficient compression), and extract **several hundred sequences verbatim from the training corpus**: names-phone-numbers-addresses, profile URLs, looping radio content... No "hack": just a model queried and sorted. The aggravating factor: the **duplicates** — sequences seen many times come out; corpus deduplication is the first mitigation.
+[Experiment 7.3 — Carlini et al., USENIX Security 2021]{.tag} With the open-weight GPT-2 (1.5B), the authors generate 200,000 outputs per sampling strategy (top-$k$, decaying temperature, prefixes taken from the web) and rank them by membership scores. Low perplexity alone is a poor score: repetitive boilerplate is likely for any model.
+
+The scores therefore compare the model with a reference. The simplest reference is a generic compressor: the ratio of the model's log-perplexity to the **zlib entropy** of the text (its compressed length in bits). A memorized sequence is abnormally *likely for the model* although zlib finds nothing repetitive in it; boilerplate, which both find easy, is pushed down the ranking.
+
+They extract **several hundred sequences verbatim from the training corpus**: names, phone numbers and addresses, URLs, code, UUIDs... No "hack": just a model queried and sorted. The aggravating factor: the **duplicates** — sequences seen many times come out; corpus deduplication is the first mitigation.
 :::
 
 ::: prop
@@ -566,12 +612,25 @@ Engineer's reading: (i) deduplicate (train *and* eval); (ii) scrub PII at the so
 
 ```python
 # Mini-extraction: recover the canaries planted in a small LM (exercise 2)
-def extract(model, prompt, n=500, temp=1.2):
-    cands = [model.generate(prompt, do_sample=True, temperature=temp,
-                            max_new_tokens=48) for _ in range(n)]
-    # "fluency" score: zlib compression ratio (memorized sequences
-    # compress better) normalized by length
-    ranked = sorted(cands, key=lambda s: len(zlib.compress(s.encode())) / len(s))
+import zlib, torch
+
+@torch.no_grad()
+def log_ppl(model, tok, text):          # mean token negative log-likelihood
+    ids = tok(text, return_tensors="pt").input_ids
+    return model(ids, labels=ids).loss.item()
+
+def zlib_bits(text):                    # zlib entropy: compressed length in bits
+    return 8 * len(zlib.compress(text.encode()))
+
+@torch.no_grad()
+def extract(model, tok, prompt, n=500, temp=1.2):
+    ids = tok(prompt, return_tensors="pt").input_ids
+    outs = model.generate(ids, do_sample=True, temperature=temp, max_new_tokens=48,
+                          num_return_sequences=n, pad_token_id=tok.eos_token_id)
+    cands = tok.batch_decode(outs, skip_special_tokens=True)
+    # Carlini et al. (2021) "zlib" score: low = likely for the model,
+    # yet not trivially compressible (repetitive boilerplate is pushed down)
+    ranked = sorted(cands, key=lambda s: log_ppl(model, tok, s) / zlib_bits(s))
     return ranked[:20]                  # -> check the intersection with the canaries
 ```
 
@@ -581,66 +640,60 @@ Even when nothing is given back verbatim, an attacker may learn whether a given 
 
 ### 8.1. Membership inference: "was this point in the corpus?"
 
-::: def
-[Definition 8.1 — MIA attack]{.tag} The *membership inference attack* (Shokri et al., S&P 2017, for classifiers; extended to LMs) infers whether an example $x$ was used in training. The attacker observes the model's output on $x$; typical signature: members are predicted with *abnormally high* confidence (overfitting). For an LM: abnormally low perplexity of $x$.
+:::: recap
+::: recap-title
+Recall — membership inference ([Security & Robustness Def. 8.3](../m2-security-robustness/index.html#ch8); [Privacy and UQ ch. 5](../m2-privacy-uncertainty/index.html#ch5))
+:::
 
-The attack **advantage** is measured:
+The *membership inference attack* (MIA; Shokri et al., S&P 2017) decides, from the model's outputs, whether an example $x$ was in the training set: shadow models, or the likelihood-ratio test LiRA (Carlini et al., 2022). Its quality is the **advantage**
 $$
 \mathrm{Adv} \;=\; \mathrm{TPR} - \mathrm{FPR},
 $$
-the gap between the detection rate of members and the false positive rate on non-members; the area under the ROC curve (AUC) gives its threshold-swept version.
-:::
+the gap between the detection rate on members and the false-positive rate on non-members, reported with the ROC curve and, above all, the TPR at a low FPR (0.1 %).
+::::
+
+For an LM the signal is the loss: members have abnormally low perplexity. Calibrating the target's log-likelihood by a reference model that did not see $x$ ([LLM 9.7](../m2-large-language-models/index.html#privacy-bias)) removes the part of a low perplexity that only says "$x$ is an easy text".
 
 ::: prop
-[Proposition 8.2 — Member ⇒ likelihood ratio]{.tag} The optimal test to distinguish member/non-member compares the density of the output under each hypothesis (Neyman-Pearson): in practice one reduces to a threshold on a loss statistic $L(x)$. If the model does not overfit — same distributions of $L$ for members and non-members — then $\mathrm{Adv} \approx 0$: MIA measures overfitting, which also makes it a generalization diagnostic tool. Consequence for LLMs: large well-regularized models, trained on a single pass over each document, expose little signal; the danger concentrates on restricted corpora seen multiple times (private fine-tuning).
+[Proposition 8.1 — Member ⇒ likelihood ratio]{.tag} The optimal test to distinguish member/non-member compares the density of the output under each hypothesis (Neyman-Pearson): in practice one reduces to a threshold on a loss statistic $\ell(x)$. If the model does not overfit — same distributions of $\ell$ for members and non-members — then $\mathrm{Adv} \approx 0$: MIA measures overfitting, which also makes it a generalization diagnostic tool. Consequence for LLMs: large well-regularized models, trained on a single pass over each document, expose little signal; the danger concentrates on restricted corpora seen multiple times (private fine-tuning).
 :::
 
 ### 8.2. The guarantee: differential privacy applied to LLMs
 
 :::: recap
 ::: recap-title
-Recap — Emerging ML module ch. 5
+Differential privacy on one page (proofs: [Privacy and UQ ch. 1–4](../m2-privacy-uncertainty/index.html#ch1))
 :::
 
-A mechanism $M$ is $(\varepsilon, \delta)$-DP if for all neighboring datasets $D \sim D'$ (one example apart) and every event $S$:
-$$
-\mathbb{P}(M(D) \in S) \leq e^{\varepsilon}\, \mathbb{P}(M(D') \in S) + \delta .
-$$
-
-Gaussian mechanism: noise a statistic of sensitivity $\Delta_2$ with
-$$
-\sigma \geq \sqrt{2\ln(1.25/\delta)}\,\Delta_2/\varepsilon .
-$$
+-   **Definition.** A randomized mechanism $M$ is $(\varepsilon, \delta)$-DP if, for all datasets $D \simeq D'$ that differ by adding or removing one example, and every event $S$,
+    $$
+    \mathbb{P}(M(D) \in S) \leq e^{\varepsilon}\, \mathbb{P}(M(D') \in S) + \delta .
+    $$
+-   **Gaussian mechanism.** Adding $\mathcal N(0, \sigma_G^2 I)$ to a statistic of $\ell_2$ sensitivity $\Delta_2$ is $(\varepsilon, \delta)$-DP as soon as
+    $$
+    \sigma_G \geq \sqrt{2\ln(1.25/\delta)}\,\Delta_2/\varepsilon, \qquad \text{valid for } 0 < \varepsilon < 1
+    $$
+    (Dwork & Roth, Theorem A.1). The budgets $\varepsilon = 3$ or 8 met below are not obtained from this bound but from the accountant.
+-   **Post-processing.** Any function of a DP output that does not touch the data again is DP with the same $(\varepsilon, \delta)$. *This is the property that makes DP usable*: one can distill, quantize, deploy and query a DP model without re-proving anything ([Privacy and UQ Prop. 1.2](../m2-privacy-uncertainty/index.html#ch1), proved there for $\delta = 0$; the same line carries the $+\delta$).
+-   **Composition.** Running mechanisms that are $\varepsilon_1$-, …, $\varepsilon_k$-DP on the same data is $(\varepsilon_1 + \dots + \varepsilon_k)$-DP (basic composition). Advanced and Rényi composition make the total grow like $\sqrt k$ instead of $k$ for small per-step budgets.
+-   **Accountant.** Rényi DP budgets add up exactly under composition, and a final conversion returns an $(\varepsilon, \delta)$ pair. The RDP (moments) accountant of DP-SGD applies this to the $T$ subsampled Gaussian steps: in Opacus it returns $\varepsilon$ from the sampling rate, the noise multiplier, $T$ and $\delta$.
 ::::
 
-::: thm
-[Lemma 8.3 — Immunity to post-processing]{.tag} If $M$ is $(\varepsilon, \delta)$-DP, then for any function (random, arbitrary) $g$ computed *after* $M$, $g \circ M$ remains $(\varepsilon, \delta)$-DP. *This is the theorem that makes DP usable*: one can fine-tune, distill, quantize, deploy and query a DP model without re-proving anything.
-:::
-
-::: proof
-Let $D \sim D'$ be neighbors and $B$ a Borel set of the output space of $g$. Write $g^{-1}(B) = \{m : g(m) \in B\}$ (possibly random: condition on the randomness of $g$, the reasoning is then deterministic and one integrates at the end).
-
-Then
-$$
-\mathbb{P}(g(M(D)) \in B) = \mathbb{P}(M(D) \in g^{-1}(B)) \leq e^{\varepsilon}\, \mathbb{P}(M(D') \in g^{-1}(B)) + \delta = e^{\varepsilon}\, \mathbb{P}(g(M(D')) \in B) + \delta,
-$$
-where the middle inequality is exactly the DP of $M$ applied to the event $g^{-1}(B)$.
-
-No property of $g$ was used: post-processing cannot "reintroduce" lost privacy. [∎]{.qed}
-:::
-
 ::: def
-[Definition 8.4 — DP-SGD (Abadi et al., 2016)]{.tag} At each step: (1) compute the gradient *per example*; (2) **clip** each gradient to norm $C$ (bounded sensitivity $\Delta_2 \leq C$); (3) aggregate and noise:
+[Definition 8.2 — DP-SGD (Abadi et al., 2016)]{.tag} At each step: (1) draw a mini-batch $B$ from the $n$ training examples, keeping each with probability $q = b/n$; (2) compute the gradient *per example* and **clip** it to norm $C$ (bounded sensitivity $\Delta_2 \leq C$); (3) aggregate and add noise, with noise multiplier $\sigma$:
 $$
-\tilde g \;=\; \frac{1}{|B|}\Bigl(\sum_{i \in B} \mathrm{clip}(\nabla \ell_i, C) + \mathcal{N}(0, \sigma^2 C^2 I)\Bigr),
+\tilde g \;=\; \frac{1}{b}\Bigl(\sum_{i \in B} \mathrm{clip}(\nabla \ell_i, C) + \mathcal{N}(0, \sigma^2 C^2 I)\Bigr).
 $$
-where $B$ is the mini-batch drawn from the $N$ training examples.
 
-Accounting (moments accountant / RDP) aggregates the budget over the $T$ steps: the total $\varepsilon$ grows with $T$ and with the sampling rate $|B|/N$ (roughly as $(|B|/N)\sqrt{T}/\sigma$ for small sampling rates). For an LLM: DP-SGD on the *fine-tuning* (public pre-training is deemed non-sensitive).
+The accountant aggregates the budget over the $T$ steps: the total $\varepsilon$ grows with $T$ and with the sampling rate $q$ (roughly as $q\sqrt{T \ln(1/\delta)}/\sigma$ for small $q$). For an LLM: DP-SGD on the *fine-tuning* (public pre-training is deemed non-sensitive).
 :::
 
 ::: ex
-[Result 8.5 — DP fine-tuning at reasonable cost (Yu et al., ICLR 2022)]{.tag} Fine-tuning RoBERTa/GPT-2 with DP-SGD at $\varepsilon \leq 8$ costs a few points of performance on classic classification tasks, and **strongly reduces memorization** (canaries nearly inextractable); training tricks (ghost clipping to avoid materializing per-example gradients, large batch size, adapted LR) narrow the gap. The trade-off to present to the committee: target $\varepsilon$ vs utility — there is no universally "good" $\varepsilon$; 1 is strict, 8 common, 10+ loose.
+[Result 8.3 — DP fine-tuning at reasonable cost (Yu et al.; Li et al.; ICLR 2022)]{.tag} Two papers made DP fine-tuning practical. Yu et al. train only a small set of new parameters (LoRA, adapters) with DP-SGD: the noise lives in a much smaller space, and RoBERTa and GPT-2 lose only a few points at $\varepsilon \leq 8$ (87.8 % against 90.2 % on MNLI at $\varepsilon = 6.7$ for RoBERTa-Large).
+
+Li, Tramèr, Liang & Hashimoto show that full fine-tuning also works with hyperparameters suited to DP (large batches, a tuned learning rate, an objective aligned with pre-training) and *ghost clipping*, which clips without materializing the per-example gradients.
+
+By the guarantee, canaries of the fine-tuning set become nearly unextractable: the Secret Sharer already measured chance-level exposure under DP training. The trade-off to present to the committee: target $\varepsilon$ vs utility — there is no universally "good" $\varepsilon$; 1 is strict, 8 common, 10+ loose.
 :::
 
   Privacy defense              Utility cost   Guarantee                           Limitation
@@ -664,53 +717,61 @@ The classic pipeline: entity detection (NER — NLP module ch. 6) → masking/re
 
 \(iii\) blind replacement breaks utility (names carry syntactic and semantic information).
 
+::: def
+[Definition 9.1 — k-anonymity (Sweeney, 2002)]{.tag} Fix the *quasi-identifiers* of a table (postal code, birth date, sex, occupation...). The table is **k-anonymous** if every combination of their values that occurs is shared by at least $k$ rows. One gets there by generalizing (birth date → year, postal code → its first two digits) and by suppressing the rare rows. The stakes: in the 1990 US census data, ZIP code, birth date and sex alone single out about 87 % of the population (Sweeney, 2000).
+
+Two limits matter here. If the $k$ rows of a group share the same sensitive value, the attacker learns it anyway (the homogeneity attack, which motivates $\ell$-diversity; Machanavajjhala et al., 2007). And free text has no columns: a corpus of e-mails has no fixed list of quasi-identifiers to generalize, which is why ch. 7–8 measure leakage with attacks and bound it with DP instead.
+:::
+
 Regulatory position: "definitive" anonymization takes the data out of the GDPR; pseudonymization does not — and the AI Act (ch. 10) requires reports on the training data, not their disappearance.
 
 ### 9.2. Watermarking: signing the generation
 
-::: def
-[Definition 9.1 — Green-list watermark (Kirchenbauer et al., ICML 2023)]{.tag} At each generation step:
-
-1.  hash the previous token $x_{t-1}$ (plus optionally $H$, a secret key) to initialize a pseudo-random generator;
-2.  partition the vocabulary into a *green list* $G$ of proportion $\gamma$ and its complement;
-3.  add $\delta$ to the logits of the green tokens before sampling.
-
-The model statistically *favors* green tokens without perceptibly degrading quality ($\delta \approx 1$-2, $\gamma \approx 0.5$).
+:::: recap
+::: recap-title
+Recall — the green-list watermark ([LLM Theorem 9.3](../m2-large-language-models/index.html#watermark); Kirchenbauer et al., ICML 2023)
 :::
 
-:::: thm
-[Proposition 9.2 — Detection test (z-test)]{.tag} On a suspect text $s = (s_1, \dots, s_T)$ (marked or not), one counts $|s|_G$ = number of green tokens (lists recomputed step by step):
+At each generation step, a hash of the previous token $x_{t-1}$ and a secret key seeds a partition of the vocabulary into a *green list* $G_t$ of proportion $\gamma$ and its complement; $\delta$ is added to the logits of the green tokens before sampling (typically $\delta$ of 1 to 2 and $\gamma$ of 0.5).
+
+On a suspect text $s$ of $T$ tokens with $|s|_G$ green tokens (lists recomputed step by step), the score
+$$
+z(s) \;=\; \frac{|s|_G - \gamma\, T}{\sqrt{T\, \gamma\, (1 - \gamma)}}
+$$
+is approximately $\mathcal{N}(0, 1)$ under $H_0$ (unmarked text). The test flags $z > 4$: false-positive rate $\Phi(-4) \approx 3 \times 10^{-5}$, whatever $T$.
+::::
+
+The independence of the green indicators under $H_0$ is a heuristic — the tokens of a natural text are correlated — so the calibration is checked on human text (Ex. 10). What the LLM module does not cover is the power of the test.
+
+:::: prop
+[Proposition 9.2 — Power and text length]{.tag} Under $H_1$ (marked text), for a small bias $\delta$ and a high-entropy next-token distribution,
 
 ::: key
-[Key result — watermark detection score]{.tag}
+[Key result — expected watermark score]{.tag}
 $$
-z(s) \;=\; \frac{|s|_G - \gamma\, T}{\sqrt{T\, \gamma\, (1 - \gamma)}}.
+\mathbb{E}[z] \;\approx\; \delta\,\sqrt{T\gamma(1-\gamma)} ,
 $$
 :::
 
-Under $H_0$ (unmarked text), the green indicators are (approximately) i.i.d. Bernoulli($\gamma$), hence $z \approx \mathcal{N}(0, 1)$ by the central limit theorem.
-
-Under $H_1$, $z$ grows like $\sqrt{T}$ (bias $\delta$).
-
-At the threshold $z > 4$ and $T = 200$: false positive $\approx \Phi(-4) \approx 3\times 10^{-5}$, and high power for moderate $\delta$.
+which grows like $\sqrt T$: the power tends to 1 with the length. With $\gamma = 0.5$ and $\delta = 1$, $\mathbb{E}[z] \approx 7$ at $T = 200$, far above the threshold. Low-entropy text (code, lists, fixed phrases) gains much less: the bias cannot steer a token that is nearly forced.
 ::::
 
 ::: proof
-Under $H_0$, $|s|_G = \sum_t \mathbf{1}[s_t \in G_t]$ with $\mathbb{E} = \gamma T$ and $\mathrm{Var} = T\gamma(1-\gamma)$ (sum of independent Bernoullis — the independence assumption is heuristic: the tokens of a natural text are correlated; empirically the calibration holds). The CLT gives
+The logit bias raises the probability of drawing a green token from $\gamma$ to
 $$
-(|s|_G - \gamma T)/\sqrt{T\gamma(1-\gamma)} \Rightarrow \mathcal{N}(0,1),
+\frac{\gamma e^{\delta}}{\gamma e^{\delta} + 1 - \gamma} \;\approx\; \gamma + \gamma(1-\gamma)\,\delta
 $$
-hence the threshold by Gaussian quantile.
-
-Under $H_1$, the logit bias increases the green probability by $\Delta \approx \gamma(1-\gamma)\delta$ (first-order expansion of the softmax); then
+(first-order expansion at $\delta = 0$, when the green tokens carry a mass $\gamma$ of the distribution). Hence
 $$
-\mathbb{E}[z] \approx \delta\sqrt{T\gamma(1-\gamma)} \to \infty ;
+\mathbb{E}|s|_G - \gamma T \;\approx\; \gamma(1-\gamma)\,\delta\, T ,
 $$
-the power tends to 1 with the length. [∎]{.qed}
+and dividing by $\sqrt{T\gamma(1-\gamma)}$ gives the result. [∎]{.qed}
 :::
 
 ::: note
-[Robustness: the Achilles' heel]{.tag} The test assumes the text is *intact*: paraphrase by another model, translation, insertion/deletion of tokens dilute the signal (the hashing of the previous token desynchronizes). Robustness studies show detections collapsing after high-rate paraphrase — hence the search for more robust schemes and, at the other extreme, the cryptographic result of Christ, Gunn & Zamir (COLT 2024): *undetectable* watermarks (detection with a secret key only, construction via one-way functions) that degrade *no* distribution — at the price of a key to manage.
+[Robustness: the Achilles' heel]{.tag} The test assumes the text is *intact*: paraphrase by another model, translation, insertion/deletion of tokens dilute the signal (the hashing of the previous token desynchronizes). Robustness studies show detections collapsing after high-rate paraphrase.
+
+Hence the search for more robust schemes — a fixed green list (Zhao et al., ICLR 2024), sampling keyed by a secret random sequence that leaves the distribution unchanged (Kuditipudi et al., TMLR 2024) — and, at the other extreme, the cryptographic result of Christ, Gunn & Zamir (COLT 2024): *undetectable* watermarks (detection with a secret key only, construction via one-way functions) that degrade *no* distribution — at the price of a key to manage.
 
 Intended use: **provenance** (proving that a content comes from *my* model), a complement to the transparency obligations of the AI Act (ch. 10) — not a universal cheating detector.
 :::
@@ -751,24 +812,120 @@ The **Regulation (EU) 2024/1689** ("AI Act") organizes AI by levels of risk: *un
 ## Exercises / Labs {#ex}
 
 1.  **★ Probes and selectivity (ch. 1).** Train linear probes (language, sentiment, POS category) on every layer of a GPT-2; plot the accuracy per layer; add the control tasks of Hewitt & Liang and report the selectivity; conclusion on "is the information *linearly* encoded?".
-2.  **★ Canaries and extraction (ch. 7).** Place canaries (random phone numbers) in a fine-tuning corpus with $k = 1, 10, 100$ repetitions; measure the exposure (prop. 7.2); launch the extraction attack by compression ratio; repeat after deduplication — conclude.
-3.  **★ Attributions (ch. 4).** Compute the IG of a RAG answer with respect to its context tokens; verify the completeness (thm. 4.3) numerically (sum of the attributions vs logit gap); compare two baselines (pad vs empty sentence) and comment on the stability.
+2.  **★ Canaries and extraction (ch. 7).** Place canaries (random phone numbers) in a fine-tuning corpus with $k = 1, 10, 100$ repetitions; measure the exposure (prop. 7.2); launch the extraction attack ranked by the perplexity/zlib ratio (Experiment 7.3); repeat after deduplication — conclude.
+3.  **★ Attributions (ch. 4).** Compute the IG of a RAG answer with respect to its context tokens; verify the completeness (thm. 4.6) numerically (sum of the attributions vs logit gap); compare two baselines (pad vs empty sentence) and comment on the stability.
 4.  **★ Regulatory framework (ch. 10).** Classify three scenarios (internal HR assistant, public health chatbot, journalistic content generation) in the AI Act risk pyramid; list for each the concrete obligations *and* the ML Ops artifact that attests to them (registry? eval? monitoring?) — prop. 10.2 in practice.
 5.  **★★ Home-grown tuned lens (ch. 2).** Implement the logit lens on GPT-2 (final LayerNorm + unembedding at every layer); train the affine transformations of the tuned lens per layer (regression toward the final distribution); visualize the trajectory of the top token on 50 examples — identify the "late switches".
 6.  **★★ Attention under control (ch. 2).** Reproduce the experiment of Jain & Wallace on a small model: show that an adversarial (permuted) attention distribution preserves the prediction; then show with patching that an identified induction head is *causally* necessary for pattern completion. Two conclusions, one method.
 7.  **★★ SAE on a toy model (ch. 3).** Train the toy autoencoder with 5 features in 2 dimensions (variable rarities); observe the phase transitions; then train an SAE ($m = 8d$) on the activations of a layer of a small LM; annotate the 20 most active features and attempt a *steering* (amplify a feature during generation).
 8.  **★★ Indirect injection on a toy RAG (ch. 5-6 — central lab).** Build the "master's documents" RAG; slip in a booby-trapped page (instruction hidden in white-on-white); demonstrate the exfiltration to a simulated "mail tool"; harden by layers (delimiters, injection classifier, permissions, human confirmation); report the ASR before/after *for paraphrased attacks* (adaptive!).
-9.  **★★ MIA on fine-tuning (ch. 8).** Fine-tune a small LM on a restricted corpus (members) with a disjoint corpus (non-members); plot the ROC of the MIA by perplexity; repeat with DP-SGD (Opacus) at $\varepsilon \in \{3, 8\}$; plot utility vs attack advantage — the trade-off curve of Result 8.5.
-10. **★★ End-to-end watermark (ch. 9).** Implement the green-list scheme (hashing of the previous token, $\gamma = 0.5$, $\delta = 2$) on an open LM; verify the calibration of the z-test on unmarked texts (Q-Q plot); measure the power at $T \in \{50, 200, 500\}$; attack with light then heavy paraphrase; discuss the detectability/quality trade-off (perplexity before/after).
+    -   *GraphRAG variant*: index the same documents as a knowledge graph with entity and community summaries ([LLM 7.4](../m2-large-language-models/index.html#graphrag), [Graph ML ch. 10](../m1p2-graph-ml/index.html#ch10)). Plant the injection in one entity description or in a forged triple, and measure how far it spreads — how many community summaries and answers it reaches — against the chunk index. Which defense layer of ch. 6 still applies when the poisoned text has been rewritten by the summarizer?
+9.  **★★ MIA on fine-tuning (ch. 8).** Fine-tune a small LM on a restricted corpus (members) with a disjoint corpus (non-members); plot the ROC of the MIA by perplexity; repeat with DP-SGD (Opacus) at $\varepsilon \in \{3, 8\}$; plot utility vs attack advantage — the trade-off curve of Result 8.3.
+10. **★★ End-to-end watermark (ch. 9).** Implement the green-list scheme (hashing of the previous token, $\gamma = 0.5$, $\delta = 2$) on an open LM; verify the calibration of the z-test on unmarked texts (Q-Q plot); measure the power at $T \in \{50, 200, 500\}$ and compare it with Proposition 9.2; attack with light then heavy paraphrase; discuss the detectability/quality trade-off (perplexity before/after).
 11. **★★★ Red team (ch. 10).** Write a red teaming protocol for the application of exercise 8: policy, attack taxonomy, 30 attacks (including 10 adaptive), severity grid; execute, report ASR per family + blast radius; turn the 5 most effective attacks into CI tests.
+12. **★★★ KernelSHAP from scratch, and which attribution to trust (ch. 4).** (a) On the three-token table of Example 4.4, solve the weighted least-squares problem of Proposition 4.3 over the 8 coalitions (give the two infinite weights a value of $10^6$) and check that it returns $(11/30, 14/30, 5/30)$; rerun LIME with $\sigma \in \{0.25, 0.5, 1, 2\}$ and plot the coefficients. (b) On 50 RAG prompts, attribute the answer to the context passages with LIME, sampled KernelSHAP (256 coalitions) and IG: agreement of the rankings, stability over 5 seeds, deletion curves. Which method would you show an auditor, and why?
+
+## Projects and assessment {#projects}
+
+The 2026–2027 SynapseS sheet publishes no description of this module, so its assessment is **not displayed** (see the fiche above: the S3/S4 tracks of the catalog are still empty). The subjects, the exam and the rubric below are proposals of these notes, not official rules.
+
+The projects exercise mainly O8 (trustworthy and responsible AI: interpretability, attacks, privacy, regulation), with O3 (the LLM internals that probes and attacks rely on) and O5 for the GraphRAG subject. Ex. 8 (the injection lab, with its GraphRAG variant) and Ex. 11 (the red-team protocol) are the pieces that every Year 2 [trust work package](../../projects/index.html#trust) reuses.
+
+### Solo projects {#projects-solo}
+
+1.  **[Solo · ≈ 20 h] A feature atlas of GPT-2 small, checked by intervention.** Which sparse-autoencoder features of a middle layer survive a causal test, and how do the dictionary size and the sparsity penalty change the answer?
+    -   *Work*: train SAEs (Definition 3.2) with $m \in \{8d, 16d, 32d\}$ and a sweep of $\lambda$ on the residual stream of layers 4 and 8. Measure the reconstruction error, the loss increase when the SAE output replaces the activation, the dead latents and the shrinkage (ch. 3 critical note).
+    -   *Then*: label 30 features from their top examples, compare each with a linear probe and its control task (Problem 1.2), and test it by ablation and steering (Definition 1.3).
+    -   *Data*: GPT-2 small (Radford et al., 2019) run over about 10 M tokens of OpenWebText (Gokaslan & Cohen, 2019), activations streamed rather than stored.
+    -   *Success criterion*: the reconstruction–sparsity curves for each $m$; at least 10 labelled features whose ablation or steering moves a measured behaviour more than a random direction of the same norm, over 3 seeds.
+    -   *Deliverables*: code, a 4–6 page report with a feature dashboard, a 10-minute talk; chapters 1, 2 and 3.
+2.  **[Solo · ≈ 20 h] Do attributions find the passages a RAG answer rests on?** Attention weights, gradient × input, IG with two baselines, LIME and sampled KernelSHAP, compared at passage level.
+    -   *Work*: score each method by the rank of the two gold supporting paragraphs among the ten of each question; by deletion and insertion curves (remove the top-attributed passages, re-score the answer); and, for IG, by the completeness gap of Theorem 4.6 against the number of steps. Then test whether a low attribution to the passage the model *cites* predicts a wrong citation.
+    -   *Data*: HotpotQA in its distractor setting (Yang et al., EMNLP 2018), 300 questions, with an open instruct model of 0.5–1.5 B parameters such as Qwen2.5-0.5B-Instruct.
+    -   *Success criterion*: precision at 2 on the gold paragraphs per method, with bootstrap intervals; an IG completeness gap below 1 % of the logit gap at the chosen number of steps; a stated verdict on attention weights (2.2).
+    -   *Deliverables*: code, report, talk; chapters 2 and 4, Ex. 3 and 12. It extends the RAG evaluation of [LLM ch. 7](../m2-large-language-models/index.html#ch7).
+3.  **[Solo · ≈ 25 h] Paper study: Quantifying Memorization Across Neural Language Models (Carlini, Ippolito, Jagielski, Lee, Tramèr & Zhang, ICLR 2023).** Do the paper's log-linear laws — memorization grows with model size, with duplication and with the prompt length (Proposition 7.4 states the first two) — hold on a model family whose training data and order are public?
+    -   *Work*: prompt the Pythia models from 70 M to 1.4 B parameters (Biderman et al., ICML 2023) with prefixes of 50 tokens taken from their training sequences, and count the exact 50-token continuations under greedy decoding. Duplication is studied by comparing the models trained on the standard and on the deduplicated Pile at equal size.
+    -   *Extension*: rank unconditional samples by the perplexity/zlib ratio of Experiment 7.3 and check the top ones against the sampled training data.
+    -   *Data*: a few thousand sequences of The Pile (Gao et al., 2020) read from the training order released with Pythia.
+    -   *Success criterion*: the size and prompt-length curves with intervals, set against the paper's figures; the deduplication effect quantified; a one-page critique of the definition ("extractable" is not "harmful").
+    -   *Deliverables*: code, report, talk; chapters 7 and 8.
+
+### Group projects {#projects-group}
+
+1.  **[Group of 3 · ≈ 30 h each] Hardening a GraphRAG assistant against indirect prompt injection.** How much does each defense layer of ch. 6 lower the *adaptive* attack success rate, and does a knowledge graph spread an injection further than a chunk index?
+    -   *Work*: build the "master's documents" assistant of Ex. 8 twice, over chunks and over a knowledge graph with entity and community summaries ([LLM 7.4](../m2-large-language-models/index.html#graphrag), [Graph ML ch. 10](../m1p2-graph-ml/index.html#ch10)), with a simulated mail tool. Write an attack suite — direct, indirect, encoded, paraphrased, and adaptive attacks aimed at each defense — then add the layers of the ch. 6 table one by one.
+    -   *Data*: the public pages of these notes as the corpus, and the injection tasks of AgentDojo (Debenedetti et al., NeurIPS 2024 Datasets and Benchmarks) as attack templates.
+    -   *Split*: the two retrieval pipelines and the graph; the attack suite and the adaptive attacks; the defense layers, the CI suite and the latency budget.
+    -   *Success criterion*: per layer, the ASR per attack family with 95 % intervals, the blast radius, the false-positive rate on 200 legitimate questions and the added latency (Proposition 6.2); the spread of one planted injection in each index.
+    -   *Deliverables*: code, a CI regression suite, a red-team report in the format of Ex. 11, a 20-minute talk; chapters 0, 5, 6 and 10. It is the trust work package of a Year 2 project such as [Y2.1](../../projects/index.html#y2-1), with the CI gates of [MLOps ch. 2](../m2-mlops-llm-engineering/index.html#ch2).
+2.  **[Group of 3 · ≈ 30 h each] Privacy audit of a private fine-tune: memorization, membership inference and DP.** Which mitigation buys the most privacy per point of utility on a small corporate-style fine-tune?
+    -   *Work*: fine-tune GPT-2 small or Pythia-160M on synthetic customer e-mails with canaries repeated $k \in \{1, 10, 100\}$ times. Measure the exposure (Metric 7.2), run the extraction of Experiment 7.3, and draw the MIA ROC for a loss attack and a reference-calibrated attack ([LLM 9.7](../m2-large-language-models/index.html#privacy-bias)).
+    -   *Mitigations*: deduplication, PII scrubbing with Microsoft Presidio, and DP-SGD on LoRA adapters with Opacus at $\varepsilon \in \{1, 3, 8\}$ (Result 8.3), compared on one privacy–utility plot.
+    -   *Data*: e-mails generated from templates with the Faker library (the generator is released), mixed into WikiText-103 (Merity et al., ICLR 2017) so that personal data is rare.
+    -   *Split*: the corpus, the canaries and the exposure; extraction and MIA; mitigations, accountant and utility.
+    -   *Success criterion*: held-out perplexity against exposure and against the TPR at 0.1 % FPR for every mitigation, over 3 seeds; the measured MIA advantage set against the DP bound of exam question 4; a one-page recommendation for a data-protection committee.
+    -   *Deliverables*: code, joint report, talk; chapters 7, 8 and 9. It uses [Privacy and UQ ch. 4](../m2-privacy-uncertainty/index.html#ch4) (DP-SGD accounting) and [Security & Robustness Def. 8.3](../m2-security-robustness/index.html#ch8) (LiRA).
+3.  **[Group of 2 · ≈ 25 h each] A watermark bench for machine-readable marking.** Is the green-list z-test calibrated on human text, and what does each removal attack cost the attacker in quality?
+    -   *Work*: implement the green-list scheme (Ex. 10) and the unigram variant with a fixed green list (Zhao et al., ICLR 2024). Check the z-test with a Q-Q plot on human text, measure the power at $T \in \{50, 200, 500\}$ against Proposition 9.2, and attack with token edits, round-trip translation and paraphrase by an open instruct model.
+    -   *Data*: prompts and human continuations from the news-like split of C4 (Raffel et al., JMLR 2020), as in Kirchenbauer et al.; OPT-1.3B (Zhang et al., 2022) as the generator.
+    -   *Split*: the two schemes and their detectors; the attacks and the quality metrics.
+    -   *Success criterion*: the empirical false-positive rate at thresholds 2, 3 and 4 against the Gaussian prediction; a detectability–perplexity curve per attack and scheme; a one-page note on what the scheme can attest under the AI Act marking duty (ch. 10).
+    -   *Deliverables*: code, joint report, talk; chapters 9 and 10. It continues [LLM Theorem 9.3](../m2-large-language-models/index.html#watermark) and the watermarking chapter of [Control in Generative AI](../m2-control-generative-ai/index.html#ch6).
+
+### Written exam (proposal) {#projects-exam}
+
+Two hours, one handwritten A4 sheet allowed, a simple calculator allowed; four exercises, 20 points.
+
+1.  **Question (5 points).** A team reports two results: (i) a linear probe reads sentiment from layer 6 of its model with 95 % accuracy, "so the model uses sentiment at layer 6"; (ii) a new input filter lowers the attack success rate from 90 % to 0 % on 50 public jailbreaks, "so the assistant is secure". Review each claim: what it shows, what it does not show, and which experiment would settle it.
+    -   *Expected*: (i) a probe shows that the information is decodable, not that it is used (Problem 1.2). Report the selectivity against a control task with a low-capacity probe, then intervene — amnesic projection or activation patching (Definition 1.3) — and check that the output changes.
+    -   (ii) Known attacks measure only the non-adaptive ASR (Proposition 6.2). Attack the published filter with paraphrase, encoding and optimization, report the worst case, the false-positive rate on legitimate requests and the latency. With 0 successes out of 50, the 95 % upper bound on the true ASR is still about 3/50 = 6 % (rule of three, 10.1).
+2.  **Question (5 points).** A green-list watermark uses $\gamma = 0.5$, and a text of $T = 200$ tokens contains 130 green tokens. (a) Compute $z$ and decide at the threshold $z > 4$. (b) On marked text from a low-entropy domain, the green probability is only 0.6: give the expected score at the same length and the approximate power. (c) Which length brings the expected score to 4, and about which length gives a power of 95 %?
+    -   *Expected*: (a) $z = (130 - 100)/\sqrt{50} = 30/7.07 \approx 4.24 > 4$: the text is flagged, with a one-sided p-value of about $10^{-5}$.
+    -   (b) The expected score is
+        $$
+        \mathbb{E}[z] = \frac{0.1\,T}{\sqrt{0.25\,T}} = 0.2\sqrt{T} \approx 2.83 .
+        $$
+        Under $H_1$ the standard deviation of $z$ is $\sqrt{0.24/0.25} \approx 0.98$, so the power is about $\mathbb{P}(Z > 1.19) \approx 0.12$.
+    -   (c) $0.2\sqrt{T} = 4$ gives $T = 400$, where the power is only 0.5. A power of 0.95 needs $0.2\sqrt{T} \approx 4 + 1.645 \times 0.98 \approx 5.61$, so $T \approx 790$ tokens.
+3.  **Question (5 points).** (a) Prove the completeness of integrated gradients (Theorem 4.6) for a differentiable $F$. (b) Let $F(t) = 1 - \mathrm{ReLU}(1 - t)$ on $\mathbb{R}$, with input $x = 2$ and baseline $x' = 0$. Compute the gradient × input attribution and the IG attribution, and explain the difference.
+    -   *Expected*: (a) set $g(\alpha) = F(x' + \alpha(x - x'))$. The chain rule gives
+        $$
+        g'(\alpha) = \sum_i (x_i - x'_i)\,\partial_i F\bigl(x' + \alpha(x - x')\bigr),
+        $$
+        the integrand of $\sum_i \mathrm{IG}_i$, and the fundamental theorem of calculus gives $g(1) - g(0) = F(x) - F(x')$.
+    -   (b) $F(t) = \min(t, 1)$, so $F'(2) = 0$ and gradient × input gives 0, although $F(2) - F(0) = 1$. IG gives
+        $$
+        2\int_0^1 F'(2\alpha)\,d\alpha = 2 \times \tfrac12 = 1,
+        $$
+        the whole gap: the gradient saturates at the input, the path integral does not (the kink at $t = 1$ is a single point of the path).
+4.  **Question (5 points).** A membership-inference test decides "member" when the trained model falls in an event $S$; the training algorithm is $(\varepsilon, \delta)$-DP. (a) Show the two inequalities below. (b) Deduce the bound on the advantage. (c) Evaluate it for $\delta = 0$ at $\varepsilon = 1$ and $\varepsilon = 8$, and comment in the light of Result 8.3.
+    $$
+    \mathrm{TPR} \leq e^{\varepsilon}\,\mathrm{FPR} + \delta, \qquad 1 - \mathrm{FPR} \leq e^{\varepsilon}\,(1 - \mathrm{TPR}) + \delta, \qquad \mathrm{Adv} \leq \frac{e^{\varepsilon} - 1 + 2\delta}{e^{\varepsilon} + 1}.
+    $$
+    -   *Expected*: (a) let $D'$ be the training set with the target and $D$ the set without it, a neighbouring pair. The decision is a post-processing of the model, so the TPR is the probability that $M(D')$ falls in $S$ and the FPR the probability that $M(D)$ does. DP applied to this event gives the first inequality; applied to its complement, with the roles of the two sets swapped, the second.
+    -   (b) Maximize $\mathrm{TPR} - \mathrm{FPR}$ over the polygon cut by the two constraints: the maximum is at the vertex where both are tight, $\mathrm{FPR} = (1 - \delta)/(e^{\varepsilon} + 1)$ and $\mathrm{TPR} = e^{\varepsilon}\,\mathrm{FPR} + \delta$, which gives the bound.
+    -   (c) With $\delta = 0$ the bound is $\tanh(\varepsilon/2)$: 0.46 at $\varepsilon = 1$ and 0.9993 at $\varepsilon = 8$, almost vacuous. The guarantee at the budgets of Result 8.3 is a worst case; measured attacks are far weaker, which is why a DP fine-tune is also audited empirically (Ex. 9).
+
+### Grading rubric (proposal) {#projects-rubric}
+
+| Criterion | Weight | What earns the marks |
+|---|---|---|
+| Threat model and question | 15 % | a threat model in the terms of Definition 0.1 (access level, phase, goal, surface), or an interpretability question with its hypothesis, written before the experiment |
+| Method and implementation | 25 % | methods written from the chapters (probe with control task, IG with its completeness check, KernelSHAP, DP-SGD with an accountant, defense layers) and tested on cases whose answer is known |
+| Evaluation protocol | 20 % | adaptive attacks, worst case and false positives (Proposition 6.2); TPR at low FPR; utility measured next to privacy; several seeds with intervals |
+| Causal and statistical honesty | 15 % | correlations closed by an intervention (ch. 1); intervals instead of a bare "0 %" (10.1); claims kept within the stated threat model |
+| Responsible conduct | 10 % | attacks only against one's own systems, no harmful payload published, synthetic personal data only; the GDPR and AI Act consequences named (ch. 9–10) |
+| Report and presentation | 15 % | a clear report with honest limits, a talk on time, a repository that reruns, with its CI regression suite |
 
 ## References {#refs}
 
--   **Interpretability.** G. Alain & Y. Bengio, [Understanding Intermediate Layers Using Linear Classifier Probes](https://arxiv.org/abs/1610.01644), 2016; J. Hewitt & P. Liang, [Designing and Interpreting Probes with Control Tasks](https://arxiv.org/abs/1909.03368), EMNLP 2019; Y. Belinkov, [Probing Classifiers: Promises, Shortcomings, and Advances](https://direct.mit.edu/coli/article/8/1/251/98453), Computational Linguistics 2022; nostalgebraist, "Interpreting GPT: the logit lens", blog post, 2019; N. Belrose et al., [Eliciting Latent Predictions from Transformers with the Tuned Lens](https://arxiv.org/abs/2303.08112), 2023; S. Jain & B. Wallace, [Attention is not Explanation](https://arxiv.org/abs/1902.10186), NAACL 2019; S. Wiegreffe & Y. Pinter, [Attention is not not Explanation](https://arxiv.org/abs/1908.04626), EMNLP-IJCNLP 2019; C. Olsson et al., [In-context Learning and Induction Heads](https://arxiv.org/abs/2209.11895), Transformer Circuits 2022.
+-   **Interpretability.** G. Alain & Y. Bengio, [Understanding Intermediate Layers Using Linear Classifier Probes](https://arxiv.org/abs/1610.01644), 2016; J. Hewitt & P. Liang, [Designing and Interpreting Probes with Control Tasks](https://arxiv.org/abs/1909.03368), EMNLP 2019; Y. Belinkov, [Probing Classifiers: Promises, Shortcomings, and Advances](https://direct.mit.edu/coli/article/8/1/251/98453), Computational Linguistics 2022; nostalgebraist, "Interpreting GPT: the logit lens", blog post, 2019; N. Belrose et al., [Eliciting Latent Predictions from Transformers with the Tuned Lens](https://arxiv.org/abs/2303.08112), 2023; S. Jain & B. Wallace, [Attention is not Explanation](https://arxiv.org/abs/1902.10186), NAACL 2019; S. Wiegreffe & Y. Pinter, [Attention is not not Explanation](https://arxiv.org/abs/1908.04626), EMNLP-IJCNLP 2019; C. Olsson et al., [In-context Learning and Induction Heads](https://arxiv.org/abs/2209.11895), Transformer Circuits 2022; N. F. Liu, M. Gardner, Y. Belinkov, M. Peters, N. A. Smith, [Linguistic Knowledge and Transferability of Contextual Representations](https://arxiv.org/abs/1903.08855), NAACL 2019; I. Tenney, D. Das, E. Pavlick, [BERT Rediscovers the Classical NLP Pipeline](https://arxiv.org/abs/1905.05950), ACL 2019; Y. Elazar, S. Ravfogel, A. Jacovi, Y. Goldberg, [Amnesic Probing: Behavioral Explanation with Amnesic Counterfactuals](https://arxiv.org/abs/2006.00995), TACL 2021; K. Meng, D. Bau, A. Andonian, Y. Belinkov, [Locating and Editing Factual Associations in GPT](https://arxiv.org/abs/2202.05262), NeurIPS 2022; K. Wang, A. Variengien, A. Conmy, B. Shlegeris, J. Steinhardt, [Interpretability in the Wild: a Circuit for Indirect Object Identification in GPT-2 small](https://arxiv.org/abs/2211.00593), ICLR 2023.
 -   **Superposition / SAE.** N. Elhage, T. Hume, C. Olsson et al., [Toy Models of Superposition](https://transformer-circuits.pub/2022/toy-model/index.html), Transformer Circuits 2022; T. Bricken et al., [Towards Monosemanticity: Decomposing Language Models With Dictionary Learning](https://transformer-circuits.pub/2023/monosemantic-features/index.html), 2023; T. Templeton et al., [Scaling Monosemanticity: Extracting Interpretable Features from Claude 3 Sonnet](https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html), 2024.
 -   **Post-hoc explainability.** S. Lundberg & S.-I. Lee, [A Unified Approach to Interpreting Model Predictions](https://arxiv.org/abs/1705.07874) (SHAP), NeurIPS 2017; M. Ribeiro, S. Singh, C. Guestrin, ["Why Should I Trust You?": Explaining the Predictions of Any Classifier](https://arxiv.org/abs/1602.04938) (LIME), KDD 2016; M. Sundararajan, A. Taly, Q. Yan, [Axiomatic Attribution for Deep Networks](https://arxiv.org/abs/1703.01365) (Integrated Gradients), ICML 2017.
 -   **Security.** A. Zou, Z. Wang, N. Carlini, et al., [Universal and Transferable Adversarial Attacks on Aligned Language Models](https://arxiv.org/abs/2307.15043) (GCG), 2023; A. Wei, N. Haghtalab, J. Steinhardt, [Jailbroken: How Does LLM Safety Training Fail?](https://arxiv.org/abs/2307.02475), NeurIPS 2023; K. Greshake, S. Abdelnabi, S. Mishra, et al., [Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection](https://arxiv.org/abs/2302.12173), ACM AISec 2023; F. Perez & I. Ribeiro, [Ignore Previous Prompt: Attack Techniques For Language Models](https://arxiv.org/abs/2211.09527), 2022; A. Wan, E. Wallace, S. Shen, D. Klein, [Poisoning Language Models During Instruction Tuning](https://arxiv.org/abs/2305.00944), ICML 2023; T. Gu, B. Dolan-Gavitt, S. Garg, [BadNets](https://arxiv.org/abs/1708.06733), 2017; F. Tramèr, F. Zhang, A. Juels, et al., [Stealing Machine Learning Models via Prediction APIs](https://arxiv.org/abs/1609.02943), USENIX Security 2016.
--   **Privacy.** N. Carlini, C. Liu, Ú. Erlingsson, et al., [The Secret Sharer: Evaluating and Testing Unintended Memorization in Neural Networks](https://arxiv.org/abs/1812.00910), USENIX Security 2019; N. Carlini, F. Tramèr, E. Wallace, et al., [Extracting Training Data from Large Language Models](https://arxiv.org/abs/2012.07805), USENIX Security 2021; N. Carlini, S. Chien, M. Nasr, et al., [Quantifying Memorization Across Neural Language Models](https://arxiv.org/abs/2202.07646), ICLR 2023; R. Shokri, M. Stronati, C. Song, V. Shmatikov, [Membership Inference Attacks Against Machine Learning Models](https://arxiv.org/abs/1610.05820), IEEE S&P 2017; M. Abadi, A. Chu, I. Goodfellow, et al., [Deep Learning with Differential Privacy](https://arxiv.org/abs/1607.00133), CCS 2016; D. Yu, S. Naik, A. Backurs, et al., [Differentially Private Fine-tuning of Language Models](https://arxiv.org/abs/2110.06500), ICLR 2022; C. Dwork & A. Roth, [The Algorithmic Foundations of Differential Privacy](https://www.cis.upenn.edu/~aaroth/Papers/privacybook.pdf), Foundations and Trends in TCS 2014 (recap from the Emerging ML module ch. 5).
--   **Watermarking.** J. Kirchenbauer, J. Geiping, Y. Wen, et al., [A Watermark for Large Language Models](https://arxiv.org/abs/2301.10226), ICML 2023; M. Christ, S. Gunn, O. Zamir, [Undetectable Watermarks for Language Models](https://arxiv.org/abs/2306.09194), COLT 2024.
+-   **Privacy.** N. Carlini, C. Liu, Ú. Erlingsson, et al., [The Secret Sharer: Evaluating and Testing Unintended Memorization in Neural Networks](https://arxiv.org/abs/1812.00910), USENIX Security 2019; N. Carlini, F. Tramèr, E. Wallace, et al., [Extracting Training Data from Large Language Models](https://arxiv.org/abs/2012.07805), USENIX Security 2021; N. Carlini, S. Chien, M. Nasr, et al., [Quantifying Memorization Across Neural Language Models](https://arxiv.org/abs/2202.07646), ICLR 2023; R. Shokri, M. Stronati, C. Song, V. Shmatikov, [Membership Inference Attacks Against Machine Learning Models](https://arxiv.org/abs/1610.05820), IEEE S&P 2017; M. Abadi, A. Chu, I. Goodfellow, et al., [Deep Learning with Differential Privacy](https://arxiv.org/abs/1607.00133), CCS 2016; D. Yu, S. Naik, A. Backurs, et al., [Differentially Private Fine-tuning of Language Models](https://arxiv.org/abs/2110.06500), ICLR 2022; X. Li, F. Tramèr, P. Liang, T. Hashimoto, [Large Language Models Can Be Strong Differentially Private Learners](https://arxiv.org/abs/2110.05679), ICLR 2022; N. Carlini, S. Chien, M. Nasr, et al., [Membership Inference Attacks From First Principles](https://arxiv.org/abs/2112.03570) (LiRA), IEEE S&P 2022; L. Sweeney, *Simple Demographics Often Identify People Uniquely*, Carnegie Mellon University, Data Privacy Working Paper 3, 2000; L. Sweeney, *k-anonymity: a model for protecting privacy*, International Journal of Uncertainty, Fuzziness and Knowledge-Based Systems 10(5), 2002; A. Machanavajjhala, D. Kifer, J. Gehrke, M. Venkitasubramaniam, *ℓ-diversity: Privacy beyond k-anonymity*, ACM TKDD 2007; C. Dwork & A. Roth, [The Algorithmic Foundations of Differential Privacy](https://www.cis.upenn.edu/~aaroth/Papers/privacybook.pdf), Foundations and Trends in TCS 2014 (proved in the Privacy and UQ module ch. 1–4).
+-   **Watermarking.** J. Kirchenbauer, J. Geiping, Y. Wen, et al., [A Watermark for Large Language Models](https://arxiv.org/abs/2301.10226), ICML 2023; M. Christ, S. Gunn, O. Zamir, [Undetectable Watermarks for Language Models](https://arxiv.org/abs/2306.09194), COLT 2024; X. Zhao, P. Ananth, L. Li, Y.-X. Wang, [Provable Robust Watermarking for AI-Generated Text](https://arxiv.org/abs/2306.17439), ICLR 2024; R. Kuditipudi, J. Thickstun, T. Hashimoto, P. Liang, [Robust Distortion-free Watermarks for Language Models](https://arxiv.org/abs/2307.15593), TMLR 2024.
 -   **Red teaming / compliance.** E. Perez, S. Huang, H. Song, et al., [Red Teaming Language Models with Language Models](https://arxiv.org/abs/2212.08094), 2022; D. Ganguli, L. Lovitt, J. Kernion, et al., [Red Teaming Language Models to Reduce Harms](https://arxiv.org/abs/2209.07858), 2022; [Regulation (EU) 2024/1689 — AI Act](https://eur-lex.europa.eu/eli/reg/2024/1689/oj); [NIST AI Risk Management Framework 1.0](https://www.nist.gov/itl/ai-risk-management-framework), 2023; [OWASP Top 10 for LLM Applications](https://genai.owasp.org/llm-top-10/).
+-   **Projects: data and models.** Z. Yang et al., [HotpotQA](https://arxiv.org/abs/1809.09600), EMNLP 2018; S. Biderman et al., [Pythia: A Suite for Analyzing Large Language Models Across Training and Scaling](https://arxiv.org/abs/2304.01373), ICML 2023; L. Gao et al., [The Pile](https://arxiv.org/abs/2101.00027), 2020; E. Debenedetti et al., [AgentDojo](https://arxiv.org/abs/2406.13352), NeurIPS 2024 Datasets and Benchmarks; S. Merity et al., [Pointer Sentinel Mixture Models](https://arxiv.org/abs/1609.07843) (WikiText-103), ICLR 2017; C. Raffel et al., [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683) (C4), JMLR 2020; S. Zhang et al., [OPT: Open Pre-trained Transformer Language Models](https://arxiv.org/abs/2205.01068), 2022; A. Radford et al., *Language Models are Unsupervised Multitask Learners* (GPT-2), 2019; A. Gokaslan & V. Cohen, *OpenWebText Corpus*, 2019.
 -   Lab tools: [Captum](https://github.com/pytorch/captum) (attributions), [Opacus](https://pytorch.org/privacy/) (DP-SGD), [mechanistic interpretability glossary](https://neelnanda.io/glossary) (TransformerLens for patching).
