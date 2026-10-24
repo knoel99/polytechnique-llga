@@ -875,7 +875,7 @@ The projects are built so that students extend labs that already exist instead o
 |---|---|
 | Graph ML final lab (mini-GraphRAG), Example 8.1, Example 3.4, Ex. 15 | Y1.1, Y1.3, Y1.4; Y2.1 |
 | NLP Ex. 14 capstone pipeline, Ex. 13 (MF vs content on MovieLens) | Y1.1, Y1.3 |
-| RL ch7 guiding lab and Ex. 16 (agent project), Ex. 8 (LinUCB) | Y1.1, Y1.3 |
+| RL ch7 guiding lab and Ex. 18 (agent project), Ex. 8 (LinUCB) | Y1.1, Y1.3 |
 | Multimodal GenAI ch5 InfoNCE code, Ex. 5 | Y1.4; Y2.3 |
 | DL (P2 variant) Example 5.4 protocol, Ex. 7 budget | Y1.2, Y1.5; all charters |
 | LLM final lab (8.3) and Ex. 12 (vector vs graph router), 7.3 RAG lab protocol | Y2.1 |
