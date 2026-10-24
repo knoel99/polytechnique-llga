@@ -58,6 +58,8 @@ A gradient step can reduce that loss without changing the predicted class. Loss 
 
 The empirical spine is the public [knoel99/MNIST](https://github.com/knoel99/MNIST) repository: load digits, normalize pixels, flatten, train an affine NumPy classifier with alternative output activations, and inspect loss and accuracy. The calculations below make that path explicit before extending it.
 
+You do not need the notebook to run anything here: [§2.3](#numpy-loop) gives a self-contained NumPy training loop with reference numbers.
+
 ::: note
 [Starting point]{.tag} The reference notebook trains an **affine MNIST classifier with no hidden layer**, using **MSE and alternative output activations**. The multilayer examples below extend that starting point. They prepare the transition to Deep Learning; they do not replace practice with layered models, automatic differentiation or sequence prediction.
 :::
@@ -66,6 +68,7 @@ The empirical spine is the public [knoel99/MNIST](https://github.com/knoel99/MNI
 
 -   Follow the notebook’s data preparation, parameter shapes, scores, MSE, updates and `argmax` evaluation.
 -   Distinguish its $(B,784)\to(B,10)$ map from a multilayer extension $(B,784)\to(B,H)\to(B,10)$.
+-   Run a complete NumPy training loop for that extension and match its reference loss and accuracy.
 -   Compute a tiny forward/backward by hand, including the loss-reduction factor.
 -   Compare identity / sigmoid / ReLU through saturation, sparsity and measured loss curves.
 -   Read SGD, momentum and Adam updates, then interpret one attention line as a $T\times T$ weight matrix.
@@ -79,7 +82,7 @@ Recognizing names such as saturation or exploding gradients helps with diagnosis
 | Session | Hours | Level | Content | Practice |
 |---|---|---|---|---|
 | 1 | 2 h | 1 | ch. 1 Empirical MNIST path: shapes, MSE helper, what the notebook compares | Ex. 1, 5; positioning task 1 |
-| 2 | 2 h | 1 | ch. 2 Tiny $2\to2\to2$ forward, stable softmax, MSE versus cross-entropy | set up Experiment 2.2; positioning task 3 |
+| 2 | 2 h | 1 | ch. 2 Tiny $2\to2\to2$ forward, stable softmax, MSE versus cross-entropy, a complete NumPy training loop | run the §2.3 loop; set up Experiment 2.2; positioning task 3 |
 | 3 | 2 h | 2 | ch. 3 Backpropagation with numbers: affine MSE table, two-layer ReLU chain | Ex. 2, 3, 6; positioning task 2 |
 | 4 | 2 h | 2 | ch. 4 Activations and initialization | Ex. 7 |
 | 5 | 2 h | 2 | ch. 5 Optimization in practice: SGD, momentum, Adam | Ex. 8 (write-up of Experiment 2.2) |
@@ -112,6 +115,14 @@ The affine notebook provides practice with normalization, parameter matrices, Nu
 
 The full route is an estimate of **about 12–18 hours of self-study**, including exercises and reruns. It is not an official workload or a required duration; the [session plan](#sessions) splits its first 12 h into six sessions of 2 h.
 
+::: {#dl-p2-route .note}
+[Route for Deep Learning P2 students]{.tag} On the AI systems route, students take no Deep Learning course in Period 1. The notes of [Deep Learning P2](../m1p2-deep-learning-p2/index.html) list Machine Learning and this refresher as their prerequisites; the official sheet asks for basics in machine learning and Python.
+
+Work ch. 2–6 before DL P2 session 1: sessions 2–6 of the [session plan](#sessions), about 9 h, with Exercises 2, 3, 4 and 6. Read ch. 1 too if positioning task 1 is uncertain.
+
+Attention stops at a single head here. DL P2's [chapter 0](../m1p2-deep-learning-p2/index.html#ch0) completes the step from MLP to transformer block. The [exit checkpoint](#exit-checkpoint) of ch. 7 is your entry check.
+:::
+
 ## Contents
 
 -   [Introduction and overview](#intro)
@@ -125,6 +136,7 @@ The full route is an estimate of **about 12–18 hours of self-study**, includin
 -   [6. Short bridge: attention intuition](#ch6)
 -   [7. Connections, limits and exit routes](#ch7)
 -   [Exercises](#ex)
+-   [Projects and assessment](#projects)
 -   [Sources, scope and references](#refs)
 
 ## 1. Empirical MNIST path (from the notebook) {#ch1}
@@ -165,6 +177,12 @@ Here $n$ is the number of examples in a dataset, $B$ the mini-batch size, and $C
 | $z=XW+b$ | $(B,10)$ | pre-activation outputs |
 | $\hat y=\phi(z)$ | $(B,10)$ | scores used by MSE and `argmax` |
 | $Y$ | $(B,10)$ | one-hot targets |
+
+::: note
+[Shape convention]{.tag} These notes put one example per row: $z=XW+b$, with $W$ of shape (fan-in, fan-out), here $(784,10)$. PyTorch's `nn.Linear` stores its `weight` as (fan-out, fan-in), so our $W$ is `nn.Linear.weight` transposed.
+
+Other LLGA pages write one example as a column, $h=Wx+b$ with $W\in\mathbb{R}^{d_\text{out}\times d_\text{in}}$. Transpose $W$ when you move between the two forms.
+:::
 
 For comparison, the **multilayer extension** used later has hidden width $H$:
 
@@ -318,7 +336,7 @@ In a framework, a fused cross-entropy function commonly accepts **logits** and c
 ![Schematic healthy descent, explosion and vanishing-gradient regimes. These are diagnostic illustrations, not measured curves from a specific notebook run.](schema-grad-regimes.svg){fig-alt="Three schematic training regimes: healthy descent, explosion, and vanishing gradients." width="100%"}
 
 ::: ex
-[Experiment 2.2 — controlled learning-rate stress test]{.tag} Choose either the affine notebook model or the two-layer extension. Keep that architecture and its loss reduction fixed. Run **5 epochs** for each setting, resetting to the same initialization and mini-batch order:
+[Experiment 2.2 — controlled learning-rate stress test]{.tag} Choose either the affine notebook model or the two-layer extension; the loop of [§2.3](#numpy-loop) runs the extension without the notebook. Keep that architecture and its loss reduction fixed. Run **5 epochs** for each setting, resetting to the same initialization and mini-batch order:
 
 | Setting | Diagnostic hypothesis to test |
 |---------|-------------------------------|
@@ -331,6 +349,58 @@ Record loss, accuracy and gradient norms; keep the data split, batch size and re
 
 Write three sentences identifying which observed curve resembles each relevant panel above. Then report what changes when swapping ReLU↔sigmoid at fixed $\eta=0.01$; connect the result to §4. A flat loss alone does not distinguish a tiny step size from saturation.
 :::
+
+### 2.3. A complete training loop in NumPy {#numpy-loop}
+
+The notebook is one way to watch training happen. This loop is another, with no external code: it trains the multilayer extension $784\to128\to10$ (ReLU hidden layer, softmax CE head) with mini-batch SGD.
+
+The forward pass is §2.1 at full size. The lines with `delta2` and `delta1` apply the batch-mean CE gradients that [§3.2](#two-layer-backprop) derives by hand: run them now, check them there.
+
+~~~python
+import numpy as np   # softmax(...) is the stable helper of §2.1
+
+# Keras copy of MNIST (60,000 training and 10,000 test images):
+# https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist.npz
+with np.load("mnist.npz") as f:
+    X, y = f["x_train"].reshape(-1, 784) / 255.0, f["y_train"]
+Xtr, ytr, Xva, yva = X[:55000], y[:55000], X[55000:], y[55000:]  # test set untouched
+
+rng = np.random.default_rng(0)
+W1 = rng.normal(0, np.sqrt(2 / 784), size=(784, 128)); b1 = np.zeros((1, 128))
+W2 = rng.normal(0, np.sqrt(2 / 128), size=(128, 10));  b2 = np.zeros((1, 10))
+eta, B = 0.1, 64
+
+def forward(X):
+    z1 = X @ W1 + b1
+    h = np.maximum(z1, 0.0)
+    return z1, h, softmax(h @ W2 + b2)
+
+for epoch in range(1, 6):
+    perm = rng.permutation(len(Xtr))
+    for s in range(0, len(Xtr), B):
+        idx = perm[s:s + B]
+        xb, yb = Xtr[idx], np.eye(10)[ytr[idx]]          # one-hot targets
+        z1, h, p = forward(xb)
+        delta2 = (p - yb) / len(idx)                      # batch-mean CE, §3.2
+        delta1 = (delta2 @ W2.T) * (z1 > 0)               # before W2 changes
+        W2 -= eta * h.T @ delta2;  b2 -= eta * delta2.sum(0, keepdims=True)
+        W1 -= eta * xb.T @ delta1; b1 -= eta * delta1.sum(0, keepdims=True)
+    p_tr = forward(Xtr)[2]
+    loss = -np.mean(np.log(p_tr[np.arange(len(ytr)), ytr]))
+    acc = np.mean(forward(Xva)[2].argmax(axis=1) == yva)
+    print(f"epoch {epoch}: train CE {loss:.4f}, validation accuracy {acc:.4f}")
+~~~
+
+Reference output with seed 0, float64 NumPy and this file:
+
+| After | Training CE (55,000 images) | Validation accuracy (5,000 images) |
+|---|---|---|
+| epoch 1 | 0.2340 | 0.9486 |
+| epoch 5 | 0.0883 | 0.9762 |
+
+The training CE is measured on the whole training split after the epoch, not averaged over its mini-batches. Your digits should agree to about three decimals; another seed, batch order or copy of the data changes them.
+
+These are validation numbers: the 10,000 test images stay free for one final report. To compare with the notebook's affine MSE model, train it on the same split and read its validation accuracy.
 
 ## 3. Gradients and backpropagation with numbers {#ch3}
 
@@ -510,13 +580,15 @@ A hidden nonlinearity prevents this collapse and allows a richer representation.
 
 ### 4.1. Initialization {#initialization}
 
-If $W_{ij}\sim\mathcal{N}(0,1)$, pre-activation variance can grow with fan-in. Under an independent, unit-variance input approximation,
+If $W_{ij}\sim\mathcal{N}(0,1)$, pre-activation variance can grow with fan-in. For zero-mean weights drawn independently of the inputs,
 
 $$
-\mathrm{Var}(z_j)\approx \mathrm{fan\_in}\,\mathrm{Var}(W_{ij}).
+\mathrm{Var}(z_j)\approx \mathrm{fan\_in}\,\mathrm{Var}(W_{ij})\,\mathbb{E}[x_i^2],
 $$
 
-At fan-in 784, unit-variance weights give a scale near variance 784, or standard deviation 28 — enough to push many sigmoid outputs into saturation.
+where $\mathbb{E}[x_i^2]$ is the second moment of an input, averaged over the inputs.
+
+With standardized inputs, $\mathbb{E}[x_i^2]=1$: at fan-in 784, unit-variance weights give variance 784, or standard deviation 28. The notebook only scales pixels to $[0,1]$, and MNIST then has $\mathbb{E}[x_i^2]\approx0.11$: the variance is about 88 and the standard deviation about 9.4. Either scale pushes many sigmoid outputs into saturation.
 
 Common scale choices:
 
@@ -546,9 +618,11 @@ Here $B_t$ is the set of examples in the current mini-batch, $\theta$ contains a
 **Momentum** accumulates a velocity. Writing $g_t$ for the current gradient,
 
 $$
-v_{\mathrm{mom}}\leftarrow\mu v_{\mathrm{mom}}+g_t,\qquad
+v_{\mathrm{mom}}\leftarrow\beta v_{\mathrm{mom}}+g_t,\qquad
 \theta\leftarrow\theta-\eta v_{\mathrm{mom}}.
 $$
+
+The momentum coefficient $\beta$ is often 0.9.
 
 **Adam** maintains first and second moments with bias correction. It is a useful default once shapes and derivatives are trusted, but it does not remove the need to choose a learning rate or inspect loss scaling.
 
@@ -577,17 +651,17 @@ Goal: **not** to train an LLM. Only see how attention creates a $T\times T$ patt
 
 For example, a row of weights $(0.1,0.2,0.6,0.1)$ produces the weighted combination $0.1V_0+0.2V_1+0.6V_2+0.1V_3$. The third position contributes most; the weights in that row sum to one.
 
-Let $T$ be the number of positions, $d$ the query/key dimension, and $d_v$ the value dimension:
+Let $T$ be the number of positions, $d_k$ the query/key dimension, and $d_v$ the value dimension:
 
 $$
-Q,K\in\mathbb{R}^{T\times d},\qquad
+Q,K\in\mathbb{R}^{T\times d_k},\qquad
 V\in\mathbb{R}^{T\times d_v}.
 $$
 
 ::: def
 [Definition 6.1 — Attention (single head)]{.tag}
 $$
-\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\Big(\frac{QK^\top}{\sqrt{d}}\Big)V.
+\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\Big(\frac{QK^\top}{\sqrt{d_k}}\Big)V.
 $$
 Softmax acts across key positions in each row. The weight matrix has shape $(T,T)$ and the output has shape $(T,d_v)$.
 :::
@@ -598,15 +672,15 @@ Using the stable row-wise softmax helper from §2:
 
 ~~~python
 def attention(Q, K, V):
-    d = Q.shape[1]
-    scores = (Q @ K.T) / np.sqrt(d)   # (T, T)
+    d_k = Q.shape[1]
+    scores = (Q @ K.T) / np.sqrt(d_k)   # (T, T)
     weights = softmax(scores, axis=-1)
     return weights @ V, weights
 ~~~
 
-A common **pre-normalized** transformer block is approximately LayerNorm → attention → residual → LayerNorm → MLP → residual. Learned projections, multiple heads, batching and these surrounding operations require further practice in Deep Learning.
+*Preview, taught in [Deep Learning §6.2](../m1p1-deep-learning/index.html#ch6) (or chapter 0 of [Deep Learning P2](../m1p2-deep-learning-p2/index.html#ch0)).* A common **pre-normalized** transformer block is approximately LayerNorm → attention → residual → LayerNorm → MLP → residual. There, $Q=XW_Q$ is learned from token rows $X\in\mathbb{R}^{T\times d}$; with several heads, each head has $d_k$ equal to $d$ divided by the number of heads. Learned projections, multiple heads, batching and these surrounding operations require further practice in Deep Learning.
 
-Token prediction uses the same CE family as classification, but adds a sequence task: tokenization, per-position targets, target shifting, causal masking and sequence evaluation. None of those is supplied by the affine MNIST notebook or by this attention function.
+*Preview, taught in [Text Mining and NLP](../m1p2-nlp-text-mining/index.html#ch1) (tokenization in §1.2).* Token prediction uses the same CE family as classification, but adds a sequence task: tokenization, per-position targets, target shifting, causal masking and sequence evaluation. None of those is supplied by the affine MNIST notebook or by this attention function.
 
 Attention provides an intuition for weighted aggregation. Whether an explicit relational graph improves a text model is a separate empirical question — central to the Graph × LLM reading route, not answered by an attention heatmap.
 
@@ -614,24 +688,27 @@ Attention provides an intuition for weighted aggregation. Whether an explicit re
 
 The following is a **reading recommendation**, not a statement of official prerequisites, elective status or curriculum equivalence.
 
-### Exit checkpoint
+### Exit checkpoint {#exit-checkpoint}
 
 Before leaving for layered-model work, check that you can:
 
 1.  Separate **notebook scores → MSE / `argmax`** from **extension logits → softmax CE**, and explain the $2/(BC)$ MSE factor: [§1.1](#mnist-scores), [§2.2](#losses), [§3.1](#affine-backprop), Exercise 2.
 2.  Reproduce the tiny forward and hidden ReLU mask, with correctly shaped gradients: [§2.1](#tiny-forward), [§3.2](#two-layer-backprop), Exercises 1, 2, 3 and 6.
-3.  Report a controlled learning-rate comparison without inferring generalization from training loss alone: [§1.3](#notebook-comparison), [Experiment 2.2](#losses), Exercise 8.
+3.  Report a controlled learning-rate comparison without inferring generalization from training loss alone: [§1.3](#notebook-comparison), [Experiment 2.2](#losses), [§2.3](#numpy-loop), Exercise 8.
+4.  Read one attention row as weights over key positions, with and without a causal mask: [§6](#ch6), Exercise 4.
 
 These are **entry checks for further study**, not evidence of completing Deep Learning.
+
+For a student entering [Deep Learning P2](../m1p2-deep-learning-p2/index.html) without the Period 1 course, checks 1–4 are the entry check for its session 1 (see the [DL P2 route](#dl-p2-route)). Its chapter 0 starts from check 4 and completes the transformer block.
 
 | Reading stage | Exit destination and purpose | What this refresher supplies — and what remains |
 |---------------|-----------------------------|------------------------------------------------|
 | Refreshers on demand | [Refresher Statistics](../m1p1-refresher-statistics/index.html) · [Refresher CS](../m1p1-refresher-cs/index.html) | Revisit uncertainty, evaluation or implementation only where the positioning tasks expose a gap. Neither refresher is assumed complete. |
-| Evaluation first | [Machine Learning entry on the course map](../../index.html) | Carry empirical risk and a reproducible affine baseline. Develop validation, regularization, model comparison and leakage controls. |
-| Layered models next | [Deep Learning — continue from manual gradients to trained representations](../m1p1-deep-learning/index.html) | Carry the two-layer calculation and optimizer diagnostics. Implement and evaluate layered models with autodiff, training/evaluation states and appropriate architectures. |
-| Relational branch | [Graph ML entry on the course map](../../index.html) | Carry batched affine maps, nonlinear composition and gradient checks. Learn data-graph representations, message passing, relational splits and feature-only baselines. |
-| Text branch, coordinated with Graph ML | [NLP entry on the course map](../../index.html) | Carry softmax/CE and the optional attention intuition. Learn text representations, tokenization, sequence targets and sequence evaluation. |
-| Graph × LLM continuation | [Large Language Models and Advanced GNN entries on the course map](../../index.html) | Build on the two branches before evaluating coupling choices, graph expressivity, scaling and language-model objectives. This refresher is not a direct substitute for those steps. |
+| Evaluation first | [Machine Learning](../m1p1-machine-learning/index.html) | Carry empirical risk and a reproducible affine baseline. Develop validation, regularization, model comparison and leakage controls. |
+| Layered models next | [Deep Learning — continue from manual gradients to trained representations](../m1p1-deep-learning/index.html) · on the AI systems route, [Deep Learning P2](../m1p2-deep-learning-p2/index.html) | Carry the two-layer calculation and optimizer diagnostics. Implement and evaluate layered models with autodiff, training/evaluation states and appropriate architectures. |
+| Relational branch | [Graph ML](../m1p2-graph-ml/index.html) | Carry batched affine maps, nonlinear composition and gradient checks. Learn data-graph representations, message passing, relational splits and feature-only baselines. |
+| Text branch, coordinated with Graph ML | [Text Mining and NLP](../m1p2-nlp-text-mining/index.html) | Carry softmax/CE and the optional attention intuition. Learn text representations, tokenization, sequence targets and sequence evaluation. |
+| Graph × LLM continuation | [Large Language Models](../m2-large-language-models/index.html) · [Advanced GNN](../m2-advanced-gnn/index.html) | Build on the two branches before evaluating coupling choices, graph expressivity, scaling and language-model objectives. This refresher is not a direct substitute for those steps. |
 
 For a concrete **next Deep Learning experiment**, implement the $2\to2\to2$ example with automatic differentiation and compare its gradients to §3.2 before scaling up. Then train a hidden-layer MNIST model under a fixed split and compare it with the affine baseline. Reproduce the computation first; ask whether the added representation improves held-out results second.
 
@@ -698,10 +775,10 @@ Optimal Transport and Geometric DL can provide complementary tools when the prob
     The extra local derivative $h(1-h)$ explains why the first weight receives a smaller gradient in this example.
     :::
 
-4.  **★ Toy attention.** $T=5$, $d=16$; force $K_2$ to align positively with $Q_0$ and make its score larger than the other scores. Check that row 0 of the weights concentrates on column 2. Would that connection be allowed under a causal mask?
+4.  **★ Toy attention.** $T=5$, $d_k=16$; force $K_2$ to align positively with $Q_0$ and make its score larger than the other scores. Check that row 0 of the weights concentrates on column 2. Would that connection be allowed under a causal mask?
 
     ::: sol
-    A large score $(Q_0\cdot K_2)/\sqrt{d}$ dominates its softmax row. Alignment alone is insufficient if other keys have still larger dot products.
+    A large score $(Q_0\cdot K_2)/\sqrt{d_k}$ dominates its softmax row. Alignment alone is insufficient if other keys have still larger dot products.
 
     For example, if the five row scores are $(0,0,5,0,0)$, then
     $$
@@ -787,6 +864,112 @@ Optimal Transport and Geometric DL can provide complementary tools when the prob
     :::
 
 
+## Projects and assessment {#projects}
+
+Official assessment: not displayed. This refresher is outside the official curriculum, so no SynapseS sheet gives it an assessment, and the subjects below are **proposals** for self-assessment. They are also the remediation route for AI systems students before [Deep Learning P2](../m1p2-deep-learning-p2/index.html). The NumPy MLP is the "from scratch" reflex that [Deep Learning](../m1p1-deep-learning/index.html) ch. 2 and DL P2 ch. 0 reuse. The projects exercise objective **O1** (ML and DL foundations) only.
+
+### Solo projects {#projects-solo}
+
+1.  **[Solo · ≈ 10 h] From affine scores to a trained MLP in pure NumPy.** Question: how much of the gain over the affine MSE baseline comes from the hidden layer, and how much from the change of loss (the "Two independent changes" note of §1.1)?
+    -   *Implement*: a 2 × 2 design {affine, one hidden ReLU layer of width 128} × {MSE, softmax CE}, built on the [§2.3](#numpy-loop) loop; finite-difference checks of every gradient on a batch of 8, as in Exercise 6.
+    -   *Data*: MNIST (LeCun, Cortes and Burges), the Keras `mnist.npz` copy; the §2.3 split, with the 10,000 test images used once.
+    -   *Deliverables*: script, 4-page report, table of test accuracy (mean ± standard deviation over 3 seeds) for the four cells.
+    -   *Chapters*: ch. 1, 2, 3, 5.
+    -   *Success*: every gradient check below $10^{-6}$ relative error; one learning rate per cell chosen on validation; a report that separates the depth effect from the loss effect.
+2.  **[Solo · ≈ 10 h] Gradient-flow lab: a paper study of Glorot and Bengio (2010).** Reproduce on MNIST the per-layer activation and gradient statistics of X. Glorot and Y. Bengio, "Understanding the difficulty of training deep feedforward neural networks", AISTATS 2010, and extend them to ReLU with the He scale (He, Zhang, Ren and Sun, ICCV 2015).
+    -   *Implement*: a factorial design {sigmoid, ReLU} × {$\mathcal{N}(0,1)$, Xavier, He} on 5 hidden layers of width 256; the general $L$-layer $\delta$ recursion behind §3.2; per-layer activation second moment, gradient norm and dead-ReLU fraction, at initialization and after one epoch.
+    -   *Deliverables*: script, per-layer plots, 4-page report comparing measured and predicted variances.
+    -   *Chapters*: ch. 3, 4.
+    -   *Success*: averaged over 3 seeds, the layer-1 mean of $z^2$ matches the [§4.1](#initialization) prediction within 10 %; initialization and activation effects are attributed separately, the control that Exercise 7 lacks.
+3.  **[Solo · ≈ 8 h] Attention from scratch on a toy retrieval task.** Question: can one causal attention head learn to fetch the token two positions back, and does its $T\times T$ weight matrix show it?
+    -   *Implement*: extend the §6 helper with learned $W_Q,W_K,W_V$, an output layer and the causal mask of Exercise 4; inputs are one-hot tokens concatenated with one-hot positions; CE on the shifted targets; NumPy gradients checked against PyTorch autograd.
+    -   *Data*: synthetic sequences of $T=8$ tokens drawn uniformly from 16 symbols; fresh sequences for testing.
+    -   *Deliverables*: script, attention heatmaps, 3-page report.
+    -   *Chapters*: ch. 2, 3, 5, 6.
+    -   *Success*: test accuracy above 99 % and a mean attention weight above 0.8 on position $t-2$. This is the stepping stone to [Text Mining and NLP](../m1p2-nlp-text-mining/index.html) ch. 7 and [Large Language Models](../m2-large-language-models/index.html).
+
+### Group projects {#projects-group}
+
+1.  **[Group of 3 · ≈ 10 h each] Optimizer bake-off: a paper study of Kingma and Ba (2015).** Revisit the MNIST multilayer experiment of D. P. Kingma and J. Ba, "Adam: A Method for Stochastic Optimization", ICLR 2015, under a controlled protocol. Question: does Adam's advantage survive a fair learning-rate sweep, and how does the loss reduction move the best SGD step size?
+    -   *Implement*: SGD, momentum ($\beta=0.9$) and Adam in NumPy, checked against `torch.optim` on identical gradients; log-grid sweeps of $\eta$ for MSE with the $1/(BC)$ and $1/B$ reductions and for CE; 3 seeds per setting.
+    -   *Data*: MNIST with the §2.3 split and MLP; the paper's two hidden layers of 1000 ReLU units are an optional extension.
+    -   *Split*: one member writes the optimizers and PyTorch checks, one the sweep harness and logging, one the analysis, plots and effect sizes.
+    -   *Deliverables*: repository, 6-page report, 10-minute talk.
+    -   *Chapters*: ch. 2, 3, 5.
+    -   *Success*: NumPy and PyTorch updates agree to $10^{-10}$ in float64; every best $\eta$ lies inside its grid; the report tests whether SGD's best $\eta$ moves by about $C=10$ between the two MSE reductions while Adam's does not (exam question 4).
+2.  **[Group of 2 · ≈ 12 h each] A mini reverse-mode autodiff engine.** Question: can a 200-line engine over NumPy reproduce this page's hand-written gradients exactly? It builds the tool that [Deep Learning](../m1p1-deep-learning/index.html) ch. 2 and [Deep Learning P2](../m1p2-deep-learning-p2/index.html#ch0) ch. 0 take for granted.
+    -   *Implement*: a `Tensor` class that records a DAG; vector–Jacobian products for matmul, broadcast add, ReLU, sigmoid, log-softmax CE, sum and mean, applied in reverse topological order (§3.2 note); then train the §2.3 MLP and differentiate the §6 attention function.
+    -   *Reading*: A. G. Baydin, B. A. Pearlmutter, A. A. Radul and J. M. Siskind, "Automatic Differentiation in Machine Learning: a Survey", JMLR 18(153), 2018.
+    -   *Split*: one member writes the graph, operations and VJPs; the other writes the tests and the MNIST and attention integrations.
+    -   *Deliverables*: package with tests, 4-page report, 10-minute demo.
+    -   *Chapters*: ch. 2, 3, 6.
+    -   *Success*: the §3.2 gradients reproduced to four decimals; every operation passes a finite-difference check below $10^{-6}$ relative error; one epoch of the §2.3 loop gives the reference training CE 0.2340.
+
+### Written exam (proposal) {#projects-exam}
+
+*Format*: 2 h written exam, one handwritten A4 sheet allowed, simple calculator allowed; four questions, 20 points.
+
+1.  **Question (5 points).** Scores, logits and diagnosis.
+    -   **(a)** Why need the notebook's ten sigmoid scores not sum to one, and why does `argmax` still work?
+    -   **(b)** Show that two affine layers with an identity hidden activation form one affine layer. What does a hidden ReLU change?
+    -   **(c)** A training loss stays flat for five epochs. Give two causes and the measurement that separates them.
+
+    *Expected*:
+
+    -   **(a)** $\sigma$ acts entrywise with no normalization; `argmax` needs only an order (1 pt).
+    -   **(b)** The identity of ch. 4, $X(W^{(1)}W^{(2)})+(b^{(1)}W^{(2)}+b^{(2)})$; a hidden ReLU makes the map piecewise affine, so it no longer collapses (2 pts).
+    -   **(c)** A tiny step size, or saturation and dead ReLUs. Per-layer gradient norms and activation statistics separate them: small steps keep healthy gradient norms, saturation drives them towards zero (2 pts).
+2.  **Question (6 points).** Take $x=(1,2)$, target $y=(1,0)$, a ReLU hidden layer, a softmax CE head, and
+    $$
+    W^{(1)}=\begin{pmatrix}1&-1\\0.5&0.5\end{pmatrix},\quad
+    b^{(1)}=(0,-1),\quad
+    W^{(2)}=I_2,\quad
+    b^{(2)}=(0,2).
+    $$
+    -   **(a)** Compute $z^{(1)}$, $h$, the logits, $\hat p$ and the loss.
+    -   **(b)** Compute $\delta^{(2)}$, the gradient for $W^{(2)}$, $\delta^{(1)}$ and the gradient for $W^{(1)}$.
+    -   **(c)** Apply one SGD step with $\eta=0.1$ to all four parameters and recompute the logit gap.
+
+    *Expected*:
+
+    -   **(a)** $z^{(1)}=(2,-1)$, $h=(2,0)$, logits $(2,2)$, $\hat p=(0.5,0.5)$ and loss $\ln2\approx0.693$ (2 pts).
+    -   **(b)** $\delta^{(2)}=(-0.5,0.5)$; the ReLU mask $(1,0)$ gives $\delta^{(1)}=(-0.5,0)$ (2 pts). The bias gradients are $\delta^{(2)}$ and $\delta^{(1)}$, and the weight gradients are (1 pt)
+        $$
+        \nabla_{W^{(2)}}\mathcal{L}=\begin{pmatrix}-1&1\\0&0\end{pmatrix},\qquad
+        \nabla_{W^{(1)}}\mathcal{L}=\begin{pmatrix}-0.5&0\\-1&0\end{pmatrix}.
+        $$
+    -   **(c)** New logits $(2.58,1.72)$, so the gap grows from 0 to 0.86 and the loss falls to $\ln(1+e^{-0.86})\approx0.353$ (1 pt).
+3.  **Question (5 points).** Let $z=\sum_{i=1}^{n}x_iW_i$, with the $W_i$ independent, of mean 0 and variance $s^2$, and independent of the input $x$.
+    -   **(a)** Prove that $\mathrm{Var}(z)=n\,s^2\,\bar m$, where $\bar m$ is the average of the $\mathbb{E}[x_i^2]$.
+    -   **(b)** When $z$ is symmetric about 0, prove that $\mathbb{E}[\mathrm{ReLU}(z)^2]$ is half of $\mathbb{E}[z^2]$; deduce the He variance $2/n$.
+    -   **(c)** MNIST pixels in $[0,1]$ have $\bar m\approx0.112$. With $n=784$, give the standard deviation of $z$ for $s^2=1$ and for $s^2=1/784$.
+
+    *Expected*:
+
+    -   **(a)** $\mathbb{E}[z]=0$. Expanding $\mathbb{E}[z^2]$, the cross terms vanish because $\mathbb{E}[W_iW_k]=0$ for $i\neq k$, which leaves $s^2\sum_i\mathbb{E}[x_i^2]$ (2 pts).
+    -   **(b)** By symmetry, the parts $z>0$ and $z<0$ carry equal halves of $\mathbb{E}[z^2]$. A ReLU layer therefore halves the second moment, and $s^2=2/n$ restores it (2 pts).
+    -   **(c)** About 9.4, which saturates a sigmoid, and about 0.33 (1 pt).
+4.  **Question (4 points).** Multiply a training loss by a constant $c>0$.
+    -   **(a)** Show that every SGD and momentum update is multiplied by $c$.
+    -   **(b)** Show that Adam's update is unchanged when $\epsilon=0$.
+    -   **(c)** The MSE reduction changes from $1/(BC)$ to $1/B$, with $C=10$. How do the best SGD and Adam learning rates change?
+
+    *Expected*:
+
+    -   **(a)** Gradients become $cg$, and both updates are linear in the gradients (1 pt).
+    -   **(b)** $m$ becomes $cm$ and $v$ becomes $c^2v$; the bias corrections do not change, so $\hat m/\sqrt{\hat v}$ is unchanged (2 pts).
+    -   **(c)** The new loss is $C$ times the old one, so SGD with $\eta/C$ retraces the old trajectory: the best SGD rate drops about tenfold. Adam's stays put, up to $\epsilon$ (1 pt).
+
+### Grading rubric (proposal) {#projects-rubric}
+
+| Criterion | Weight | What earns the marks |
+|---|---|---|
+| Correctness | 30 % | Derivations are right; every gradient is checked by finite differences or against autograd; the page's reference numbers are reproduced. |
+| Experimental protocol | 25 % | A fixed split, validation for every choice and a test set used once; seeds reported; one change at a time or a factorial design. |
+| Analysis | 20 % | Claims match the measurements; effects come with their spread over seeds; unexpected or negative results are reported. |
+| Code and reproducibility | 15 % | Runs end to end from a fresh copy with one command; seeds, library versions and the data source are recorded. |
+| Communication | 10 % | Figures with labelled axes; a report or talk that a classmate can follow and rerun. |
+
 ## Sources, scope and references {#refs}
 
 ### Provenance and support status
@@ -805,6 +988,11 @@ Optimal Transport and Geometric DL can provide complementary tools when the prob
 -   Nielsen, *Neural Networks and Deep Learning* (online).
 -   Zhang et al., *Dive into Deep Learning*.
 -   Vaswani et al., *Attention Is All You Need*, NeurIPS 2017.
+-   LeCun, Cortes, Burges, *The MNIST database of handwritten digits*, 1998 (Keras copy: `mnist.npz`).
+-   Glorot, Bengio, *Understanding the difficulty of training deep feedforward neural networks*, AISTATS 2010.
+-   He, Zhang, Ren, Sun, *Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification*, ICCV 2015.
+-   Kingma, Ba, *Adam: A Method for Stochastic Optimization*, ICLR 2015.
+-   Baydin, Pearlmutter, Radul, Siskind, *Automatic Differentiation in Machine Learning: a Survey*, JMLR 18(153), 2018.
 -   Sibling notes: [Deep Learning](../m1p1-deep-learning/index.html) · [Refresher CS](../m1p1-refresher-cs/index.html) · [Refresher Statistics](../m1p1-refresher-statistics/index.html).
 -   Empirical starting point: [knoel99/MNIST](https://github.com/knoel99/MNIST) (`MNIST_from_scratch.ipynb`).
 -   [Course map](../../index.html): continue to Machine Learning, Graph ML, NLP and the coordinated Graph × LLM reading path.

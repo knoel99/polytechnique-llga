@@ -53,6 +53,7 @@ format:
 -   [9. Honest benchmarking](#ch9)
 -   [10. Choosing your method: guide and open questions](#ch10)
 -   [Exercises / Labs](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -100,7 +101,7 @@ The exact split between brochure content and the materials' own extensions can o
 
 ### Where this course fits in the program
 
-M2 module offered in period 1, outside the recommended track, designed as an applied deepening accessible right after M1. **Prerequisites**: chapter 6 (trees, forests, boosting) of [Machine Learning](../m1p1-machine-learning/index.html) is the direct foundation — ch. 0 consolidates it before pushing the theory; the scikit-learn practice acquired in M1 suffices for the labs.
+M2 module offered in period 1, outside the recommended track, designed as an applied deepening accessible right after M1. **Prerequisites**: chapter 6 (trees, forests, boosting) of [Machine Learning](../m1p1-machine-learning/index.html) is the direct foundation — ch. 0 consolidates it before pushing the theory; the scikit-learn practice acquired in M1 suffices for the labs. The few SQL notions needed in ch. 7 are recalled there, since the Databases course is not on the LLGA list.
 
 **Downstream modules**: data versioning, rigorous benchmarking, and computation costs of the [ML Ops and LLM Engineering Principles](../m2-mlops-llm-engineering/index.html) module naturally extend this course when tables become pipelines; and for your internships as for your first jobs, it is tabular data you will handle — this is the module you will use the soonest outside the School.
 
@@ -118,6 +119,7 @@ M2 module offered in period 1, outside the recommended track, designed as an app
 -   **Honest benchmarking** — protocols, fair search budgets, validation-set overfitting pitfalls.
 -   **Choosing your method: guide and open questions** — the practitioner's practical decision tree, and what research has not settled yet.
 -   **Exercises / Labs** — from hand-computed gradient boosting to the full comparative study on real data.
+-   **Projects and assessment** — solo and group project subjects, a written-exam proposal and a grading rubric.
 -   **References** — founding papers of GBDTs and tabular foundation models.
 
 ### Session plan {#sessions}
@@ -129,12 +131,12 @@ Level 1 = foundations (reminders, first results), 2 = core methods (boosting eng
 | Session | Hours | Level | Content | Practice |
 |---|---|---|---|---|
 | 1 | 3 h | 1 | ch. 0 Reminders: trees, forests, boosting; ch. 1 Why GBDTs still dominate tabular data | Ex. 3 |
-| 2 | 3 h | 2 | ch. 2 Boosting as functional gradient descent; ch. 3.1 XGBoost: leaf weights and split gain | Ex. 1 |
+| 2 | 3 h | 2 | ch. 2 Boosting as functional gradient descent, AdaBoost as its exponential-loss case; ch. 3.1 XGBoost: leaf weights and split gain | Ex. 1 |
 | 3 | 3 h | 2 | ch. 3.2–3.3 LightGBM (histograms, GOSS, EFB) and CatBoost (oblivious trees, ordered statistics) | Ex. 4 |
 | 4 | 3 h | 2 | ch. 4 Encoding categorical and numerical columns; target leakage | Ex. 2 (central lab) |
 | 5 | 3 h | 2 | ch. 5 Deep tabular: regularized MLPs, FT-Transformer, TabNet, NODE | Ex. 7 (start: GBDT and FT-Transformer baselines) |
-| 6 | 3 h | 3 | ch. 6 TabPFN: prior-fitted networks and in-context learning on tables | Ex. 8 |
-| 7 | 3 h | 3 | ch. 7 LLMs and tables: serialization, TabLLM, text-to-SQL; ch. 8 Synthetic tabular data | Ex. 5, 6 |
+| 6 | 3 h | 3 | ch. 6 TabPFN: prior-fitted networks, the prior-data likelihood, in-context learning on tables | Ex. 8 |
+| 7 | 3 h | 3 | ch. 7 LLMs and tables: serialization, TabLLM, text-to-SQL and execution accuracy; ch. 8 Synthetic tabular data | Ex. 5, 6 |
 | 8 | 3 h | 3 | ch. 9 Honest benchmarking; ch. 10 Choosing your method, open questions | Ex. 7 (conclusions and decision guide) |
 
 **Self-study, outside the 24 h**: none — every chapter is covered in class; the labs (Ex. 2 and 7 in particular) are the personal work expected alongside.
@@ -161,7 +163,7 @@ This module studies the models that work best on tables, starting from the tree 
 
 :::: recap
 ::: recap-title
-Reminders from the Machine Learning module (M1 P1, ch. 6) — what is assumed acquired
+Reminders from the [Machine Learning](../m1p1-machine-learning/index.html#ch6) module (M1 P1, ch. 4 and 6) — what is assumed acquired
 :::
 
 -   **CART trees**: recursive partitions of the space by univariate thresholds $x_j \leq t$, splits chosen by maximizing the impurity decrease (Gini/variance), depth = control of the bias-variance trade-off;
@@ -170,23 +172,25 @@ Reminders from the Machine Learning module (M1 P1, ch. 6) — what is assumed ac
     \mathrm{Err} = \mathrm{bias}^2 + \mathrm{variance} + \mathrm{noise},
     $$
     and the role of *ensembles*: bagging and random forests reduce variance by averaging decorrelated trees;
--   **AdaBoost**: iterative reweighting of misclassified examples, prediction by weighted vote of weak classifiers;
--   **Gradient boosting**: at each iteration a small tree is fit *on the residuals* of the current model, then added with a step $\eta > 0$;
+-   **Gradient boosting as functional gradient descent** (ML section 6.3, Theorem 6.4): at each iteration a small tree is fit by regression to the *pseudo-residuals* (minus the derivative of the loss in the prediction), then added with a step $\eta > 0$. The quadratic loss gives the plain residuals, the logistic loss gives $y_i - p_i$, and early stopping on the number of trees is the main regularization;
+-   **Not assumed**: AdaBoost, which M1 does not present — ch. 2 defines it and derives it as the exponential-loss case of the same descent;
 -   **Evaluation** (ch. 4): cross-validation, data leakage, benchmark protocols — we return to this in ch. 9 of the present module.
 ::::
 
 ::: def
 [Definition 0.1 — Notation of the module]{.tag} A **tabular dataset** is a matrix $X \in \mathbb{R}^{n \times p}$ whose columns (features) are *heterogeneous*: numerical (price, age, log-ratio), categorical (country, product code), ordinal, binary, dates, sometimes textual; the target is $y \in \mathcal{Y}$ (classification) or $y \in \mathbb{R}$ (regression).
 
-We write $f$ for the model, $L$ for the loss, $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^n$ for the sample.
+We write $F$ for a fitted model (for boosting, the ensemble $F_M$), $f_m$ for a single tree, $\ell(\hat{y}, y)$ for the loss — prediction first, as in the Machine Learning module — and $\mathcal{D} = \{(x_i, y_i)\}_{i=1}^n$ for the sample. A calligraphic $\mathcal{L}$ always denotes an objective that is minimized.
+
+The number of features is $p$ rather than the site-wide $d$, because on this page $d$ already denotes a tree depth (ch. 2–3) and a token dimension (ch. 5); from ch. 3 on, $g_i$ and $h_i$ are the first and second derivatives of the loss at example $i$.
 
 A single row can contain scales ranging from $10^{-3}$ to $10^{7}$ and massively skewed columns — it is this heterogeneity that structures the whole module.
 :::
 
 ::: note
-[The module's storyline]{.tag} M1 (cf. Machine Learning module ch. 6) presented boosting as an idea: "one fits trees on the residuals". This module takes it seriously as a **central object of study**:
+[The module's storyline]{.tag} M1 already derived boosting as functional gradient descent, with logistic pseudo-residuals and early stopping ([Machine Learning section 6.3](../m1p1-machine-learning/index.html#ch6), Theorem 6.4). This module starts from that result and makes boosting a **central object of study**:
 
-1.  we prove the formulas of the industrial engines (optimal leaf weights, split gain, GOSS, ordered statistics);
+1.  we recall the first-order derivation briefly, add AdaBoost as a special case, and prove the second-order formulas of the industrial engines (optimal leaf weights, split gain, GOSS, ordered statistics);
 2.  we explain *why* they win on tables, based on the large empirical studies of 2021-2025;
 3.  we explore the two deep counter-attacks — attention over features (ch. 5) and tabular *foundations* (TabPFN, ch. 6) or linguistic ones (ch. 7);
 4.  we finish with synthetic generation (ch. 8) and an honest comparison protocol (ch. 9), extending ch. 4 of the Machine Learning module.
@@ -203,7 +207,7 @@ Concrete scene: a leaderboard is won… thanks to temporal leakage. This chapter
 Images, text, speech, and graphs have been conquered by deep networks. Tables — which remain the majority format of enterprise data (CRM, sensors, finance, health, logs) — resist. This finding was established rigorously by three major empirical studies, which serve as the module's guiding thread.
 
 ::: def
-[Definition 1.1 — GBDT (extended reminder)]{.tag} A **gradient boosted decision tree** is an additive model $$ F_M(x) = \sum_{m=1}^{M} \eta\, h_m(x), $$ where each $h_m$ is a shallow regression tree fit on the negative of the gradient of the loss with respect to the current prediction (ch. 2). The structural hyperparameters: number of trees $M$, learning rate $\eta$, maximum depth (≈ order of interaction), subsampling rate (rows/columns), leaf regularization.
+[Definition 1.1 — GBDT (extended reminder)]{.tag} A **gradient boosted decision tree** is an additive model $$ F_M(x) = \sum_{m=1}^{M} \eta\, f_m(x), $$ where each $f_m$ is a shallow regression tree fit on the negative of the gradient of the loss with respect to the current prediction (ch. 2). The structural hyperparameters: number of trees $M$, learning rate $\eta$, maximum depth (≈ order of interaction), subsampling rate (rows/columns), leaf regularization.
 :::
 
 ::: thm
@@ -216,7 +220,9 @@ A **random rotation** experiment on the columns confirms the diagnosis: after ro
 :::
 
 :::: prop
-[Proposition 1.3 — Trees are invariant under monotone transformation of columns]{.tag} Let $h$ be a tree and, for each column $j$, $g_j : \mathbb{R} \to \mathbb{R}$ a strictly increasing function. If $\tilde{x}_j = g_j(x_j)$, then the tree trained on the transformed data induces *the same partition* of the space (up to the thresholds) and makes the same predictions. In particular: log-transforming, whitening, or clipping a skewed column changes (almost) nothing for a GBDT.
+[Proposition 1.3 — Trees are invariant under monotone transformation of columns]{.tag} Let $f$ be a tree and, for each column $j$, $g_j : \mathbb{R} \to \mathbb{R}$ a strictly increasing function. If $\tilde{x}_j = g_j(x_j)$, then the tree trained on the transformed data induces *the same partition* of the space (up to the thresholds) and makes the same predictions. In particular, log-transforming, standardizing or rank-transforming a skewed column — each a strictly increasing map applied column by column — changes nothing for a GBDT, up to threshold placement and binning (ch. 3).
+
+Two common transforms are *not* covered. Clipping is only non-decreasing: it merges the clipped tail into one value, so the splits inside that tail disappear. Whitening ($x \mapsto \Sigma^{-1/2} x$) mixes columns, so it is not column-wise at all: it breaks the invariance, as the rotation experiment of study 1.2 shows.
 
 ::: proof
 A split $x_j \leq t$ partitions the examples into $\{i : x_{ij} \leq t\}$ and its complement. Since $g_j$ is strictly increasing,
@@ -232,7 +238,7 @@ By recursion over the depth, the partitions coincide, so the leaves receive the 
 ::: note
 [Why this proposition matters]{.tag} It explains a robust empirical result: GBDTs win especially when features have *skewed, heavy, multimodal* distributions — precisely the cases where a network, which adds and multiplies activations, suffers from scales and distribution tails, whereas a tree only looks at the order of values.
 
-McElfresh et al. (TabZilla, NeurIPS 2023: *When do neural nets outperform boosted trees on tabular data?*) quantifies this over 176 datasets and 19 algorithms: GBDTs dominate on skewed/heavy-tailed features, and the most decisive performance factor is not the model family but the **tuning budget** — "lightly tuning a GBDT matters more than choosing between a GBDT and a network".
+McElfresh et al. (TabZilla, NeurIPS 2023: *When do neural nets outperform boosted trees on tabular data?*) quantifies this over 176 datasets and 19 algorithms: GBDTs handle skewed or heavy-tailed features much better than networks. It also finds that, on many datasets, the gap between the two families is negligible or smaller than the effect of **lightly tuning the GBDT** — tuning matters more than the choice between a GBDT and a network.
 :::
 
 ::: ex
@@ -240,40 +246,40 @@ McElfresh et al. (TabZilla, NeurIPS 2023: *When do neural nets outperform booste
 
 1.  Shwartz-Ziv & Armon (*Tabular data: Deep learning is not all you need*, Information Fusion 2022): XGBoost beats deep models on most of their datasets, and tuning does not close the gap; GBDT+network ensembles = the best of both.
 2.  Grinsztajn et al. (2022): the gap is real at medium sizes and stems from inductive biases (study 1.2).
-3.  McElfresh et al. (2023): on the largest available benchmark, no family dominates everywhere; a simple *hybrid* (average of a GBDT + a lightly tuned MLP) is the best "default".
+3.  McElfresh et al. (TabZilla, 2023): on the largest benchmark then available, no family dominates everywhere; light tuning of a GBDT matters more than the choice between a GBDT and a network; and the best *average* performance goes to TabPFN (v1, ch. 6), even with its training sets subsampled to 3,000 rows.
 
 Moral: the question is not "which is best" but "in which regime" — the subject of ch. 10.
 :::
 
 ## 2. Boosting: functional gradient descent {#ch2}
 
-Boosting is most cleanly written as *gradient descent in the space of functions* — a view due to Friedman (2001), which generalizes AdaBoost (Freund & Schapire, 1997; cf. Machine Learning module ch. 6 for the historical account).
+Boosting is most cleanly written as *gradient descent in the space of functions* — a view due to Friedman (2001). The [Machine Learning module](../m1p1-machine-learning/index.html#ch6) derived it in section 6.3 (Theorem 6.4); this chapter recalls it in the notation of the page, then shows that AdaBoost (Freund & Schapire, 1997), which M1 does not cover, is the same descent for the exponential loss.
 
 :::: def
-[Definition 2.1 — Functional gradient descent]{.tag} We look for $F^\star = \arg\min_F \sum_i L(y_i, F(x_i))$ in a space of functions. The "gradient at point $x_i$" is the variable
+[Definition 2.1 — Functional gradient descent (recall of ML Theorem 6.4)]{.tag} We look for $F^\star = \arg\min_F \sum_i \ell(F(x_i), y_i)$ in a space of functions. The "gradient at point $x_i$" is the variable
 
 ::: key
 [Key result — the pseudo-residual]{.tag}
 $$
-r_i = -\left[\dfrac{\partial L(y_i, F(x_i))}{\partial F(x_i)}\right]_{F = F_{m-1}} .
+r_i = -\left[\dfrac{\partial \ell(F(x_i), y_i)}{\partial F(x_i)}\right]_{F = F_{m-1}} .
 $$
 :::
 
 The boosting iteration:
 
 1.  compute the $r_i$;
-2.  fit a weak learner $h_m$ (shallow tree) by least squares to the $r_i$;
+2.  fit a weak learner $f_m$ (shallow tree) by least squares to the $r_i$;
 3.  update
     $$
-    F_m = F_{m-1} + \eta\, h_m .
+    F_m = F_{m-1} + \eta\, f_m .
     $$
 ::::
 
 :::: prop
-[Proposition 2.2 — Residuals for the quadratic loss]{.tag} For $L(y, a) = \tfrac{1}{2}(y - a)^2$, one has exactly $r_i = y_i - F_{m-1}(x_i)$: "fitting on the residuals" is a special case of definition 2.1.
+[Proposition 2.2 — Residuals for the quadratic loss]{.tag} For $\ell(\hat{y}, y) = \tfrac{1}{2}(\hat{y} - y)^2$, one has exactly $r_i = y_i - F_{m-1}(x_i)$: "fitting on the residuals" is a special case of definition 2.1.
 
 ::: proof
-$\partial L / \partial a = a - y$, so $-\partial L(y_i, F(x_i))/\partial F = y_i - F(x_i)$. [∎]{.qed}
+$\partial \ell / \partial \hat{y} = \hat{y} - y$, so $-\partial \ell(F(x_i), y_i)/\partial F = y_i - F(x_i)$. [∎]{.qed}
 :::
 ::::
 
@@ -293,12 +299,55 @@ $\partial L / \partial a = a - y$, so $-\partial L(y_i, F(x_i))/\partial F = y_i
 2.  A depth-1 tree fit to the residuals chooses the column $j^\star$ and the threshold $t^\star$ minimizing the within-leaf variance of the $r_i$ — that is, best explaining *what the constant model could not say*.
 3.  New prediction
     $$
-    F_1(x) = \bar{y} + \eta\,(a\, \mathbf{1}[x_{j^\star} \leq t^\star] + b\,\mathbf{1}[x_{j^\star} > t^\star]),
+    F_1(x) = \bar{y} + \eta\,(c_1\, \mathbf{1}[x_{j^\star} \leq t^\star] + c_2\,\mathbf{1}[x_{j^\star} > t^\star]),
     $$
-    where $a, b$ are the per-leaf residual means.
+    where $c_1, c_2$ are the per-leaf residual means.
 
 The following iterations attack the residuals of $F_1$, and so on.
 :::
+
+AdaBoost came first, as a reweighting heuristic for classifiers; it is worth seeing why it is a functional gradient method in disguise.
+
+::: def
+[Definition 2.4 — AdaBoost (Freund & Schapire, 1997)]{.tag} Binary labels $y_i \in \{-1, +1\}$, weak classifiers with values in $\{-1, +1\}$, initial weights $w_i = 1/n$. For $m = 1, \dots, M$:
+
+1.  fit $f_m$ to minimize the weighted error
+    $$
+    \mathrm{err}_m = \frac{\sum_i w_i\, \mathbf{1}[f_m(x_i) \neq y_i]}{\sum_i w_i} ;
+    $$
+2.  set the vote weight
+    $$
+    \alpha_m = \tfrac{1}{2}\log\frac{1 - \mathrm{err}_m}{\mathrm{err}_m} ;
+    $$
+3.  reweight $w_i \leftarrow w_i\, e^{-\alpha_m y_i f_m(x_i)}$, so misclassified examples gain weight.
+
+The prediction is the weighted vote $\mathrm{sign}(F_M(x))$, with $F_M = \sum_m \alpha_m f_m$.
+:::
+
+:::: prop
+[Proposition 2.5 — AdaBoost is stagewise descent on the exponential loss (Friedman, Hastie & Tibshirani, 2000)]{.tag} Take the exponential loss $\ell(\hat{y}, y) = e^{-y \hat{y}}$ and the weights $w_i = e^{-y_i F_{m-1}(x_i)}$. Over classifiers $f$ with values in $\{-1,+1\}$ and steps $\alpha > 0$, the minimizer of
+$$
+\sum_i \ell\big(F_{m-1}(x_i) + \alpha f(x_i),\, y_i\big)
+$$
+is the pair $(f_m, \alpha_m)$ of definition 2.4, as long as the best weighted error is below 1/2. The weights of the next round are $e^{-y_i F_m(x_i)}$.
+
+::: proof
+1.  Factor the current model out: the objective equals $\sum_i w_i\, e^{-\alpha y_i f(x_i)}$.
+2.  Since $y_i f(x_i) = \pm 1$, with $W = \sum_i w_i$ it equals
+    $$
+    W e^{-\alpha} + (e^{\alpha} - e^{-\alpha}) \sum_i w_i \mathbf{1}[f(x_i) \neq y_i] .
+    $$
+    For $\alpha > 0$ the bracket is positive, so the best $f$ minimizes the weighted error.
+3.  Dividing by $W$ leaves
+    $$
+    e^{-\alpha}(1 - \mathrm{err}) + e^{\alpha}\,\mathrm{err},
+    $$
+    whose derivative vanishes when $e^{2\alpha} = (1 - \mathrm{err})/\mathrm{err}$, which gives $\alpha_m$.
+4.  Finally $e^{-y_i F_m(x_i)} = w_i\, e^{-\alpha_m y_i f_m(x_i)}$: the reweighting rule. [∎]{.qed}
+:::
+::::
+
+The link with definition 2.1 is direct: the pseudo-residual of the exponential loss is $r_i = y_i\, e^{-y_i F_{m-1}(x_i)} = y_i w_i$. The AdaBoost weights are the sizes of the functional gradient, and the next classifier follows its sign.
 
 ::: note
 [What ch. 3 adds]{.tag} Definition 2.1 says *what* to fit; XGBoost, LightGBM, and CatBoost optimize *how*: closed-form leaf weights via a second-order Taylor expansion, histogram-based splits, large-gradient sampling, symmetric trees, ordered statistics for categoricals. All choices that take the GBDT from "nice idea" to industrial default on tables.
@@ -311,15 +360,15 @@ Chapter 2 says *what* each new tree must fit; the three industrial libraries dif
 ### 3.1. XGBoost: the second derivative and explicit regularization
 
 ::: def
-[Definition 3.1 — XGBoost's regularized objective]{.tag} At iteration $t$, with
+[Definition 3.1 — XGBoost's regularized objective]{.tag} At iteration $m$, write $\hat{y}_i = F_{m-1}(x_i)$ for the current prediction and
 $$
-g_i = \partial_{\hat{y}^{(t-1)}_i} L(y_i, \hat{y}^{(t-1)}_i) \quad\text{and}\quad h_i = \partial^2_{\hat{y}^{(t-1)}_i} L(y_i, \hat{y}^{(t-1)}_i),
+g_i = \partial_{\hat{y}}\, \ell(\hat{y}_i, y_i) \quad\text{and}\quad h_i = \partial^2_{\hat{y}}\, \ell(\hat{y}_i, y_i)
 $$
-one minimizes
+for the first and second derivatives of the loss in the prediction ($h_i$ is a curvature, not a tree). One minimizes
 $$
-\sum_{i=1}^{n}\Big[ g_i\, f_t(x_i) + \tfrac{1}{2} h_i\, f_t(x_i)^2 \Big] + \Omega(f_t), \qquad \Omega(f) = \gamma\, T + \tfrac{\lambda}{2}\sum_{j=1}^{T} w_j^2,
+\sum_{i=1}^{n}\Big[ g_i\, f_m(x_i) + \tfrac{1}{2} h_i\, f_m(x_i)^2 \Big] + \Omega(f_m), \qquad \Omega(f) = \gamma\, T + \tfrac{\lambda}{2}\sum_{j=1}^{T} w_j^2,
 $$
-where $f_t$ is a tree with $T$ leaves of weights $w_1, \dots, w_T$.
+where $f_m$ is a tree with $T$ leaves of weights $w_1, \dots, w_T$.
 
 This is the second-order Taylor expansion of the loss, exact for the quadratic loss, very good for the log-loss.
 :::
@@ -329,12 +378,12 @@ This is the second-order Taylor expansion of the loss, exact for the quadratic l
 $$
 w_j^\star = -\frac{G_j}{H_j + \lambda}, \qquad \mathcal{L}^\star = -\frac{1}{2}\sum_{j=1}^{T}\frac{G_j^2}{H_j + \lambda} + \gamma T,
 $$
-and splitting a parent node $P$ into $L, R$ improves the objective by
+and splitting a parent node $P$ into a left and a right child improves the objective by
 
 ::: key
 [Key result — XGBoost split gain]{.tag}
 $$
-\mathrm{Gain} = \frac{1}{2}\left[\frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda}\right] - \gamma.
+\mathrm{Gain} = \frac{1}{2}\left[\frac{G_{\mathrm{left}}^2}{H_{\mathrm{left}} + \lambda} + \frac{G_{\mathrm{right}}^2}{H_{\mathrm{right}} + \lambda} - \frac{(G_{\mathrm{left}} + G_{\mathrm{right}})^2}{H_{\mathrm{left}} + H_{\mathrm{right}} + \lambda}\right] - \gamma.
 $$
 :::
 
@@ -349,7 +398,7 @@ w_j^\star = -G_j/(H_j + \lambda), \quad \text{of value} \quad -\tfrac{1}{2}G_j^2
 $$
 Hence $\mathcal{L}^\star$.
 
-A split replaces leaf $P$ (sums $G_P = G_L + G_R$, $H_P = H_L + H_R$) with two leaves: the gain is $\mathcal{L}^\star_P - \mathcal{L}^\star_{\{L,R\}}$, i.e. the stated expression; one splits only if Gain > 0, i.e. beyond the "price" $\gamma$. [∎]{.qed}
+A split replaces leaf $P$ (sums $G_P = G_{\mathrm{left}} + G_{\mathrm{right}}$, and likewise $H_P$) with two leaves: the gain is the drop of $\mathcal{L}^\star$ from the parent to the split, i.e. the stated expression; one splits only if Gain > 0, i.e. beyond the "price" $\gamma$. [∎]{.qed}
 :::
 ::::
 
@@ -402,14 +451,14 @@ The rest follows by replacing the sums with their estimators in the gain formula
 :::
 
 ::: def
-[Definition 3.8 — Ordered target statistics]{.tag} For a categorical $c$ and a random permutation $\sigma$ of the rows, the encoded value of row $i$ uses only *earlier* rows: $$ \hat{x}_i = \frac{\sum_{\sigma(k) < \sigma(i)} \mathbf{1}[c_k = c_i]\, y_k + a\, p}{\sum_{\sigma(k) < \sigma(i)} \mathbf{1}[c_k = c_i] + a}, $$ with $p$ a global prior (target mean) and $a$ a smoothing weight. This is target encoding (ch. 4) *without leakage*: row $i$ is never encoded with its own target. **Ordered boosting** generalizes the idea to residuals: each example is scored only by models that have not seen it — correcting the "prediction shift" of classical GBDTs (Prokhorenkova et al., 2018).
+[Definition 3.8 — Ordered target statistics]{.tag} For a categorical $c$ and a random permutation $\sigma$ of the rows, the encoded value of row $i$ uses only *earlier* rows: $$ \hat{x}_i = \frac{\sum_{\sigma(k) < \sigma(i)} \mathbf{1}[c_k = c_i]\, y_k + \kappa\, \bar{y}}{\sum_{\sigma(k) < \sigma(i)} \mathbf{1}[c_k = c_i] + \kappa}, $$ with $\bar{y}$ a global prior (the target mean) and $\kappa$ a smoothing weight — the pseudo-count of def. 4.1. This is target encoding (ch. 4) *without leakage*: row $i$ is never encoded with its own target. **Ordered boosting** generalizes the idea to residuals: each example is scored only by models that have not seen it — correcting the "prediction shift" of classical GBDTs (Prokhorenkova et al., 2018).
 :::
 
 |  | XGBoost | LightGBM | CatBoost |
 |---|---|---|---|
-| Split | exact / approximate quantiles (2nd order) | histogram, leaf by leaf (leaf-wise) | oblivious, level by level |
+| Split | histogram (`hist`, the default since v2.0; `exact` and `approx` remain), 2nd order | histogram, leaf by leaf (leaf-wise) | oblivious, level by level |
 | Acceleration | quantile sketch, sparsity-aware | GOSS + EFB (defs 3.4-3.6) | symmetric trees, native GPU |
-| Categoricals | one-hot / provided encodings | partition of categories by gradient statistics | native ordered TS (def. 3.8) |
+| Categoricals | native partition-based splits (`enable_categorical`, since v1.6) or one-hot | partition of categories by gradient statistics | native ordered TS (def. 3.8) |
 | Inductive bias | regularization $\gamma, \lambda$ | leaf-wise growth (beware overfitting on small $n$) | anti-leakage + symmetry |
 
 ```python
@@ -421,7 +470,8 @@ Xtr, Xva, ytr, yva = train_test_split(X, y, test_size=0.2, random_state=0)
 m1 = xgb.XGBClassifier(n_estimators=2000, learning_rate=0.02, max_depth=6,
                        early_stopping_rounds=100).fit(Xtr, ytr, eval_set=[(Xva, yva)])
 m2 = lgb.LGBMClassifier(n_estimators=2000, learning_rate=0.02, num_leaves=63,
-                        subsample=0.8, colsample_bytree=0.8).fit(
+                        subsample=0.8, subsample_freq=1,  # bagging is off unless freq > 0
+                        colsample_bytree=0.8).fit(
                         Xtr, ytr, eval_set=[(Xva, yva)],
                         callbacks=[lgb.early_stopping(100)])
 m3 = cb.CatBoostClassifier(iterations=2000, learning_rate=0.02, depth=8,
@@ -434,7 +484,7 @@ m3 = cb.CatBoostClassifier(iterations=2000, learning_rate=0.02, depth=8,
 On tables, a massive share of the performance is decided *before* the model: GBDTs barely digest massive one-hots, networks require clean numerical inputs. This chapter surveys the encodings, with the central pitfall: target leakage.
 
 ::: def
-[Definition 4.1 — Target encoding (mean encoding)]{.tag} For a high-cardinality categorical $c$ (postal codes, SKUs, users), one replaces the category with a statistic of the target; smoothed version of Micci-Barreca (2001): $$ \mathrm{enc}(v) = \frac{n_v\, \bar{y}_v + m\, \bar{y}}{n_v + m}, $$ where $\bar{y}_v$ is the target mean within category $v$, $n_v$ its count, $\bar{y}$ the global mean and $m$ a pseudo-count: rare categories are pulled toward the global prior.
+[Definition 4.1 — Target encoding (mean encoding)]{.tag} For a high-cardinality categorical $c$ (postal codes, SKUs, users), one replaces the category with a statistic of the target; smoothed version of Micci-Barreca (2001): $$ \mathrm{enc}(v) = \frac{n_v\, \bar{y}_v + \kappa\, \bar{y}}{n_v + \kappa}, $$ where $\bar{y}_v$ is the target mean within category $v$, $n_v$ its count, $\bar{y}$ the global mean and $\kappa$ a pseudo-count: rare categories are pulled toward the global prior.
 :::
 
 ::: ex
@@ -442,7 +492,7 @@ On tables, a massive share of the performance is decided *before* the model: GBD
 :::
 
 ::: prop
-[Proposition 4.3 — Anti-leakage: out-of-fold and random order]{.tag} Two standard repairs: (i) **K-fold out-of-fold**: split the train set into $K$ blocks, encode each block with the statistics of the other $K-1$; (ii) **random order** (CatBoost, def. 3.8): each row encoded using only earlier rows. In both cases, $\mathrm{enc}(v_i)$ becomes independent of $y_i$ conditionally on the category — the leakage disappears at the cost of a slight estimation noise, absorbed by the smoothing $m$.
+[Proposition 4.3 — Anti-leakage: out-of-fold and random order]{.tag} Two standard repairs: (i) **K-fold out-of-fold**: split the train set into $K$ blocks, encode each block with the statistics of the other $K-1$; (ii) **random order** (CatBoost, def. 3.8): each row encoded using only earlier rows. In both cases, $\mathrm{enc}(v_i)$ becomes independent of $y_i$ conditionally on the category — the leakage disappears at the cost of a slight estimation noise, absorbed by the smoothing $\kappa$.
 :::
 
 ::: def
@@ -486,11 +536,11 @@ Two deep answers to the dominance of trees: better regularize MLPs, and treat th
 ::: def
 [Definition 5.1 — Feature tokenizer (FT-Transformer)]{.tag} Each column becomes a token of dimension $d$: for a numerical one, $e_j = b_j + x_j\, w_j$ ($b_j, w_j \in \mathbb{R}^d$ learned); for a categorical one, a row of an embedding table. To this one adds a $[\mathrm{CLS}]$ token.
 
-The following block is a standard transformer (multi-head attention, cf. Deep Learning module):
+The following block is a standard transformer (multi-head attention, cf. [Deep Learning P1 ch. 6](../m1p1-deep-learning/index.html#ch6) or [Deep Learning P2 ch. 0](../m1p2-deep-learning-p2/index.html#ch0)):
 $$
 \mathrm{Att}(Q, K, V) = \mathrm{softmax}\!\left(\frac{QK^\top}{\sqrt{d_k}}\right)V,
 $$
-computed *between features* of the same row. The prediction is read from $[\mathrm{CLS}]$ after $L$ blocks.
+computed *between features* of the same row. The prediction is read from $[\mathrm{CLS}]$ after $n_{\mathrm{blocks}}$ transformer blocks.
 :::
 
 ::: note
@@ -509,7 +559,7 @@ computed *between features* of the same row. The prediction is read from $[\math
 [Peculiarities of tables (summary)]{.tag}
 
 -   **Heterogeneous columns**: mixed types, scales, semantics — no "natural" convolution kernel;
--   **No translation invariance** nor locality: permuting *pixels* changes nothing in an image, permuting *columns* changes everything; the rotation experiment of ch. 1 shows that this absence of invariance is a richness (axis-aligned structure) that MLPs do not exploit;
+-   **No locality, no natural column order**: permuting the pixels of an image destroys its local structure, whereas a fixed permutation of the columns changes nothing for an MLP or a tree. What breaks trees is *mixing* columns: the rotation experiment of ch. 1 shows that the axis-aligned meaning of each column is a richness that trees exploit and MLPs do not;
 -   **Irregular distributions**: skewness, heavy tails, multimodality, "round" regulatory thresholds;
 -   **Many uninformative features** and **informative missing values**;
 -   **Small/medium $n$** by vision standards: the risk of overfitting the architecture is real (cf. TabZilla, ch. 9).
@@ -519,36 +569,62 @@ computed *between features* of the same row. The prediction is read from $[\math
 
 The 2023-2025 paradigm shift: no longer train a model *on* the table, but train a transformer *once and for all* on millions of synthetic tables, then predict *in-context* — the tabular analogue of LLM few-shot learning.
 
-::: def
+:::: def
 [Definition 6.1 — Prior-fitted network (PFN)]{.tag} Let a **prior** $\mathfrak{p}$ over datasets: a law over functions $f$ (and noises, features, sizes) from which synthetic datasets $\mathcal{D}_{sim}$ are drawn.
 
-A PFN is a transformer $q_\theta$ trained to predict, for an example $x$ presented next to a set $\mathcal{D}_{train}$ *inside its input window*, the law $p(y \mid x, \mathcal{D}_{train})$.
+A PFN is a transformer $q_\theta$ trained to predict, for an example $x$ presented next to a set $\mathcal{D}_{train}$ *inside its input window*, the law $p(y \mid x, \mathcal{D}_{train})$. Its training objective is the **prior-data negative log-likelihood**: draw a synthetic dataset, hold out one of its points $(x, y)$, and score the prediction on it,
 
-Müller et al. (ICLR 2022) show that such a network approximates the **Bayesian posterior predictive**
+::: key
+[Key result — the PFN training objective]{.tag}
 $$
-p(y \mid x, \mathcal{D}) = \int p(y \mid x, \theta)\, p(\theta \mid \mathcal{D})\, d\theta
+\mathcal{L}_{\mathrm{PFN}}(\theta) = \mathbb{E}_{\mathcal{D} \cup \{(x, y)\} \sim \mathfrak{p}} \big[ -\log q_\theta(y \mid x, \mathcal{D}) \big] .
 $$
-in *a single forward pass*: the transformer's in-context learning is a form of amortized Bayesian inference. Cf. the LLMs module (M2) for in-context learning on the language side.
 :::
 
+For classification this is a cross-entropy; for regression, $q_\theta$ outputs a histogram over bins of $y$ (the "bar distribution" of Müller et al.). The language-side counterpart — a model that picks up a task from demonstrations placed in its prompt — is defined in [Large Language Models section 4.0](../m2-large-language-models/index.html#icl).
+::::
+
+:::: prop
+[Proposition 6.2 — The PFN objective targets the posterior predictive (Müller et al., ICLR 2022)]{.tag} Write $p(\cdot \mid x, \mathcal{D})$ for the Bayesian posterior predictive of the prior $\mathfrak{p}$,
+$$
+p(y \mid x, \mathcal{D}) = \int p(y \mid x, \phi)\, p(\phi \mid \mathcal{D})\, d\phi ,
+$$
+where $\phi$ indexes the data-generating functions of the prior. Then
+$$
+\mathcal{L}_{\mathrm{PFN}}(\theta) = \mathbb{E}_{x, \mathcal{D}}\Big[\mathrm{KL}\big(p(\cdot \mid x, \mathcal{D}) \,\|\, q_\theta(\cdot \mid x, \mathcal{D})\big)\Big] + \mathbb{E}_{x, \mathcal{D}}\Big[H\big(p(\cdot \mid x, \mathcal{D})\big)\Big] .
+$$
+The entropy term does not depend on $\theta$, so a rich enough $q_\theta$ that minimizes the objective equals the posterior predictive: in-context learning is amortized Bayesian inference, done in *a single forward pass*.
+
+::: proof
+1.  Condition on $(x, \mathcal{D})$: under the prior, the held-out $y$ follows $p(\cdot \mid x, \mathcal{D})$.
+2.  Add and subtract $\log p(y \mid x, \mathcal{D})$ inside the expectation over $y$:
+    $$
+    \mathbb{E}_{y}[-\log q_\theta] = \mathbb{E}_{y}[-\log p] + \mathbb{E}_{y}\Big[\log \frac{p}{q_\theta}\Big] = H(p) + \mathrm{KL}(p \,\|\, q_\theta) .
+    $$
+3.  Take the expectation over $(x, \mathcal{D})$. The KL is non-negative and vanishes only when $q_\theta = p$. [∎]{.qed}
+:::
+::::
+
 ::: def
-[Definition 6.2 — TabPFN's causal prior]{.tag} TabPFN (Hollmann et al., ICLR 2023; v2: Nature 2025) draws its synthetic tables from random **structural causal models**: random DAG over $p$ variables, nonlinear mechanisms (networks, piecewise transformations), heterogeneous noises, then monotone marginal transformations — mimicking the "irregular distributions" of ch. 5 — and adding uninformative features and missing values.
+[Definition 6.3 — TabPFN's causal prior]{.tag} TabPFN (Hollmann et al., ICLR 2023; v2: Nature 2025) draws its synthetic tables from random **structural causal models**: random DAG over $p$ variables, nonlinear mechanisms (networks, piecewise transformations), heterogeneous noises, then monotone marginal transformations — mimicking the "irregular distributions" of ch. 5 — and adding uninformative features and missing values.
 
 By training on millions of such tables, the model learns *to learn:* in use, one deposits train + the row to predict in the context; no gradient descent is run on the user's table.
 :::
 
 ::: prop
-[Proposition 6.3 — What in-context buys]{.tag}
+[Proposition 6.4 — What in-context buys]{.tag}
 
 1.  **Zero pipeline hyperparameters** (no trees, rates, or depths): the "tuning" is amortized in pre-training;
 2.  **seconds** of inference for tables up to $\sim\!10,000$ rows (v2), classification *and* regression, missing values and outliers tolerated;
 3.  **free uncertainty**: $q_\theta(y \mid x, \mathcal{D})$ is a predictive law — usable for abstention.
 
-Trade-offs: a context window (beyond $\sim\!10,000$ rows, fall back to "classical" training minibatches), limited types (no rich textual columns; cf. ch. 7), and a dependence on the proximity between the real table and the prior of def. 6.2.
+Trade-offs: a context window (beyond $\sim\!10,000$ rows, fall back to "classical" training minibatches), limited types (no rich textual columns; cf. ch. 7), and a dependence on the proximity between the real table and the prior of def. 6.3.
 :::
 
 ::: ex
-[Example 6.4 — A shifting benchmark]{.tag} On the reference suites of medium-sized datasets, v2 (Nature 2025) beats tuned GBDTs on average — the first credible "deep" victory in this regime, three years after Grinsztajn et al.
+[Example 6.5 — A shifting benchmark]{.tag} TabPFN v1 already had the best average performance in TabZilla (2023), but for classification only and on training sets subsampled to 3,000 rows. Version 2 (Nature 2025) extends the model to regression and to tables of up to 10,000 rows and 500 features.
+
+On the reference suites of medium-sized datasets, v2 beats tuned GBDTs on average — the strongest "deep" result in this regime so far, three years after Grinsztajn et al.
 
 Ch. 9 nonetheless requires reading these results with a symmetric protocol (GBDT tuning budget, same folds, same seeds): the "trees vs foundations" debate remains open for large $n$, textual columns, and industrial constraints.
 :::
@@ -567,12 +643,57 @@ Two critical properties: the **column order** influences the prediction (the mod
 [Study 7.2 — TabLLM (Hegselmann et al., 2023)]{.tag} In **few-shot** (typically $\leq 64$ examples), an LLM (T0/GPT-3.5, textual serializations) predicts tables better than dedicated deep methods and rivals GBDTs; the advantage reverses as soon as data abounds — the per-row token cost becomes prohibitive and the semantic prior no longer compensates for the statistical capacity. The LLM wins where *every example is expensive* (medical annotation, industry); the GBDT where data is massive.
 :::
 
+When the table lives in a relational database, the LLM's job changes from predicting to querying. The few SQL notions this needs fit in six lines.
+
+:::: recap
+::: recap-title
+SQL in six lines (the [Databases course](../m1p1-dbms/index.html#ch2) is not on the LLGA list)
+:::
+
+```sql
+SELECT c.name, SUM(o.amount) AS revenue       -- columns to return, with aggregates
+FROM clients AS c                              -- a table (a relation), with an alias
+JOIN orders AS o ON o.client_id = c.id         -- join: pair the rows whose keys match
+WHERE o.year = 2025 AND o.status <> 'refund'   -- filter rows before grouping
+GROUP BY c.name HAVING SUM(o.amount) > 1000    -- one row per group; filter the groups
+ORDER BY revenue DESC LIMIT 5;                 -- sort, keep the first 5
+```
+
+Each table has a *primary key* (`clients.id`); a *foreign key* (`orders.client_id`) points to another table's key, and a join follows it. A join along the wrong key, or one that duplicates rows before a `SUM`, returns a plausible but wrong number without any error.
+::::
+
 ::: def
 [Definition 7.3 — Text-to-SQL and schema linking]{.tag} When the table is a database, the LLM becomes an *interface*: producing SQL from a question in natural language.
 
 **Schema linking** denotes the step of aligning question ↔ schema: entities of the question to cells of the tables, terms to candidate columns/tables, then plausible joins.
 
 Benchmarks: **Spider** (Yu et al., 2018; clean schemas, academic questions) then **BIRD** (Li et al., 2023; 95 large "dirty" databases, dirty values, external knowledge, query efficiency requirement) — on which the performance drop of models between the two worlds is precisely measured.
+:::
+
+Text-to-SQL is scored by running the queries, not by reading them.
+
+::: def
+[Definition 7.4 — Execution accuracy]{.tag} For $N$ questions with gold queries $s_k^\star$ and generated queries $\hat{s}_k$, run both on the database $\mathrm{DB}$:
+$$
+\mathrm{EX} = \frac{1}{N}\sum_{k=1}^{N} \mathbf{1}\big[\mathrm{exec}(\hat{s}_k, \mathrm{DB}) = \mathrm{exec}(s_k^\star, \mathrm{DB})\big],
+$$
+where results are compared as multisets of rows, or as ordered lists when the question asks for an order.
+
+EX accepts every correct rewrite, unlike *exact-match* accuracy, which compares SQL strings. It can also accept a wrong query that happens to return the right rows on this one database; *test-suite accuracy* (Zhong, Yu & Klein, 2020) reduces these false positives by running both queries on several database instances. BIRD adds a *valid efficiency score* that also rewards fast queries.
+:::
+
+::: note
+[A text-to-SQL error taxonomy]{.tag} When auditing generated queries, classify each failure:
+
+1.  **schema linking**: wrong table or column (the product's `name` instead of the client's);
+2.  **joins**: a missing join, a wrong join path, or a join that duplicates rows and inflates a `SUM`;
+3.  **values and conditions**: a literal that does not match the stored value ('France' vs 'FR'), a wrong comparison or date format — BIRD's "dirty values";
+4.  **aggregation and grouping**: a missing `GROUP BY` column, `COUNT(*)` instead of `COUNT(DISTINCT ...)`, `WHERE` instead of `HAVING`;
+5.  **nesting and set operations**: a missing subquery, `NOT IN` over a column with `NULL`s, a wrong `EXCEPT`;
+6.  **external knowledge**: a business definition that the schema does not contain ("margin = price − cost");
+7.  **invalid SQL**: a syntax error or a column that does not exist.
+
+An *execution-feedback* loop (run the query, return the error message to the LLM, regenerate) repairs class 7 and part of class 1. Classes 2–6 fail silently, so only EX on a labelled set reveals them.
 :::
 
 ```python
@@ -587,7 +708,7 @@ question = "top 5 clients by margin in 2025, excluding refunds"
 ```
 
 ::: note
-[Structural limits]{.tag} Tokenization of numbers (scalars are chopped into pieces — fine arithmetic remains fragile); context window (millions of rows will never fit); confidentiality (sending customer rows to an API; cf. the Explainability, Security and Privacy of LLMs module); cost and non-determinism in production (cf. ML Ops module).
+[Structural limits]{.tag} Tokenization of numbers (scalars are chopped into pieces — fine arithmetic remains fragile); context window (millions of rows will never fit); confidentiality (sending customer rows to an API; cf. [Explainability, Security and Privacy of LLMs](../m2-explainability-security-privacy-llms/index.html)); cost and non-determinism in production (cf. [ML Ops ch. 4](../m2-mlops-llm-engineering/index.html#ch4)).
 
 Hence the dominant posture: **hybrid** — the LLM prepares, summarizes, links, programs; the tabular model (GBDT/TabPFN) predicts.
 :::
@@ -601,23 +722,23 @@ Real tables are often too small, too unbalanced or too sensitive to be shared. T
 
 -   **fidelity** (marginals and dependencies reproduced; KS/TV distances per column, correlations, detectability by a real-vs-synthetic classifier),
 -   **utility** (does a model trained on the synthetic perform on the real? the *train-synthetic-test-real* protocol, TSTR), and
--   **privacy** (no synthetic row should copy an individual; nearest-neighbor distance metrics and membership inference attacks — cf. ch. 8 of the Security and Robustness module).
+-   **privacy** (no synthetic row should copy an individual; nearest-neighbor distance metrics and membership inference attacks — cf. [Privacy and Uncertainty ch. 5](../m2-privacy-uncertainty/index.html#ch5), or the shadow-model attack of [Emerging ML ch. 5](../m1p1-emerging-ml/index.html#ch5)).
 :::
 
 ::: ex
 [Example 8.2 — Three families of generators]{.tag}
 
--   **GAN/VAE**: CTGAN/TVAE (Xu et al., 2019) — "mode-based" normalization of multimodal columns (GMM) and a conditional classifier for categoricals.
--   **Diffusion**: TabDDPM (Kotelnikov et al., ICML 2023) — Gaussian diffusion for numericals, multinomial diffusion for categoricals (cf. Image Synthesis module for the diffusion foundation), with missing-value imputation as a bonus.
--   **Language models**: GReaT (Borisov et al., ICLR 2023) — one fine-tunes an LM on rows serialized as text with *random column order*; generating = sampling conditioned completions — the most faithful on dependencies, the most exposed to memorization (cf. LLMs module for LM memorization).
+-   **GAN/VAE**: CTGAN/TVAE (Xu et al., 2019) — "mode-specific" normalization of multimodal columns (a Gaussian mixture per column) and, for imbalanced categoricals, a *conditional generator* with training-by-sampling: each row of a batch is conditioned, through a conditional vector, on a category drawn in proportion to the log of its frequency, so rare categories are seen far more often than in the data.
+-   **Diffusion**: TabDDPM (Kotelnikov et al., ICML 2023) — Gaussian diffusion for numericals, multinomial diffusion for categoricals, with missing-value imputation as a bonus. The diffusion foundation is in [Multimodal Generative AI ch. 3](../m1p2-multimodal-genai/index.html#ch3), [Deep Learning P2 section 7.3](../m1p2-deep-learning-p2/index.html#dl-generative) or [Deep Learning P1 section 9.4](../m1p1-deep-learning/index.html#diffusion).
+-   **Language models**: GReaT (Borisov et al., ICLR 2023) — one fine-tunes an LM on rows serialized as text with *random column order*; generating = sampling conditioned completions — the most faithful on dependencies, the most exposed to memorization (cf. [Large Language Models section 9.7](../m2-large-language-models/index.html#privacy-bias) on extracting memorized text).
 :::
 
 ::: prop
 [Proposition 8.3 — Synthetic ≠ anonymous]{.tag} A generator trained by maximum likelihood *memorizes*: rare rows (atypical individuals) can be reproduced almost verbatim.
 
-The formal safeguard is **differential privacy** (cf. Emerging ML module ch. 5): training the generator in DP (Gaussian mechanism on gradients) guarantees an $(\varepsilon, \delta)$ — at the price of a measurable fidelity loss.
+The formal safeguard is **differential privacy** (cf. [Emerging ML ch. 5](../m1p1-emerging-ml/index.html#ch5) or [Privacy and Uncertainty ch. 1–4](../m2-privacy-uncertainty/index.html#ch1)): training the generator in DP (Gaussian mechanism on gradients) guarantees an $(\varepsilon, \delta)$ — at the price of a measurable fidelity loss.
 
-In practice one combines: DP when the guarantee is required, membership inference audits and nearest-record distances otherwise, and documentation of both (regulation; cf. ML Ops module).
+In practice one combines: DP when the guarantee is required, membership inference audits and nearest-record distances otherwise, and documentation of both (regulation; cf. [ML Ops](../m2-mlops-llm-engineering/index.html)).
 :::
 
 ::: note
@@ -632,7 +753,7 @@ The "trees vs deep vs foundations" debate has produced more contradictory conclu
 [Protocol rules]{.tag}
 
 1.  **Same folds, same preprocessing** for everyone: seeded splits, encodings computed only inside the CV loop (the OOF target encoding of prop. 4.3 is *inside* the CV, never before);
-2.  **Symmetric tuning budget**: same number of trials, same search, same selection metric — TabZilla shows that the tuning budget dominates the family choice (ch. 1);
+2.  **Symmetric tuning budget**: same number of trials, same search, same selection metric — TabZilla finds that lightly tuning a GBDT often matters more than the family choice (ch. 1);
 3.  **Multiple seeds** (≥ 5) and report mean ± standard deviation: on medium tables, the inter-seed std of a GBDT can approach the gap between families;
 4.  **Counted cost**: training + inference + tuning time (TabPFN's "zero-tuning" is compared to a *tuned* XGBoost — but also to default XGBoost);
 5.  **Dataset deduplication**: OpenML suites share variants of the same dataset — a "win by average" benchmark may count the same dataset three times;
@@ -642,12 +763,16 @@ The "trees vs deep vs foundations" debate has produced more contradictory conclu
 ::: ex
 [Example 9.1 — Calibrating an "X% better"]{.tag} On 20 OpenML datasets: mean GBDT AUC 0.812 ± 0.004 (5 seeds), FT-Transformer 0.807 ± 0.006, TabPFN 0.818 ± 0.000 (deterministic). Before writing "TabPFN wins":
 
-1.  paired per-dataset test (permutation or corrected t);
+1.  paired per-dataset test (permutation or corrected t; cf. [Machine Learning section 4.9](../m1p1-machine-learning/index.html#model-comparison));
 2.  check that the GBDT had its budget;
 3.  look at the distribution — gaining 0.006 everywhere is not gaining 0.06 on half the datasets and losing on the other half;
 4.  report the total time to prediction.
 
 The honest conclusion is often "statistically tied, choose by cost and constraint" (ch. 10).
+:::
+
+::: note
+[Where this protocol is used next]{.tag} The Year 2 transverse project [Y2.5 "Fraud alerts you can defend"](../../projects/index.html#y2-5) starts from a tuned GBDT on the Elliptic transaction data and asks which graph signals add value over it. Rules 1–6 apply as written, with one change: the folds become a strictly temporal split, since shuffling time steps leaks the future. [Y2.4](../../projects/index.html#y2-4) applies the same protocol to gradient boosting for travel-time prediction.
 :::
 
 ## 10. Choosing your method: guide and open questions {#ch10}
@@ -656,7 +781,7 @@ The previous chapters compared model families regime by regime; this chapter con
 
 | Regime | Recommended default | Why |
 |---|---|---|
-| $n \lesssim 10,000$, no tuning resources | TabPFN | zero hyperparameters, seconds, uncertainty included (prop. 6.3) |
+| $n \lesssim 10,000$, no tuning resources | TabPFN | zero hyperparameters, seconds, uncertainty included (prop. 6.4) |
 | Heterogeneous, skewed tables, medium/large $n$ | GBDT (XGBoost/LightGBM/CatBoost) | monotone invariance (prop. 1.3), irregularity (study 1.2), cost |
 | Very large $n$, multimodal columns (linked text/image), differentiable stack | Tabular network (FT-Transformer) + embeddings | shared representations, joint gradients (ch. 5) |
 | Few-shot with semantic columns, free text | LLM (prediction or feature engineering) | pre-training prior (study 7.2) |
@@ -676,13 +801,107 @@ These questions feed the master's internship/lab topics.
 ## Exercises / Labs {#ex}
 
 1.  **★ Theorem 3.2 by hand (ch. 2-3).** Implement in pure NumPy (without a library) a depth-1 tree boosting: residuals, leaf weights $w_j^\star = -G_j/(H_j+\lambda)$, split gain — verify on a toy dataset that the objective of theorem 3.2 decreases by exactly the announced Gain at each split.
-2.  **★ Target encoding leakage (ch. 4 — central lab).** On a dataset where the target is pure noise: (i) naive target encoding with an identifier column — measure train/test AUC; (ii) intermediate cardinality (100 categories) — show that partial leakage skews standard CV; (iii) repair with K-fold OOF and Micci-Barreca smoothing (sweep $m$); (iv) rerun CatBoost with native ordered TS and compare.
+2.  **★ Target encoding leakage (ch. 4 — central lab).** On a dataset where the target is pure noise: (i) naive target encoding with an identifier column — measure train/test AUC; (ii) intermediate cardinality (100 categories) — show that partial leakage skews standard CV; (iii) repair with K-fold OOF and Micci-Barreca smoothing (sweep $\kappa$); (iv) rerun CatBoost with native ordered TS and compare.
 3.  **★ Rotation and useless features (ch. 1).** Reproduce the two diagnostics of Grinsztajn et al. on 3 datasets: (i) random column rotation — GBDT vs MLP; (ii) adding noise features then importance-based pruning — who suffers most? Reread proposition 1.3 in light of the results.
 4.  **★★ GOSS and EFB (ch. 3).** In a toy GBDT: implement GOSS ($a = 0.2, b = 0.1$) and numerically verify proposition 3.5 (compare estimated gains with exact gains over 100 splits); build a sparse one-hot and measure the achievable EFB fusion rate (greedy coloring of the conflict graph).
-5.  **★★ LLM on a table (ch. 7).** Serialize a tabular dataset in 4 formats (CSV/JSON/Markdown/template): measure the effect of format and column order in few-shot (16/64 examples); compare with a GBDT at the same sample sizes — reproduce the crossover of study 7.2; finish with 5 text-to-SQL questions on a mini-database and audit the schema linking errors.
+5.  **★★ LLM on a table (ch. 7).** Serialize a tabular dataset in 4 formats (CSV/JSON/Markdown/template): measure the effect of format and column order in few-shot (16/64 examples); compare with a GBDT at the same sample sizes — reproduce the crossover of study 7.2; finish with 10 text-to-SQL questions on a mini-database: report the execution accuracy (def. 7.4) and classify every failure with the error taxonomy of ch. 7.
 6.  **★★ Synthetic and privacy (ch. 8).** Generate data with CTGAN, TabDDPM, and a serialized LM (GReaT-like); evaluate fidelity (KS, correlations, detectability) and utility (TSTR vs TRTR); launch a membership inference attack and a nearest-record-distance analysis; redo the generator with light DP and plot the fidelity-privacy curve.
 7.  **★★★ Symmetric benchmark (ch. 5-6-9).** On 8-10 OpenML datasets (Grinsztajn suite): XGBoost/LightGBM/CatBoost with an equal tuning budget (Optuna, 100 trials), FT-Transformer (tokenizer + periodic embeddings), TabPFN. Same folds, 5 seeds, mean ± standard deviation, paired test, total time reported — write the "TabZilla-style" conclusion (ch. 9) then the decision guide (ch. 10) on these data.
-8.  **★★★ Prior and in-context (ch. 6).** Generate tables from random SCMs (def. 6.2 — DAG skeleton, piecewise mechanisms, marginal transformations); train a small PFN transformer to predict $p(y \mid x, \mathcal{D})$; show in-context learning (performance curve vs context size) and test sensitivity to the prior (Gaussian vs causal prior — when does the PFN fail?).
+8.  **★★★ Prior and in-context (ch. 6).** Generate tables from random SCMs (def. 6.3 — DAG skeleton, piecewise mechanisms, marginal transformations); train a small PFN transformer to predict $p(y \mid x, \mathcal{D})$; show in-context learning (performance curve vs context size) and test sensitivity to the prior (Gaussian vs causal prior — when does the PFN fail?).
+
+## Projects and assessment {#projects}
+
+**Official assessment: not displayed.** This module has no published SynapseS 2026–2027 sheet: code, hours, credits, instructor and assessment are all "not published" (see the fiche above). The proposals below are ours: a project, solo or in a group, plus a written exam, weighted as the instructor decides. They exercise O1 (boosting, encodings and deep tabular models), O7 (honest benchmarks on real tables) and O3 (LLMs on tables, text-to-SQL); the fraud project also touches O4 and the mini-PFN project O8. Two subjects rehearse the Year 2 transverse projects [Y2.5](../../projects/index.html#y2-5) and [Y2.4](../../projects/index.html#y2-4).
+
+The projects draw on [Graph ML](../m1p2-graph-ml/index.html) and [Large Language Models](../m2-large-language-models/index.html); exam questions 2 and 3 take [Machine Learning Theorem 6.4](../m1p1-machine-learning/index.html#ch6) to second order and to AdaBoost.
+
+### Solo projects {#projects-solo}
+
+1.  **[Solo · ≈ 20 h] Leakage forensics: an audit kit for target, temporal and group leakage.** How much does each kind of leakage inflate a cross-validated score, and does the right split or encoding remove all of it?
+    -   *Implement*: a small Python library that injects and detects three leaks — naive versus out-of-fold versus ordered target encoding (Ex. 2), temporal leakage from shuffled folds on time-ordered rows (the opening scene of ch. 1), and group leakage (the same patient in train and test). The detector compares random-split scores with grouped or temporal-split scores.
+    -   *Data*: Amazon_employee_access (OpenML, high-cardinality categoricals); the Bike Sharing dataset (Fanaee-T & Gama, 2013, UCI, hourly rentals); Diabetes 130-US Hospitals (Strack et al., 2014, UCI, repeated encounters per patient).
+    -   *Deliverables*: the library with unit tests, a 4-page report, a 10-minute talk.
+    -   *Chapters*: ch. 1, 4, 9.
+    -   *Success*: for each leak and dataset, the inflation (leaky minus honest score) with a 5-seed interval; the inflation vanishes, within the seed spread, under the correct split or encoding; the detector flags every injected leak and none on clean controls.
+2.  **[Solo · ≈ 25 h] Paper study: a mini-PFN against the exact posterior (Müller et al., 2022).** Does a small transformer trained on the prior-data likelihood really approach the Bayesian posterior predictive, as "Transformers Can Do Bayesian Inference" (ICLR 2022) reports?
+    -   *Implement*: a 4-layer PFN in PyTorch trained on the objective of def. 6.1 for regression tasks drawn from a Gaussian-process prior (RBF kernel, fixed hyperparameters), with a Gaussian or bar-distribution head; compare its test NLL with the closed-form GP posterior at context sizes 5 to 200. Then switch to an SCM prior (def. 6.3) for classification.
+    -   *Data*: synthetic priors; five OpenML-CC18 tables of at most 1,000 rows (credit-g, diabetes, blood-transfusion, ilpd, wdbc).
+    -   *Deliverables*: code, a 4-page report stating which claims were reproduced, a 10-minute talk.
+    -   *Chapters*: ch. 6 (prop. 6.2), ch. 9; [Privacy and Uncertainty ch. 7](../m2-privacy-uncertainty/index.html#ch7) and [ch. 9](../m2-privacy-uncertainty/index.html#ch9) for calibration and conformal prediction.
+    -   *Success*: the NLL gap to the exact GP posterior per context size, with 3 seeds, shrinking with training; on the real tables, the PFN's calibration error (ECE) compared with a GBDT wrapped in split conformal prediction at 90 % coverage.
+
+### Group projects {#projects-group}
+
+1.  **[Group of 4 · ≈ 30 h each] A symmetric tabular benchmark: GBDTs, FT-Transformer, TabPFN v2 and an LLM.** In which regimes (rows, cardinality, skew, textual columns) does each family win once the protocol is symmetric?
+    -   *Implement*: Ex. 7 at full scale. XGBoost, LightGBM and CatBoost under an equal Optuna budget; FT-Transformer with periodic embeddings; TabPFN v2; a TabLLM-style few-shot LLM (Qwen2.5-7B-Instruct, 4-bit) at 16, 64 and 256 shots, prompted as in [Large Language Models section 4.0](../m2-large-language-models/index.html#icl).
+    -   *Data*: the benchmark suites of Grinsztajn et al. (2022) on OpenML, deduplicated; one industrial table, Home Credit Default Risk (Kaggle, 2018; about 300,000 loans, over 100 columns).
+    -   *Split*: GBDTs and the tuning harness; deep tabular models; TabPFN and the LLM; protocol, statistics and deduplication.
+    -   *Deliverables*: a repository that reruns everything with one command, a 6-page TabZilla-style report, a 15-minute talk.
+    -   *Chapters*: ch. 3, 5, 6, 7, 9, 10; [Machine Learning section 4.9](../m1p1-machine-learning/index.html#model-comparison) for the paired tests.
+    -   *Success*: every claimed win backed by a paired test across datasets (Wilcoxon signed-rank with Holm correction), 5 seeds, the total time to prediction; each row of the ch. 10 guide confirmed or amended with evidence.
+2.  **[Group of 3 · ≈ 30 h each] Graph-augmented fraud detection: from a GBDT on transaction features to GNN embeddings.** Do graph signals add detection value over a tuned GBDT, and does the gain survive a regime shift? A dress rehearsal for [Y2.5](../../projects/index.html#y2-5).
+    -   *Implement*: four set-ups under a strictly temporal protocol — a tuned GBDT on the transaction features; the same GBDT plus graph features (degrees, PageRank, node2vec embeddings from [Graph ML ch. 3](../m1p2-graph-ml/index.html#ch3)); an end-to-end GNN ([Graph ML ch. 5](../m1p2-graph-ml/index.html#ch5)); TabPFN on per-time-step slices.
+    -   *Data*: the Elliptic dataset (Weber et al., 2019): 203,769 Bitcoin transactions, 166 features, 49 time steps, about 2 % labelled illicit; train on steps 1–34, test on 35–49, as in the paper.
+    -   *Split*: GBDT and protocol; graph features and embeddings; GNN.
+    -   *Deliverables*: a repository, a 6-page report, a 15-minute talk.
+    -   *Chapters*: ch. 1, 3, 4, 6, 9; [Advanced GNN ch. 6](../m2-advanced-gnn/index.html#ch6) for temporal graphs.
+    -   *Success*: illicit-class F1 and recall at a fixed alert budget per time step, 5 seeds; a paired test of each graph addition against the GBDT; the drop after the dark-market shutdown at step 43 measured and discussed.
+3.  **[Group of 3 · ≈ 25 h each] A text-to-SQL analyst over a dirty database.** How far does an open LLM get on realistic databases, which errors remain, and does execution feedback help?
+    -   *Implement*: schema linking, SQL generation and an execution-feedback self-correction loop with Qwen2.5-Coder-7B-Instruct, in the ReAct style of [Large Language Models section 8.1](../m2-large-language-models/index.html#react); a home-made SQLite CRM with dirty values (mixed country codes, NULLs, duplicates); a GBDT churn model exposed through the same natural-language interface ("the LLM prepares, the tabular model predicts").
+    -   *Data*: 300 questions of the BIRD development set (Li et al., 2023); the IBM Telco Customer Churn sample (7,043 customers) for the CRM.
+    -   *Split*: schema linking and retrieval; generation and self-correction; the CRM, the churn model and the evaluation.
+    -   *Deliverables*: a repository with a one-command evaluation, a 6-page report, a live demo.
+    -   *Chapters*: ch. 3, 4, 7 (def. 7.4 and the error taxonomy), 9; [Large Language Models section 7.4](../m2-large-language-models/index.html#graphrag) for text-to-SQL as a structured-query variant of retrieval.
+    -   *Success*: execution accuracy with a bootstrap interval; the effect of self-correction measured by a paired McNemar test; an error table by class before and after correction; identical churn scores through the interface and the direct API.
+
+### Written exam (proposal) {#projects-exam}
+
+**Format**: 2 hours; one handwritten A4 sheet allowed; no electronic device; 4 questions — a course question, a computation and two short proofs.
+
+1.  **Question (5 points).** Explain why GBDTs beat MLPs on typical medium-sized tables. State the invariance of proposition 1.3 and its limits, give the two mechanistic causes identified by Grinsztajn et al. (2022), and say what a random rotation of the columns does to each family.
+
+    *Expected*:
+    -   A strictly increasing map of a column sends every split $x_j \le t$ to the split at threshold $g_j(t)$, so partitions and predictions are unchanged: logs, standardization and ranks do not matter to a tree (2 pts).
+    -   Clipping merges the tail into one value; whitening mixes columns and breaks the invariance (1 pt).
+    -   Networks are hurt by uninformative features and by irregular, non-smooth targets (1 pt).
+    -   After a random rotation, trees lose their axis-aligned splits and degrade sharply, while MLPs, rotation-invariant by construction, change little (1 pt).
+2.  **Question (6 points).** Six examples sorted by one feature have labels $(1, 1, 1, 0, 0, 0)$. The current raw score is 0 for all of them; the loss is the logistic loss; $\lambda = 1$, $\gamma = 0.5$. (a) Give $g_i$ and $h_i$ (1 pt). (b) Compute the gain of the split between the third and fourth examples (2 pts). (c) Compute the gain of the split between the second and third, and say which split XGBoost makes (1.5 pts). (d) Give the two leaf weights, and the new probability on the left with $\eta = 0.3$ (1.5 pts).
+
+    *Expected*: (a) $g_i = \sigma(0) - y_i = \mp 0.5$, $h_i = 0.25$. (b) $G = \mp 1.5$, $H = 0.75$ on each side, parent $G = 0$:
+    $$
+    \mathrm{Gain} = \tfrac{1}{2}\big[\tfrac{2.25}{1.75} \cdot 2\big] - 0.5 \approx 0.786 .
+    $$
+    (c) Left $G = -1$, $H = 0.5$; right $G = 1$, $H = 1$:
+    $$
+    \tfrac{1}{2}\big[\tfrac{1}{1.5} + \tfrac{1}{2}\big] - 0.5 \approx 0.083 ;
+    $$
+    the 3–3 split wins. (d) $w = \pm 1.5/1.75 \approx \pm 0.857$; new score $0.257$, so $p = \sigma(0.257) \approx 0.564$.
+3.  **Question (5 points).** Labels $y_i \in \{-1, +1\}$, exponential loss $\ell(\hat{y}, y) = e^{-y\hat{y}}$, current model $F_{m-1}$, weights $w_i = e^{-y_i F_{m-1}(x_i)}$.
+    -   **(a)** For a fixed classifier $f$ with values in $\{-1, +1\}$ and weighted error $\mathrm{err} < 1/2$, show that the best step is
+        $$
+        \alpha = \tfrac{1}{2}\log\frac{1 - \mathrm{err}}{\mathrm{err}} \quad \text{(3 pts)}.
+        $$
+    -   **(b)** Show that for any fixed $\alpha > 0$ the best $f$ minimizes the weighted error, and give the weights of the next round (2 pts).
+
+    *Expected*: (a) The objective is $\sum_i w_i e^{-\alpha y_i f(x_i)}$; dividing by $W = \sum_i w_i$ gives $e^{-\alpha}(1 - \mathrm{err}) + e^{\alpha}\mathrm{err}$, a convex function of $\alpha$ whose derivative vanishes at $e^{2\alpha} = (1 - \mathrm{err})/\mathrm{err}$. (b) The objective equals
+    $$
+    W e^{-\alpha} + (e^{\alpha} - e^{-\alpha}) \textstyle\sum_i w_i \mathbf{1}[f(x_i) \neq y_i],
+    $$
+    increasing in the weighted error when $\alpha > 0$; the new weights are $w_i e^{-\alpha y_i f(x_i)}$ (proposition 2.5).
+4.  **Question (4 points).** A column `customer_id` takes a distinct value on every training row, and the binary target is independent of all features. (a) Give its smoothed target encoding (def. 4.1) computed on the full training set, with pseudo-count $\kappa > 0$ and global mean $\bar{y}$ (1 pt). (b) Show that one split on this column classifies the training set perfectly for every $\kappa$, and give the test AUC (2 pts). (c) What does out-of-fold encoding give, and why does the leakage disappear (1 pt)?
+
+    *Expected*: (a) $n_v = 1$ and $\bar{y}_v = y_i$, so the encoding is $(y_i + \kappa\bar{y})/(1 + \kappa)$. (b) It takes two values that differ by $1/(1 + \kappa) > 0$, the larger one exactly on $y_i = 1$: a threshold between them separates the classes; smoothing shrinks the gap but never closes it. Test identifiers are unseen, so the encoding is the constant $\bar{y}$ and the AUC is 0.5. (c) Each identifier is absent from the other folds, so every training row is encoded by the out-of-fold mean, which does not depend on its own label: train and test scores agree.
+
+### Grading rubric (proposal) {#projects-rubric}
+
+| Criterion | Weight | What earns the marks |
+|---|---|---|
+| Question and baselines | 15 % | A precise question; a tuned GBDT baseline under the same budget as every other model |
+| Correct implementation | 20 % | Code that runs with one command; formulas checked on a toy case (the split gain of theorem 3.2, the encodings of ch. 4) |
+| Protocol and statistics | 25 % | The rules of ch. 9: same folds, 5 or more seeds, paired tests, no test reuse, counted cost |
+| Data hygiene and leakage | 10 % | Encodings fitted inside the folds; temporal or grouped splits where the data require them; leakage checks reported |
+| Decision and limits | 10 % | A conclusion stated by regime (ch. 10), with its limits and the cases where the evidence is a tie |
+| Report and talk | 20 % | A clear 4–6-page report, figures with error bars, a 10–15-minute talk that answers the question |
 
 ## References {#refs}
 
