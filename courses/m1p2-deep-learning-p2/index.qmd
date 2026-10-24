@@ -152,16 +152,16 @@ Level 1 = foundations (pipeline, autodiff, first counts), 2 = core architectures
 | Session | Hours | Level | Content | Practice |
 |---|---|---|---|---|
 | 1 | 3 h | 1 | ch. 0 Refresher; the field and its tasks, universal approximation (official 1); the PyTorch training pipeline (official 2) | lab: the ResNet-18 script, initial-loss and one-batch checks |
-| 2 | 3 h | 1 | ch. 0 Automatic differentiation; optimization for deep learning, initialization, learning rate, non-convexity (official 3) | Example 0.6 in PyTorch; learning-rate range test |
+| 2 | 3 h | 1 | ch. 0 Automatic differentiation; optimization for deep learning: SGD, Adam, initialization, learning rate, normalization, residuals and dropout, non-convexity (official 3) | Example 0.6 in PyTorch; learning-rate range test |
 | 3 | 3 h | 1 | ch. 1 Units, cost of a linear layer and of a transformer block, the $6ND$ rule, training memory, scaling laws | Ex. 1 |
 | 4 | 3 h | 2 | ch. 1 Convolutional networks and translation equivariance (official 4); equivariant models | lab: counting a ResNet stage |
-| 5 | 3 h | 2 | ch. 1 Recurrent networks and LSTMs (official 5); text generation with transformers, decoding (official 6) | lab: temperature and nucleus sampling on a small model |
+| 5 | 3 h | 2 | ch. 1 Recurrent networks and LSTMs (official 5); the transformer block: attention, multi-head, masks, pre-LN residuals, positions; text generation with transformers, decoding (official 6) | lab: the block of definition 1.15a (parameter count, causal mask); temperature and nucleus sampling on a small model |
 | 6 | 3 h | 2 | ch. 2 Data, tensor and pipeline parallelism; the decision tree | Ex. 2 |
 | 7 | 3 h | 2 | ch. 3 All-reduce: ring and tree, overlap; ch. 4 Checkpointing, ZeRO, mixed precision | Ex. 5, 6 |
-| 8 | 3 h | 2 | ch. 5 The memory wall, prefill and decode, compression, speculative decoding; ch. 6 Roofline, Amdahl, the budget of a 7B LLM | Ex. 3, 4, 7 |
+| 8 | 3 h | 2 | ch. 5 The memory wall, prefill and decode, compression, speculative decoding, LoRA; ch. 6 Roofline, Amdahl, the budget of a 7B LLM | Ex. 3, 4, 7 |
 | 9 | 3 h | 2 | ch. 7.1 Stability and robustness: Lipschitz bounds, adversarial examples, distribution shift (official 7) | lab: FGSM on the CIFAR-10 model of session 1 |
-| 10 | 3 h | 2 | ch. 7.2 Deep reinforcement learning: Bellman equation, DQN, policy gradient (official 8) | Example 7.6, then REINFORCE on a small control task |
-| 11 | 3 h | 2 | ch. 7.3 Generative models: VAE, GAN, diffusion (official 9) | lab: a small VAE or DDPM on MNIST |
+| 10 | 3 h | 2 | ch. 7.2 Deep reinforcement learning: Bellman equation, DQN, policy gradient (recalled from the RL course), the cost of RLHF (official 8) | Example 7.6, then REINFORCE on a small control task |
+| 11 | 3 h | 2 | ch. 7.3 Generative models: VAE, GAN, diffusion (official 9) | lab: a small VAE or DDPM on MNIST (starting code: DL P1 sections 9.2 and 9.4) |
 | 12 | 3 h | 3 | ch. 8 Decentralized optimization, gossip, lower bounds and optimal algorithms, the finite-sum regime | Ex. 8 (presentations of the paper studies) |
 
 **Self-study, outside the 36 h** (about 3 h in total): ch. 9 Research readings — the papers behind the lower bounds, and the Lipschitz regularity of networks (≈ 3 h).
@@ -392,11 +392,21 @@ In PyTorch, `x = torch.tensor([math.pi, 2.0], requires_grad=True); (x[0]*x[1] + 
 
 Training minimizes the empirical risk $F(\theta) = \frac1n\sum_i \ell(h_\theta(x_i), y_i)$, which is non-convex as soon as there is a hidden layer.
 
-The algorithms are those of the Optimization for AI module — SGD with momentum
+Two algorithms do almost all the work, with $g_k$ the gradient of a mini-batch. **SGD with momentum** averages the past gradients, which damps the oscillations across a narrow valley and accumulates progress along it:
 $$
-m_{k+1} = \beta m_k + g_k, \qquad \theta_{k+1} = \theta_k - \eta\, m_{k+1},
+m_{k+1} = \beta m_k + g_k, \qquad \theta_{k+1} = \theta_k - \eta\, m_{k+1}.
 $$
-and Adam/AdamW, which divides each coordinate of the step by a running estimate of the gradient's magnitude — but three facts specific to deep networks decide whether they work.
+
+**Adam** (Kingma & Ba 2015) divides each coordinate of the step by a running estimate of the gradient's magnitude, with $\beta_1 = 0.9$ and $\beta_2 = 0.999$ by default:
+$$
+m_t = \beta_1 m_{t-1} + (1-\beta_1)\,g_t, \qquad v_t = \beta_2 v_{t-1} + (1-\beta_2)\,g_t^2 \quad (\text{coordinate-wise}),
+$$
+$$
+\theta_t = \theta_{t-1} - \eta\,\frac{\hat m_t}{\sqrt{\hat v_t} + \epsilon}, \qquad \hat m_t = \frac{m_t}{1 - \beta_1^t}, \quad \hat v_t = \frac{v_t}{1 - \beta_2^t}.
+$$
+The divisions by $1 - \beta^t$ correct the start from $m_0 = v_0 = 0$. **AdamW** (Loshchilov & Hutter 2019) applies the weight decay directly to the weights, outside this normalization; it is the standard for transformers.
+
+Four ingredients specific to deep networks then decide whether training works: the initialization, the learning rate, normalization with residual connections and dropout, and the shape of the non-convex landscape.
 
 ::::: prop
 [Proposition 0.7 — Initialization that preserves the signal (He et al. 2015, proved)]{.tag} Consider a layer $z = W x$ with $W \in \mathbb{R}^{m \times n}$ whose entries are independent, centred, of variance $s^2$, independent of the input $x = \mathrm{ReLU}(u)$, where the coordinates of $u$ are centred, symmetric and identically distributed. Then
@@ -437,14 +447,36 @@ Hence the practical recipe: find the largest learning rate that does not diverge
 **Gradient clipping**, $g \mapsto g\min(1, c/\|g\|)$, caps the damage of a rare large gradient.
 :::
 
+::: def
+[Definition 0.9 — Normalization, residual connection, dropout]{.tag} Three devices keep deep networks trainable; every architecture of this module uses them.
+
+-   **BatchNorm** (Ioffe & Szegedy 2015) normalizes each feature $j$ over the batch, then rescales it with learned $\gamma_j, \beta_j$:
+    $$
+    \hat h_{ij} = \frac{h_{ij} - \mu_j}{\sqrt{\sigma_j^2 + \varepsilon}}, \qquad y_{ij} = \gamma_j \hat h_{ij} + \beta_j ,
+    $$
+    with $\mu_j, \sigma_j^2$ the batch mean and variance (frozen running averages at inference). **LayerNorm** (Ba et al. 2016) applies the same formula with the statistics taken over the features of each example: it does not depend on the batch, which is why transformers use it.
+-   A **residual connection** computes $h + F(h)$ instead of $F(h)$ (He et al. 2016). Its Jacobian $I + \partial F/\partial h$ contains the identity, so the gradient crosses many layers without the product of small factors that makes plain deep networks vanish (prop. 1.13 shows the recurrent case).
+-   **Dropout** (Srivastava et al. 2014) multiplies each activation, during training, by an independent $M_j/(1-p)$ with $M_j \sim \mathrm{Bernoulli}(1-p)$. Since $\mathbb{E}[M_j/(1-p)] = 1$, the expected activation is unchanged and the layer is the identity at inference. This multiplicative noise discourages co-adapted units; keeping it active at test time gives MC dropout ([Privacy and Uncertainty ch. 8](../m2-privacy-uncertainty/index.html#ch8), M2).
+:::
+
 ::: note
-[Non-convex optimization: what is guaranteed, what is observed]{.tag} The guarantee is modest: with a step tuned to the horizon, SGD reaches points whose average squared gradient norm is $O(1/\sqrt{K})$ after $K$ steps (Optimization for AI module, theorem 5.5) — stationary points, not minima.
+[Non-convex optimization: what is guaranteed, what is observed]{.tag} The guarantee is modest, and its proof is short. Let $F$ be $L$-smooth ([Machine Learning, definition 0.4](../m1p1-machine-learning/index.html#gd-sgd)) and bounded below by $F_{\inf}$, and let the mini-batch gradient be unbiased with variance at most $\sigma^2$.
+
+The descent lemma of that section, applied to one SGD step with $\eta \le 1/L$ and averaged over the batch, gives
+$$
+\mathbb{E}F(\theta_{k+1}) \le \mathbb{E}F(\theta_k) - \frac{\eta}{2}\,\mathbb{E}\|\nabla F(\theta_k)\|^2 + \frac{L\eta^2\sigma^2}{2}.
+$$
+Summing over $K$ steps, the values telescope:
+$$
+\frac1K\sum_{k<K}\mathbb{E}\|\nabla F(\theta_k)\|^2 \le \frac{2\,(F(\theta_0) - F_{\inf})}{\eta K} + L\eta\sigma^2 .
+$$
+A step $\eta \propto 1/\sqrt K$ makes the right-hand side $O(1/\sqrt K)$: SGD reaches points of small average gradient — stationary points, not minima. (Theorem 5.5 of the Optimization for AI notes gives the details; it is optional reading, since that course is in the same choose-1 group as this one.)
 
 What is observed is much better, for three reasons studied in research:
 
 -   in high dimension, most critical points with a high loss are saddle points rather than poor local minima (Dauphin et al. 2014), and the noise of SGD helps to escape them (Ge et al. 2015);
 -   overparameterized networks have many connected near-global minima;
--   normalization layers and residual connections keep the landscape well conditioned along the trajectory (Optimization for AI module, ch. 10).
+-   normalization layers and residual connections (def. 0.9) keep the landscape well conditioned along the trajectory.
 :::
 
 ## 1. Counting: FLOPs, memory, scaling laws {#ch1}
@@ -470,7 +502,7 @@ The **MFU** (model FLOPs utilization) = achieved FLOP/s ÷ peak FLOP/s: 35–50%
 
 -   **(i)** A matrix-matrix product $A \in \mathbb{R}^{m \times n}$ by $B \in \mathbb{R}^{n \times p}$ costs $2mnp$ FLOPs.
 -   **(ii)** A linear layer $d_\mathrm{in} \to d_\mathrm{out}$ applied to $n$ tokens costs $2\,n\,d_\mathrm{in}d_\mathrm{out}$ FLOPs and has $d_\mathrm{in}d_\mathrm{out}$ parameters — that is, **2 FLOPs per parameter and per token**.
--   **(iii)** Transformer block of width $d$, over a sequence of $n$ tokens:
+-   **(iii)** Transformer block of width $d$, over a sequence of $n$ tokens (the block itself is defined in definition 1.15a; only its matrix products matter here):
     -   QKVO $4 \times 2d^2 = 8d^2$,
     -   scores $QK^\top$ and product with $V$: $2 \times 2n^2 d$,
     -   MLP (width $4d$): $2 \times 2 \times 4d^2 = 16d^2$
@@ -537,17 +569,21 @@ Order of magnitude to remember: **16 bytes per parameter** of states + activatio
 :::
 
 ::: note
-[Scaling laws: from Kaplan to Chinchilla (the budget as a primary dimension)]{.tag} **Kaplan et al. 2020**: over decades, the loss follows a power law
+[Scaling laws: from Kaplan to Chinchilla (the budget as a primary dimension)]{.tag} **Kaplan et al. 2020** measured, over several decades, power laws of the loss in the number of parameters $N$ and of tokens $D$, combined into the joint fit
 $$
-L(N, D) \approx (N_c/N)^{\alpha_N} + (D_c/D)^{\alpha_D} + L_\infty
+L(N, D) = \Big[\Big(\frac{N_c}{N}\Big)^{\alpha_N/\alpha_D} + \frac{D_c}{D}\Big]^{\alpha_D}
 $$
 — first reading: enlarging the model helps more than enlarging the data.
 
-**Hoffmann et al. 2022 (Chinchilla)**: with the compute budget $C = 6ND$ *fixed*, the optimum is reached for $D \approx 20 N$ — the models of the Kaplan era were *undertrained*; GPT-3 (300B tokens for 175B parameters) was "too big" for its data, and a 70B on 1.5T tokens dominates it at equal budget.
+**Hoffmann et al. 2022 (Chinchilla)** fitted the additive form, with $E$ the irreducible loss,
+$$
+L(N, D) = E + \frac{A}{N^{\alpha}} + \frac{B}{D^{\beta}} ,
+$$
+and showed that with the compute budget $C = 6ND$ *fixed*, the optimum is reached for $D \approx 20 N$ — the models of the Kaplan era were *undertrained*; GPT-3 (300B tokens for 175B parameters) was "too big" for its data, and a 70B on 1.5T tokens dominates it at equal budget.
 
 Method lesson for this module: the budget $C$ is not a side constraint, it is the axis along which one *designs* the model.
 
-(The M2 LLMs module, ch. 3, revisits these laws in detail; the "energy" angle is in the Optimization and Responsible AI for Sustainability module, ch. 6.)
+(The M2 [LLMs module, ch. 3](../m2-large-language-models/index.html#ch3), revisits these laws in detail; the energy of a run is computed in example 6.4.)
 :::
 
 ::: ex
@@ -718,7 +754,70 @@ Exploding gradients are handled separately, by gradient clipping. The GRU is a l
 
 ### Text generation with transformers {#dl-textgen}
 
-A language model assigns a probability to every sequence of tokens and generates text by sampling from it one token at a time. The transformer of prop. 1.2 becomes a generator through two changes: a causal mask, and a decoding rule.
+A language model assigns a probability to every sequence of tokens and generates text by sampling from it one token at a time. Definition 1.15a assembles the transformer block whose cost prop. 1.2 counted; the transformer then becomes a generator through two changes: a causal mask, and a decoding rule.
+
+::: def
+[Definition 1.15a — The transformer block (Vaswani et al. 2017)]{.tag} A sequence of $n$ tokens is a matrix $X \in \mathbb{R}^{n \times d}$, one row per token: its embedding plus a positional encoding, since attention alone ignores order.
+
+**Scaled dot-product attention.** With learned projections $Q = XW_Q$, $K = XW_K$, $V = XW_V$ of width $d_k$, and a mask $M$,
+$$
+\mathrm{Attn}(X) = \mathrm{softmax}\Big(\frac{QK^\top}{\sqrt{d_k}} + M\Big)V ,
+$$
+the softmax acting row by row: row $t$ of the output averages the values, weighted by the similarity of query $t$ with every key. A bidirectional (encoder) model takes $M = 0$; a causal (decoder) model sets $M_{tj} = -\infty$ for $j > t$.
+
+**Why $\sqrt{d_k}$.** If the coordinates of a query $q$ and a key $k$ are independent, centred, of variance 1, the score is a sum of $d_k$ independent terms of variance 1:
+$$
+\mathrm{Var}(q^\top k) = d_k .
+$$
+Unscaled scores of standard deviation $\sqrt{d_k}$ (32 for $d_k = 1024$) saturate the softmax into a near one-hot whose gradient vanishes; the division brings the variance back to 1.
+
+**Multi-head.** $h$ heads of width $d_k = d/h$ run in parallel with their own projections; their outputs are concatenated and mixed by $W_O \in \mathbb{R}^{d \times d}$, so that each head can follow a different relation (syntax, coreference, position).
+
+**The block (pre-LN).** With LayerNorm, dropout (def. 0.9) and a two-layer MLP of width $4d$:
+$$
+X' = X + \mathrm{Drop}\big(\mathrm{MHA}(\mathrm{LN}(X))\big), \qquad Y = X' + \mathrm{Drop}\big(\mathrm{MLP}(\mathrm{LN}(X'))\big).
+$$
+The residual paths carry the identity, so the gradient crosses many blocks; a model stacks $L$ blocks, then a final LayerNorm and the output layer.
+
+**Positions.** Sinusoidal encodings add $\sin(t\omega_i)$ and $\cos(t\omega_i)$, with $\omega_i = 10000^{-2i/d}$, to row $t$; learned encodings are a trainable table; RoPE, used by most current LLMs, rotates $q$ and $k$ by an angle proportional to the position, so that scores depend only on the gap between positions ([LLMs ch. 2](../m2-large-language-models/index.html#ch2)).
+
+The block holds $4d^2$ parameters in $W_Q, W_K, W_V, W_O$ and $8d^2$ in the MLP, that is $12d^2$ (biases and LayerNorm aside), as counted in prop. 1.2 and example 1.5.
+:::
+
+The block in 25 lines of PyTorch. With `causal=True`, changing a later token leaves the outputs of the earlier positions unchanged (check it), and the parameter count is $12d^2$ plus $3\,328$ biases and LayerNorm gains.
+
+```python
+import math, torch, torch.nn as nn
+
+class Block(nn.Module):                        # pre-LN transformer block (definition 1.15a)
+    def __init__(self, d=256, h=4, p=0.1):
+        super().__init__()
+        self.h, self.dk = h, d // h
+        self.ln1, self.ln2 = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.qkv, self.o = nn.Linear(d, 3 * d), nn.Linear(d, d)        # W_Q, W_K, W_V, W_O: 4d^2
+        self.mlp = nn.Sequential(nn.Linear(d, 4 * d), nn.GELU(), nn.Linear(4 * d, d))  # 8d^2
+        self.drop = nn.Dropout(p)
+    def attn(self, x, causal):
+        B, n, d = x.shape
+        q, k, v = self.qkv(x).view(B, n, 3, self.h, self.dk).permute(2, 0, 3, 1, 4)  # each (B, h, n, dk)
+        s = q @ k.transpose(-2, -1) / math.sqrt(self.dk)               # scores of variance ~1
+        if causal:                                                      # position t sees only j <= t
+            s = s.masked_fill(torch.ones(n, n, dtype=torch.bool).triu(1), float("-inf"))
+        a = self.drop(s.softmax(-1)) @ v                                # (B, h, n, dk)
+        return self.o(a.transpose(1, 2).reshape(B, n, d))               # concatenate the heads
+    def forward(self, x, causal=True):
+        x = x + self.drop(self.attn(self.ln1(x), causal))              # residual 1
+        return x + self.drop(self.mlp(self.ln2(x)))                    # residual 2
+
+def sinusoidal(n, d):                          # positional encoding, added to the embeddings
+    pos, f = torch.arange(n)[:, None], 10000 ** (-torch.arange(0, d, 2) / d)
+    return torch.cat([torch.sin(pos * f), torch.cos(pos * f)], 1)     # (n, d)
+
+torch.manual_seed(0)
+x = torch.randn(2, 16, 256) + sinusoidal(16, 256)
+blk = Block()
+print(blk(x).shape, sum(p.numel() for p in blk.parameters()))       # (2, 16, 256), 789760 = 12 d^2 + 3328
+```
 
 ::: def
 [Definition 1.15 — Causal language model, teacher forcing, perplexity]{.tag} The model factorizes
@@ -762,10 +861,10 @@ This chapter answers a practical question: how to split one training run over ma
 
 Time per step (batch size $B$, forward+backward time $\tau_\mathrm{calc}(B)$, gradient of size $S$ bytes):
 $$
-T_\mathrm{DP} \;=\; \underbrace{\tau_\mathrm{calc}(B/P)}_{\text{compute, divided by } P} \;+\; \underbrace{2\,(P-1)\,\alpha + \tfrac{2(P-1)}{P}\tfrac{S}{b}}_{\text{ring all-reduce (ch. 4)}}.
+T_\mathrm{DP} \;=\; \underbrace{\tau_\mathrm{calc}(B/P)}_{\text{compute, divided by } P} \;+\; \underbrace{2\,(P-1)\,\alpha + \tfrac{2(P-1)}{P}\tfrac{S}{b}}_{\text{ring all-reduce (theorem 3.2)}}.
 $$
 
-*Strong* scalability (at fixed $B$): the compute term shrinks, the communication term grows — the balance point defines the effective batch size; hence increasing $B$ with the step (LARS: Optimization for AI module, ch. 10).
+*Strong* scalability (at fixed $B$): the compute term shrinks, the communication term grows — the balance point defines the effective batch size; hence increasing $B$ with the step (LARS, You et al. 2017; ch. 10 of the Optimization for AI notes is optional reading, that course being in the same choose-1 group).
 
 This is the default mode of PyTorch DDP.
 :::
@@ -892,7 +991,7 @@ This is why gradients are grouped into large buckets before being reduced: a few
 :::
 
 ::: note
-[Three wars against $\gamma$: overlap, bucketing, compression]{.tag}
+[Three wars against communication time: overlap, bucketing, compression]{.tag}
 
 -   **Overlap**: while the GPU computes layer $k+1$, the gradient of layer $k$ is already on the network (async by buckets); provided $T_\mathrm{comm} \leq T_\mathrm{calc}$, communication disappears from the critical path — the raison d'être of PyTorch DDP's "bucketing".
 -   **Gradient compression**: quantizing the gradients (8 bits, even 1 bit) before exchange divides $S$ by 2–16; *error feedback* (compensating the quantization error at the next step) preserves convergence — at the price of a delicate variance/theory trade-off (see the Emerging ML module, ch. 2–3 for the federated case, where communication is the limiting factor).
@@ -928,7 +1027,7 @@ The 16 bytes per parameter of ch. 1 and the activations rarely fit on one GPU. T
   ZeRO-2   \+ gradients ($2N$)                  $2N + 14N/P$          = DP
   ZeRO-3   \+ weights ($2N$)                    $16N/P$               slightly > DP (on-the-fly gathers)
 
-Example 6B on 8 GPUs: ZeRO-3 brings the states down to
+Example 7B on 8 GPUs ($16 \times 7 = 112$ GB of states, def. 1.4): ZeRO-3 brings the states down to
 $$
 112/8 = 14 \ \text{GB per GPU}
 $$
@@ -936,12 +1035,17 @@ $$
 :::
 
 ::: note
-[Mixed precision: the "free" compression]{.tag} Computing in bf16 (2 bytes) instead of fp32 (4): half the memory and (on tensor cores) 2–8× the throughput; fp32 is kept for accumulators and master weights (long sums and small updates; historical fp16 additionally required *loss scaling* — see the Deep Learning module, ch. 2 and 8).
+[Mixed precision: the "free" compression]{.tag} Computing in bf16 (2 bytes) instead of fp32 (4): half the memory and (on tensor cores) 2–8× the throughput; fp32 is kept for accumulators and master weights (long sums and small updates; historical fp16 additionally required *loss scaling*, which multiplies the loss so that small gradients do not underflow, see example 4.3).
 
-Theorem 1.3 remains valid: we count FLOPs, precision changes the price of a FLOP. *Integer* quantization (int8/int4) only serves *inference* — ch. 5; its error analysis is in the Optimization and Responsible AI for Sustainability module, ch. 3 (proved proposition):
+Theorem 1.3 remains valid: we count FLOPs, precision changes the price of a FLOP. *Integer* quantization (int8/int4) only serves *inference* — ch. 5 — and its error is controlled in two lines. Rounding to a grid of step $\Delta$ moves a value by at most $\Delta/2$.
+
+Write the network as $f = f_L \circ \dots \circ f_1$ with layer $m$ being $\mathrm{Lip}_m$-Lipschitz, and assume that quantizing layer $\ell$ moves its output by at most $\Delta_\ell/2$.
+
+Let $e_\ell$ be the output error after layer $\ell$: the error inherited from below is stretched by the layer, then its own rounding adds,
 $$
-\text{error} \leq \sum_\ell \frac{\Delta_\ell}{2}\prod_{m>\ell}\mathrm{Lip}_m .
+e_\ell \leq \mathrm{Lip}_\ell\, e_{\ell-1} + \frac{\Delta_\ell}{2}, \quad e_0 = 0 \qquad\Longrightarrow\qquad \|\hat f(x) - f(x)\| \leq \sum_{\ell=1}^{L} \frac{\Delta_\ell}{2}\prod_{m>\ell}\mathrm{Lip}_m .
 $$
+Networks with controlled Lipschitz constants (section 7.1) are therefore also safe to quantize. (The reference-only Responsible AI notes, ch. 3, state the same bound with the integer codes.)
 :::
 
 ::: ex
@@ -989,10 +1093,10 @@ This ceiling — and not FLOPs — governs token-by-token generation (ch. 6, roo
 
 | Lever | Idea | Memory/speed effect | Ref. / cross-reference |
 |---|---|---|---|
-| int8/int4 PTQ | round the trained weights, calibration only | 2–8× memory, up to 4× CPU/latency | Jacob et al. 2018; error bounds: Responsible AI module, ch. 3 |
+| int8/int4 PTQ | round the trained weights, calibration only | 2–8× memory, up to 4× CPU/latency | Jacob et al. 2018; error bound: the mixed-precision note of ch. 4 |
 | QAT | simulate rounding *during* training (STE) | int8 nearly lossless, int4 on large models | Jacob et al. 2018 |
 | Structured pruning | remove whole heads/channels/layers | *effective* speedup (unlike unstructured) | Han et al. 2016 |
-| Distillation | student trained on the teacher's logits (temperature $\tau$) | 10–100× fewer parameters at similar quality on the target task | Hinton et al. 2015; Responsible AI module, ch. 3 (full lab) |
+| Distillation | student trained on the teacher's logits (temperature $\tau$) | 10–100× fewer parameters at similar quality on the target task | Hinton et al. 2015 |
 | Speculative decoding | small model proposes, large model verifies *in parallel* — same distribution in theory | 2–3× tokens/s without loss | Leviathan et al. 2023 |
 | IO-aware attention | rewrite attention for the GPU memory hierarchy (tiling, kernel fusion) | 2–4× training/inference on long contexts, $O(n)$ memory | Dao et al. 2022 (FlashAttention, see M2 LLMs ch. 2) |
 :::
@@ -1028,9 +1132,19 @@ Because generation is memory-bound (def. 5.1), checking four tokens costs almost
 1.  *quality metric* (perplexity/accuracy — not "it feels better");
 2.  *latency* at p50 and p99 (tail latency pays for cache misses);
 3.  *throughput* (aggregate tokens/s);
-4.  *energy per request* (J/request — Optimization and Responsible AI for Sustainability module, ch. 6).
+4.  *energy per request* (J/request: measured GPU power × time, multiplied by the PUE defined after example 6.4).
 
 An improvement on three columns with the fourth constant is a result; on a single one, it is a communication angle.
+:::
+
+::: def
+[Definition 5.5 — LoRA: adapting a served model cheaply (Hu et al. 2022)]{.tag} Adapting a pretrained model by full fine-tuning costs the 16 bytes per parameter of def. 1.4. LoRA freezes each pretrained matrix $W_0$, of size $d_\mathrm{out} \times d_\mathrm{in}$, and learns a low-rank update, started at $B = 0$ so that training departs from the pretrained model (often scaled by $\alpha/r$):
+$$
+W = W_0 + BA, \qquad B \in \mathbb{R}^{d_\mathrm{out} \times r},\quad A \in \mathbb{R}^{r \times d_\mathrm{in}},\quad r \ll \min(d_\mathrm{in}, d_\mathrm{out}).
+$$
+A layer then trains $r(d_\mathrm{in} + d_\mathrm{out})$ parameters instead of $d_\mathrm{in}d_\mathrm{out}$. For a $4096 \times 4096$ matrix and $r = 8$, that is 65,536 instead of 16.8 M, a factor 256.
+
+After training, $W_0 + BA$ is merged, so inference costs nothing extra, and one served base model can swap per-task adapters $(A, B)$. The memory arithmetic of an 8B model and QLoRA (a 4-bit frozen base) are in the PEFT box of [LLMs ch. 4](../m2-large-language-models/index.html#ch4), the site's reference for LoRA.
 :::
 
 ## 6. Real systems: roofline, GPU, and the complete budget of a 7B LLM {#ch6}
@@ -1089,8 +1203,14 @@ increasing in $P$ and bounded above by $1/s$. [∎]{.qed}
 | States memory | $16\,N = 16 \times 6.7\times10^9$ | 107 GB > 80 GB: ZeRO-2/3 or TP required (ch. 2, 4) |
 | Activations (checkpointing, batch 4×2048 tokens) | $\approx 2\sqrt{32}\times(\text{layer act.})$ | a few GB/GPU: checkpointing (th. 4.1) makes the batch viable |
 | Time on 256 GPUs (32 nodes) | 79,000/256 h | ≈ 13 days — hence the vital importance of MFU (half the time = 6 days saved) |
-| GPU-only energy | 79,000 h × 0.4 kW (+ PUE, see the Responsible AI module, ch. 6) | ≈ 32 MWh before PUE; emissions by region: 1.6 t (FR) to \~15 t (world average) |
+| GPU-only energy | 79,000 h × 0.4 kW, then × PUE (below) | ≈ 32 MWh before PUE (≈ 38 MWh at PUE 1.2); emissions by region: 1.6 t (FR) to \~15 t (world average) |
 | fp16 inference | weights $2N$ = 13.4 GB; KV cache 2048 ctx ≈ 1.1 GB (def. 5.1) | fits on 1 80 GB GPU; throughput ≈ 140–150 tok/s (memory wall) |
+
+The energy line counts the GPU boards only. The **power usage effectiveness** of the data centre converts it into facility energy:
+$$
+\mathrm{PUE} = \frac{\text{total energy of the facility}}{\text{energy of the IT equipment}} \geq 1 ,
+$$
+about 1.1 in the best hyperscale centres and around 1.5 on average; at PUE 1.2, the run above draws about 38 MWh.
 
 This table — reused in exercise 7 — is the module's typical deliverable: a quantified budget, every line traceable to a theorem of the course (1.3, 4.1, 5.1, 6.1), and an engineer's conclusion (where to invest the next euro: MFU? memory? quantization?).
 :::
@@ -1169,7 +1289,7 @@ $$
 $$
 \min_\theta \mathbb{E}\max_{\|\delta\|_\infty \leq \epsilon}\ell(h_\theta(x + \delta), y),
 $$
-approximating the inner maximum by a few projected gradient steps — a minimax problem of the kind studied in the Optimization for AI module (ch. 8) — at a cost of several forward-backward passes per training step.
+approximating the inner maximum by a few projected gradient steps — a minimax (saddle-point) problem, the subject of ch. 8 of the Optimization for AI notes (optional reading) — at a cost of several forward-backward passes per training step.
 :::
 
 ::: note
@@ -1199,7 +1319,7 @@ over transitions $(s, a, r, s')$.
 Two devices make it stable: a **replay buffer** of past transitions, sampled at random to break the correlation of consecutive steps, and a **target network** $\theta^-$, a copy of $\theta$ refreshed only every few thousand steps, so that the regression target does not move at every update.
 
 :::: thm
-[Theorem 7.5 — Policy gradient (REINFORCE, Williams 1992, proved)]{.tag} For a differentiable policy $\pi_\theta$ and $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$ (finite horizon $T$),
+[Theorem 7.5 — Policy gradient (REINFORCE, Williams 1992)]{.tag} For a differentiable policy $\pi_\theta$ and $J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[R(\tau)]$ (finite horizon $T$),
 $$
 \nabla J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\Big[R(\tau)\sum_{t=0}^{T}\nabla_\theta\log\pi_\theta(a_t \mid s_t)\Big],
 $$
@@ -1208,25 +1328,13 @@ and the identity still holds when $R(\tau)$ is replaced by $R(\tau) - b$ for any
 The gradient can thus be estimated from sampled trajectories, without knowing or differentiating the dynamics.
 
 ::: proof
-The probability of a trajectory is
+This is [theorem 5.1 of the RL course](../m1p2-reinforcement-learning/index.html#ch5) (mandatory, same period, session 7), proved there in full. In short: the initial distribution and the dynamics do not depend on $\theta$, so
 $$
-p_\theta(\tau) = \rho(s_0)\prod_t\pi_\theta(a_t \mid s_t)P(s_{t+1} \mid s_t, a_t),
+\nabla_\theta\log p_\theta(\tau) = \sum_t\nabla_\theta\log\pi_\theta(a_t \mid s_t),
 $$
-so
+and the log-derivative trick $\nabla p_\theta = p_\theta\,\nabla\log p_\theta$ turns $\nabla J = \sum_\tau R(\tau)\nabla p_\theta(\tau)$ into the stated expectation. The baseline drops out because
 $$
-\nabla_\theta\log p_\theta(\tau) = \sum_t\nabla_\theta\log\pi_\theta(a_t \mid s_t) :
-$$
-the initial distribution and the dynamics do not depend on $\theta$.
-
-Then
-$$
-\nabla J = \sum_\tau R(\tau)\nabla p_\theta(\tau) = \sum_\tau R(\tau)\,p_\theta(\tau)\nabla\log p_\theta(\tau),
-$$
-which is the stated expectation (the *log-derivative trick*; the sum becomes an integral for continuous spaces).
-
-For the baseline,
-$$
-\mathbb{E}[\nabla\log p_\theta(\tau)] = \sum_\tau\nabla p_\theta(\tau) = \nabla\sum_\tau p_\theta(\tau) = \nabla 1 = 0.
+\mathbb{E}[\nabla\log p_\theta(\tau)] = \nabla\sum_\tau p_\theta(\tau) = \nabla 1 = 0 .
 $$
 [∎]{.qed}
 :::
@@ -1250,6 +1358,18 @@ $$
     At $\theta = 0$ it takes the constant value $\tfrac14$, whereas without baseline it takes the values $\tfrac12$ and $0$ — the baseline removed all the variance at that point.
 
 Actor-critic methods and PPO, used to fine-tune language models from human feedback, learn such baselines with a value network. The [Reinforcement Learning and Autonomous Agents](../m1p2-reinforcement-learning/index.html) module of the same period treats the field in depth.
+:::
+
+::: note
+[The cost of RLHF on a 7B model, in the units of this module]{.tag} Fine-tuning a language model from human feedback with PPO (Ouyang et al. 2022) keeps four networks of the same size in play: the policy and a value network, both trained (16 bytes per parameter, def. 1.4), and a frozen reference policy and a frozen reward model (2 bytes per parameter in bf16).
+
+For $N = 7 \times 10^9$, the states alone take
+$$
+2 \times 16N + 2 \times 2N = 36N \approx 252\ \text{GB},
+$$
+at least four 80 GB GPUs before any activation: ZeRO-3 (ch. 4) is not optional.
+
+Per generated token, the rollout costs $2N$ FLOPs (policy), the scoring $2 \times 2N$ (reference and reward) and one PPO epoch $2 \times 6N$ (policy and value): about $18N$, three times the $6N$ of pre-training. The rollout is token-by-token decoding, hence memory-bound (def. 5.1): on the clock, generation typically dominates although it is a minority of the FLOPs. DPO ([LLMs ch. 5](../m2-large-language-models/index.html#ch5)) removes the value and reward models.
 :::
 
 ### 7.3. Generative models {#dl-generative}
@@ -1365,14 +1485,14 @@ The cost side, in the language of this module: a GAN generates a sample in one f
   GAN                 adversarial game                  no                     one pass                        unstable training, mode collapse
   diffusion           noise regression                  bound (variational)    tens to $1\,000$ passes         slow sampling
 
-The [Multimodal Generative AI](../m1p2-multimodal-genai/index.html) module of the same period develops diffusion, latent diffusion and text-to-image models.
+Diffusion, latent diffusion and text-to-image models are developed in [Multimodal Generative AI](../m1p2-multimodal-genai/index.html), optional reading since it is in the same choose-1 group as this course; [section 9.4 of the P1 Deep Learning notes](../m1p1-deep-learning/index.html#diffusion) gives the one-page version with guidance and code.
 
 ## 8. Theoretical complexity of training {#ch8}
 
 The previous chapters made each training step faster with more GPUs; this chapter asks whether there is a *limit* to what parallelism can buy. The answer is yes, and it is *provable*: for distributed optimization over a network, lower bounds say how many computation and communication rounds any algorithm needs. This chapter is the most theoretical of the module, and its lower bound is the central result of the papers read in ch. 9.
 
 ::: def
-[Definition 8.1 — Decentralized distributed optimization over a graph]{.tag} $P$ machines, each with its own convex function $f_i$, connected by a graph $G$ (each machine talks only to its neighbors); common goal: $$\min_x\; f(x) = \frac{1}{P}\sum_{i=1}^{P} f_i(x).$$ The **execution time** counts two currencies: the number of *local* iterations (compute: gradients up to the condition number — see the Optimization for AI module, ch. 2–3) and the **communication rounds** (one gossip round = mixing the vectors between neighbors).
+[Definition 8.1 — Decentralized distributed optimization over a graph]{.tag} $P$ machines, each with its own convex function $f_i$, connected by a graph $G$ (each machine talks only to its neighbors); common goal: $$\min_x\; f(x) = \frac{1}{P}\sum_{i=1}^{P} f_i(x).$$ The **execution time** counts two currencies: the number of *local* iterations (compute: a number of gradients that grows with the condition number $\kappa = L/\mu$ of [Machine Learning definition 0.4](../m1p1-machine-learning/index.html#gd-sgd)) and the **communication rounds** (one gossip round = mixing the vectors between neighbors).
 
 The gossip matrix $W$ is symmetric and doubly stochastic, with $W_{ij} > 0$ only between neighbours.
 
@@ -1406,7 +1526,7 @@ $$
 
 where a local gradient computation takes one unit of time and a communication round takes $\tau$ units.
 
-This order is **attained**, up to replacing the global condition number by the local ones of the $f_i$, by accelerated gradient ascent on the dual problem (Nesterov's scheme, see the Optimization for AI module, ch. 3) combined with *Chebyshev accelerated gossip* — replacing $W$ by a well-chosen polynomial in $W$ that flattens its spectrum, the same trick that accelerates gradients, applied to the graph (the MSDA algorithm).
+This order is **attained**, up to replacing the global condition number by the local ones of the $f_i$, by accelerated gradient ascent on the dual problem (Nesterov's accelerated scheme, which needs $O(\sqrt\kappa\,\ln(1/\varepsilon))$ gradient steps where gradient descent needs $O(\kappa\ln(1/\varepsilon))$; ch. 3 of the Optimization for AI notes is optional reading) combined with *Chebyshev accelerated gossip* — replacing $W$ by a well-chosen polynomial in $W$ that flattens its spectrum, the same trick that accelerates gradients, applied to the graph (the MSDA algorithm).
 
 When communication dominates ($\tau$ large), the time is essentially $\tau\sqrt{\kappa/(1-\gamma)}\,\ln(1/\varepsilon)$: the product of the two obstacles. The JMLR 2019 version extends the analysis to non-smooth convex objectives.
 
@@ -1415,7 +1535,7 @@ When communication dominates ($\tau$ large), the time is essentially $\tau\sqrt{
 
 For machine $i$ to learn what machine $j$ knew, the information must travel along the graph, and the *mixing of the graph* imposes $\Omega(1/\sqrt{1-\gamma})$ communication rounds (each gossip multiplies the imbalance by only $\gamma$).
 
-Independently, even sequentially, a quadratic with condition number $\kappa$ requires $\Omega(\sqrt\kappa)$ gradient accesses (Nesterov's bound — Optimization for AI module, ch. 3).
+Independently, even sequentially, a quadratic with condition number $\kappa$ requires $\Omega(\sqrt\kappa)$ gradient accesses (Nesterov's lower bound, Nesterov 2004, section 2.1).
 
 The construction crosses the two obstacles into a quadratic *on the product* graph × condition number: no algorithm can beat the product of the two bounds. [∎]{.qed}
 :::
@@ -1433,14 +1553,14 @@ Engineering consequence: **adding machines does not reduce the time below the co
 :::
 
 ::: prop
-[Proposition 8.4 — What parallelism *can* buy: the "finite sum" regime]{.tag} The bound of theorem 8.3 concerns the time to *reach* an $\varepsilon$-optimal point when the data are *partitioned* (each $f_i$ is opaque). If instead all machines can evaluate the *same* function (replicated data), parallelism reduces the variance of SGD (mini-batching: Optimization for AI module, ch. 5) — but the optimal statistical rate bounds the gain (Dieuleveut et al., see the Optimization for AI module, ch. 11). In short: parallelism speeds up *compute*, never (or marginally) the *statistical complexity* — a distinction that commercial announcements like to forget.
+[Proposition 8.4 — What parallelism *can* buy: the "finite sum" regime]{.tag} The bound of theorem 8.3 concerns the time to *reach* an $\varepsilon$-optimal point when the data are *partitioned* (each $f_i$ is opaque). If instead all machines can evaluate the *same* function (replicated data), parallelism reduces the variance of SGD (mini-batching divides the gradient variance by the batch size) — but the optimal statistical rate bounds the gain (Dieuleveut et al.; ch. 5 and 11 of the Optimization for AI notes are optional reading). In short: parallelism speeds up *compute*, never (or marginally) the *statistical complexity* — a distinction that commercial announcements like to forget.
 :::
 
 ## 9. Research readings: lower bounds and Lipschitz regularity {#ch9}
 
 **Who wrote these papers (2026-2027 catalog):** the APM_52183_EP course unit “Apprentissage profond de la théorie à la pratique” is led by Boris Bonev (“Responsable” on the 2026–2027 sheet and on the track page), with P. Bianchi, C. Bonet and B. Bonev on the instructional engineering team.
 
-The works presented below are those of Kevin Scaman (previously MSR–INRIA) and co-authors, the lower-bound results underlying chapter 8 and the Lipschitz analysis behind section 7.1: they are cited as classic references of the field, not as the works of the official team.
+The works presented below are those of Kevin Scaman (previously MSR–INRIA) and co-authors, the lower-bound results underlying chapter 8 and the Lipschitz analysis behind section 7.1. The curriculum wiki names Kevin Scaman as the instructor of this course, while the 2026–2027 sheet names Boris Bonev as responsible; either way, the papers are classic references of the field.
 
 Three papers to know:
 
@@ -1454,7 +1574,7 @@ Three papers to know:
 ::: note
 [Complexity of neural networks: Lipschitz regularity]{.tag}
 
--   A. Virmaux, K. Scaman, [Lipschitz regularity of deep neural networks: analysis and efficient estimation](https://arxiv.org/abs/1805.10965), NeurIPS 2018 — proving that computing *exactly* the Lipschitz constant of a deep network is NP-hard, and designing the estimator (SeqLip, layer-wise power iteration) that became standard. The link with this module: the propagation bound of prop. 5.2/Responsible AI 3.3 involves precisely these $\mathrm{Lip}_m$ constants — and the paper says how far one can (not) compute them; on the robustness side, the Lipschitz constant is the certificate of adversarial guarantees (see the M2 Security and Robustness module, ch. 5).
+-   A. Virmaux, K. Scaman, [Lipschitz regularity of deep neural networks: analysis and efficient estimation](https://arxiv.org/abs/1805.10965), NeurIPS 2018 — proving that computing *exactly* the Lipschitz constant of a deep network is NP-hard, and designing the estimator (SeqLip, layer-wise power iteration) that became standard. The link with this module: the quantization bound of the mixed-precision note of ch. 4 involves precisely these $\mathrm{Lip}_m$ constants — and the paper says how far one can (not) compute them; on the robustness side, the Lipschitz constant is the certificate of adversarial guarantees (see the M2 Security and Robustness module, ch. 5).
 :::
 
 ::: note
@@ -1506,6 +1626,157 @@ Three papers to know:
 
     *Grid*: accuracy of the quoted formulas, honesty of the measurement (error bars!), relevance of the chosen limitation.
 
+## Projects and assessment {#projects}
+
+::: note
+[Status]{.tag} Independent proposals of these notes, not the official assessment.
+The official assessment (SynapseS 2026–2027, "Assessment" row of the fiche above, engineering-degree and exchange-programme sections) is: "“validation by project” stated for the engineering degree and the exchange programmes; resit allowed (max of the two grades); course unit earned if final grade ≥ 10. Modalities specific to the LLGA track: not displayed (its section of the sheet is empty)".
+The projects below are candidate topics for the official project, to be validated by the teaching team.
+:::
+
+### A classical assessment {#projects-exam}
+
+The sheet asks for validation by project, so the project carries most of the grade, with three milestone notebooks from the official themes 7–9. The counting questions below are asked at the defence (one per student, with new numbers) and can also serve as an optional, ungraded quiz.
+
+| Component | Weight | Format | Covers |
+|---|---|---|---|
+| Project | 70 % | a card below, or Ex. 7 or 8 extended; report (≤ 6 pages solo, ≤ 10 group) and 10-minute defence with one counting question | ch. 0–8 |
+| Milestone notebooks | 30 % | three notebooks, 10 % each, due one week after the session | session 9 (FGSM on the CIFAR-10 model of session 1), session 10 (REINFORCE on a small control task), session 11 (a small VAE or DDPM on MNIST) |
+| Counting quiz (optional) | 0 % | 1 h, calculator allowed, after session 8; formative | ch. 1–6 |
+
+**Resit.** An individual oral on the project (an improved report is allowed) with one counting question; as on the sheet, the final grade is the maximum of the two grades.
+
+**Sample questions.** Five counting questions worth 20 points make the 1 h quiz, calculator allowed: three computations, one derivation, and one diagnosis.
+
+**Q1 (4 pts) — Training compute and memory.** A dense transformer of $N = 1.3 \times 10^9$ parameters is trained with the Chinchilla ratio $D = 20N$, with Adam in mixed precision, on 8 A100 GPUs (312 TFLOP/s in bf16) at 40 % MFU. (a) Give the number of tokens and the total FLOPs. (b) Give the training time. (c) Give the memory of the training states, and say whether plain data parallelism fits on 80 GB GPUs.
+
+::: proof
+[Marking points]{.tag}
+
+- (a) $D = 2.6 \times 10^{10}$ tokens; theorem 1.3 gives $C = 6ND \approx 2.03 \times 10^{20}$ FLOPs (1.5 pts).
+- (b) The cluster delivers $8 \times 312 \times 0.4 \approx 1\,000$ TFLOP/s, so the run takes about $2.0 \times 10^5$ s, that is 56 h or 2.4 days (1 pt).
+- (c) Definition 1.4: 16 bytes per parameter, so 20.8 GB of states, replicated on each GPU by plain data parallelism; this fits in 80 GB with room for activations, and checkpointing (theorem 4.1) is the fallback if they grow (1.5 pts). Common error: 2 bytes per parameter (the weights alone), or forgetting the $4ND$ of the backward pass.
+:::
+
+**Q2 (4 pts) — KV cache and the decoding wall.** A 13B model with 40 layers and $d = 5120$ is served in bf16 on one 80 GB GPU with 2 TB/s of memory bandwidth. (a) Give the KV cache of one sequence of 4,096 tokens. (b) How many such sequences fit next to the weights? (c) Give the ceiling on tokens per second for one sequence, and say what batching changes.
+
+::: proof
+[Marking points]{.tag}
+
+- (a) Definition 5.1: $4 \times 40 \times 4096 \times 5120 \approx 3.36 \times 10^9$ bytes, about 3.4 GB (1.5 pts).
+- (b) The weights take $2N = 26$ GB, so $(80 - 26)/3.36 \approx 16$ sequences, before activations and fragmentation (1 pt).
+- (c) Every token rereads all the weights: $2 \times 10^{12} / 2.6 \times 10^{10} \approx 77$ tokens/s per sequence. Batching serves $B$ sequences per read and raises the aggregate throughput until memory (here about 16 sequences) or compute (around $B \approx 150$, example 6.2) runs out, but not the per-sequence ceiling (1.5 pts). Common error: forgetting the factor 2 for K and V, or the 2 bytes of bf16.
+:::
+
+**Q3 (4 pts) — Pipeline bubble and all-reduce.** (a) A pipeline of $p = 8$ stages processes $m = 24$ micro-batches under 1F1B: give the efficiency and the bubble fraction, and the smallest $m$ for 90 % efficiency. (b) A gradient of $S = 2$ GB is all-reduced over $P = 16$ machines with latency 5 µs and bandwidth 50 GB/s: give the ring and tree times, say which wins, and why.
+
+::: proof
+[Marking points]{.tag}
+
+- (a) Theorem 2.3: efficiency $24/31 \approx 0.77$, bubble $7/31 \approx 23\,\%$; $m/(m + 7) \geq 0.9$ gives $m \geq 63$ (2 pts).
+- (b) With $S/b = 40$ ms, theorem 3.2 and proposition 3.3 give
+    $$
+    T_\mathrm{ring} = 2 \times 15 \times 5\ \mu\text{s} + \tfrac{30}{16} \times 40\ \text{ms} \approx 75\ \text{ms}, \qquad T_\mathrm{tree} = 2 \times 4 \times (5\ \mu\text{s} + 40\ \text{ms}) \approx 320\ \text{ms}.
+    $$
+    The ring wins by a factor of about 4: for a large message bandwidth dominates, and the ring sends less than $2S$ per machine where the tree sends $S$ at each of its $2\log_2 P$ steps (2 pts). Common error: $\log_2 P$ steps instead of $2\log_2 P$ for the tree.
+:::
+
+**Q4 (4 pts) — The 6ND rule.** (a) Show that a linear layer applied to $n$ tokens costs 2 FLOPs per parameter and per token. (b) Explain why the backward pass costs twice the forward pass, and deduce theorem 1.3. (c) For GPT-2 small ($d = 768$, $n = 1024$), compare the two terms of the per-token cost $24d^2 + 4nd$ of a block, and say when the rule stops being accurate.
+
+::: proof
+[Marking points]{.tag}
+
+- (a) Each output coordinate of $Wx$ is a dot product of length $d_\mathrm{in}$: $d_\mathrm{in}d_\mathrm{out}$ multiply-adds, that is $2d_\mathrm{in}d_\mathrm{out}$ FLOPs per token for $d_\mathrm{in}d_\mathrm{out}$ parameters (1 pt).
+- (b) The backward pass forms the input gradient $W^\top\delta$ and the weight gradient $\delta x^\top$, each 2 FLOPs per parameter and per token: $4ND$, so $2ND + 4ND = 6ND$ (1.5 pts).
+- (c) $24d^2 \approx 14.2$ M and $4nd \approx 3.1$ M FLOPs per token: the matrix products dominate. The terms are equal at $n = 6d \approx 4\,600$ tokens; beyond, the quadratic attention term takes over and $6ND$ underestimates the cost (1.5 pts). Common error: counting a multiply-add as one FLOP.
+:::
+
+**Q5 (4 pts) — A disappointing speedup.** A training script runs only 1.2 times faster on 8 GPUs than on 1. (a) Under Amdahl's law, what fraction $s$ of the single-GPU step time is not parallelized? (b) What is the best speedup on 64 GPUs with the same $s$? (c) Name two likely causes that a profile would show, and the measurement that tells them apart.
+
+::: proof
+[Marking points]{.tag}
+
+- (a) Proposition 6.3: $1/1.2 = s + (1 - s)/8$, so $s = (1/1.2 - 1/8)/(7/8) \approx 0.81$ (1.5 pts).
+- (b) $1/(0.81 + 0.19/64) \approx 1.23$, against the ceiling $1/s \approx 1.24$: more GPUs are useless until the serial part shrinks (1 pt).
+- (c) Two of: data loading on the CPU (too few loader workers: the GPUs wait for input), a gradient all-reduce not overlapped with compute (ch. 3: buckets and overlap), host–device synchronizations such as `.item()` at every step. The profiler timeline separates input wait, communication and compute (1.5 pts). Common error: blaming the FLOP/s of the GPU, which the roofline of ch. 6 rules out here.
+:::
+
+### Projects {#projects-list}
+
+House rules: public data, a laptop CPU or one free Colab T4 GPU, and only what this module, the Machine Learning module and, when a card says so, the mandatory P2 courses of the same period teach. Levels ★, ★★ and ★★★ mean what they mean for the exercises; effort per student is 15–25 h for ★★ and 25–35 h for ★★★.
+
+**Grading grid used by every project of this page** (a project card may replace one row).
+
+| Criterion | Weight |
+|---|---|
+| Question and success metric stated before the experiments | 10 % |
+| Correct use of the course results (cited by number) | 25 % |
+| Protocol: leakage-free split, baselines, at least 3 seeds, intervals | 25 % |
+| Results and analysis: error analysis, limits, one responsible-AI remark | 20 % |
+| Reproducibility: repository, README, pinned environment, one command | 10 % |
+| Communication: report (≤ 6 pages solo, ≤ 10 group) or 10-minute oral | 10 % |
+
+Group projects: a contribution statement and an oral with individual questions; the individual grade is the group grade times a factor in [0.8, 1.2].
+
+#### P1 · ★★ · solo · Predict, then measure: the cost of a small GPT (extends Ex. 1) {#proj-1}
+
+| Field | Content |
+|---|---|
+| Goal | For GPT-style models of about 10, 20 and 30 M parameters (the block of definition 1.15a) trained on TinyStories, predict the FLOPs per step, the peak memory and the step time before running, then measure them; report the relative error of each prediction and the MFU, with the $6ND$ rule as the baseline prediction. |
+| Data | [TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) — CDLA-Sharing-1.0 — about 2.1 M short synthetic stories (about 1 GB); loading: `datasets.load_dataset("roneneldan/TinyStories")` |
+| Chapters | [ch. 1](#ch1) (prop. 1.2, theorem 1.3, def. 1.4, def. 1.15a), [ch. 4](#ch4) (theorem 4.1), [ch. 6](#ch6) (roofline); extends [Ex. 1](#ex) |
+| Deliverables | notebook + 4-page report with a predicted-versus-measured table (FLOPs, memory, time, MFU) for 3 sizes × 3 seeds |
+| Effort and compute | ≈ 18 h · one free Colab T4 (about 65 TFLOP/s fp16 tensor peak), longest run ≤ 45 min |
+| Objectives served | O3 (transformer cost), O7 (engineering estimates) |
+| Specific criterion | Replaces "Correct use of the course results" (25 %): each prediction cites the result it comes from, and each gap is explained (embeddings, attention term, memory-bound operations). |
+| Going further | Add activation checkpointing (theorem 4.1) and plot memory against time overhead. |
+
+#### P2 · ★★ · solo · Gossip against all-reduce: consensus and the spectral gap {#proj-2}
+
+| Field | Content |
+|---|---|
+| Goal | Run decentralized gradient descent for logistic regression on a9a split over 16 and 64 simulated workers on a ring, a 2-D torus, an Erdős–Rényi graph and the complete graph; measure the gossip rounds needed to reach suboptimality $10^{-3}$ and compare them with $1/(1-\gamma)$ for plain gossip and $1/\sqrt{1-\gamma}$ for Chebyshev-accelerated gossip, with the exact all-reduce (complete graph) as baseline. |
+| Data | [a9a (LIBSVM)](https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary.html) — derived from the UCI Adult census data (CC BY 4.0) — 32,561 training examples, 123 binary features; loading: `sklearn.datasets.load_svmlight_file("a9a")`; graphs from `networkx` |
+| Chapters | [ch. 3](#ch3) (all-reduce), [ch. 8](#ch8) (def. 8.1, example 8.2, theorem 8.3); [Machine Learning section 0.2](../m1p1-machine-learning/index.html#gd-sgd) for the condition number |
+| Deliverables | notebook + 4-page report: rounds to $10^{-3}$ against $1/(1-\gamma)$ on a log-log plot, one point per topology and size, 3 random splits |
+| Effort and compute | ≈ 15 h · laptop CPU (NumPy simulation of the workers, or 16 gloo processes), longest run ≤ 10 min |
+| Objectives served | O4 (graph spectra), O9 (reproducing a published bound) |
+| Responsible AI | Adult is census data with sensitive attributes (sex, race): here it is only an optimization benchmark, and no claim about people is drawn from it. |
+| Going further | Compressed gossip: 8-bit messages with error feedback (the note of ch. 3). |
+
+#### P3 · ★★ · group (3–4) · A serving budget for a small open LLM {#proj-3}
+
+| Field | Content |
+|---|---|
+| Goal | Serve Qwen2.5-1.5B-Instruct in fp16, int8 and int4, and with speculative decoding drafted by Qwen2.5-0.5B-Instruct; report the four columns of example 5.4 (WikiText-2 perplexity, P50/P99 time per output token and time to first token, tokens/s, Wh per request) against the fp16 greedy baseline, and compare the measured speculative speedup with example 5.3 at the measured acceptance rate. |
+| Data | [WikiText-2](https://huggingface.co/datasets/Salesforce/wikitext) — CC BY-SA 3.0 — for perplexity; 300 prompts of [databricks-dolly-15k](https://huggingface.co/datasets/databricks/databricks-dolly-15k) — CC BY-SA 3.0; models [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) and [Qwen2.5-0.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct) — Apache 2.0; loading: `load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")` |
+| Chapters | [ch. 5](#ch5) (def. 5.1, prop. 5.2, examples 5.3–5.4), [ch. 6](#ch6) (roofline, example 6.2) |
+| Deliverables | repository with a one-command benchmark, README and pinned environment + report ≤ 10 pages + 10-minute oral with individual questions |
+| Effort and compute | ≈ 20 h per student · one free Colab T4 (int8 and int4 through bitsandbytes), longest run ≤ 1 h |
+| Objectives served | O3 (LLM inference), O7 (serving engineering), O8 (energy) |
+| Responsible AI | Credit the dolly prompts (written by Databricks employees, CC BY-SA), and report energy with its measurement boundary (GPU board only) and the PUE assumed (example 6.4). |
+| Going further | Prefix caching of a shared system prompt, or the KV-cache saving of grouped-query attention (Ex. 3). |
+
+#### P4 · ★★★ · group (3–4) · Shift and attack robustness in histopathology {#proj-4}
+
+| Field | Content |
+|---|---|
+| Goal | Train a small CNN and a ResNet-18 on Camelyon17-WILDS (official split: three training hospitals, one validation and one test hospital) and report in-distribution against held-out-hospital accuracy, robust accuracy under FGSM and PGD at $\epsilon = 2/255$ and $8/255$, and the spectral-norm bound of proposition 7.2 against measured input-gradient norms; compare plain training with adversarial training and spectral normalization. |
+| Data | [Camelyon17-WILDS](https://wilds.stanford.edu/datasets/) — CC0 — about 450,000 lymph-node patches of 96 × 96 pixels from 5 hospitals (train on a 50,000-patch subset); loading: `pip install wilds`, then `wilds.get_dataset("camelyon17", download=True)` (about 10 GB) |
+| Chapters | [ch. 0](#ch0) (pipeline, def. 0.9), [ch. 1](#ch1) (CNNs), [ch. 7](#ch7) (prop. 7.2, example 7.3, distribution shift) |
+| Deliverables | repository with a one-command run, README and pinned environment + report ≤ 10 pages + 10-minute oral with individual questions |
+| Effort and compute | ≈ 30 h per student · one free Colab T4, longest run ≤ 2 h |
+| Objectives served | O6 (health), O8 (robustness) |
+| Specific criterion | Replaces "Protocol" (25 %): hospital-level split respected, results per hospital, at least 5 seeds (results on this dataset vary strongly across seeds), attack strength reported with $\epsilon$ and the number of PGD steps. |
+| Responsible AI | De-identified patient tissue under CC0: report errors per hospital, state what a robustness gain does and does not certify, and make no clinical claim. |
+| Going further | Stain augmentation or self-supervised pre-training against the hospital shift. |
+
+### End-of-year projects {#projects-capstone}
+
+For students who take Deep Learning in Period 2, this course is the deep-learning component of the Year-1 integrative projects, and its cost lens supplies their route variants: the scoring cost of the candidate pairs in [Y1-1](../m1-integrative-projects/index.html#y1-1) (ch. 6), the roofline of a GCN layer in [Y1-2](../m1-integrative-projects/index.html#y1-2) (ch. 6), the CNN of [Y1-7](../m1-integrative-projects/index.html#y1-7) (ch. 1) and the KV-cache budget of [Y1-8](../m1-integrative-projects/index.html#y1-8) (ch. 5).
+
+In Year 2, the serving datasheets of capstones [C1](../m2-projet-transverse/index.html#c1), [C4](../m2-projet-transverse/index.html#c4) and [C8](../m2-projet-transverse/index.html#c8) (P50/P99 latency, cost and energy per 1,000 requests) apply the four-column protocol of example 5.4 at scale; card P3 rehearses it.
+
 ## References {#refs}
 
 -   K. Scaman, F. Bach, S. Bubeck, Y. T. Lee, L. Massoulié, [Optimal Algorithms for Smooth and Strongly Convex Distributed Optimization in Networks](https://arxiv.org/abs/1702.08704), ICML 2017.
@@ -1539,4 +1810,9 @@ Three papers to know:
 -   I. Goodfellow, J. Shlens, C. Szegedy, [Explaining and Harnessing Adversarial Examples](https://arxiv.org/abs/1412.6572), ICLR 2015; A. Madry et al., [Towards Deep Learning Models Resistant to Adversarial Attacks](https://arxiv.org/abs/1706.06083), ICLR 2018.
 -   V. Mnih et al., "Human-level control through deep reinforcement learning", *Nature*, 2015 — DQN; R. J. Williams, "Simple statistical gradient-following algorithms for connectionist reinforcement learning", *Machine Learning*, 1992 — REINFORCE.
 -   D. P. Kingma, M. Welling, [Auto-Encoding Variational Bayes](https://arxiv.org/abs/1312.6114), ICLR 2014; I. Goodfellow et al., [Generative Adversarial Nets](https://arxiv.org/abs/1406.2661), NeurIPS 2014; J. Ho, A. Jain, P. Abbeel, [Denoising Diffusion Probabilistic Models](https://arxiv.org/abs/2006.11239), NeurIPS 2020.
+-   A. Vaswani et al., [Attention Is All You Need](https://arxiv.org/abs/1706.03762), NeurIPS 2017 — definition 1.15a.
+-   S. Ioffe, C. Szegedy, [Batch Normalization](https://arxiv.org/abs/1502.03167), ICML 2015; J. Ba, J. Kiros, G. Hinton, [Layer Normalization](https://arxiv.org/abs/1607.06450), 2016; N. Srivastava et al., "Dropout: a simple way to prevent neural networks from overfitting", *JMLR* 15, 2014 — definition 0.9.
+-   D. Kingma, J. Ba, [Adam: A Method for Stochastic Optimization](https://arxiv.org/abs/1412.6980), ICLR 2015; I. Loshchilov, F. Hutter, [Decoupled Weight Decay Regularization](https://arxiv.org/abs/1711.05101) (AdamW), ICLR 2019 — the optimization section of ch. 0.
+-   E. Hu et al., [LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/abs/2106.09685), ICLR 2022 — definition 5.5.
+-   L. Ouyang et al., [Training language models to follow instructions with human feedback](https://arxiv.org/abs/2203.02155), NeurIPS 2022 — the RLHF cost note of section 7.2.
 -   [PyTorch Distributed (DDP/FSDP)](https://pytorch.org/tutorials/distributed.html) and [NCCL](https://developer.nvidia.com/nccl-guide) — the lab tools.
