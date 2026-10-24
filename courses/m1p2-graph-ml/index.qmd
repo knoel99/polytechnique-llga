@@ -1102,11 +1102,13 @@ $$
 $$
 q(Z \mid X, A) = \prod_i \mathcal{N}(z_i;\ \mu_i, \mathrm{diag}(\sigma_i^2))
 $$
-with $\mu = \mathrm{GCN}_\mu(X, A)$, $\log\sigma = \mathrm{GCN}_\sigma(X, A)$, prior $\mathcal{N}(0, I)$; one maximizes the ELBO (Deep Learning module):
+with $\mu = \mathrm{GCN}_\mu(X, A)$, $\log\sigma = \mathrm{GCN}_\sigma(X, A)$, prior $\mathcal{N}(0, I)$; one maximizes the ELBO:
 $$
 \mathcal{L} = \mathbb{E}_{q}[\log p(A \mid Z)] - \mathrm{KL}\big(q(Z \mid X,A)\,\|\,\mathcal{N}(0, I)\big),
 $$
 reparameterization $z_i = \mu_i + \sigma_i \odot \varepsilon$, $\varepsilon \sim \mathcal{N}(0, I)$.
+
+Recap in two lines. The ELBO is a lower bound on $\log p(A)$, tight when $q$ equals the posterior $p(Z \mid A)$: the bound behind EM in [Machine Learning, ch. 7](../m1p1-machine-learning/index.html#ch7). Writing $z_i$ as a differentiable function of $\mu_i$, $\sigma_i$ and an independent noise lets backpropagation train both GCNs on a Monte Carlo estimate of the ELBO. Both ideas are taught in full in [Deep Learning, ch. 9](../m1p1-deep-learning/index.html#ch9) and [Deep Learning P2, 7.3](../m1p2-deep-learning-p2/index.html#dl-generative); on the P2 path, 7.3 comes after this session.
 
 Results: on Cora, AUC $\approx 0.91$ (GAE) and $\approx 0.92$ (VGAE) — the prior regularizes the dot product (cf. the connection with SBM inference, ch. 9).
 ::::
@@ -1213,7 +1215,7 @@ Rules of the game: fixed splits, defined model selection protocols, public leade
 The previous chapters gave the models; this chapter maps them onto the use cases met in industry, then gives the protocol of a first honest experiment — the step where most graph projects go wrong.
 
 -   **Recommendation**: user-item graph, link prediction (ch. 6); PinSage (3B nodes, 18B edges) = GraphSAGE at industrial scale; cold-start = the inductive case par excellence;
--   **Fraud detection**: node classification on the transaction graph; typical signals: counter proximities, money-laundering cycles (the *motifs* matter!), card hubs — GNNs capture the multihop neighborhood that an iid model ignores; temporal version in [Advanced GNN, ch. 6](../m2-advanced-gnn/index.html#ch6);
+-   **Fraud detection**: node classification on the transaction graph; typical signals: counter proximities, money-laundering cycles (the *motifs* matter!), card hubs — GNNs capture the multihop neighborhood that an iid model ignores; public data: the Elliptic Bitcoin transaction graph (Exercise 15); temporal version in [Advanced GNN, ch. 6](../m2-advanced-gnn/index.html#ch6);
 -   **Chemistry / biotech**: molecule = graph (atoms = nodes, bonds = edges); graph classification to predict properties (toxicity, solubility, HIV activity); benchmarks: ZINC, QM9, ogbg-mol\*; 3D geometry and equivariance: Definition 8.2 below, developed in [Advanced GNN, ch. 8](../m2-advanced-gnn/index.html#ch8) and [Analysis and Deep Learning on Geometric Data, ch. 7](../m2-geometric-deep-learning/index.html#ch7);
 -   **Knowledge graph completion**: link prediction on heterogeneous KGs (TransE, R-GCN — ch. 6); the basis of "enterprise" RAG (ch. 10);
 -   **Scale up**: neighborhood minibatching, clustering, sampling (ch. 7), multi-node GPUs ([Advanced GNN, ch. 1](../m2-advanced-gnn/index.html#ch1)); open benchmarks: OGB.
@@ -1242,6 +1244,23 @@ The encoder has already passed messages *along* those edges, so their endpoints 
 When the edges carry timestamps (transactions, citations), replace the random split by a *temporal* one — train on the edges before a date, test on those after it — since a random split lets the model see the future.
 
 In PyG, `RandomLinkSplit` implements steps 1 and 2; the same discipline applies to node classification, where the test labels must never be used, even through the features of their neighbors.
+:::
+
+::: note
+[Explaining a GNN]{.tag} A fraud analyst asks *why* a node was flagged. Two standard answers, both available in PyG's `torch_geometric.explain` module:
+
+-   **GNNExplainer** (Ying et al., 2019) learns a soft mask $\sigma(M) \in (0,1)^{|E|}$ on the edges of the node's $L$-hop computation graph, which keeps the model's prediction $\hat y$ while staying small:
+    $$
+    \min_M \; -\log p_\theta\big(\hat y \mid A \odot \sigma(M), X\big) + \lambda \sum_{e} \sigma(M_e) + \mu\, H\big(\sigma(M)\big),
+    $$
+    where $H$ is the mean entropy of the mask entries, which pushes them toward 0 or 1; a feature mask is learned the same way.
+-   **Integrated gradients** (Sundararajan et al., 2017) attribute the score $f$ to the node features by integrating the gradient along the segment from a baseline $X'$ (often zero features) to $X$:
+    $$
+    \mathrm{IG}_{vk} = (X_{vk} - X'_{vk}) \int_0^1 \frac{\partial f\big(X' + \alpha (X - X')\big)}{\partial X_{vk}}\, d\alpha .
+    $$
+    The attributions sum to $f(X) - f(X')$ (completeness).
+
+**Deletion sanity check.** Remove the $k$ edges (or features) that the explanation ranks highest, recompute the score, and compare the drop with that of $k$ random deletions, over many nodes. An explanation that does no better than random is not faithful, however plausible it looks. The same tools for language models are in [Explainability, Security, Privacy of LLMs, ch. 4](../m2-explainability-security-privacy-llms/index.html#ch4).
 :::
 
 ### Geometric graphs and applications in biomedicine
@@ -1443,7 +1462,7 @@ A large language model answers fluently but does not know the private documents 
 ::: thm
 [10.1 — The complete industrial GraphRAG pipeline (after Edge et al., 2024)]{.tag}
 
-1.  **ingestion**: splitting the corpus into chunks; LLM extraction of the *entities* (NER) and *relations* (typed relation extraction, [NLP, ch. 6](../m1p2-nlp-text-mining/index.html#ch6)) in the triplet format (subject, relation, object, source passage); entity resolution (aliases); the graph is built incrementally — each edge keeps its source or sources;
+1.  **ingestion**: splitting the corpus into chunks; LLM extraction of the *entities* (NER) and *relations* (typed relation extraction, [NLP, section 6.1](../m1p2-nlp-text-mining/index.html#relation-extraction)) in the triplet format (subject, relation, object, source passage); entity resolution (aliases); the graph is built incrementally — each edge keeps its source or sources;
 2.  **communities**: community detection (Leiden — a Louvain variant, ch. 0) on the entity graph; for each community (at each level of the hierarchy), an LLM summarizes the entities, relations and themes; the summaries aggregate bottom-up;
 3.  **hybrid index**: the graph *plus* a vector index of the chunks and the summaries (classic RAG remains useful for local queries; index structures in [Large Language Models, ch. 7](../m2-large-language-models/index.html#ch7));
 4.  **global queries** ("what are the major themes of the corpus?"): map-reduce over the community summaries — each community answers partially, an LLM synthesizes; **local queries** ("who works with whom on X?"): expanding the neighborhood of entity X (linked entities, source chunks) then a grounded answer;
@@ -1488,7 +1507,7 @@ LLGA reading: each stage is an object of the course — clustering (ch. 0), link
 ::: ex
 [Final lab]{.tag} Build a mini-GraphRAG: 
 
-1.  extract an entity graph from an enterprise corpus (reports, simulated e-mails) with an LLM, or import the triples of the NLP relation-extraction lab ([NLP, ch. 6](../m1p2-nlp-text-mining/index.html#ch6));
+1.  extract an entity graph from an enterprise corpus (reports, simulated e-mails) with an LLM, or load the (head, relation, tail, source) triples exported by the session-8 lab of [NLP, section 6.1](../m1p2-nlp-text-mining/index.html#relation-extraction);
 2.  detect the communities (Leiden) and summarize with an LLM;
 3.  answer relational questions ("who works with whom on X?") by graph traversal vs. by vector RAG vs. by pseudo-code prompting (10.2);
 4.  compare fidelity, token cost and latency.
