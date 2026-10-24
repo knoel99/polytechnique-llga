@@ -123,6 +123,7 @@ An M2 module announced for period 2 and preselected by the AI-systems route of t
 -   **The conversational loop: VAD, turn-taking, full-duplex** — listening, waiting one's turn, interrupting oneself: real-time orchestration.
 -   **Speech LLMs and multilingualism** — the speech signal fed directly into the language model: architectures and issues for low-resource languages.
 -   **Exercises / Labs** — align a CTC, measure a WER, synthesize and watermark a voice clip.
+-   **Projects and assessment** — solo and group subjects, a written-exam proposal and a grading rubric, all labelled as proposals.
 -   **References** — the founding papers of neural ASR and TTS.
 
 ### Session plan {#sessions}
@@ -137,7 +138,7 @@ Level 1 = foundations (reviews, definitions, first worked examples), 2 = core me
 | 2 | 3 h | 2 | ch. 2 CTC: the loss and its forward-backward, derived | Ex. 3, 4 |
 | 3 | 3 h | 2 | ch. 3 Encoder-decoder: LAS, Conformer, RNN-T; ch. 4 Whisper | Ex. 1 |
 | 4 | 3 h | 2 | ch. 5 Streaming: latencies, chunking, VAD; ch. 6 Vocoders | Ex. 5(a)–(b), 7 |
-| 5 | 3 h | 2 | ch. 7 Neural TTS: Tacotron 2, VITS, diffusion and flow | Ex. 2(a)–(b) |
+| 5 | 3 h | 2 | ch. 7 Neural TTS: Tacotron 2, VITS, diffusion and flow | Ex. 2(a)–(b), (e) |
 | 6 | 3 h | 2 | ch. 8 Expressivity; ch. 9 Voice conversion, cloning, ethics, watermarking | Ex. 2(c)–(d), 6 |
 | 7 | 3 h | 3 | ch. 10 The conversational loop: turn-taking, endpointing, full-duplex | Ex. 5(c) |
 | 8 | 3 h | 3 | ch. 11 Speech LLMs and multilingualism | Ex. 8 (per-language WER with Whisper and MMS, Proposition 11.3) |
@@ -209,7 +210,9 @@ A recognizer tuned on call-center audio collapses as soon as the accent or the m
 The historical pipeline (1980-2015) survives only as technical memories — but its formalism (emission model, chain of states, Bayesian decoding) reappears everywhere, up to the CTC forward-backward (ch. 2). We cover it in one structured chapter.
 
 ::: thm
-[Theorem 1.1 — The GMM-HMM acoustic model and decoding]{.tag} One decomposes $p(x_{1:T} \mid w)$ with a hidden Markov chain over phonetic states $z_t \in \{1, \dots, K\}$, with transitions $a_{ij}$; the observations are the acoustic frames $x_t$. Each phoneme is a 3-state left-to-right HMM (beginning/middle/end), put in context (triphones); the emission $b_j$ of state $j$ is a **Gaussian mixture** over the MFCCs (39 dimensions: 13 + first and second derivatives):
+[Theorem 1.1 — The GMM-HMM acoustic model and decoding]{.tag} One decomposes $p(x_{1:T} \mid w)$ with a hidden Markov chain over phonetic states $z_t \in \{1, \dots, K\}$, with transitions $a_{ij}$; the observations are the acoustic frames $x_t$ (written $o_t$ on the notation page).
+
+Each phoneme is a 3-state left-to-right HMM (beginning/middle/end), put in context (triphones); the emission $b_j$ of state $j$ is a **Gaussian mixture** over the MFCCs (39 dimensions: 13 + first and second derivatives):
 $$b_j(x_t) = p(x_t \mid z_t = j) = \sum_{m=1}^{M_j} c_{jm}\, \mathcal N(x_t;\ \mu_{jm}, \Sigma_{jm}).$$
 
 The retained transcription maximizes *Bayesian decoding*
@@ -293,10 +296,10 @@ initialized $\alpha_1(1) = p_1(\epsilon)$, $\alpha_1(2) = p_1(\ell_2)$, the rest
 
 Symmetrically, the *backward variable* $\beta_t(s)$ is the probability of completing $\ell$ from position $s$ at frame $t$, over frames $t{+}1$ to $T$.
 
-As in the HMM of Theorem 1.1, $\alpha$ includes the emission at $t$ and $\beta$ excludes it; Graves et al. (2006) put it in both and divide their product by $p_t(\ell_s)$.
+As for the HMM (Theorem 1.1 and the site's HMM conventions), $\alpha$ includes the emission at $t$ and $\beta$ excludes it; Graves et al. (2006) put it in both and divide their product by $p_t(\ell_s)$.
 
-Then
-$$p(y \mid x) = \alpha_T(S) + \alpha_T(S{-}1), \qquad \alpha_t(s)\,\beta_t(s) = p\big(y \mid x,\ \pi_t = \ell_s\big)\cdot p_t(\ell_s),$$
+Write $\mathrm{pos}_t$ for the position of $\ell$ that a path occupies at frame $t$. Then
+$$p(y \mid x) = \alpha_T(S) + \alpha_T(S{-}1), \qquad \alpha_t(s)\,\beta_t(s) = p\big(y,\ \mathrm{pos}_t = s \mid x\big),$$
 and the gradient of the loss is written in closed form
 $$\frac{\partial \mathcal L_{\mathrm{CTC}}}{\partial p_t(k)} = -\,\frac{1}{p(y \mid x)}\ \frac{1}{p_t(k)} \sum_{s\,:\,\ell_s = k} \alpha_t(s)\, \beta_t(s).$$
 
@@ -304,8 +307,8 @@ $$\frac{\partial \mathcal L_{\mathrm{CTC}}}{\partial p_t(k)} = -\,\frac{1}{p(y \
 **Step 1 (decomposition by the state at $t$).** The sum over paths partitions according to the position $s$ occupied at frame $t$. Each path passing through $\ell_s$ at $t$ factorizes into three factors:
 $$\text{(prefix reaching } \ell_s \text{ at } t) \times p_t(\ell_s) \times (\text{suffix from } \ell_s \text{ at } t{+}1)$$
 — hence
-$$\alpha_t(s)\beta_t(s) = p(y, \pi_t = \ell_s \mid x)$$
-(careful: with the convention above, $\alpha_t(s)$ contains $p_t(\ell_s)$ and $\beta_t(s)$ does not, so the product counts the factor once).
+$$\alpha_t(s)\beta_t(s) = p(y, \mathrm{pos}_t = s \mid x)$$
+(a label that occurs at several positions of $\ell$, such as $\epsilon$, gets one such term per position; careful: with the convention above, $\alpha_t(s)$ contains $p_t(\ell_s)$ and $\beta_t(s)$ does not, so the product counts the factor once).
 
 **Step 2 (recursion).** For the path to be at $\ell_s$ at $t$, it was at $s$, $s{-}1$ or $s{-}2$ at $t{-}1$.
 
@@ -362,7 +365,7 @@ The takeaway intuition: attention alone is bad at the fine local patterns of spe
 :::
 
 ::: thm
-[Theorem 3.3 — RNN-T (Graves, 2012): the CTC that speaks in real time]{.tag} The RNN-transducer combines an *encoder* $f_t$ (frame $\to$ state, causal — processed on the fly) and a *prediction network* $g_u$ (tokens already emitted $\to$ state); a joint network produces
+[Theorem 3.3 — RNN-T (Graves, 2012): the CTC that speaks in real time]{.tag} The RNN-transducer combines an *encoder* $f_t$ (frame $\to$ state; causal in streaming systems, so processed on the fly) and a *prediction network* $g_u$ (tokens already emitted $\to$ state); a joint network produces
 $$P(k \mid t, u) = \mathrm{softmax}\big(W\, f_t + W'\, g_u + b\big)_{k}, \qquad k \in \mathcal V \cup \{\epsilon\},$$
 and the likelihood sums over all paths of the $(t, u)$ grid — it is the forward-backward of Theorem 2.3, transposed onto a $T \times U$ trellis where $\epsilon$ = "advance in $t$ without emitting".
 
@@ -502,7 +505,7 @@ Two chronic diseases: *attention failure* (skipped or stuttered words on long or
     a richer text-conditioned prior whose density stays exact. At inference: sample the Gaussian, invert the flow, decode.
 3.  *Implicit monotone alignment* (MAS: dynamic-programming search for the best monotone alignment between the text and the speech latent, redone at each training step), with a duration predictor for inference.
 
-*Objective:* maximize the ELBO — an L1 reconstruction of the Mel of the generated wave, minus the KL term
+*Objective:* minimize the negative ELBO — an L1 loss between the Mel of the generated wave and that of the target, plus the KL term
 $$\mathrm{KL}\big(q_\phi(z \mid x) \,\|\, p_\theta(z \mid c)\big)$$
 — and add adversarial and feature-matching losses on the waveform and a duration loss. This is a bound plus a GAN, not an exact likelihood: the flow only keeps the prior's density computable, so that the KL term can be evaluated on a sampled $z$.
 
@@ -698,7 +701,7 @@ Moral of the module: no single layer suffices — defense in depth.
 Recognition and synthesis are not yet a conversation: the system must also know when the user has finished, answer within a human delay, and cope with interruptions. This chapter measures the human speaking turn and shows how systems went from a pipeline with thresholds to full-duplex models.
 
 ::: thm
-[Theorem 10.1 — The human speaking turn, in numbers]{.tag} Human conversation alternates turns with a median delay on the order of 200 ms — measured across a dozen languages (Stivers et al., PNAS 2009); yet planning and pronouncing the first word of a turn takes \~600 ms: humans *anticipate* the end of the other's turn (prosodic, syntactic, pragmatic cues) to prepare their own.
+[Theorem 10.1 — The human speaking turn, in numbers]{.tag} Human conversation alternates turns with a median delay on the order of 200 ms — measured across ten languages (Stivers et al., PNAS 2009); yet planning and pronouncing the first word of a turn takes \~600 ms: humans *anticipate* the end of the other's turn (prosodic, syntactic, pragmatic cues) to prepare their own.
 
 An assistant that listens to everything, waits for silence, transcribes, thinks, synthesizes, shows \~1.5-3 s of latency — *five to ten times too slow*: turn-taking is the real conversational bottleneck, not intelligence.
 
@@ -767,7 +770,7 @@ Moshi's codec Mimi (ch. 10) puts the same split inside one codec: a first, seman
 ::: prop
 [Proposition 11.3 — Multilingualism: 7,000 languages, 100 covered]{.tag} The bottleneck of low-resource languages: labeling is expensive, writing is sometimes lacking.
 
-**MMS** (Meta, 2023 — "Scaling Speech Technology to 1000+ Languages"): one multilingual wav2vec 2 model fine-tuned with CTC, with small per-language adapters, covers ASR in 1,107 languages; TTS uses a separate VITS model per language for the same languages; language identification covers 4,017. All are learned on public religious readings (the paradox: the Bible is the most translated text in the world) — a jump by a factor of 10-40 in coverage.
+**MMS** (Meta, 2023 — "Scaling Speech Technology to 1000+ Languages"): one multilingual wav2vec 2 model fine-tuned with CTC, with small per-language adapters, covers ASR in 1,107 languages; TTS uses a separate VITS model per language for the same languages; language identification covers 4,017. All are learned mainly on public religious readings (the paradox: the Bible is the most translated text in the world) — a jump by a factor of 10-40 in coverage.
 
 **Common Voice** (Mozilla): open crowd-sourcing (including French — regional accents: lab 1 draws from it).
 
@@ -978,7 +981,7 @@ Two hours, one handwritten A4 sheet allowed, a simple calculator allowed; four e
 -   **Signal and representations**: L. Rabiner, B.-H. Juang, *Fundamentals of Speech Recognition*, Prentice Hall, 1993; L. Rabiner, *A Tutorial on Hidden Markov Models and Selected Applications in Speech Recognition*, Proc. IEEE 77(2), 1989; S. Davis, P. Mermelstein, *Comparison of Parametric Representations…* (MFCC), IEEE TASSP, 1980 — foundations in the [Signal Processing (M1) module ch. 4-8](../m1p1-signal-processing/index.html).
 -   **End-to-end ASR**: A. Graves, S. Fernández, F. Gomez, J. Schmidhuber, *Connectionist Temporal Classification: Labelling Unsegmented Sequence Data with Recurrent Neural Networks*, ICML 2006; A. Graves, [Sequence Transduction with Recurrent Neural Networks](https://arxiv.org/abs/1211.3711) (RNN-T), 2012; W. Chan et al., [Listen, Attend and Spell](https://arxiv.org/abs/1508.01209), ICASSP 2016; A. Gulati et al., [Conformer: Convolution-augmented Transformer for Speech Recognition](https://arxiv.org/abs/2005.08100), Interspeech 2020; N. Moritz, T. Hori, J. Le Roux, [Streaming Automatic Speech Recognition with the Transformer Model](https://arxiv.org/abs/2001.02674), ICASSP 2020.
 -   **Self-supervised representations and data at scale**: A. Baevski et al., [wav2vec 2.0](https://arxiv.org/abs/2006.11477), NeurIPS 2020; W.-N. Hsu et al., [HuBERT](https://arxiv.org/abs/2106.07447), IEEE/ACM TASLP 2021; A. Radford et al., [Robust Speech Recognition via Large-Scale Weak Supervision](https://arxiv.org/abs/2212.04356) (Whisper), ICML 2023; V. Pratap et al., [Scaling Speech Technology to 1000+ Languages](https://arxiv.org/abs/2305.13516) (MMS), 2023; [Mozilla Common Voice](https://commonvoice.mozilla.org/); V. Panayotov et al., *LibriSpeech: an ASR Corpus Based on Public Domain Audio Books*, ICASSP 2015; A. Conneau et al., [FLEURS](https://arxiv.org/abs/2205.12446), IEEE SLT 2022.
--   **TTS and vocoders**: A. van den Oord et al., [WaveNet: A Generative Model for Raw Audio](https://arxiv.org/abs/1609.03499), 2016; J. Shen et al., [Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions](https://arxiv.org/abs/1712.05884) (Tacotron 2), ICASSP 2018; J. Kong et al., [HiFi-GAN](https://arxiv.org/abs/2010.05646), NeurIPS 2020; J. Kim et al., [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) (VITS), ICML 2021; V. Popov et al., [Grad-TTS](https://arxiv.org/abs/2105.06337), ICML 2021; M. Le et al., [Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale](https://arxiv.org/abs/2306.15687), 2023; Y. Wang et al., [Style Tokens: Unsupervised Style Modeling, Control and Transfer in End-to-End Speech Synthesis](https://arxiv.org/abs/1803.09017), ICML 2018; L. Dinh, J. Sohl-Dickstein, S. Bengio, [Density Estimation Using Real NVP](https://arxiv.org/abs/1605.08803) (affine coupling), ICLR 2017; Y. Lipman et al., [Flow Matching for Generative Modeling](https://arxiv.org/abs/2210.02747), ICLR 2023; [W3C, Speech Synthesis Markup Language (SSML) 1.1](https://www.w3.org/TR/speech-synthesis11/).
+-   **TTS and vocoders**: A. van den Oord et al., [WaveNet: A Generative Model for Raw Audio](https://arxiv.org/abs/1609.03499), 2016; J. Shen et al., [Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions](https://arxiv.org/abs/1712.05884) (Tacotron 2), ICASSP 2018; J. Kong et al., [HiFi-GAN](https://arxiv.org/abs/2010.05646), NeurIPS 2020; J. Kim et al., [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) (VITS), ICML 2021; V. Popov et al., [Grad-TTS](https://arxiv.org/abs/2105.06337), ICML 2021; S. Mehta, R. Tu, J. Beskow, É. Székely, G. E. Henter, *Matcha-TTS: A Fast TTS Architecture with Conditional Flow Matching*, ICASSP 2024; M. Le et al., [Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale](https://arxiv.org/abs/2306.15687), 2023; Y. Wang et al., [Style Tokens: Unsupervised Style Modeling, Control and Transfer in End-to-End Speech Synthesis](https://arxiv.org/abs/1803.09017), ICML 2018; L. Dinh, J. Sohl-Dickstein, S. Bengio, [Density Estimation Using Real NVP](https://arxiv.org/abs/1605.08803) (affine coupling), ICLR 2017; Y. Lipman et al., [Flow Matching for Generative Modeling](https://arxiv.org/abs/2210.02747), ICLR 2023; [W3C, Speech Synthesis Markup Language (SSML) 1.1](https://www.w3.org/TR/speech-synthesis11/).
 -   **Cloning, ethics, watermarking**: E. Casanova et al., [YourTTS](https://arxiv.org/abs/2112.02418), ICML 2022; C. Wang et al., [Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers](https://arxiv.org/abs/2301.02111) (VALL-E), 2023; L. Wan et al., *Generalized End-to-End Loss for Speaker Verification*, ICASSP 2018; G. Chen et al., [WavMark: Watermarking for Audio Generation](https://arxiv.org/abs/2308.12770), 2023; R. San Roman et al., [Proactive Detection of Voice Cloning with Localized Watermarking](https://arxiv.org/abs/2401.17264) (AudioSeal), ICML 2024; [Regulation (EU) 2024/1689 — AI Act](https://eur-lex.europa.eu/eli/reg/2024/1689/oj) (art. 50) — the text watermark and its $z$-test in [LLMs ch. 9.5](../m2-large-language-models/index.html#watermark) (J. Kirchenbauer et al., ICML 2023); extended by the [Explainability module ch. 9](../m2-explainability-security-privacy-llms/index.html#ch9) and, on the Graph × LLM route, the [Control in Generative AI module ch. 6 and 10](../m2-control-generative-ai/index.html).
 -   **Conversation and speech LLMs**: G. Skantze, [Turn-taking in Conversational Systems and Human-Robot Interaction: A Review](https://www.sciencedirect.com/science/article/pii/S088523082030111X), Computer Speech & Language 67, 2021; T. Stivers et al., *Universals and Cultural Variation in Turn-Taking*, PNAS 2009; T. Nguyen et al., [Generative Spoken Dialogue Language Modeling](https://aclanthology.org/2023.tacl-1.15/) (dGSLM), TACL 2023; Z. Borsos et al., [AudioLM: A Language Modeling Approach to Audio Generation](https://arxiv.org/abs/2209.03143), IEEE/ACM TASLP 2023; Y.-A. Chung et al., [w2v-BERT](https://arxiv.org/abs/2108.06209), ASRU 2021; N. Zeghidour et al., [SoundStream: An End-to-End Neural Audio Codec](https://arxiv.org/abs/2107.03312), IEEE/ACM TASLP 2022; A. Défossez et al., [High Fidelity Neural Audio Compression](https://arxiv.org/abs/2210.13438) (EnCodec), 2022; A. Défossez et al., [Moshi: a Speech-Text Foundation Model for Real-Time Dialogue](https://arxiv.org/abs/2410.00037), 2024 ([code](https://github.com/kyutai-labs/moshi)); J. Ao et al., *SpeechT5: Unified-Modal Encoder-Decoder for Speech Language Processing*, ACL 2022; D. Zhang et al., [SpeechGPT: Empowering Large Language Models with Intrinsic Cross-Modal Conversational Abilities](https://arxiv.org/abs/2305.11000), Findings of EMNLP 2023; C. Tang et al., [SALMONN: Towards Generic Hearing Abilities for Large Language Models](https://arxiv.org/abs/2310.13289), ICLR 2024 — the multimodal layer is in the [LLMs (M2) module ch. 8](../m2-large-language-models/index.html).
 -   **Lab tools**: [HuggingFace transformers](https://huggingface.co/docs/transformers) (ASR/TTS pipelines); [Silero VAD](https://github.com/snakers4/silero-vad); [jiwer](https://github.com/jitsi/jiwer) (WER); [AudioSeal](https://github.com/facebookresearch/audioseal).
