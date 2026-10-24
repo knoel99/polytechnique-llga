@@ -26,7 +26,6 @@ NON_SCIENCE = {
     "m1p1-strategy-marketing", "m1-sports", "m1-humanites", "m1-langues",
     "m1p2-startup-entrepreneurship", "m1p3-research-internship",
     "m2-ethical-issues-ai", "m2-projet-transverse", "m2-internship",
-    "m1-integrative-projects",
 }
 
 FR_SWITCHER = re.compile(r"français|lang-toggle|href=\"[^\"]*/fr/", re.IGNORECASE)
@@ -82,53 +81,28 @@ for cdir in course_dirs:
         check(True, f"{cid}: exercises (non-science exempt, {n_ex})")
     else:
         check(n_ex >= 6, f"{cid}: >= 6 exercises", f"found {n_ex}")
+    if cid not in NON_SCIENCE:
+        qsrc = read(cdir / "index.qmd") if (cdir / "index.qmd").is_file() else ""
+        proj = qsrc.split("## Projects and assessment {#projects}", 1)
+        check(len(proj) == 2, f"{cid}: '## Projects and assessment {{#projects}}' section",
+              "specs/projects-and-assessment.md")
+        if len(proj) == 2:
+            pbody = proj[1].split("\n## ", 1)[0]
+            solo = len(re.findall(r"^\d+\.\s+\*\*\[Solo", pbody, re.M))
+            group = len(re.findall(r"^\d+\.\s+\*\*\[Group", pbody, re.M))
+            check(solo >= 2, f"{cid}: >= 2 solo project subjects", f"found {solo}")
+            check(group >= 2, f"{cid}: >= 2 group project subjects", f"found {group}")
+            exam = pbody.split("### Written exam", 1)
+            nq = len(re.findall(r"^\d+\.\s", re.split(r"^### ", exam[1], maxsplit=1, flags=re.M)[0], re.M)) if len(exam) == 2 else 0
+            check(nq >= 3, f"{cid}: written-exam proposal with >= 3 questions", f"found {nq}")
+            check(qsrc.find("## Exercises") < qsrc.find("## Projects and assessment")
+                  < qsrc.find("## References"),
+                  f"{cid}: Projects section between Exercises and References")
     if cid == "m1p1-refresher-neural-nets":
         qmd = read(cdir / "index.qmd") if (cdir / "index.qmd").is_file() else html
         nn_numpy_seen = bool(re.search(r"numpy|import np\b|np\.", qmd, re.IGNORECASE))
 
 check(nn_numpy_seen, "NN refresher: NumPy primary")
-
-# --- Projects and assessment (specs/curriculum-coherence.md) ----------------
-# Every science page ends with a projects section between Exercises and
-# References: a classical assessment and at least three project cards (h4),
-# one of them for a group.
-for cdir in course_dirs:
-    cid = cdir.name
-    if cid in NON_SCIENCE or not (cdir / "index.html").is_file():
-        continue
-    html = read(cdir / "index.html")
-    pos = {k: html.find(f'<h2 id="{k}"') for k in ("ex", "projects", "refs")}
-    check(pos["projects"] >= 0, f"{cid}: projects and assessment section")
-    if pos["projects"] < 0:
-        continue
-    check(pos["ex"] < pos["projects"] and (pos["refs"] < 0 or pos["projects"] < pos["refs"]),
-          f"{cid}: projects section after Exercises, before References")
-    end = NEXT_H2.search(html, pos["projects"] + 4)
-    sec = html[pos["projects"]: end.start() if end else len(html)]
-    check('id="projects-exam"' in sec, f"{cid}: projects section has a classical assessment")
-    cards = re.findall(r"<h4[^>]*>(.*?)</h4>", sec, flags=re.S)
-    check(len(cards) >= 3, f"{cid}: at least 3 project cards", f"found {len(cards)}")
-    check(any("group" in c for c in cards), f"{cid}: at least one group project")
-
-# End-of-year projects: Year-1 page and Year-2 capstones (transverse project)
-y1 = ROOT / "courses/m1-integrative-projects/index.html"
-check(y1.is_file(), "Year-1 integrative projects page present")
-if y1.is_file():
-    y1_html = read(y1)
-    for k in range(1, 9):
-        check(f'id="y1-{k}"' in y1_html, f"Year-1 integrative project y1-{k} present")
-tp = read(ROOT / "courses/m2-projet-transverse/index.html")
-for k in range(1, 9):
-    check(f'id="c{k}"' in tp, f"transverse project: capstone c{k} present")
-
-# Home: how the courses serve the master's objectives (specs/curriculum-coherence.md, D7)
-home_html = read(ROOT / "index.html")
-check('id="objectives"' in home_html, "home: objectives section present")
-for k in range(1, 10):
-    check(f"<strong>O{k}</strong>" in home_html, f"home: objective O{k} listed")
-check("courses/m1-integrative-projects/index.html" in home_html
-      and "courses/m2-projet-transverse/index.html#capstones" in home_html,
-      "home: end-of-year projects linked")
 
 # --- Root surface ------------------------------------------------------------
 root_pages = ["index.html"]
@@ -342,6 +316,19 @@ check(air.returncode == 0, "check_airiness: every page passes A1-A3 (specs/front
 home = read(ROOT / "index.html")
 check('id="programme"' in home and "<!-- programme:start -->" in home,
       "home: programme 2026-2027 table present")
+
+# --- End-of-year projects page (specs/projects-and-assessment.md) -------------
+pq, ph = ROOT / "projects/index.qmd", ROOT / "projects/index.html"
+check(pq.is_file() and ph.is_file(), "projects/: end-of-year projects page (qmd + html)")
+if pq.is_file():
+    psrc = read(pq)
+    links = set(re.findall(r"\.\./courses/([\w-]+)/index\.html", psrc))
+    missing = sorted(s_ for s_ in links if not (ROOT / "courses" / s_ / "index.html").is_file())
+    check(not missing, "projects/: links only existing course pages", ", ".join(missing))
+    check("Year 1" in psrc and "Year 2" in psrc, "projects/: Year 1 and Year 2 projects")
+home = read(ROOT / "index.html")
+check('href="projects/index.html"' in home, "home: link to the end-of-year projects page")
+check('id="projects"' in home, "home: projects section present")
 
 # --- Report ------------------------------------------------------------------
 total = passed + len(failures)
