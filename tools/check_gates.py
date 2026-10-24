@@ -26,6 +26,7 @@ NON_SCIENCE = {
     "m1p1-strategy-marketing", "m1-sports", "m1-humanites", "m1-langues",
     "m1p2-startup-entrepreneurship", "m1p3-research-internship",
     "m2-ethical-issues-ai", "m2-projet-transverse", "m2-internship",
+    "m1-integrative-projects",
 }
 
 FR_SWITCHER = re.compile(r"français|lang-toggle|href=\"[^\"]*/fr/", re.IGNORECASE)
@@ -86,6 +87,39 @@ for cdir in course_dirs:
         nn_numpy_seen = bool(re.search(r"numpy|import np\b|np\.", qmd, re.IGNORECASE))
 
 check(nn_numpy_seen, "NN refresher: NumPy primary")
+
+# --- Projects and assessment (specs/curriculum-coherence.md) ----------------
+# Every science page ends with a projects section between Exercises and
+# References: a classical assessment and at least three project cards (h4),
+# one of them for a group.
+for cdir in course_dirs:
+    cid = cdir.name
+    if cid in NON_SCIENCE or not (cdir / "index.html").is_file():
+        continue
+    html = read(cdir / "index.html")
+    pos = {k: html.find(f'<h2 id="{k}"') for k in ("ex", "projects", "refs")}
+    check(pos["projects"] >= 0, f"{cid}: projects and assessment section")
+    if pos["projects"] < 0:
+        continue
+    check(pos["ex"] < pos["projects"] and (pos["refs"] < 0 or pos["projects"] < pos["refs"]),
+          f"{cid}: projects section after Exercises, before References")
+    end = NEXT_H2.search(html, pos["projects"] + 4)
+    sec = html[pos["projects"]: end.start() if end else len(html)]
+    check('id="projects-exam"' in sec, f"{cid}: projects section has a classical assessment")
+    cards = re.findall(r"<h4[^>]*>(.*?)</h4>", sec, flags=re.S)
+    check(len(cards) >= 3, f"{cid}: at least 3 project cards", f"found {len(cards)}")
+    check(any("group" in c for c in cards), f"{cid}: at least one group project")
+
+# End-of-year projects: Year-1 page and Year-2 capstones (transverse project)
+y1 = ROOT / "courses/m1-integrative-projects/index.html"
+check(y1.is_file(), "Year-1 integrative projects page present")
+if y1.is_file():
+    y1_html = read(y1)
+    for k in range(1, 9):
+        check(f'id="y1-{k}"' in y1_html, f"Year-1 integrative project y1-{k} present")
+tp = read(ROOT / "courses/m2-projet-transverse/index.html")
+for k in range(1, 9):
+    check(f'id="c{k}"' in tp, f"transverse project: capstone c{k} present")
 
 # --- Root surface ------------------------------------------------------------
 root_pages = ["index.html"]

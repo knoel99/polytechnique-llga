@@ -16,6 +16,7 @@ NON_SCIENCE = {
     "m1p1-strategy-marketing", "m1-sports", "m1-humanites", "m1-langues",
     "m1p2-startup-entrepreneurship", "m1p3-research-internship",
     "m2-ethical-issues-ai", "m2-projet-transverse", "m2-internship",
+    "m1-integrative-projects",
 }
 BAND = (100, 320)  # prose words per in-class hour (R2)
 

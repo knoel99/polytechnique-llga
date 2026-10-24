@@ -22,6 +22,7 @@ Before merging a module / CSS refactor:
 - [ ] **CSS**: dark (`prefers-color-scheme` / `data-theme`) + mobile (no blocking horizontal overflow; tables / code / KaTeX scrollable) checked on one course page + the index.
 - [ ] **Theme**: `assets/theme.js` loaded (theme button, side contents, table wrapping); toggle localStorage OK; UI strings in English.
 - [ ] **Airy prose**: `python3 tools/check_airiness.py` passes (A1–A3 of `specs/front-redesign.md`); long or key formulas on their own line.
+- [ ] **Projects and assessment**: every science page ends with `## Projects and assessment {#projects}` (status box quoting the official assessment, a classical assessment with sample questions and marking points, 3–5 project cards with public data) — `specs/curriculum-coherence.md`.
 - [ ] **Pedagogy**: ≥ 6 exercises on science modules (non-science pages exempt, see `specs/non-science-pages.md`); NumPy primary if NN/ML module; full sentences in English.
 - [ ] **Smoke**: open EN pages locally (or Pages preview); KaTeX and `.def`/`.thm`/`.note` boxes readable in dark.
 - [ ] **No FR switcher**: no “Français” / lang-toggle links in published HTML.

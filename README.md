@@ -1,82 +1,89 @@
 # polytechnique-llga
 
-Supports de cours (tutoriels HTML) pour le master **MSc&T « Large Language Models, Graphs and Applications » (LLGA)** de l'École Polytechnique.
+Notes de cours indépendantes et open source pour le master **MScT « Large Language Models, Graphs and Applications » (LLGA)** de l'École Polytechnique.
 
-**Site (EN only)** : <https://knoel99.github.io/polytechnique-llga/>  
-Former `/en/` URLs redirect to the root (homepage stub); deeper `/en/courses/…` paths are retired (404). Former FR paths `capacites-sortie/` and `coherence-2ans/` redirect to `exit-capabilities/` and `coherence-2years/`.
+**Site (en anglais)** : <https://knoel99.github.io/polytechnique-llga/>
 
-Chaque module est aligné sur la **fiche officielle SynapseS 2026-2027** (code UE, volume horaire, équipe pédagogique, objectifs et programme officiel avec tableau de correspondance vers nos sections, évaluation, prérequis).
+> Ce site n'est ni créé, ni maintenu, ni validé par l'École Polytechnique ou ses enseignants. Il reconstitue ce qui peut être enseigné dans le master à partir du programme public et de l'état de l'art. Pour les inscriptions, les ECTS et les listes officielles de cours, la référence reste la documentation officielle (liens en bas de la page d'accueil).
 
-## Objectif
+## Ce que contient le site
 
-Reconstituer, module par module, un **cours complet et auto-contenu** correspondant au *track recommandé* du master LLGA, destiné à un étudiant ayant **un bon niveau L3 de mathématiques**. Chaque module contient :
+- **Page d'accueil** (`index.html`), qui contient :
+  - la description officielle du master ;
+  - l'arbre du cursus (obligatoires, « Choose N », créneaux annoncés), avec deux parcours conseillés :
+    - *Graph × LLM* ;
+    - *AI systems* ;
+  - la manière dont les cours servent les objectifs du master ;
+  - le tableau du programme 2026–2027 (codes, volumes horaires, statut dans le catalogue SynapseS) ;
+  - la documentation officielle et les débouchés.
+- **Une page par module** (`courses/<module>/index.html`). Chaque cours scientifique contient :
+  - la fiche officielle SynapseS 2026–2027 (code, équipe, volume, évaluation, prérequis) et un tableau de correspondance entre le programme officiel et les chapitres ;
+  - un plan de séances qui totalise le volume officiel, avec des niveaux 1 → 3 qui ne redescendent jamais ;
+  - des chapitres numérotés : définitions, théorèmes et démonstrations, exemples travaillés, code Python (NumPy / PyTorch / networkx…) ;
+  - des encadrés de rappel quand une notion vient d'un cours qu'un étudiant peut ne pas avoir suivi ;
+  - des exercices corrigés, gradués ★ / ★★ / ★★★ ;
+  - une section **Projects and assessment** qui propose :
+    - une évaluation classique cohérente avec la modalité officielle (barème, sujets types avec éléments de correction) ;
+    - 3 à 5 projets individuels ou en groupe, sur données publiques et avec un calcul modeste ;
+  - les références.
+- **Projets de fin d'année** :
+  - [Year-1 integrative projects](courses/m1-integrative-projects/index.html) : huit projets d'équipe qui combinent les cours de la première année ;
+  - le catalogue de [capstones](courses/m2-projet-transverse/index.html#capstones) du projet transverse de M2.
+- **Pages de cadrage** pour les modules non scientifiques :
+  - management, langues, humanités, sport ;
+  - stages ;
+  - séminaire d'éthique, avec une carte des sujets de confiance et une page sur le droit (AI Act, RGPD).
 
-- les **rappels** de niveau L3 nécessaires (probabilités, algèbre linéaire, analyse, algorithmique…) ;
-- le **cours proprement dit** (définitions, théorèmes, démonstrations, schémas) ;
-- une section **« Travaux de l'équipe pédagogique »** intégrant les publications réelles des enseignants du master ;
-- des **extraits de code Python** exécutables (NumPy / PyTorch / networkx…) ;
-- des **exercices corrigés ou guidés** (≥ 8 par module) ;
-- les **références** (livres et articles) réellement utilisées par les enseignants du master.
+Le site est en anglais uniquement (`specs/en-only.md`). L'ancien chemin `/en/` redirige vers la racine.
 
-**L'index recense par ailleurs l'intégralité des cours de la brochure et du curriculum officiel** (options P1/P2, cours M2, management, transversal) ; les modules non rédigés dans ce dépôt y apparaissent en cartes grises « non couverts ». Les cours scientifiques (mathématiques et informatique) sont rédigés en profondeur ; les pages management / transversal / stages / séminaire éthique sont des **cadrages Extrapolons** (pas des polycopiés complets).
+## Structure du dépôt
 
-## Le track recommandé
+```
+index.html                    Page d'accueil (racine GitHub Pages)
+assets/paper.css              Feuille de style unique : fort contraste, clair / sombre, mobile
+assets/theme.js               Barre supérieure, sommaire latéral, thème, tableaux
+courses/<module>/index.qmd    Source Quarto d'un module
+courses/<module>/index.html   Page rendue (publiée)
+specs/                        Contrats « spec → implement → prove » (index : specs/README.md)
+tools/                        Scripts de rendu et de contrôle
+AGENTS.md                     Règles et gates obligatoires
+LICENSE                       Licence Apache 2.0
+```
 
-La sélection suit le **« profil équilibré » recommandé** pour ce master (analyse du curriculum officiel) :
+## Travailler sur un module
 
-| Période | Modules |
+Prérequis : [Quarto](https://quarto.org) 1.7.32, Python 3, et Node.js pour la vérification KaTeX.
+
+1. Modifier la source `courses/<module>/index.qmd`.
+2. Rendre la page : `python3 tools/render.py <module>`. Ce script appelle Quarto puis remet l'empreinte d'intégrité de KaTeX 0.19.0.
+3. Lancer les contrôles :
+   - `python3 tools/check_gates.py` : contrôles d'ensemble (sources, thème, exercices, sections de projets, arbre de l'accueil, KaTeX épinglé…) ;
+   - `python3 tools/check_progression.py` : plan de séances, niveaux, calibrage horaire et exercices gradués (`specs/hours-and-progression.md`) ;
+   - `python3 tools/check_airiness.py` : texte aéré, lisible au vidéoprojecteur (`specs/front-redesign.md`).
+4. Mettre à jour le tableau du programme de l'accueil si un plan de séances a changé : `python3 tools/programme_table.py`.
+
+Un nouveau module ou une refonte importante commence par un contrat dans `specs/` (modèle : `specs/_template-module.md`). Les gates de `AGENTS.md` doivent être cochées avant la fusion.
+
+## Contrats principaux
+
+| Contrat | Objet |
 |---|---|
-| **M1 · P1** | Refresher Statistics · Refresher CS · **Machine Learning** (obligatoire) · **Deep Learning** · **Signal Processing** · **Emerging Subjects in ML & Collaborative Learning** |
-| **M1 · P2** | **RL & Autonomous Agents** (obligatoire) · **Graph ML & DL for Generative AI** (obligatoire, cours central) · **Text Mining & NLP** (obligatoire) · **Computational Optimal Transport** · **Multimodal Generative AI** |
-| **M2** | **Large Language Models** · **Advanced Graph Neural Networks** · **Analysis & Deep Learning on Geometric Data** |
+| `specs/competency-tree.md` | source structurelle unique (wiki LLGA + catalogue SynapseS de l'année) |
+| `specs/hours-and-progression.md` | volumes, plans de séances, progression de la difficulté |
+| `specs/front-redesign.md` | contraste projecteur, mode sombre, sommaire, texte aéré |
+| `specs/curriculum-coherence.md` | cohérence avec les objectifs du master, projets et évaluations, projets de fin d'année |
+| `specs/en-only.md` | site en anglais uniquement |
 
-Cette sélection correspond aux tracks *« Graph AI / Structured Generative AI »* et *« Hybrid Neuro-Symbolic / GraphRAG »* — le cœur du master : **faire cohabiter LLMs et données structurées en graphes**.
+## Sources officielles
 
-## Volume horaire et progression (programme 2026-2027)
+- [Page du programme LLGA](https://programmes.polytechnique.edu/en/master/all-msct-specializations/large-language-models-graphs-and-applications-llga) (École Polytechnique)
+- [Wiki du master, page curriculum](https://msct.dix.polytechnique.fr/llga/wiki/doku.php?id=curriculum)
+- [Catalogue SynapseS 2026–2027](https://synapses.polytechnique.fr/catalogue/2026-2027)
 
-- La page d'accueil contient un tableau **« Programme 2026–2027 : course units and hours »** : chaque UE de la liste SynapseS du parcours LLGA (année 1, semestres S1 et S2), son code, sa période, son volume officiel, et la façon dont nos notes s'y ajustent. Une liste « What changed » résume les évolutions du catalogue (nouveau *Refresher in Computer Graphics*, *Optimisation and Responsible AI* passé en période 1 sous `CSC_51076_EP`, liste S2 à neuf UE, codes des UE de management et de culture, année 2 pas encore publiée).
-- Chaque cours scientifique a un **plan de séances** (`#sessions`) dont les heures totalisent le volume officiel (12 × 3 h pour 36 h, 4 × 3 h pour un refresher de 12 h, 8 × 3 h pour un cours de M2), avec un niveau 1/2/3 qui ne redescend jamais. Les chapitres qui dépassent ce volume (notes de recherche, approfondissements) sont listés en travail personnel avec une durée estimée.
-- Règles et preuves : `specs/hours-and-progression.md`, contrôle `python3 tools/check_progression.py` (lancé aussi par `tools/check_gates.py`).
-- Outils : `tools/render.py` (rendu Quarto 1.7.32 + empreinte KaTeX), `tools/renumber_chapters.py`, `tools/grade_exercises.py`, `tools/cross_refs.py`, `tools/programme_table.py`.
+## Licence
 
-## Utilisation
+Le code et les notes de cours de ce dépôt sont distribués sous la [licence Apache 2.0](LICENSE). Copyright 2026 knoel99 et les contributeurs.
 
-Ouvrir `index.html` dans un navigateur, ou tout simplement consulter la liste des modules ci-dessous. Les formules mathématiques sont rendues par [KaTeX](https://katex.org) 0.19.0, chargé depuis jsDelivr avec une empreinte d'intégrité (une connexion internet reste utile ; le texte reste lisible hors ligne).
-
-## Structure
-
-```
-index.html                 English homepage (canonical GitHub Pages root)
-assets/paper.css           Single stylesheet (high contrast, light/dark, mobile)
-assets/theme.js            Theme button, side contents, tables (English UI)
-exit-capabilities/         Exit capabilities synthesis
-coherence-2years/          Two-year pedagogical coherence
-courses/<module>/index.html  One long page per module
-specs/                     Spec contracts (EN-only policy: specs/en-only.md)
-tools/                     Replayable scripts
-```
-
-Chaque cours est **une longue page unique** (comme un article Wikipédia) : sommaire en tête, sections numérotées N.k., encadrés définitions/théorimes style LaTeX, formules rendues par KaTeX. Le clic sur un cours dans l'index mène directement à cette page.
-
-## Sources
-
-- Programme officiel : [curriculum MScT LLGA](https://msct.dix.polytechnique.fr/llga/wiki/doku.php?id=curriculum)
-- Brochure : MSc&T Prospectus (École Polytechnique)
-- Page programme : [LLGA | Polytechnique Program](https://programmes.polytechnique.edu/en/master/all-msct-specializations/large-language-models-graphs-and-applications-llga)
-
-> Ces supports sont des **reconstitutions pédagogiques** rédigées à partir du programme public et des références standard de chaque domaine ; ils ne remplacent pas les cours officiels de l'École Polytechnique.
-
-
-## Apparence (dark mode & mobile)
-
-- `assets/paper.css` : thème à **fort contraste** (texte ≥ 7:1, lisible au vidéoprojecteur), **dark** via `prefers-color-scheme` et `data-theme`, encadrés colorés par type, styles **responsive** (code, tableaux, KaTeX). Règles : `specs/front-redesign.md`.
-- `assets/theme.js` : barre supérieure (bouton *Contents*, section en cours, bouton *Dark/Light* avec persistance `localStorage` `llga-theme`), sommaire latéral toujours visible sur grand écran et en tiroir sur mobile, tableaux défilants.
-- `tools/check_airiness.py` : contrôle d'aération du texte (paragraphe ≤ 100 mots, ≤ 6 formules en ligne, formule en ligne ≤ 50 caractères TeX, sinon formule centrée sur sa propre ligne).
-
-## Gouvernance Spec-Driven / BMAD (légère)
-
-Ce n’est pas un monorepo app : on garde un flux **spec → implement → prove** adapté aux cours HTML.
-
-- **`AGENTS.md`** — gates obligatoires (contrat, EN-only root, index, dark/mobile, preuves PR).
-- **`specs/`** — contrats de module (modèle `_template-module.md`).
-- Installation **optionnelle** de Spec Kit / `bmad-speckit-sdd-flow` : instructions dans `AGENTS.md`. Sans CLI, les gates + `specs/` suffisent.
+Exceptions :
+- **Textes officiels cités** : les descriptions du programme, les fiches SynapseS et le wiki restent la propriété de leurs auteurs. Ils sont cités pour information, avec leur source.
+- **Ressources tierces** : KaTeX (licence MIT) est chargé depuis jsDelivr. Les jeux de données cités dans les projets ont leurs propres licences, indiquées sur chaque fiche de projet.
