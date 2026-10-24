@@ -573,7 +573,7 @@ Since $\Delta \leq 2\max_{ij} C_{ij}/\varepsilon$, convergence is all the faster
 :::
 
 :::: thm
-[Theorem 3.4 — Gradient of the regularized loss (sketch: envelope/implicit differentiation)]{.tag} $$\nabla_a\, W_\varepsilon(a, b) = f^\star \quad (\text{optimal dual potential}).$$
+[Theorem 3.4 — Gradient of the regularized loss (sketch: envelope/implicit differentiation)]{.tag} $$\nabla_a\, W_\varepsilon(a, b) = \lambda^\star - \varepsilon\mathbf{1} \quad (\lambda^\star:\ \text{optimal dual potential}).$$
 
 ::: proof
 The Lagrangian of the problem (that of th. 3.2) has a saddle point at $(\Gamma^\star, \lambda^\star, \mu^\star)$, at which
@@ -599,7 +599,7 @@ Practical consequence: a loss $a = a_\theta$ (a batch of features, parameters $\
 ["Debiased" Sinkhorn divergences and epsilon-scaling]{.tag}
 
 -   **Entropic bias**: $W_\varepsilon(a,a) > 0$ (the regularized plan "blurs" even between identical distributions) and the plan is concentrated near $ab^\top$ as $\varepsilon \to \infty$. Correction (Feydy et al., AISTATS 2019): $$S_\varepsilon(a,b) = W_\varepsilon(a,b) - \tfrac12 W_\varepsilon(a,a) - \tfrac12 W_\varepsilon(b,b) \ \geq\ 0, \qquad S_\varepsilon(a,a) = 0,$$ which interpolates between $W$ (ε→0) and a kernel distance (MMD, ε→∞) — the loss of choice for comparing clouds in deep learning.
--   **ε-scaling**: at small $\varepsilon$, $K = e^{-C/\varepsilon}$ is numerically degenerate (its smallest entries underflow): start at large $\varepsilon$ (fast convergence), then divide it by \~2 down to the target, reusing $(u, v)$ warm; stabilized variants in log space (`ot.sinkhorn_log`).
+-   **ε-scaling**: at small $\varepsilon$, $K = e^{-C/\varepsilon}$ is numerically degenerate (its smallest entries underflow): start at large $\varepsilon$ (fast convergence), then divide it by \~2 down to the target, reusing $(u, v)$ warm; stabilized variants in log space (`ot.bregman.sinkhorn_log`, sketched after the code below).
 -   **GPU and complexity**: one iteration = two matrix-vector products ($\mathcal{O}(n^2)$), fully parallelizable and "batchable" (thousands of problems at once on GPU); the exact LP ($\mathcal{O}(n^3 \log n)$) lacks this memory regularity — hence Sinkhorn's supremacy in high dimension.
 :::
 
@@ -638,7 +638,7 @@ $$
 f_i \leftarrow \varepsilon\log a_i - \varepsilon\log\sum_j e^{(g_j - C_{ij})/\varepsilon}, \qquad g_j \leftarrow \varepsilon\log b_j - \varepsilon\log\sum_i e^{(f_i - C_{ij})/\varepsilon}.
 $$
 
-The kernel $K = e^{-C/\varepsilon}$ is never formed, so nothing underflows at small $\varepsilon$: this is the method behind `ot.sinkhorn_log`. The lines below reuse the clouds of the previous block and check the plan against POT.
+The kernel $K = e^{-C/\varepsilon}$ is never formed, so nothing underflows at small $\varepsilon$: this is what `ot.sinkhorn(..., method="sinkhorn_log")` runs (`ot.bregman.sinkhorn_log`). The lines below reuse the clouds of the previous block and check the plan against POT.
 
 ```python
 from scipy.special import logsumexp
@@ -661,6 +661,12 @@ print("<C,P> vs exact :", (P * Cn).sum(), ot.emd2(a, b, Cn))  # entropic plan co
 
 The two plans agree to about $10^{-11}$ and the marginals hold to machine precision. The transport cost of the entropic plan stays above the exact optimum, because that plan is admissible but blurred: the entropic bias of the note above.
 
+These $f$ and $g$ are log-scalings, not the multipliers of the proof of th. 3.2. From $u_i = a_i e^{\lambda_i/\varepsilon}$,
+$$
+\lambda = f - \varepsilon\log a ,
+$$
+and the potential of th. 3.4 is $\lambda^\star$, because def. 3.1 measures the entropy against $ab^\top$. So $f$ gives the gradient in $a$, up to a constant, only when $a$ is uniform; a finite-difference check with random weights shows the difference.
+
 ## 4. OT and machine learning {#ch4}
 
 With the tools of ch. 1–3 in hand, this chapter uses transport to solve learning problems: adapting a classifier to a shifted domain, training generative models with a Wasserstein loss, averaging distributions, comparing documents — and asks how many samples are needed to estimate a Wasserstein distance.
@@ -681,12 +687,16 @@ A classifier trained on the source suffers from the distribution shift; the OT i
     $$
     \Omega_c(\Gamma) = \sum_j \sum_c \big\|\Gamma_{I_c,\, j}\big\|_2 .
     $$
-    For each target column $j$, the mass coming from each class forms one group, so each target point is fed by few classes, ideally one. Final cost: $\langle C, \Gamma\rangle$ + entropy + $\eta\,\Omega_c(\Gamma)$, solved by generalized conditional gradient, each step being a Sinkhorn problem (ch. 3). POT's `ot.da.SinkhornLpl1Transport` uses the non-convex $\ell_p$–$\ell_1$ variant ($p = 1/2$), solved by majorization-minimization.
+    For each target column $j$, the mass coming from each class forms one group, so each target point is fed by few classes, ideally one. Final cost: $\langle C, \Gamma\rangle$ + entropy + $\eta\,\Omega_c(\Gamma)$, solved by generalized conditional gradient, each step being a Sinkhorn problem (ch. 3). POT implements it as `ot.da.SinkhornL1l2Transport`; `ot.da.SinkhornLpl1Transport` uses the non-convex $\ell_p$–$\ell_1$ variant ($p = 1/2$), solved by majorization-minimization.
 3.  **Barycentric transport**: each source point is sent to the plan-weighted average of its images,
     $$
     \hat T(x_i) \;=\; \frac{1}{a_i}\sum_j\ \Gamma_{ij}\, z_j,
     $$
-    and its label $y_i$ follows. The plan is a *soft coupling*, not a map, and $\hat T$ is its **barycentric projection**. For discrete measures it is not an optimal Monge map, and it does not push $a$ exactly onto $b$: corollary 2.3 needs $\mu \ll \mathrm{Leb}$. When the samples come from a measure with a density, it approximates the Brenier map as $n$ grows, provided $\varepsilon$ is zero or shrinks with $n$. **Label propagation** is the dual view: the label predicted for $z_j$ is the plan-weighted majority of the classes arriving at $z_j$.
+    and its label $y_i$ follows. The plan is a *soft coupling*, not a map, and $\hat T$ is its **barycentric projection**.
+
+    For discrete measures it is in general not an optimal Monge map, and it does not push $a$ exactly onto $b$: corollary 2.3 needs $\mu \ll \mathrm{Leb}$. The exception is exact OT between two uniform clouds of the same size, whose optimal plan can be chosen to be a permutation (exercise 8). When the samples come from a measure with a density, the barycentric projection approximates the Brenier map as the sample size grows, provided $\varepsilon$ is zero or shrinks with it.
+
+    **Label propagation** is the dual view: the label predicted for $z_j$ is the plan-weighted majority of the classes arriving at $z_j$.
 4.  **Learning**: train the classifier on the transported pairs $(\hat T(x_i),\, y_i)$ — which live in the *target* space — then predict on the target.
 5.  **Out-of-sample**: a new point $z$ is predicted directly (it is already in the target space); to transport a new *source* point without recomputing the plan, interpolate the plan row of the $k$ nearest neighbors of $x$ in the source, or learn a map $T_\theta \approx \hat T$ (a network, Deep Learning module).
 
@@ -694,9 +704,9 @@ A classifier trained on the source suffers from the distribution shift; the OT i
 
 The **JDOT** extension (Courty, Flamary et al., NeurIPS 2017) transports the *joint* law $(X, Y)$ with a cost that includes the label loss,
 $$
-c\big((x,y),(z,y')\big) = \alpha\|x - z\|^2 + \mathcal{L}(y, y'),
+c\big((x,y),(z,y')\big) = \alpha\|x - z\|^2 + \ell(y', y),
 $$
-which gives unsupervised *and* semi-supervised adaptation in the same framework.
+where $\ell$ is the label loss and $y' = h(z)$ is the label that the classifier $h$, learned alternately with the plan, predicts on the target point. This gives unsupervised *and* semi-supervised adaptation in the same framework.
 :::
 
 :::: thm
@@ -757,7 +767,7 @@ print("WMD :", ot.emd2(a, b, C))                   # exact plan: ot.emd(a, b, C)
 ::: note
 [Spectral loss: Gaussian $W_2$ as a closed-form, differentiable loss]{.tag} Compare two *batches* of generative data (images, audio) by fitting a Gaussian to their features and evaluating $W_2^2$ with the closed formula of theorem 2.7 (Bures metric): this is the FID of image generators and the "Fréchet audio distance" of audio generators — a loss *without a solver*, differentiable, usable as a training loss (spectral loss).
 
-This is exactly the announced bridge with the Signal Processing module M1P1: chapter 8 (FID and Bures are presented there) and chapter 9 (bridge lab). In 1D (spectra, signals), return to quantiles (prop. 2.6); `ot.gaussian.wass2` provides the Gaussian empirical estimate.
+This is exactly the announced bridge with the Signal Processing module M1P1: chapter 8 (FID and Bures are presented there) and chapter 9 (bridge lab). In 1D (spectra, signals), return to quantiles (prop. 2.6); `ot.gaussian.empirical_bures_wasserstein_distance` provides the Gaussian empirical estimate.
 :::
 
 ::: thm
@@ -821,7 +831,7 @@ Practical consequence: GW is **invariant under rotations, translations, reflecti
 ::: thm
 [GW algorithms: projected (PGW), entropic, sliced (SGW)]{.tag}
 
--   **Projected GW — PGW** (Peyré, Cuturi & Solomon, ICML 2016): linearize the quadratic problem around the current plan $\Gamma^{(t)}$. The gradient of the objective in $\Gamma$ reads
+-   **Projected GW — PGW** (Peyré, Cuturi & Solomon, ICML 2016): linearize the quadratic problem around the current plan $\Gamma^{(t)}$. The gradient of the objective in $\Gamma$ is $2c^{(t)}$, with
     $$
     c^{(t)}_{ij} \;=\; \sum_{k,l}\ \big(D_{ik} - D'_{jl}\big)^2\ \Gamma^{(t)}_{kl} \;=\; \big[(D \odot D)\,a\big]_i + \big[(D' \odot D')\,b\big]_j - 2\,\big[D\,\Gamma^{(t)}\,D'^\top\big]_{ij},
     $$
@@ -891,7 +901,7 @@ Lab remark: test several initializations (GW is non-convex), plot the distance a
 :::
 
 ::: note
-[The CMAP/POT GW bestiary]{.tag} The ecosystem developed around the instructor: semi-relaxed GW (only one side preserved — ICLR 2022), *unbalanced* fused GW for brain alignment (fugw, NeurIPS 2022), sliced GW, graph barycenters for prediction (NeurIPS 2022), and the complete integration into POT (`ot.gromov`: `gromov_wasserstein`, `fused_gromov_wasserstein`, `co_optimal_transport`…). Positioning with respect to the course: ch. 5 lays the definitions; these variants each fix a practical limitation (unequal masses, size, attributes) — details in ch. 7.
+[The CMAP/POT GW bestiary]{.tag} The ecosystem developed around the instructor: semi-relaxed GW (only one side preserved — ICLR 2022), *unbalanced* fused GW for brain alignment (fugw, NeurIPS 2022), sliced GW, graph barycenters for prediction (NeurIPS 2022), and the complete integration into POT (`ot.gromov`: `gromov_wasserstein`, `fused_gromov_wasserstein`…, and `ot.coot.co_optimal_transport`). Positioning with respect to the course: ch. 5 lays the definitions; these variants each fix a practical limitation (unequal masses, size, attributes) — details in ch. 7.
 :::
 
 ## 6. Fairness through transport {#ch6}
@@ -965,7 +975,7 @@ over the feasible set (the intersection of the two regions convexified by random
 ::: note
 [Limits and debate: incompatible metrics, utility, causal assumptions]{.tag}
 
--   **Theoretical incompatibilities**: when the base rates $\mathbb{P}(Y = 1 \mid S = s)$ differ across groups, calibration *and* equalized odds are mutually exclusive (Kleinberg, Mullainathan & Raghavan 2016; Chouldechova 2017): no method — OT included — can satisfy all the criteria; choosing the metric is choosing the trade-off.
+-   **Theoretical incompatibilities**: when the base rates $\mathbb{P}(Y = 1 \mid S = s)$ differ across groups, calibration *and* equalized odds are mutually exclusive (Kleinberg, Mullainathan & Raghavan, 2017; Chouldechova, 2017): no method — OT included — can satisfy all the criteria; choosing the metric is choosing the trade-off.
 -   **Utility cost**: DP repair can destroy a legitimate signal (if $S$ genuinely predicts $Y$, independence forces a loss); "blind" repair is not always fair in the individual sense.
 -   **Causal assumptions**: counterfactuals by bicausal OT assume a structure $S \to X$ and the absence of unmeasured confounding; two different optimal bicausal couplings (non-uniqueness, cf. example 1.2) can yield different counterfactuals — OT provides a *family* of models, to be audited (the JMLR 2024 paper proposes statistical tests).
 -   **Position of the course**: OT is not an answer to the question of justice, but a *geometric language* for quantifying trade-offs: distances between groups, barycenters, optimal couplings — the same objects as in ch. 1-5.
@@ -1024,8 +1034,8 @@ Lab questions:
 [POT — Python Optimal Transport (Flamary et al., JMLR 2021): the library of the course]{.tag} [POT: Python Optimal Transport](https://jmlr.org/papers/v22/20-451.html), Journal of Machine Learning Research 22(78), 2021 — [pythonot.github.io](https://pythonot.github.io). **Principle**: a unified library of OT solvers, with an API with three inputs (measures, costs, solver):
 
 -   **Exact solvers**: `ot.emd`, `ot.emd2` (network simplex, ch. 1); 1D by quantiles (`ot.wasserstein_1d`);
--   **Regularized**: `ot.sinkhorn`, `ot.sinkhorn_log` (ch. 3), debiased divergences `ot.sinkhorn_divergence`; exact and entropic barycenters (ch. 4);
--   **Structured**: `ot.gromov` — GW, FGW, COOT (ch. 5); Gaussian (`ot.gaussian.wass2`, th. 2.7); sliced;
+-   **Regularized**: `ot.sinkhorn`, `ot.bregman.sinkhorn_log` (ch. 3), debiased divergences `ot.bregman.empirical_sinkhorn_divergence`; exact and entropic barycenters (ch. 4);
+-   **Structured**: `ot.gromov` — GW, FGW — and `ot.coot` — COOT (ch. 5); Gaussian (`ot.gaussian.bures_wasserstein_distance`, th. 2.7); sliced;
 -   **Application**: `ot.da` — the transporter of the OTDA algorithm of ch. 4, packaged with label propagation and out-of-sample.
 
 **Result**: some sixty solvers drawn from the literature, NumPy/PyTorch/JAX backends (differentiation of the potential, th. 3.4), an example gallery — the reference tool for numerical OT, used from medical applications to generative AI. **Positioning**: all the labs of this module use it; the architecture of ch. 3 (solvers, regularization, GPU) is exactly its architecture.
@@ -1058,7 +1068,7 @@ Lab questions:
 
 **Result**: a unifying framework subsuming OT, GW and co-clustering; marked gains in *heterogeneous* domain adaptation (datasets with different features: texts in different languages, distinct sensors).
 
-**Positioning**: the "double alternation" of ch. 5; available in POT (`ot.gromov.co_optimal_transport`).
+**Positioning**: the "double alternation" of ch. 5; available in POT (`ot.coot.co_optimal_transport`).
 :::
 
 ::: note
@@ -1102,9 +1112,9 @@ Lab questions:
     \Gamma = \mathrm{diag}(u)\,K = \frac{1}{2(1+e^{-1})}\big(\begin{smallmatrix}1 & e^{-1}\\ e^{-1} & 1\end{smallmatrix}\big) \approx \big(\begin{smallmatrix}0.366 & 0.134\\ 0.134 & 0.366\end{smallmatrix}\big)
     $$
     indeed has rows and columns summing to $1/2$; the entropic plan "blurs" the diagonal toward the anti-diagonal (entropic bias, ch. 3).
-3.  **★ Bures in simulation (lab).** Draw $n = 5000$ points from two anisotropic 2D Gaussians ($\Sigma_1 = \mathrm{diag}(4, 1)$ rotated, $\Sigma_2 = \mathrm{diag}(1, 4)$), compare the empirical $W_2^2$ (Sinkhorn on the samples) with the closed formula of th. 2.7 and with `ot.gaussian.wass2`. Observe the effect of $\varepsilon$.
+3.  **★ Bures in simulation (lab).** Draw $n = 5000$ points from two anisotropic 2D Gaussians ($\Sigma_1 = \mathrm{diag}(4, 1)$ rotated, $\Sigma_2 = \mathrm{diag}(1, 4)$), compare the empirical $W_2^2$ (Sinkhorn on the samples) with the closed formula of th. 2.7 and with `ot.gaussian.empirical_bures_wasserstein_distance` (it returns the distance, not its square). Observe the effect of $\varepsilon$.
 
-    *Hint.* The gap comes from the entropic bias (use `ot.sinkhorn_divergence`) and from the sampling noise ($n^{-1/d}$, th. 4.5: severe in dimension 2 if $n$ is small).
+    *Hint.* The gap comes from the entropic bias (use `ot.bregman.empirical_sinkhorn_divergence`) and from the sampling noise ($n^{-1/d}$, th. 4.5: severe in dimension 2 if $n$ is small).
 4.  **★ Weighted Gaussian barycenter (hint).** Rederive corollary 2.8 with arbitrary weights, then in the case of two laws $\mathcal{N}(0, 1)$ and $\mathcal{N}(0, 9)$: show that the standard deviation of the equal-weight barycenter equals $2$ (and not $\sqrt{5}$), and comment ("the mean of the variances" is not the barycenter).
 
     *Hint.* Minimize pointwise in $u$ the quantile function (zero derivative), then identify the resulting Gaussian quantile: $\sigma = \sum_k w_k \sigma_k$.
@@ -1185,15 +1195,16 @@ The projects exercise mainly O1 (the mathematics and algorithms under OT losses)
 ### Solo projects {#projects-solo}
 
 1.  **[Solo · ≈ 20 h] Sinkhorn from scratch, and as a loss.** When is entropic OT a faithful, differentiable stand-in for exact OT, and at which statistical rate?
-    -   *Work*: log-domain Sinkhorn with ε-scaling and the debiased divergence $S_\varepsilon$, in NumPy then PyTorch (ch. 3); the gradient in $a$ given by the potential (th. 3.4) compared with autodiff through the iterations; timings against `ot.sinkhorn` and `ot.emd`; a small MLP pushed from a Gaussian onto two moons with an $S_\varepsilon$ loss; distances between two independent $n$-samples of the same law, for exact $W_2$, $S_\varepsilon$ and sliced $W_2$, in dimensions 2, 10 and 50.
+    -   *Work*: log-domain Sinkhorn with ε-scaling and the debiased divergence $S_\varepsilon$, in NumPy then PyTorch (ch. 3); the gradient in $a$ given by the potential $\lambda^\star$ of th. 3.4 (not the log-scaling $f$ of the ch. 3 code) compared with autodiff through the iterations; timings against `ot.sinkhorn` and `ot.emd`.
+    -   *Experiments*: a small MLP pushed from a Gaussian onto two moons with an $S_\varepsilon$ loss; distances between two independent $n$-samples of the same law, for exact $W_2$, $S_\varepsilon$ and sliced $W_2$, in dimensions 2, 10 and 50.
     -   *Data*: synthetic only (Gaussians, `sklearn.datasets.make_moons`); a laptop is enough.
     -   *Success criterion*: plans within $10^{-6}$ of POT; potential and autodiff gradients equal up to an additive constant; log-log slopes with intervals over 20 repetitions, compared with the rates of th. 4.5.
-    -   *Deliverables*: code, a 4–6 page report, a 10-minute talk; chapters 0–4.
+    -   *Deliverables*: code, a 4–6 page report, a 10-minute talk; ch. 0–4.
 2.  **[Solo · ≈ 25 h] Paper study: OT domain adaptation (Courty, Flamary, Tuia and Rakotomamonjy, 2016) and JDOT (Courty, Flamary, Habrard and Rakotomamonjy, 2017).** Does transporting the source onto the target beat a source-only classifier, and what does the class regularizer buy?
     -   *Work*: OTDA with exact, entropic and class-regularized plans (`ot.da.EMDTransport`, `SinkhornTransport`, `SinkhornLpl1Transport`), out-of-sample mapping (ch. 4, step 5) and JDOT; first on shifted two moons, then on frozen ResNet-50 features. Baselines: source-only and a target-supervised oracle. An ablation with different class proportions in the target (label shift) breaks the covariate-shift assumption of def. 4.1.
     -   *Data*: Office-31 (Saenko, Kulis, Fritz and Darrell, 2010), pairs A→W, D→W and W→A; MNIST→USPS as a fallback.
     -   *Success criterion*: target accuracy per pair over 5 seeds, with intervals; the gain of the class regularizer measured at fixed $\varepsilon$; the label-shift failure observed and explained.
-    -   *Deliverables*: code, report, talk; chapters 1–4 and 7. Extension: cross-subject EEG with Convolutional Monge Mapping Normalization (Gnassounou, Flamary and Gramfort, 2023).
+    -   *Deliverables*: code, report, talk; ch. 1–4 and ch. 7. Extension: cross-subject EEG with Convolutional Monge Mapping Normalization (Gnassounou, Flamary and Gramfort, 2023).
 
 ### Group projects {#projects-group}
 
@@ -1202,19 +1213,19 @@ The projects exercise mainly O1 (the mathematics and algorithms under OT losses)
     -   *Work*: the per-feature partial repair of the ch. 6 lab; multivariate repair toward an entropic barycenter (def. 4.3) with the barycentric projection; equalized-odds post-processing by quantile coupling (prop. 6.3); accuracy against the DP and EO gaps as $\lambda$ varies, on held-out data; calibration per group.
     -   *Split*: 1D repair and the check of exercise 9; multivariate repair; EO post-processing and calibration; shared evaluation code.
     -   *Success criterion*: $\lambda = 0$ reproduces the baseline exactly; for one feature, the $W_2$ distance between the repaired group laws follows $(1-\lambda)\,W_2(\mu_0, \mu_1)$ within sampling error; Pareto curves with intervals over 5 splits; the calibration–EO incompatibility (Kleinberg, Mullainathan and Raghavan, 2017) observed and explained.
-    -   *Deliverables*: code, an 8–10 page joint report, a 20-minute group talk (the official format); chapters 2–4 and 6. It is the fairness option of the [Y1.3 news-recommendation project](../../projects/index.html#y1-3), where the groups are news categories and the repaired quantity is exposure.
+    -   *Deliverables*: code, an 8–10 page joint report, a 20-minute group talk (the official format); ch. 2–4 and ch. 6. It is the fairness option of the [Y1.3 news-recommendation project](../../projects/index.html#y1-3), where the groups are news categories and the repaired quantity is exposure.
 2.  **[Group of 3 · ≈ 30 h each] Paper study: entity alignment between knowledge graphs with Fused Gromov-Wasserstein (Vayer, Chapel, Flamary, Tavenard and Courty, 2019).** How far does unsupervised FGW go on a real benchmark, and when does the structure term help over the attributes alone?
     -   *Data*: DBP15K (Sun, Hu and Li, 2017), the ZH–EN pair, cut into samples of 500–1,000 aligned entity pairs with their induced subgraphs; node attributes from a multilingual sentence encoder such as LaBSE (Feng et al., 2022) applied to entity names; shortest-path distances on the relation graph.
     -   *Work*: GW, FGW and entropic FGW, with $\alpha$ swept in the POT convention (def. 5.3) and $\varepsilon$ scaled down; COOT on the attribute matrices (def. 5.4); several initializations (non-convexity). Baselines: attribute-only OT ($\alpha = 0$) and nearest-neighbour matching.
     -   *Split*: graph and attribute construction; solvers and sweeps; evaluation, plus an entity-disambiguation step for GraphRAG ([Graph ML, ch. 10](../m1p2-graph-ml/index.html#ch10)).
     -   *Success criterion*: Hits@1 and Hits@10 against the gold alignment, with intervals over samples; an $\alpha$-curve whose best value is explained; runtime against the number of entities.
-    -   *Deliverables*: code, joint report, group talk; chapters 3, 5 and 7. It is the alignment option of the [Y1.1 GraphRAG project](../../projects/index.html#y1-1) and the alignment baseline of [Y2.1](../../projects/index.html#y2-1).
+    -   *Deliverables*: code, joint report, group talk; ch. 3, ch. 5 and ch. 7. It is the alignment option of the [Y1.1 GraphRAG project](../../projects/index.html#y1-1) and the alignment baseline of [Y2.1](../../projects/index.html#y2-1).
 3.  **[Group of 3 · ≈ 30 h each] An OT evaluation suite for generative models: FID, Sinkhorn divergence, sliced Wasserstein and FGW.** Do these metrics rank generators the same way, and how do their bias and variance depend on the sample size and the dimension (th. 4.5)?
     -   *Data*: CIFAR-10 test images under a ladder of corruptions (noise, blur, black rectangles, as in Heusel et al., 2017), plus samples of the public DDPM checkpoint `google/ddpm-cifar10-32` on a free GPU tier; for graphs, the generators of [Graph ML, ch. 9](../m1p2-graph-ml/index.html#ch9) on community graphs or QM9.
     -   *Work*: FID from the Bures formula (th. 2.7) on Inception features, checked against `clean-fid` (Parmar, Zhang and Zhu, 2022); $S_\varepsilon$ and sliced $W_2$ on the same features; an FGW distance between sets of graphs (def. 5.3); bias and variance against $n$ and against the feature dimension (PCA).
     -   *Split*: image metrics; graph metrics; the statistical study.
     -   *Success criterion*: the Bures FID equal to `clean-fid` on identical features; rank correlations between the metrics over the ladder; bias curves compared with th. 4.5 and with the $1/n$ bias of FID (Chong and Forsyth, 2020); one disagreement between metrics explained.
-    -   *Deliverables*: code, joint report, group talk; chapters 2–5. It reuses the evaluation chapter of [Multimodal Generative AI](../m1p2-multimodal-genai/index.html#ch7) and prepares the evaluation of graph generators in [Graph Generative Models](../m2-graph-generative-models/index.html#ch6).
+    -   *Deliverables*: code, joint report, group talk; ch. 2–5. It reuses the evaluation chapter of [Multimodal Generative AI](../m1p2-multimodal-genai/index.html#ch7) and prepares the evaluation of graph generators in [Graph Generative Models](../m2-graph-generative-models/index.html#ch6).
 
 ### Written exam (proposal) {#projects-exam}
 
@@ -1242,7 +1253,8 @@ Two hours, one handwritten A4 sheet allowed, no calculator needed; four question
         $$
         W_1 \leq \int d\,d\gamma \leq \Big(\int d^2\,d\gamma\Big)^{1/2} = W_2 .
         $$
-    -   (b) $\hat T(x_i)$ is the mean of $z_j$ under the conditional weights $\Gamma_{ij}/a_i$, and $\|x_i - \cdot\|^2$ is convex: Jensen bounds $\|x_i - \hat T(x_i)\|^2$ by the conditional mean of $\|x_i - z_j\|^2$. Multiply by $a_i$ and sum over $i$.
+    -   (b) $\hat T(x_i)$ is the mean of $z_j$ under the conditional weights $\Gamma_{ij}/a_i$, and $\|x_i - \cdot\|^2$ is convex.
+    -   Jensen bounds $\|x_i - \hat T(x_i)\|^2$ by the conditional mean of $\|x_i - z_j\|^2$; multiply by $a_i$ and sum over $i$.
     -   Example: $\mu = \delta_0$ and $\nu = \tfrac12\delta_{-1} + \tfrac12\delta_1$ (example 1.2). The only plan splits the mass, $\hat T(0) = 0$, and $\hat T$ pushes $\mu$ onto $\delta_0 \neq \nu$: the barycentric map of OTDA only approximates a Monge map.
 4.  **Question (5 points).** A score $R$ is uniform on $[0, 1]$ in group $s = 0$ and uniform on $[0, 1/2]$ in group $s = 1$; the groups have equal sizes, and the decision is $R > 1/2$.
     -   (a) Give the demographic-parity gap. (b) Give the barycentric quantile function of th. 6.2 and the gap after full repair. (c) Same for the partial repair with $\lambda = 1/2$, and give the $W_2$ distance between the two repaired score laws.

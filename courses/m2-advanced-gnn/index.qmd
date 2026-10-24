@@ -52,6 +52,7 @@ format:
 -   [8. LLGA bridges: 3D, algorithmic reasoning, GNN × LLM](#ch8)
 -   [9. Research at DaSciM (Vazirgiannis, Lutzeyer)](#ch9)
 -   [Exercises](#ex)
+-   [Projects and assessment](#projects)
 -   [References](#refs)
 
 ## Introduction and overview {#intro}
@@ -114,6 +115,7 @@ An M2 module (period 1), whose official teaching volume is not communicated. It 
 -   **LLGA bridges: 3D, algorithmic reasoning, GNN × LLM** — where this research meets the master's other axes.
 -   **Research at DaSciM (Vazirgiannis, Lutzeyer)** — the laboratory's papers, read with the module's grid (self-study).
 -   **Exercises** — expressiveness tests, encodings and scaling to carry out yourself.
+-   **Projects and assessment** — solo and group project subjects, a mock written exam and a grading rubric (proposals).
 -   **References** — the research papers underlying each chapter.
 
 ### Session plan {#sessions}
@@ -125,11 +127,11 @@ An M2 module (period 1), whose official teaching volume is not communicated. It 
 | 1 | 3 h | 1 | ch. 0 Background: message passing and its limits; ch. 1 Scale: partitioning, sampling costs, benchmark hygiene | lab: sampling vs full batch, seeds and confidence intervals |
 | 2 | 3 h | 2 | ch. 2 Expressive power: 1-WL, GNN ≤ 1-WL, GIN reaches 1-WL | Ex. 1, 4 |
 | 3 | 3 h | 2 | ch. 2 (continued) C6 vs 2×C3, the k-WL hierarchy, subgraph GNNs and motif counting | Ex. 5 |
-| 4 | 3 h | 2 | ch. 3 Over-squashing: Jacobian definition, curvature and SDRF, DIGL, APPNP and GCNII | Ex. 6 |
+| 4 | 3 h | 2 | ch. 3 Over-squashing: Jacobian bound, Cheeger constant and spectral gap, curvature and SDRF, DIGL, APPNP and GCNII | Ex. 6 |
 | 5 | 3 h | 2 | ch. 4 Positional and structural encodings: LapEig and SignNet, RWSE, 3D invariants | Ex. 2, 3 |
 | 6 | 3 h | 2 | ch. 5 Graph transformers: Graphormer, GPS, Exphormer, when an MPNN is enough | Ex. 7 |
 | 7 | 3 h | 2 | ch. 6 Dynamic and temporal graphs: TGAT, TGN, fraud; ch. 7.1–7.2 Evasion and poisoning attacks | Ex. 8, 9 |
-| 8 | 3 h | 2 | ch. 7.3–7.5 Certification, privacy, structural fairness; ch. 8 LLGA bridges: 3D, algorithmic reasoning, GNN × LLM | Ex. 10; start Ex. 11 (project) |
+| 8 | 3 h | 2 | ch. 7.3–7.5 Certification, privacy, structural fairness; ch. 8 LLGA bridges: 3D, algorithmic reasoning, GNN × LLM (soft tokens and graph–text alignment, worked) | Ex. 10, 11; start Ex. 12 (project) |
 
 **Self-study, outside the 24 h** (about 3 h in total): ch. 9 Research at DaSciM — PathNN, GOAT, NGG, pseudo-code prompting (≈ 3 h).
 
@@ -164,6 +166,11 @@ Review of the Graph ML module (M1 P2) — what is assumed known
 -   **Embeddings** (M1, ch. 3): DeepWalk/node2vec and their NetMF reading (factorization of random-walk matrices); the PathNNs of ch. 9 are their generalization;
 -   **Link prediction / GAE** (M1, ch. 6) and **scale** (M1, ch. 7: NeighborSampler, Cluster-GCN, GraphSAINT) — the ch. 1 below extends the latter;
 -   **Over-smoothing** (M1, ch. 5): after many layers, all embeddings converge (proved on a regular graph: geometric convergence to the mean) — why one stops at 2-4 layers… and why this module exists.
+-   **Notation** (the site-wide convention, as in [Graph ML ch. 0](../m1p2-graph-ml/index.html#ch0)):
+    $$
+    \tilde A = A + I, \quad \hat A = \tilde D^{-1/2} \tilde A \tilde D^{-1/2}, \quad P = D^{-1} A, \quad L = D - A, \quad L_{\mathrm{sym}} = I - D^{-1/2} A D^{-1/2} .
+    $$
+    $\hat A$ is the GCN propagator and $P$ the random walk, nothing else. Laplacian eigenvalues are listed in ascending order, $0 = \lambda_1 \leq \lambda_2 \leq \dots$, so $\lambda_2$ is the spectral gap. Node features are rows, so a layer reads $H W$.
 ::::
 
 ::: note
@@ -197,6 +204,8 @@ NeighborSampler (fanouts, expansive neighborhood $1 + s_L(1 + s_{L-1}(\dots))$),
 ## 2. Expressive power: the Weisfeiler-Lehman test {#ch2}
 
 Which graphs can a message passing GNN tell apart, and which ones will it always confuse? This chapter answers exactly, with the Weisfeiler-Lehman test. A concrete scene: take two non-isomorphic 6-regular graphs. Your 3-layer GCN produces the same embeddings for both (up to permutation), and a link-prediction AUC around 0.5. This is not an implementation bug but the 1-WL bound, which this chapter makes operational *before* any architectural gadget is added.
+
+The statement of this bound and of the GIN result is already in [Graph ML, Proposition 5.1b](../m1p2-graph-ml/index.html#ch5). Here we prove both, then go beyond 1-WL.
 
 ::: note
 [What breaks]{.tag} Three classic mistakes: believing that a deeper GNN "sees more" (often false); evaluating only on graphs that 1-WL already separates (which gives a false sense of power); and ignoring the initial features (they fix the initial colors). All three mislead the reading of papers as much as a small molecular experiment.
@@ -246,33 +255,38 @@ In practice the difference shows up mainly on tasks where *counting* neighbors m
 ::::
 
 ::: ex
-[Example 2.4 — C6 vs 2×C3: 1-WL fails, 2-WL separates (demonstration)]{.tag}
+[Example 2.4 — C6 vs 2×C3: 1-WL fails, the folklore pair test 2-FWL separates (demonstration)]{.tag}
 
 -   *1-WL*: all nodes have degree 2; by induction, at each round each node sees (its color, {its color, its color}). The colors remain uniform on each graph, and identical *between* the two graphs: **indistinguishable**.
--   *2-WL* (pair coloring): consider an adjacent pair $(u, v)$. In the triangle, $\{w : w \sim u, w \sim v\}$ counts 1 common vertex; in C6, this count is 0 (no triangles). The 2-WL update rule, which aggregates for the pair $(u,v)$ the colors of the pairs $(u, w)$ and $(w, v)$ for all $w$, encodes the number of triangles — the pair histograms differ: **separated**. [∎]{.qed}
+-   *2-FWL* (pair coloring, "folklore" rule): consider an adjacent pair $(u, v)$. In the triangle, $\{w : w \sim u, w \sim v\}$ counts 1 common vertex; in C6, this count is 0 (no triangles). The update aggregates for the pair $(u,v)$ the multiset of *joint* colors $\big(c(u, w), c(w, v)\big)$ over all $w$. It therefore encodes the number of triangles on each edge — the pair histograms differ: **separated**. [∎]{.qed}
 
-Moral: 2-WL (hence a 2-GNN) "counts the moments" that the local sum cannot see. To code in the lab (exercise 1).
+Moral: a pair test with the joint rule (hence a pair GNN built on it) "counts the moments" that the local sum cannot see. Aggregating the colors of $(u, w)$ and of $(w, v)$ as two *separate* multisets is not enough: that is the 2-WL of the box below, which equals 1-WL and fails here too. To code in the lab (exercises 1 and 5).
 :::
 
 ::: thm
-[k-WL and k-GNN hierarchy]{.tag} **k-WL** colors *k-tuples* of nodes: $k = 2$: pairs (above); the hierarchy is strict: (k+1)-WL distinguishes pairs that k-WL confuses (for $k \geq 1$, 2-WL already being strictly stronger than 1-WL); at the top, k = n+1 → exact isomorphism test (exponential).
+[k-WL and k-GNN hierarchy]{.tag} **k-WL** colors *k-tuples* of nodes. Two conventions coexist, so state which one you use.
 
-The **k-GNNs** (Morris et al., 2019) implement (a local variant of) k-WL: messages between neighboring k-tuples — memory and compute cost $\mathcal{O}(n^k)$: k = 2 practical, k = 3 reserved for small graphs (molecules). Morris et al.'s survey (2023) draws the complete map (Weisfeiler-Lehman "go machine learning").
+-   *k-WL* (Morris, Grohe): a tuple is refined by $k$ separate multisets, one per coordinate that can be replaced. In this convention 2-WL has exactly the power of 1-WL, and the hierarchy is strict from $k = 2$ on: (k+1)-WL distinguishes pairs that k-WL confuses.
+-   *k-FWL* ("folklore"): for each $w$, the $k$ tuples obtained by putting $w$ in each position are read *jointly*, as in Example 2.4. Then k-FWL = (k+1)-WL; in particular 2-FWL = 3-WL.
+
+For $k$ of the order of $n$ the test decides isomorphism, at exponential cost. Even 2-FWL fails on strongly regular graphs with the same parameters, such as the $4 \times 4$ rook's graph and the Shrikhande graph.
+
+The **k-GNNs** (Morris et al., 2019) implement a local, set-based variant of k-WL: messages between neighboring k-sets — memory and compute cost $\mathcal{O}(n^k)$: k = 2 practical, k = 3 reserved for small graphs (molecules). **PPGN** (Maron et al., 2019) reaches 2-FWL = 3-WL with matrix products on $n \times n$ pair tensors. Morris et al.'s survey (JMLR 2023, "Weisfeiler and Leman go Machine Learning") draws the complete map.
 
 | Model | Power | Cost |
 |---|---|---|
 | GCN / GraphSAGE (mean) | < 1-WL | $\mathcal{O}(|E|)$ |
-| GIN (sum+MLP) | = 1-WL | $\mathcal{O}(|E|)$ |
-| PathNN (ch. 9) | strictly > 1-WL (simple paths) | sampled |
+| GIN (sum+MLP) | = 1-WL (= 2-WL) | $\mathcal{O}(|E|)$ |
+| PathNN (ch. 9) | SP+ and AP variants strictly > 1-WL (paths) | path enumeration, exponential in the length for AP |
 | GOAT (ch. 9) | strictly > invariants (learned orders) | $\mathcal{O}(|E|)$ |
-| 2-GNN / 2-WL | counts triangles, separates regular | $\mathcal{O}(n^2)$ |
-| 3-GNN | cycles, most molecules | $\mathcal{O}(n^3)$ |
+| 2-FWL = 3-WL (PPGN) | counts triangles, separates C6 from 2×C3; fails on strongly regular pairs | $\mathcal{O}(n^3)$ time, $\mathcal{O}(n^2)$ memory |
+| 3-GNN (Morris, local) | above 1-WL: a 3-set is typed by its induced subgraph, so triangles are seen | $\mathcal{O}(n^3)$ |
 :::
 
 ::: thm
 [Pragmatic alternatives: subgraphs and motif counting]{.tag}
 
--   **ESGNN** (Equivariant Subgraph Aggregation, Bevilacqua et al., 2022): each node is described by the collection of subgraphs (ego-nets of increasing radius, or "node-deletion" — the graph deprived of $v$); a shared 1-WL GNN encodes them, aggregation across subgraphs adds expressive power *without* full $\mathcal{O}(n^k)$ cost — strictly between 1-WL and 3-WL;
+-   **ESAN** (Equivariant Subgraph Aggregation Networks, B. Bevilacqua et al., 2022): each graph is described by a bag of subgraphs (ego-nets of each node, or "node-deletion" — the graph deprived of $v$); a shared 1-WL GNN encodes them, aggregation across subgraphs adds expressive power *without* full $\mathcal{O}(n^k)$ cost — strictly above 1-WL and, for node-based policies, no stronger than 3-WL (Frasca et al., 2022);
 -   **Motif counting** (Bouritsas et al., 2020): precompute counts of isomorphic subgraphs (triangles, paths, cycles) and inject them as features — "moments matter": raising expressive power by preprocessing rather than by architecture; direct link with Example 2.4 (triangles) and with the MMDs of generative evaluation (M1, ch. 9.6);
 -   **Practical limits**: more expressive power = more estimation variance and cost; on real benchmarks (Dwivedi et al., 2023), GIN vs GCN is decided by tenths — expressive power is the bottleneck only on *structural* tasks (counting, distinguishing) — cf. ch. 1.
 :::
@@ -282,23 +296,49 @@ The **k-GNNs** (Morris et al., 2019) implement (a local variant of) k-WL: messag
 Even when a GNN could in principle tell two nodes apart, the information may never reach them: messages from far away must squeeze through a few edges. This chapter defines this over-squashing precisely, links it to the geometry and spectrum of the graph, and presents the two families of remedies — changing the graph or changing the propagation.
 
 ::: def
-[Definition 3.1 — Over-squashing (Alon & Yahav, 2021) — formal definition via Jacobians]{.tag} Let $\mathcal{G}$ be the computation graph of a GNN; the influence of a node $u$ on the final representation of a node $v$ is measured by the **Jacobian** $\big\| \partial h_v^{(L)} / \partial h_u^{(0)} \big\|$.
-
-There is *over-squashing* when this quantity is crushed exponentially with the distance $d(u, v)$ — precisely, when the bound
+[Definition 3.1 — Over-squashing and its Jacobian bound (Alon & Yahav, 2021; Topping et al., 2022)]{.tag} Alon & Yahav named the phenomenon: a node must receive, in one fixed-size vector, information from a receptive field that grows exponentially with depth. Topping et al. made it measurable. The influence of the input feature $x_u$ of a node $u$ on the representation of a node $v$ after $\ell$ layers is the **Jacobian**
 $$
-\big\| \partial h_v^{(L)} / \partial h_u^{(0)} \big\| \leq c\, (f \, r(\lambda_{\max}))^{-d(u,v)}
+\Big| \frac{\partial h_v^{(\ell)}}{\partial x_u} \Big| .
 $$
-becomes small because the *radius of convergence* $r(\lambda_{\max})$ of the propagation (an increasing function of the largest eigenvalue of the propagation operator, e.g. $2\tilde L_{\mathrm{sym}} / \lambda_{\max}$) is close to 1.
+There is *over-squashing* when this sensitivity is tiny for nodes $u$ that the task needs, typically because it decays exponentially with the distance $d(u, v)$.
 
-In words: an exponentially large quantity of information ($\sim$ growth rate $\mu$ of the neighborhood) must pass through a *channel* that contracts exponentially fast. *Bottlenecks* (cut edges, bridges between communities) are the physical points of the phenomenon.
+**The bound** (Topping et al., 2022, Lemma 1). Take an MPNN whose layer is
+$$
+h_v^{(\ell+1)} = \phi_\ell\Big(h_v^{(\ell)}, \sum_{w} \hat A_{vw}\, \psi_\ell\big(h_v^{(\ell)}, h_w^{(\ell)}\big)\Big),
+$$
+with $|\nabla \phi_\ell| \leq \alpha$ and $|\nabla \psi_\ell| \leq \beta$ at every layer. If $d(u, v) = r + 1$, then
+$$
+\Big| \frac{\partial h_v^{(r+1)}}{\partial x_u} \Big| \leq (\alpha\beta)^{r+1} \big(\hat A^{r+1}\big)_{vu} .
+$$
+
+*Why*: by the chain rule, the Jacobian is a sum over the walks of $r+1$ steps from $u$ to $v$. Each step contributes at most $\alpha\beta$ times the weight $\hat A$ of the edge it crosses, and the weighted sum over walks is $(\hat A^{r+1})_{vu}$.
+
+What makes the right-hand side small is the graph, not the network. On a binary tree, $(\hat A^{r+1})_{vu} = 2^{-1}\,3^{-r}$: the influence of one leaf decays geometrically while the number of leaves doubles at each level. *Bottlenecks* (bridges between communities) are where the walk weight is lost.
 :::
 
 ::: prop
-[Proposition 3.2 — The expansion / $\lambda_{\max}$ link (proof sketch)]{.tag} The edges crossed by the information from $u$ to $v$ form a cut; the "flow" of message passing across a cut is bounded by the conductance of the cut, itself controlled by the spectrum.
+[Proposition 3.2 — Bottleneck ⇔ small Cheeger constant ⇔ small spectral gap]{.tag} For a set $S$ of nodes, let $\partial S$ be the set of edges leaving $S$ and $\mathrm{vol}(S) = \sum_{v \in S} d_v$. The **Cheeger constant**
+$$
+h_G = \min_{S \neq \emptyset,\ \mathrm{vol}(S) \leq \mathrm{vol}(V)/2} \frac{|\partial S|}{\mathrm{vol}(S)}
+$$
+is small exactly when two large parts of the graph are joined by few edges: a bottleneck. The **Cheeger inequality** ties it to the spectral gap $\lambda_2$ of $L_{\mathrm{sym}}$:
+$$
+\frac{\lambda_2}{2} \leq h_G \leq \sqrt{2 \lambda_2} .
+$$
 
-By Cheeger (inverted for the top of the spectrum, Tanner's bound for $\lambda_{\max}$), a weak conductance forces a large $\lambda_{\max}$… that is, highly oscillating components which, in the Chebyshev recurrence (M1, ch. 4), make the factor $\big( \frac{\lambda_{\max}}{2} \big)^k$ diverge and crush the radius of convergence: *topological bottleneck ⇔ poor spectral conditioning*.
+So *topological bottleneck ⇔ small $\lambda_2$*: the bottom of the spectrum, not its top, carries the diagnosis. Every message between the two sides crosses the few edges of $\partial S$, and the walk weights of the bound above are small there.
 
-Hence the two families of remedies: change the *topology* (rewiring, below) or change the *operator* (normalization, implicit propagation, ch. 3.4).
+*Worked example*: two triangles $\{0,1,2\}$ and $\{3,4,5\}$ joined by the bridge $(2,3)$. The cut around one triangle gives
+$$
+h_G = \frac{1}{2 + 2 + 3} = \frac17, \qquad \lambda_2 \approx 0.205 \leq \frac27 .
+$$
+Adding the single edge $(1,4)$ across the bridge gives $h_G = \frac28 = \frac14$ and
+$$
+\lambda_2 = 1 - \frac{1}{\sqrt 3} \approx 0.423 :
+$$
+one well-placed edge doubles the gap.
+
+Hence the two families of remedies: change the *topology* (rewiring, below) or change the *propagation* (3.4).
 :::
 
 ::: thm
@@ -324,41 +364,49 @@ $W_1$ = Wasserstein-1 distance (Optimal Transport module): "locally dense" edges
     $$
     so $\kappa = -\frac23 < 0$ — the bridge is "hyperbolic": it is the bottleneck.
 
-**SDRF** (Spectral-De-Ricci-Flattening): at each iteration,
+Topping et al. prove that negatively curved edges are those responsible for over-squashing. Conversely, if every edge has curvature at least $k > 0$, then $h_G \geq k/2$: positive curvature everywhere forbids a bottleneck.
 
-1.  find the edge $(u,v)$ of minimal curvature;
-2.  add the edge $(x, y)$ between two neighbors of the edge (not yet present) that *maximizes the sum of curvatures* — triangulate the bottleneck;
+**SDRF** (Stochastic Discrete Ricci Flow) uses Topping et al.'s **Balanced Forman curvature**, a combinatorial curvature computed from the degrees of the two endpoints and the triangles and 4-cycles through the edge — much cheaper than a transport problem. Like $\kappa$, it is positive on triangle edges, zero on the edges of C6 and $-\frac23$ on the barbell bridge. At each iteration:
+
+1.  take the edge $(i, j)$ of minimal curvature;
+2.  for each candidate edge $(k, l)$ not yet present, with $k$ equal or adjacent to $i$ and $l$ equal or adjacent to $j$, compute how much adding it would raise the curvature of $(i, j)$; *sample* one candidate with a softmax of these improvements (a temperature sets how greedy the choice is) and add it — this creates a triangle or a 4-cycle around the bottleneck;
 3.  remove the edge of maximal curvature if it exceeds a threshold (avoid densification).
 
-Effect: the curvature distribution flattens, $\lambda_{\max}$ drops, the bound of Definition 3.1 improves. *Looking at the graph as a geometric object* — curvatures, distances, volumes — is one of the field's great turns (cf. ch. 8 and the Geometric DL module).
+Effect: the most negative curvatures rise, the bottleneck widens, and $h_G$ and $\lambda_2$ increase — the edge $(1,4)$ of the worked example of Proposition 3.2 is exactly such an addition. *Looking at the graph as a geometric object* — curvatures, distances, volumes — is one of the field's great turns (cf. ch. 8 and the Geometric DL module).
 :::
 
 ::: note
-[DIGL — diffusion rewiring (Gasteiger et al., 2021)]{.tag} A "filtering" alternative: replace $A$ by
+[DIGL — diffusion rewiring (Gasteiger, Weißenberger & Günnemann, NeurIPS 2019)]{.tag} A "filtering" alternative: replace $A$ by a sparsified *generalized graph diffusion*
 $$
-\tilde A = \mathrm{top}\text{-}k\big(\sum_{i=0}^{K} \beta_i T_i(L)\big)
+S = \sum_{k=0}^{\infty} \theta_k\, T^k ,
 $$
-— a sparsified heat kernel (sum of Chebyshev polynomials, M1 ch. 4). Each node gains "virtual" edges toward its multihop neighbors weighted by the diffusion; simple, differentiable, and the final GNN trains on the *rewired* graph.
+with $T$ a transition matrix of the graph (a random walk, possibly symmetrically normalized). Two classical choices of weights are personalized PageRank, $\theta_k = \alpha(1-\alpha)^k$, and the heat kernel, $\theta_k = e^{-t} t^k / k!$. $S$ is then sparsified (top-$k$ entries per column, or a threshold $\varepsilon$). Each node gains "virtual" edges toward its multihop neighbors weighted by the diffusion; simple, and the final GNN trains on the *rewired* graph.
 
-Comparison: SDRF is *topological* (local curvature, targeted additions); DIGL is *spectral* (global diffusion); both target $r(\lambda_{\max})$ — and both may destroy motif information: measure the trade-off in the lab (exercise 6).
+Comparison: SDRF is *topological* (local curvature, targeted additions); DIGL is *spectral* (global diffusion). Diffusion scores across a bottleneck are small, so top-$k$ sparsification keeps mostly edges *inside* communities: Topping et al. (Theorem 6) show that after PPR rewiring the Cheeger ratio of a cut stays below a fixed multiple of its old value, a factor set by $\alpha$ and the degrees: a narrow bottleneck stays narrow. DIGL therefore helps on homophilous graphs more than against over-squashing. Both may destroy motif information: measure the trade-off in the lab (exercise 6).
 :::
 
 ::: thm
-[3.4 — Deep GNNs: APPNP and GCNII]{.tag} **APPNP** (Klicpera et al., 2019) separates *predicting* from *propagating*: a network (often simple) predicts $H = f_\theta(X)$; propagation follows personalized PageRank:
+[3.4 — Deep GNNs: APPNP and GCNII]{.tag} **APPNP** (Klicpera et al., 2019) separates *predicting* from *propagating*: a network (often simple) predicts $H = f_\theta(X)$; propagation follows personalized PageRank with the GCN propagator $\hat A$ of ch. 0:
 $$
-Z^{(k+1)} = (1 - \alpha)\, \hat P\, Z^{(k)} + \alpha H, \qquad \hat P = \tilde D^{-1/2} \tilde A \tilde D^{-1/2}.
+Z^{(k+1)} = (1 - \alpha)\, \hat A\, Z^{(k)} + \alpha H .
 $$
 Fixed point:
 $$
-Z^* = \alpha \big(I - (1 - \alpha)\hat P\big)^{-1} H .
+Z^* = \alpha \big(I - (1 - \alpha)\hat A\big)^{-1} H .
 $$
-The series expansion $\sum_{k} \alpha(1-\alpha)^k \hat P^k$ shows that the effective depth is *infinite* without stacking parameters. The teleport $\alpha H$ bounds the gains (like PageRank damping, M1 ch. 0) and kills over-smoothing (M1, ch. 5.3); $K$ iterations = truncation of the series.
+The series expansion $\sum_{k} \alpha(1-\alpha)^k \hat A^k$ shows that the effective depth is *infinite* without stacking parameters. Here $\alpha$ is the PageRank teleport probability of [Graph ML Definition 0.9](../m1p2-graph-ml/index.html#ch0): the restart term $\alpha H$ keeps every node anchored to its own prediction and kills over-smoothing (M1, ch. 5.3); $K$ iterations = truncation of the series.
 
 **GCNII** (Chen et al., 2020) makes GCN *truly* deep through two mechanisms:
 $$
-h^{(\ell+1)} = \sigma\Big( \big[(1-\gamma_\ell) I + \gamma_\ell \hat P\big]\big[(1-\beta_\ell) I + \beta_\ell W_\ell\big] h^{(\ell)} + \gamma_\ell \hat P h^{(0)} \Big)
+H^{(\ell+1)} = \sigma\Big( \big[(1-\alpha_\ell)\, \hat A H^{(\ell)} + \alpha_\ell H^{(0)}\big]\big[(1-\beta_\ell) I + \beta_\ell W^{(\ell)}\big] \Big)
 $$
-— *initial residual* toward $h^{(0)}$ (the same remedy as APPNP's teleport) and *mapped identity* $(1 - \beta_\ell) I$ (as in ResNet). With $\beta_\ell$ increasing with depth, 64 layers become trainable.
+
+-   *initial residual*: the propagated $\hat A H^{(\ell)}$ is mixed with the first layer $H^{(0)}$ itself, not propagated — $\alpha_\ell$ plays the role of APPNP's teleport (typically $\alpha_\ell = 0.1$);
+-   *identity mapping*: the weight matrix is pulled toward the identity, as in ResNet, with
+    $$
+    \beta_\ell = \log\Big(\frac{\lambda}{\ell} + 1\Big) \approx \frac{\lambda}{\ell} ,
+    $$
+    where $\lambda$ is a hyperparameter (0.5 in the paper, not an eigenvalue). $\beta_\ell$ *decreases* with depth: deep layers are close to the identity, so stacking them does not degrade the representation. With these two mechanisms, GCNII trains up to 64 layers.
 
 Positioning: rewiring (3.3) changes *the channel*; APPNP/GCNII change *the dynamics*; graph transformers (ch. 5) remove the bottleneck by making the channel all-all; over-smoothing (representation) and over-squashing (channel) remain two distinct limits that must be diagnosed separately.
 :::
@@ -385,17 +433,19 @@ A GNN only sees the neighborhood of a node, not where the node sits in the whole
 2.  *basis*: if $\lambda_i$ is multiple, any rotation of the basis is admissible;
 3.  *instability*: a small perturbation of the graph crosses the eigenvalues and makes the basis jump.
 
-**SignNet** (Lim et al., 2022) builds functions invariant to sign and basis:
+**SignNet** (D. Lim et al., 2023) builds functions invariant to the sign of each eigenvector:
 $$
-\rho(V) = h\Big( \sum_{i=1}^{k} \phi(v_i) + \phi(-v_i) \Big),
+f(v_1, \dots, v_k) = \rho\Big( \big[\phi(v_i) + \phi(-v_i)\big]_{i=1}^{k} \Big),
 $$
-with $\phi, h$ MLPs. Enforcing the parity $\phi(v) + \phi(-v)$ makes $\rho$ even (sign invariance), and the sum over the basis gives invariance under rotation.
+where $[\cdot]_i$ is a concatenation and $\phi, \rho$ are permutation-equivariant networks (for instance a GIN on the graph, with $v_i$ as node feature). Each term $\phi(v) + \phi(-v)$ is even, which gives sign invariance; the eigenvectors stay in their eigenvalue order.
 
-The completeness theorem (in the spirit of results on orbit invariants): SignNet *universally* represents the continuous functions invariant in the eigenvectors — the exact analogue of Deep Sets' "sort before sum" (ch. 2). In practice: LapEig + SignNet is the default PE of spectral graph transformers.
+Rotations inside a repeated eigenspace (pathology 2) are *not* handled by SignNet. For them, Lim et al. propose **BasisNet**, which reads each eigenspace through its projector $V_i V_i^\top$, a matrix that does not depend on the chosen basis.
+
+The completeness result: a continuous function $h$ is sign invariant if and only if $h(v) = \phi(v) + \phi(-v)$ for some continuous $\phi$, so SignNet can represent every sign-invariant function. This mirrors the sum decomposition of Deep Sets (Zaheer et al., 2017) for multisets, the idea behind the injective sum of Theorem 2.3. In practice: LapEig + SignNet is the default PE of spectral graph transformers.
 :::
 
 ::: ex
-[Example 4.2 — RWPE computed by hand (and why it matters)]{.tag} The *random-walk positional encoding* (RWSE, Dwivedi et al., 2020) of a node $v$ is the vector of return probabilities
+[Example 4.2 — RWPE computed by hand (and why it matters)]{.tag} The *random-walk positional encoding* (RWPE, Dwivedi et al., ICLR 2022; called RWSE in GPS) of a node $v$ is the vector of return probabilities
 $$
 \big[ (P)_{vv}, (P^2)_{vv}, \dots, (P^K)_{vv} \big], \qquad P = D^{-1} A.
 $$
@@ -409,10 +459,11 @@ Computation:
     $$
     (P^3)_{vv} = 2 \times (\frac12)^3 = \frac14 ;
     $$
--   node of a hexagon C6: $(P^2)_{vv} = \frac12$ — *identical* (same back-and-forths); but $(P^3)_{vv} = 0$: a return of odd length requires an odd cycle, and C6 has none. The first "full tour" appears only at $k = 6$, with
+-   node of a hexagon C6: $(P^2)_{vv} = \frac12$ — *identical* (same back-and-forths); but $(P^3)_{vv} = 0$: a return of odd length requires an odd cycle, and C6 has none. At $k = 6$, every closed walk counts, not only the two full tours: a walk of 6 steps $\pm 1$ returns when it makes 0, 3 or 6 steps forward, so
     $$
-    (P^6)_{vv} = 2 \times (1/2)^6 = \frac{1}{32}.
+    (P^6)_{vv} = \frac{\binom{6}{0} + \binom{6}{3} + \binom{6}{6}}{2^6} = \frac{22}{64} = \frac{11}{32} ,
     $$
+    the same value as for a node of the triangle, which also has 22 closed walks of length 6: only the odd lengths separate them.
 
 Now C3 and C6 are exactly the pair that 1-WL cannot distinguish (Example 2.4). The RWSE — a single scalar, $p_3$, suffices here ($\frac14$ versus $0$) — separates them *immediately*.
 
@@ -451,22 +502,30 @@ Attention lets every node exchange information with every other node in one step
 Plus a global virtual node (connected to all) for the readout. Result: 1^st^ rank on OGB-LSC PCQM4M (3.7M molecules) at its release. Implementation:
 
 ```python
-import torch, torch.nn as nn
-from torch_geometric.utils import shortest_path_distance   # PyG >= 2.6 (or homemade BFS)
+import numpy as np, torch, torch.nn as nn
+from scipy.sparse.csgraph import shortest_path
+
+def spd_matrix(adj):                                 # adj: (n, n) 0/1 NumPy array
+    d = shortest_path(adj, unweighted=True)          # BFS from every node; inf if unreachable
+    d[np.isinf(d)] = -1                              # -1 marks "unreachable"
+    return torch.as_tensor(d, dtype=torch.long)
 
 class GraphormerLayer(nn.Module):
     def __init__(self, d, h, max_spd=5):
         super().__init__()
+        self.max_spd = max_spd
         self.attn = nn.MultiheadAttention(d, h, batch_first=True)
-        self.bias = nn.Embedding(max_spd + 2, h)     # b_phi table: SPD -> h heads
+        self.bias = nn.Embedding(max_spd + 2, h)     # b_phi: 0..max_spd, plus one slot for "unreachable"
         self.ffn = nn.Sequential(nn.Linear(d, 2*d), nn.GELU(), nn.Linear(2*d, d))
-    def forward(self, x, spd):                       # spd: (n, n) integer distances
-        b = self.bias(spd.clamp(max=5).long()).permute(2, 0, 1)  # (h, n, n)
-        x = self.attn(x, x, x, attn_bias=b)[0] + x
+    def forward(self, x, spd):                       # x: (1, n, d), one graph; spd: from spd_matrix
+        idx = spd.clamp(max=self.max_spd)            # long distances share the last slot
+        idx = torch.where(spd < 0, torch.full_like(spd, self.max_spd + 1), idx)
+        b = self.bias(idx).permute(2, 0, 1)          # (h, n, n) = (batch * heads, n, n) for a batch of 1
+        x = self.attn(x, x, x, attn_mask=b)[0] + x   # a float attn_mask is added to the scores
         return self.ffn(x) + x
 ```
 
-*PyG trick*: the per-head bias is built with an embedding table indexed by the distance matrix (exercise 7).
+*Two details*: `nn.MultiheadAttention` takes the additive bias as a float `attn_mask` of shape (batch · heads, n, n); and the dedicated slot `max_spd + 1` keeps disconnected pairs apart from distant ones. The per-head bias is an embedding table indexed by the distance matrix (exercise 7).
 :::
 
 ::: thm
@@ -483,7 +542,7 @@ Per-layer complexity: $\mathcal{O}(n^2 d)$ (attention) + $\mathcal{O}(|E| d)$ (M
 [5.3 — Efficient transformers: Exphormer and sampled attention]{.tag} For large $n$ (ogbn-products…), $\mathcal{O}(n^2)$ no longer fits; **Exphormer** (Shirzad et al., 2023) replaces full attention with a *sparse attention graph*:
 
 1.  the edges of the real graph;
-2.  the neighbors of a random $d$-regular **expander graph** — an expander has logarithmic diameter: information crosses the graph in $\mathcal{O}(\log n)$ layers, precisely what ch. 3 demands (expansion!);
+2.  the neighbors of a random $d$-regular **expander graph** — an expander has a spectral gap bounded away from zero and a logarithmic diameter: information crosses the graph in $\mathcal{O}(\log n)$ layers, precisely what ch. 3 demands (no bottleneck, by Proposition 3.2);
 3.  global virtual nodes.
 
 Complexity linear in $n + |E|$; combined with the local MPNN, this gives "Exphormer-GPS", the scalable state of the art.
@@ -495,7 +554,7 @@ Generalization: *sampled attention* (neighborhood, kernels, hashing) — the sam
 [5.4 — When is an MPNN enough? (decision guide)]{.tag}
 
 -   *homophilous* graph, local dependencies (Cora, transactional fraud): GCN/GAT 2-3 layers — no point paying $n^2$;
--   motifs, distances, long-range dependencies (molecules, QA over KGs): transformer or ESGNN (ch. 2) — structure exceeds the neighborhood;
+-   motifs, distances, long-range dependencies (molecules, QA over KGs): transformer or ESAN (ch. 2) — structure exceeds the neighborhood;
 -   large $n$: MPNN + sampling (ch. 1) or Exphormer;
 -   empirical benchmark rule (Dwivedi et al., 2023): at equal size, the gain of the transformer over MPNN+PE is real but modest — the hybrid (GPS) wins most often; the PE is the dominant factor, the architecture second.
 
@@ -520,7 +579,7 @@ $$
 $$
 concatenated with the features. Attention is computed over the *strictly past* neighborhood
 $$
-\mathcal{N}(v; t) = \{u : (u, v, t') \in E, t' \leq t\}
+\mathcal{N}(v; t) = \{u : (u, v, t') \in E,\ t' < t\}
 $$
 — a causal GAT; inductive by construction (new nodes = new times).
 :::
@@ -538,10 +597,10 @@ $$
     $$
     s_i(t) = \mathrm{GRU}\big(s_i(t^-),\ \mathrm{agg}(\{m_i^{t'} : t' \leq t\})\big)
     $$
-    — only the nodes *touched by the batch* are updated; "at rest" nodes receive a placeholder message to age their memory;
+    — only the nodes *touched by the batch* are updated; the memory of a node without events stays as it is, and its staleness is compensated by the embedding module below, which reads the memories of its neighbors;
 4.  **embedding**: $z_i(t)$ computed by a TGAT-type module over the memory $\{s_u(t^-) : u \in \mathcal{N}(i; t)\}$ + the time encoding $\phi$ — memory is a *compressed summary*, the embedding an *attentive reading*.
 
-Training: *strictly causal* — batches are ordered by time, and the *masked teacher forcing* technique (memorizing states between batches without backprop through the whole history, but "replaying" the stored states) makes the gradient practical.
+Training: *strictly causal* — batches are ordered by time. If the memory were updated with the events of the current batch before predicting them, the model would see the answers. TGN therefore keeps a *raw message store*: for each batch, the memory is first updated with the raw messages stored from *previous* batches, then the embeddings predict the current interactions, and finally the raw messages of the current batch are stored for the next one. The memory-related modules (message function, aggregator, GRU) thus receive a gradient without leakage.
 
 Future link prediction loss: score $(i, j, t)$ against negatives (M1, ch. 6, temporal version). The paper's ablation: every module counts — remove memory, and everything collapses on distant interactions.
 :::
@@ -551,10 +610,10 @@ Future link prediction loss: score $(i, j, t)$ against negatives (M1, ch. 6, tem
 
 1.  TGN encodes the accounts (memory = past behavior);
 2.  a head classifier reads $z_i(t)$ at the moment of the transaction;
-3.  the *negatives* are old legitimate transactions — beware temporal contamination (train strictly before $t$: the temporal-split hygiene of the Emerging ML module);
+3.  the *negatives* are old legitimate transactions — beware temporal contamination (train strictly before $t$: the temporal-split protocol of [Graph ML 5.6–5.8](../m1p2-graph-ml/index.html#ch5), with its worked leakage example);
 4.  in production: incremental memory update, model drift to monitor.
 
-Lab datasets: Wikipedia edits / Reddit (TGN standards), and anonymized transaction banks. Variants: CAWN (attention by causal walks), compressed memorization; the state-of-the-art survey lives on the temporal graph learning side.
+Lab datasets: Wikipedia edits / Reddit (TGN standards, with banned-user labels for dynamic node classification), and anonymized transaction banks such as Elliptic. Variants: CAWN (attention by causal walks), compressed memorization; the state-of-the-art survey lives on the temporal graph learning side. A TGN detector under attack and drift is the core of the end-of-year project [Y2.5](../../projects/index.html#y2-5), which reuses exercises 8 and 9.
 :::
 
 ## 7. Robustness and privacy on graphs {#ch7}
@@ -562,41 +621,58 @@ Lab datasets: Wikipedia edits / Reddit (TGN standards), and anonymized transacti
 Graph models are exposed to attackers who can add or remove a few edges, and graph data often reveals private information. This chapter studies attacks at test and training time, defenses and certification, then privacy and fairness on graphs.
 
 ::: thm
-[7.1 — Nettack (Zügner et al., 2018): gradient attack, in detail]{.tag} The scenario: *evasion* (the attacker modifies the graph at test time) on a target $u$ and its class $y_u$; budget: $\Delta$ modifications (edge additions/removals, feature changes). The attacker's dilemma: the model is not differentiable *in* the discrete structure. Nettack's solution:
+[7.1 — Nettack (Zügner, Akbarnejad & Günnemann, 2018): greedy search on a linearized surrogate]{.tag} The scenario: a target node $u$ and its class $y_u$; budget: $\Delta$ modifications (edge additions/removals, feature changes), applied at test time (*evasion*) or before retraining (*poisoning*) — the paper reports both. The attacker's dilemma: the model is not differentiable *in* the discrete structure. Nettack's solution, the one summarized in [Security, Case study 9.2](../m2-security-robustness/index.html#ch9):
 
-1.  train a linearized *surrogate* (one-layer GCN, softmax); its output $Z_u(A)$ is then polynomial in $A$ — continuous, differentiable;
-2.  **first-order score**: for each candidate modification $\delta$ (flip of an edge $(a,b)$ or of a feature),
+1.  train a linearized *surrogate*: a two-layer GCN without its nonlinearity, whose logits are
     $$
-    \mathrm{score}(\delta) = -\nabla_{A}\, \mathcal{L}_{att}\big(Z_u(A)\big)\big|_{(a,b)} \cdot \big(\delta_{ab} - A_{ab}\big),
+    \hat A^2 X W ;
     $$
-    the Taylor approximation of the loss change (product of the gradient with the direction of the change); keep the modification with maximal score;
-3.  iterate (modify, re-score) until the budget; "discretion" constraints: add only plausible edges (degrees, common features).
+2.  **exact score** of each candidate (flip of an edge, or of a feature): the surrogate margin of the target *after* the flip,
+    $$
+    \mathcal{L}_s = \max_{c \neq y_u} \big[\hat A^2 X W\big]_{uc} - \big[\hat A^2 X W\big]_{u y_u} .
+    $$
+    For an edge, one flip changes only a few entries of $\hat A^2$, which are updated incrementally in constant time. For a feature, the margin is linear in $X$, so its gradient gives the exact score;
+3.  greedily apply the best candidate and repeat until the budget is spent. *Unnoticeability* constraints keep the attack discreet: the perturbed degree distribution must pass a likelihood-ratio test against the clean one, and added features must co-occur plausibly with existing ones.
+
+Gradient-based structure attacks exist too — FGA (Chen et al., 2018) ranks edges by the gradient of the loss with respect to $A$, and Metattack (7.2) uses meta-gradients — but Nettack scores discrete flips exactly.
 
 Historic result: a few flips suffice to flip the prediction — and the attacks *transfer* to the true GCN (the surrogate suffices). The LLGA lesson: in fraud detection, the attacker *knows* the model (or its shadow); robustness is a design requirement, not an option.
 :::
 
 ::: thm
-[7.2 — Poisoning: Meta-Self (Zügner & Günnemann, 2019)]{.tag} An attack *at training time* (poisoning): the graph is corrupted *before* learning. Bilevel:
+[7.2 — Poisoning: Metattack (Zügner & Günnemann, 2019)]{.tag} An attack *at training time* (poisoning): the graph is corrupted *before* learning. Bilevel:
 $$
-\min_{\delta}\ \mathcal{L}_{att}\big(f_{\theta^*}(A + \delta)\big) \quad \text{s.t.} \quad \theta^* = \arg\min_\theta \mathcal{L}_{train}\big(f_\theta(A + \delta)\big),
+\min_{\delta}\ \mathcal{L}_{atk}\big(f_{\theta^*}(A + \delta)\big) \quad \text{s.t.} \quad \theta^* = \arg\min_\theta \mathcal{L}_{train}\big(f_\theta(A + \delta)\big),
 $$
-solved by *meta-gradient*: a few inner gradient steps are unrolled (differentiable), the outer gradient traces back to $\delta$ — the same machinery as the MAML of the RL/Deep Learning module. A "self-labeled" variant (Meta-Self): the attacker also controls a few labels.
+solved by *meta-gradient*: a few inner gradient steps are unrolled (differentiable), and the outer gradient flows back to $\delta$.
+
+**MAML in three lines** (Finn, Abbeel & Levine, 2017). Model-agnostic meta-learning learns an initialization $\theta$ such that one or a few gradient steps on a new task,
+$$
+\theta' = \theta - \eta \nabla_\theta \mathcal{L}_{task}(\theta),
+$$
+already perform well. Its outer gradient differentiates *through* these inner steps. Metattack uses the same unrolled differentiation, with respect to the graph instead of the initialization.
+
+The attack loss needs labels that the attacker does not have on unlabeled nodes. **Meta-Self** trains a surrogate on the labeled nodes, takes its *predicted* labels on the unlabeled ones (self-training) and sets $\mathcal{L}_{atk} = -\mathcal{L}_{self}$, the negated loss on these pseudo-labels; **Meta-Train** uses $-\mathcal{L}_{train}$ instead. In both, the attacker controls no label — only the graph.
 
 Structural defenses:
 
 -   **pruning** (attack edges are often "suspicious" — large feature distances);
 -   **purification** (Pro-GNN: learn a clean graph $A'$ regularized close to $A$ while training the GNN);
--   **robust GCN** (RGCN, Zhu et al., 2019): Gaussian layers whose variance absorbs the attack + attention over reliable neighbors.
+-   **robust GCN** (RGCN, Zhu, Zhang, Cui & Zhu, KDD 2019): Gaussian layers whose variance absorbs the attack + attention over reliable neighbors.
 :::
 
 ::: note
-[7.3 — Certification: sketch]{.tag} Guarantee that no attack of budget $\Delta$ changes the prediction: by *randomized smoothing* applied to graphs (majority over graphs perturbed by random flips) or by spectral bounds (certificates tied to $\lambda_{\max}$ of ch. 3 — same currency); the state of the art certifies small budgets on moderate GCNs: in practice, one combines partial certification + the defenses above + monitoring (detecting edge-addition anomalies).
+[7.3 — Certification: sketch]{.tag} Guarantee that no attack of budget $\Delta$ changes the prediction: by *randomized smoothing* applied to graphs (majority over graphs perturbed by random flips, as in [Security ch. 5](../m2-security-robustness/index.html#ch5)) or by convex relaxations of the network (Zügner & Günnemann, KDD 2019, for feature perturbations, with a robust training that enlarges the certified set). The state of the art certifies small budgets on moderate GCNs: in practice, one combines partial certification + the defenses above + monitoring (detecting edge-addition anomalies).
 :::
 
 ::: thm
 [7.4 — Privacy: node-DP, edge-DP, reidentification]{.tag}
 
--   **edge-DP**: the basic mechanism is *randomized response* — flip each edge with probability $p$, calibrated for $(\varepsilon, 0)$-DP; counting queries (how many edges between two groups?) receive Laplace noise of sensitivity 1;
+-   **edge-DP**: the basic mechanism is *randomized response* on the adjacency matrix — each pair of nodes is reported truthfully with probability $p > \frac12$ and flipped otherwise. This is $\varepsilon$-edge-DP with
+    $$
+    \varepsilon = \ln \frac{p}{1 - p} ,
+    $$
+    the convention of [Privacy & UQ, Proposition 4.2](../m2-privacy-uncertainty/index.html#ch4) (exercise 10). With a trusted curator, a counting query (how many edges between two groups?) can instead receive Laplace noise of sensitivity 1;
 -   **node-DP**: much harder — sensitivity explodes with the degree (removing a node removes $d$ edges); recipe: *project* the graph onto a graph of bounded degree $k$ (keep the $k$ "most important" neighbors), then apply the edge mechanisms; the price: bias on hubs;
 -   **reidentification**: graph embeddings (M1, ch. 3) are fingerprints — re-routing an "anonymized" node into a public graph by comparing neighborhoods (attacks by degrees, by subgraphs — the Narayanan-Shmatikov attack transposed); GraphRAG (M1, ch. 10) aggregates scattered facts: the reidentification risk *grows* with the quality of the graph;
 -   **evaluation**: measure the utility-privacy trade-off (AUC vs $\varepsilon$); cross-reference with the M2 security module for LLMs (prompt injection over the KG, leakage by generation).
@@ -611,43 +687,76 @@ Structural defenses:
 This chapter connects the module to the other axes of the master: geometric graphs (3D molecules), GNNs that learn to execute algorithms, and the combination of GNNs with LLMs.
 
 ::: thm
-[8.1 — 3D molecules: EGNN and E(n) equivariance (Satorras, Hoogeboom & Welling, 2021)]{.tag} The positions $x_i \in \mathbb{R}^3$ make the molecular graph *geometric*; physics is invariant under rotations/translations (E(3)); a GNN that respects this symmetry *by construction* learns better with less data (Bronstein et al., the Geometric DL "charter"). EGNN:
+[8.1 — 3D molecules: EGNN and E(n) equivariance (Satorras, Hoogeboom & Welling, 2021)]{.tag} The positions $x_i \in \mathbb{R}^3$ make the molecular graph *geometric*; physics is invariant under rotations/translations (E(3)); a GNN that respects this symmetry *by construction* learns better with less data (Bronstein et al., the Geometric DL "charter").
+
+**Recall.** The EGNN layer and the proof of its E(n)-equivariance are in [Graph ML, Proposition 8.3](../m1p2-graph-ml/index.html#ch8). In short, the messages read only invariant distances,
 $$
 m_{ij} = \phi_e\big(h_i, h_j, \|x_i - x_j\|^2, e_{ij}\big),
 $$
-$$
-x_i^{(\ell+1)} = x_i^{(\ell)} + C \sum_{j \in \mathcal{N}(i)} (x_i^{(\ell)} - x_j^{(\ell)})\, \phi_x(m_{ij}),
-$$
-$$
-h_i^{(\ell+1)} = \phi_h\big(h_i^{(\ell)}, \textstyle\sum_{j} m_{ij}\big).
-$$
-*Equivariance proof (sketch)*: under $x \mapsto Rx + t$ ($R$ orthogonal), the distances $\|x_i - x_j\|$ are invariant, hence so are the $m_{ij}$. The position step $\sum_j (x_i - x_j)\phi_x$ transforms into
-$$
-R \sum_j (x_i - x_j)\phi_x
-$$
-— exact equivariance; the factor $C$ bounds the step.
+and each position moves along the differences $x_i - x_j$, weighted by $\phi_x(m_{ij})$. Under $x \mapsto Qx + t$ with $Q$ orthogonal, the features are unchanged and the positions follow.
 
-Applications: 3D property prediction, learned molecular dynamics, *3D generation* (EDM — equivariant diffusion; the M2 Geometric DL module generalizes to groups; M1 ch. 9 covers the 2D version).
+What this module adds:
+
+-   *applications*: 3D property prediction (invariant features into a readout) and learned molecular dynamics (equivariant outputs as forces);
+-   *the bridge to diffusion*: an EGNN is the denoiser of equivariant diffusion models — EDM (Hoogeboom et al., ICML 2022) generates atom types and coordinates jointly, GeoDiff (Xu et al., ICLR 2022) generates the conformers (3D coordinates) of a given molecular graph. With an equivariant denoiser, an isotropic prior and centered coordinates, the learned density is invariant to rotations and translations;
+-   the M2 Geometric DL module generalizes to groups; M1 ch. 9 covers the 2D version, and [Graph Generative Models](../m2-graph-generative-models/index.html) takes over the generation side.
 :::
 
 ::: thm
 [8.2 — Neural algorithmic reasoning (Veličković et al.)]{.tag} Learning to *execute* algorithms with GNNs: encode inputs as a graph (sorting: a list = a comparison graph; shortest paths: the graph itself), execute via message passing layers, decode outputs — the *black-box* replaces the code.
 
-The CLRS benchmark (Veličković et al., ICML 2023) tests faithful execution of classical algorithms (CLRS = Cormen, Leiserson, Rivest, Stein). Results: GNN processors generalize to unseen sizes *better* than transformers on certain families (structural induction).
+The CLRS benchmark (Veličković et al., ICML 2022) tests faithful execution of classical algorithms (CLRS = Cormen, Leiserson, Rivest, Stein). Results: GNN processors generalize to unseen sizes *better* than transformers on certain families (structural induction).
 
 The LLGA lesson: a learned algorithm is *differentiable* (it can be inserted into an end-to-end trained pipeline: routing, scheduling, matching) and *approximately robust* (noisy inputs); at the price of exactness — the trade-off to master.
+
+Routing is the natural target: shortest paths and minimum spanning trees are CLRS tasks, and the end-of-year project [Y2.4](../../projects/index.html#y2-4) puts a learned router next to an exact solver.
 
 Loop with Refresher CS: what more can a "learned algorithm" do than an algorithm? Answer: train on data, slot into gradient descent — and the pseudo-code prompting of ch. 9.4 is the dual path (the LLM *simulates* the execution; NAR *embodies* it).
 :::
 
 ::: thm
-[8.3 — GNN × LLM: injected encoders and benchmarks]{.tag} Three injection architectures (M1, ch. 10.2, deepened):
+[8.3 — GNN × LLM: injected encoders, alignment and benchmarks]{.tag} Three injection architectures. The site-wide taxonomy is the one of [Graph ML 10.2](../m1p2-graph-ml/index.html#ch10) (soft tokens, structural recall, cross-distillation); the table maps the names used here onto it.
 
--   **structural tokens**: the outputs of a GNN (node/graph embeddings) are projected into the LLM's embedding space as soft tokens; the LLM reads structure as a language;
--   **structural recall**: the GNN (or the graph traversal) retrieves the relevant facts, the LLM writes — RAG becomes "graph-RAG"; in both cases, the question of the *alignment* of the spaces arises (contrastive: bring the GNN embedding closer to the text describing the same node);
--   **LLM annotator**: the LLM enriches node features (summaries, types) for the GNN — the graph becomes text-attributed (the "TAG" regime); benchmarks: NLGraph (serialized reasoning — M1, ch. 10.2), Talk like a Graph (encodings: none dominates everywhere), and the industrial GraphRAG suites.
+| Architecture (here) | Graph ML 10.2 | What is trained | Examples |
+|---|---|---|---|
+| **structural tokens**: GNN outputs projected into the LLM's embedding space; the LLM reads structure as a language | (a) soft tokens | the projector (and the GNN); LLM frozen or LoRA | GraphGPT (Tang et al., SIGIR 2024), G-Retriever (He et al., NeurIPS 2024) |
+| **structural recall**: the GNN or a graph traversal retrieves the relevant facts, the LLM writes — "graph-RAG" | (b) structural recall | the retriever | GraphRAG (Graph ML 10.1), the subgraph retrieval of G-Retriever |
+| **LLM annotator**: the LLM enriches node features (summaries, explanations, types) for the GNN — the text-attributed graph ("TAG") regime | (c) cross-distillation, LLM → GNN direction | the GNN, on the LLM-enriched features | TAPE (He et al., ICLR 2024) on ogbn-arxiv |
 
-**Industrial GraphRAG** (summary; details in M1, ch. 10): LLM extraction → entity graph → Leiden communities + summaries → local/global queries; the M2's role: the *quality of the graph* (robust communities — ch. 7; KGC completion — M1 ch. 6) is the system's bottleneck; the rare specialty the master builds: both GNN theory *and* the LLM pipeline.
+**Worked: soft tokens.** A node $v$, or each node of a small retrieved subgraph, is encoded by a GNN into $z_v \in \mathbb{R}^{d_g}$. A two-layer MLP projector maps it to the width $d_{\mathrm{LLM}}$ of the LLM's token embeddings:
+$$
+t_v = W_2\, \mathrm{GELU}(W_1 z_v) \in \mathbb{R}^{d_{\mathrm{LLM}}} .
+$$
+The vectors $t_v$ are inserted before the embeddings of the prompt tokens, as if they were extra words. The LLM stays frozen (or LoRA-adapted, [LLM 4.3](../m2-large-language-models/index.html#peft)); the projector, and possibly the GNN, are trained with the next-token loss on the answer tokens only.
+
+Sizes: with $d_g = 256$, a hidden width of 1,024 and $d_{\mathrm{LLM}} = 2{,}048$ (a 1B-parameter LLM), the projector has about 2.4M parameters — negligible next to the LLM.
+
+**Worked: graph–text alignment.** Soft tokens work better when the two spaces already agree. Take a batch of $B$ nodes with GNN embeddings $z_i$ and text embeddings $c_i$ of their descriptions (title and abstract of a paper, for instance). Two linear heads map them to a common space, normalized to unit length:
+$$
+a_i = \frac{W_g z_i}{\|W_g z_i\|}, \qquad b_j = \frac{W_t c_j}{\|W_t c_j\|}, \qquad s_{ij} = \frac{\langle a_i, b_j \rangle}{\tau},
+$$
+with a temperature $\tau$. The **symmetric InfoNCE** loss, as in CLIP, treats each matching pair as the positive and the other $B - 1$ items of the batch as negatives, in both directions:
+$$
+\mathcal{L} = -\frac{1}{2B} \sum_{i=1}^{B} \Big[ \log \frac{e^{s_{ii}}}{\sum_j e^{s_{ij}}} + \log \frac{e^{s_{ii}}}{\sum_j e^{s_{ji}}} \Big] .
+$$
+
+*By hand*, with $B = 2$ and the score matrix
+$$
+S = \begin{pmatrix} 2 & 0 \\ 0.5 & 1.5 \end{pmatrix} :
+$$
+
+-   graph → text (rows): $\log(1 + e^{-2}) = 0.127$ and $\log(1 + e^{-1}) = 0.313$;
+-   text → graph (columns): $\log(1 + e^{-1.5}) = 0.201$ twice;
+-   hence
+    $$
+    \mathcal{L} = \frac{0.127 + 0.313 + 0.201 + 0.201}{4} \approx 0.211 .
+    $$
+
+The loss falls as the diagonal dominates each row *and* each column. After alignment, a node can be retrieved from a text query and the reverse, and zero-shot classification works by matching a node with the texts of the class names. Exercise 11 runs this on ogbn-arxiv.
+
+Benchmarks: NLGraph (serialized reasoning — M1, ch. 10.2), Talk like a Graph (encodings: none dominates everywhere), and the industrial GraphRAG suites.
+
+**Industrial GraphRAG** (summary; details in M1, ch. 10): LLM extraction → entity graph → Leiden communities + summaries → local/global queries; the M2's role: the *quality of the graph* (robust communities — ch. 7; KGC completion — M1 ch. 6) is the system's bottleneck; the rare specialty the master builds: both GNN theory *and* the LLM pipeline. The GNN retriever and the graph tokens of this section are two options of the end-of-year project [Y2.1](../../projects/index.html#y2-1) (biomedical question answering on STaRK-Prime).
 :::
 
 ::: note
@@ -665,25 +774,27 @@ The DaSciM laboratory (LIX, École Polytechnique — M. Vazirgiannis, J. Lutzeye
 2.  composing layers degrades (over-smoothing/squashing, ch. 3);
 3.  1-WL — hence the GNN (th. 2.2) — aggregates only multisets of colors, without the *sequence* of the route.
 
-**The path operator**: for each node $v$, enumerate *simple* paths (without repetition) starting from $v$, of length $\ell$; encode each path with a GRU, aggregate:
+**The path operator**: for each node $v$ and each length $\ell \leq K$, take a collection $\mathcal{P}_v^{(\ell)}$ of *simple* paths (without repeated nodes) of length $\ell$ starting from $v$. Each path is encoded by an LSTM run over the node representations along it, ending at $v$, and the codes are summed:
 $$
-m_p = \mathrm{GRU}\big(h_{u_\ell}^{(\ell)}, \mathrm{GRU}(\dots \mathrm{GRU}(h_{u_1}^{(0)}, h_v^{(0)}) \dots )\big), \qquad h_v^{(\ell)} = \mathrm{AGG}\big\{ m_p : p \in \mathcal{P}_v^{(\ell)} \big\}.
+m_p = \mathrm{LSTM}\big(h_{u_\ell}^{(\ell-1)}, \dots, h_{u_1}^{(\ell-1)}, h_v^{(\ell-1)}\big), \qquad h_v^{(\ell)} = \mathrm{COMBINE}\Big(h_v^{(\ell-1)}, \sum_{p \in \mathcal{P}_v^{(\ell)}} m_p\Big).
 $$
-Three variants bound the enumeration cost:
+Three variants choose the collection of paths, each contained in the next (SP ⊆ SP+ ⊆ AP):
 
--   **PathNN-s** (shortest paths): $\mathcal{P}_v$ = shortest paths to all destinations (at most $n - 1$ paths, $\mathcal{O}(n)$ GRUs per node); captures *distances* — two nodes "close to everyone" versus "peripheral" separate;
--   **PathNN-r** (random walks): $\mathcal{P}_v$ = sampled walks — the bridge with DeepWalk/NetMF (M1, ch. 3);
--   **PathNN-n** (neighborhood sampling): locally sampled simple paths — the practical compromise for large graphs.
+-   **PathNN-SP**: a *single* shortest path for each pair of nodes — captures *distances*: two nodes "close to everyone" versus "peripheral" separate;
+-   **PathNN-SP+**: *all* shortest paths between each pair — also counts how many geodesics join two nodes;
+-   **PathNN-AP**: *all simple paths* of length up to $K$ — the most expressive and the most expensive, so $K$ stays small (5 in the paper's synthetic experiments).
 
-**Complexity**: $\mathcal{O}(P \cdot \ell \cdot d^2)$ per node ($P$ sampled paths) — of the same order as a GAT if $P \sim \bar d$.
+There is no random-walk variant: the point of the operator is to use paths that, unlike walks, repeat no node (problem 1 above).
 
-**Results**: on graph classification (standard benchmarks including molecular ones — ZINC and TU datasets), PathNN matches or exceeds GIN/GCN; on tasks where *the geometry of routes* carries the signal (molecules: paths are chemical chains!), the gain is clear.
+**Complexity**: $\mathcal{O}(P \cdot K \cdot d^2)$ per node for $P$ paths of length at most $K$ — of the same order as a GAT if $P \sim \bar d$. For AP, $P$ grows exponentially with $K$ in dense graphs.
 
-**Theoretical positioning**: simple paths carry information that walk multisets ignore (recall: C6 vs 2C3, Example 2.4 — triangles are read in paths of length 3); *ordered* GRU aggregation is a special case of GOAT's "order + sequence" family (below); and PathNN is the subject of the "paper" exercise (exercise 11).
+**Results**: on graph classification and regression — six TU datasets (DD, NCI1, PROTEINS, ENZYMES, IMDB-B, IMDB-M, with the 10-fold protocol of Errica et al., 2020), ogbg-molhiv, ZINC12K and Peptides-functional — PathNN matches or exceeds GIN/GCN in most cases; on tasks where *the geometry of routes* carries the signal (molecules: paths are chemical chains!), the gain is clear.
+
+**Theoretical positioning**: the paper proves that PathNN-SP+ and PathNN-AP are strictly more powerful than 1-WL, and PathNN-AP even separates strongly regular graphs that 3-WL confuses. Simple paths carry information that walk multisets ignore. Recall C6 vs 2×C3 (Example 2.4): a node of 2×C3 has no simple path of length 3, since its component has three nodes, while a node of C6 has two. Ordered recurrent aggregation is also the tool of GOAT (below), and PathNN is the subject of the "paper" exercise (exercise 12).
 :::
 
 ::: thm
-[9.2 — GOAT (Chatzianastasis, Lutzeyer, Dasoulas & Vazirgiannis, AAAI 2023)]{.tag} Seen in M1 (ch. 11) on the generation side; on the expressive power side: the invariant aggregator $\mathrm{AGG}$ (th. 2.2–2.3) bounds the GNN to 1-WL *precisely because it is invariant*.
+[9.2 — GOAT (Chatzianastasis, Lutzeyer, Dasoulas & Vazirgiannis, AAAI 2023)]{.tag} Introduced in M1 (ch. 11.3), which also links its learned order to the node-ordering problem of autoregressive graph generation. GOAT itself is not a generative model: it learns node representations, and here we study its expressive power. The invariant aggregator $\mathrm{AGG}$ (th. 2.2–2.3) bounds the GNN to 1-WL *precisely because it is invariant*.
 
 GOAT learns a **local order** by attention (scoring neighbors by $(h_v, h_u)$, sorting), then processes the sequence with an RNN — a sequence model *inside* the graph. It is strictly more expressive than invariant aggregation (it distinguishes identical distributions of a multiset as soon as the order carries signal), while remaining *globally* equivariant (the order is a learned function of the representations, not an external numbering).
 
@@ -704,70 +815,188 @@ The interest for M2: *latent* diffusion bypasses discretization (continuous diff
 
 1.  **★ 1-WL by hand.** Run 1-WL on C6 and 2×C3 and verify indistinguishability (detail Example 2.4); then on the "house" graph (square + roof) versus the pentagon; conclude on the exact family of indistinguishable pairs.
 
-    *Partial solution*: house vs pentagon — all nodes of degree 2 except the roof top (degree 3); the pentagon is 2-regular, the house is not → 1-WL distinguishes them from iteration 1 (initial color = degree).
+    *Partial solution*: the house has degrees 3, 3, 2, 2, 2 — the two eaves, where the roof meets the square, have degree 3, and the roof top has degree 2 (an even number of odd degrees, as the handshake lemma requires). The pentagon is 2-regular, so 1-WL distinguishes them from iteration 1 (initial color = degree).
 
-    Generalization: 1-WL fails exactly on certain pairs of regular graphs with the same degree sequence (more finely: same iteration tree; connected 2-regular graphs = cycles, all indistinguishable from one another).
+    Generalization: 1-WL confuses *every* pair of $d$-regular graphs with the same number of nodes, since all colors stay equal — for instance all unions of cycles with the same total number of nodes. It also confuses non-regular pairs: two graphs are 1-WL-equivalent exactly when they admit equitable partitions with the same cell sizes and the same numbers of neighbors between cells (fractional isomorphism: Tinhofer, 1986; Ramana, Scheinerman & Ullman, 1994).
 2.  **★ LapEig.** Compute the first 2 nontrivial eigenvectors of the Laplacian of the karate club graph; project the nodes; verify that the visualized separation ≈ the actual partition; rerun 5 times and observe the sign flips; implement the SignNet correction (ch. 4.1) and measure stability (distance between the encodings of two runs).
 
-    *Partial solution*: $\rho(V) = \mathrm{MLP}(\sum_i \phi(v_i) + \phi(-v_i))$ — the sum of the two parities is invariant under flips; compare with the baseline "sign fixed by the first positive component" (unstable at nodes of near-zero value).
-3.  **★ RWSE by hand and in code.** Recover the computations of Example 4.2 (triangle vs hexagon), then compute the RWSEs ($K = 4$) of all nodes of the karate club graph; show that two 1-WL-equivalent nodes of a regular graph get the same RWSE — and explain why this is both a *feature* (invariance under automorphism) and a *bug* (expressive power).
+    *Partial solution*: $\rho\big([\phi(v_i) + \phi(-v_i)]_{i}\big)$ with MLPs $\phi, \rho$ — each even term is invariant under the flip of its eigenvector; compare with the baseline "sign fixed by the first positive component" (unstable at nodes of near-zero value).
+3.  **★ RWSE by hand and in code.** Recover the computations of Example 4.2 (triangle vs hexagon), then compute the RWSEs ($K = 4$) of all nodes of the karate club graph. Show that two nodes exchanged by an automorphism always get the same RWSE. Then take the 2-regular graph C3 ∪ C6 (disjoint union), where all nodes are 1-WL-equivalent, and show that RWSE separates the triangle's nodes from the hexagon's. Explain why automorphism invariance is both a *feature* (the encoding does not depend on the numbering) and a *limit* (no such encoding separates automorphic nodes, even when a task needs it).
+
+    *Partial solution*: let $\Pi$ be the permutation matrix of an automorphism $\sigma$. Then
+    $$
+    \Pi A \Pi^\top = A, \quad \text{so} \quad \Pi P^k \Pi^\top = P^k \quad \text{and} \quad (P^k)_{\sigma(v)\sigma(v)} = (P^k)_{vv} .
+    $$
+    In C3 ∪ C6, $(P^3)_{vv} = \frac14$ on the triangle and $0$ on the hexagon.
 4.  **★★ GIN vs GCN.** Show that the mean is not injective on multisets (give the counterexamples {a, a, a} vs {a} and {a, a, b, b} vs {a, b}) and that sum+MLP is (discrete features); check experimentally: train GIN and GCN on a 1-WL-indistinguishable pair and measure.
 
     *Partial solution*: mean: {a, a, a} → a and {a} → a (collision); discrete sum: encode a by $\log 2$, b by $\log 3$ — $\{a,a,b,b\} \mapsto 2\log 2 + 2\log 3 = \log 36$ and $\{a, b\} \mapsto \log 6$ — no collision by uniqueness of factorization (th. 2.3); in practice, the mean does better on continuous real features — discuss why (estimation variance).
-5.  **★★ Minimal 2-GNN.** Implement a 2-GNN on pairs (representation $h_{ij}$, messages between adjacent pairs) and verify that it separates C6 and 2C3 (disjoint readout outputs) where GIN fails.
+5.  **★★ Minimal pair GNN.** Implement a pair GNN with the folklore rule of Example 2.4: a representation $h_{uv}$ per pair, updated from the multiset of $(h_{uw}, h_{wv})$ over all $w$. Verify that it separates C6 and 2×C3 (disjoint readout outputs) where GIN fails. Then implement the 2-WL rule (two separate multisets) and check that it fails, as the k-WL box predicts.
 
-    *Hint*: start with hashed colors (exact 2-WL) before learning.
-6.  **★★ Over-squashing.** Build two "communities" connected by a single bottleneck node; measure the classification performance of a GCN as a function of the distance to the bottleneck; compare GPS (ch. 5) and GCN + virtual edges (DIGL); plot $\lambda_{\max}$ before/after rewiring.
+    *Hint*: start with hashed colors (exact 2-FWL and 2-WL) before learning. With dense tensors, the sum over $w$ of $h_{uw} \odot h_{wv}$ is one matrix product per channel — the trick of PPGN.
+6.  **★★ Over-squashing.** Build two "communities" connected by a single bottleneck node; measure the classification performance of a GCN as a function of the distance to the bottleneck; compare GPS (ch. 5), GCN + SDRF and GCN + DIGL. Plot the spectral gap $\lambda_2$ of $L_{\mathrm{sym}}$ (or the effective resistance between the two sides) before and after rewiring, with the Jacobian sensitivity of Definition 3.1 computed by autograd.
 
-    *Partial solution (expected)*: gradient of accuracy with distance for the GCN; GPS nearly uniform; after DIGL, $\lambda_{\max}$ drops by several percent and the gap narrows — the $\lambda_{\max}$ vs accuracy curve is the graph to produce.
+    *Partial solution (expected)*: gradient of accuracy with distance for the GCN; GPS nearly uniform. With two random communities of 30 nodes (edge probability 0.3), three edges added across the bottleneck raise $\lambda_2$ from about 0.003 to about 0.02. DIGL (PPR with teleport 0.15, top-8 per node) only reaches about 0.005, as Theorem 6 of Topping et al. predicts.
+
+    The effective resistance
+    $$
+    R_{uv} = (e_u - e_v)^\top L^{+} (e_u - e_v)
+    $$
+    across the bottleneck falls accordingly (Black et al., 2023); the curve of accuracy against $\lambda_2$ is the graph to produce.
 7.  **★★ Graphormer-PE.** Implement the attention bias by shortest-path distance (distance matrix by BFS; learned bias table — skeleton in ch. 5.1); train on ogbg-molhiv and compare GCN / GIN / Graphormer-mini; report means ± standard deviations over 5 seeds.
 
-    *Partial solution*: BFS $\mathcal{O}(n(|V| + |E|))$ per graph — precompute; clamp distances to 5 (Pareto law of molecular SPDs); expected: a small but systematic gain of the SPD bias over GCN.
+    *Partial solution*: BFS $\mathcal{O}(n(|V| + |E|))$ per graph — precompute; clamp distances at a `max_spd` read from the distance histogram of the training molecules, with a separate slot for unreachable pairs (code of 5.1); expected: a small but systematic gain of the SPD bias over GCN.
 8.  **★★ Temporal.** On a standard TGN dataset (Wikipedia/Reddit): train a TGN (pytorch_geometric.nn.models.TGNMemory library or the paper's code); ablation: remove memory (keep the TGAT embedding); plot the AUC of future link prediction as a function of the horizon $\Delta t$.
 
     *Partial solution (expected)*: memory dominates on recent interactions; without memory, the AUC drops by several points at small $\Delta t$ (the information of the last events is no longer compressed).
-9.  **★★ Attack.** Implement an attack by removing/adding $k$ edges targeting a node (gradient over nonexistent edges — ch. 7.1, linearized surrogate); measure the prediction flip rate vs budget; test a defense (RGCN or training on perturbed graphs).
+9.  **★★ Attack.** Implement a Nettack-style structure attack on a target node (ch. 7.1): train the linearized two-layer surrogate, score every candidate edge flip by the exact surrogate margin after the flip, apply the best one and repeat $k$ times. Measure the prediction flip rate of a normally trained GCN against the budget $k$; test a defense (RGCN or training on perturbed graphs).
 
-    *Partial solution*: score = \|gradient of the attack loss per edge\|; take the top-k; the surrogate suffices (transfer); with RGCN, the required budget roughly doubles — never zero; conclude on certification (ch. 7.3).
-10. **★★ Edge-DP.** Prove that randomized response (flipping each edge with probability $p$) is $(\varepsilon, 0)$-DP with $\varepsilon = \log \frac{1-p}{p}$ for $p < \tfrac12$ (analyze the two output mechanisms per edge); deduce the equivalent Laplace noise for an edge count.
+    *Partial solution*: with $\hat A^2$ updated incrementally, each candidate is cheap to score. Compare with the gradient ranking of FGA (magnitude of the gradient of the attack loss per candidate edge), cheaper but only a first-order approximation of the same choice. The surrogate suffices (transfer). A defense raises the budget needed to flip a target but makes no target immune; conclude on certification (ch. 7.3).
+10. **★★ Edge-DP.** Prove that randomized response — each pair of nodes reported truthfully with probability $p > \tfrac12$, flipped otherwise — is $(\varepsilon, 0)$-edge-DP with $\varepsilon = \ln \frac{p}{1-p}$ (the convention of Privacy & UQ, Proposition 4.2). Then estimate the number of edges between two groups from the released graph, and compare its error with the Laplace mechanism applied to the true count by a trusted curator.
 
-    *Solution*: for two graphs neighboring in one edge, the likelihood ratio of any output is bounded by $\frac{1-p}{p}$ (the only edge where the two graphs differ is reported as present with probability $1-p$ in one and $p$ in the other; all other edges have the same law); hence the $\varepsilon$.
+    *Solution*: for two graphs neighboring in one edge, all other pairs have the same output law, and the differing pair is reported present with probability $p$ in one graph and $1-p$ in the other. The likelihood ratio of any output is therefore at most $\frac{p}{1-p}$, hence the $\varepsilon$.
 
-    Counting: each edge contributes Bernoulli($1-p$) vs Bernoulli($p$), and the sum over $m$ edges carries binomial noise of variance $m\,p(1-p)$.
+    Counting: over the $m$ pairs between the two groups, with $c$ true edges, the released count $S$ has mean
+    $$
+    \mathbb{E}[S] = c\,p + (m - c)(1 - p) = m(1 - p) + (2p - 1)\,c ,
+    $$
+    so $\hat c = \big(S - m(1-p)\big)/(2p - 1)$ is unbiased, with variance
+    $$
+    \mathrm{Var}(\hat c) = \frac{m\, p(1-p)}{(2p-1)^2} .
+    $$
 
-    This is comparable to a Laplace mechanism of scale $\sqrt{m\,p(1-p)/2}$ (a Laplace variable of scale $b$ has variance $2b^2$).
-11. **★★★ Research project.** Reproduce an experiment from one of (PathNN / GOAT / GPS / TGN / NGG) on OGB or TU; report: protocol, seeds, comparison to the published numbers, failure analysis — the M2's "paper" exercise; for PathNN: compare the three variants (s/r/n) on a molecular dataset and explain the observed hierarchy via ch. 9.1.
+    The Laplace mechanism on the true count (sensitivity 1, scale $1/\varepsilon$) has variance $2/\varepsilon^2$, independent of $m$. With $p = 0.75$, $\varepsilon = \ln 3 \approx 1.10$ and $m = 1000$ pairs, the standard deviations are about 27 edges for randomized response and 1.3 for Laplace: local noise is the price of not trusting a curator.
+11. **★★ Aligning a GNN with a text encoder on ogbn-arxiv.** On ogbn-arxiv (169,343 papers, 40 subject classes; titles and abstracts from the OGB mapping to MAG), train a 2-layer GraphSAGE and embed each title with a frozen sentence encoder. Train two linear heads with the symmetric InfoNCE loss of 8.3 (batches of 512, learned $\tau$). Report:
+
+    -   (a) graph → text recall@10 among 1,000 random test candidates;
+    -   (b) zero-shot node classification by cosine similarity with the embedded names of the 40 classes, against a GraphSAGE trained with labels;
+    -   (c) optionally, one soft token per node in a small open LLM, with the projector trained to generate the class name.
+
+    *Partial solution (expected)*: chance level is 1 % for (a) (10 out of 1,000) and 2.5 % for (b) (1 out of 40); the aligned model should be far above both, and (b) below supervised training. Expect most zero-shot confusions between neighboring fields. Map your pipeline onto the table of 8.3: (a)–(b) align the spaces, (c) is the soft-token architecture.
+12. **★★★ Research project.** Reproduce an experiment from one of (PathNN / GOAT / GPS / TGN / NGG) on OGB or TU; report: protocol, seeds, comparison to the published numbers, failure analysis — the M2's "paper" exercise; for PathNN: compare the three variants (SP / SP+ / AP) on a molecular dataset (ZINC12K) and explain the observed hierarchy via ch. 9.1.
+
+## Projects and assessment {#projects}
+
+The fiche above has no official sheet for this module: it appears in neither the S3 nor the S4 track of the SynapseS 2026–2027 catalog, so its assessment is "not displayed". Everything below is a proposal of these notes, not an official rule. The subjects are sized for an M2 module and reuse the experimental protocol of ch. 1 (seeds, confidence intervals, leakage checks), which every rubric line assumes.
+
+The projects exercise mainly O4 (graph-structured data: expressive power, over-squashing, encodings, temporal graphs), O5 (Graph × LLM: soft tokens, alignment, graph prompting) and O8 (robustness and privacy on graphs), with O7 (hands-on, reproducible research practice). They feed the end-of-year projects [Y2.1](../../projects/index.html#y2-1), [Y2.4](../../projects/index.html#y2-4) and [Y2.5](../../projects/index.html#y2-5).
+
+### Solo projects {#projects-solo}
+
+1.  **[Solo · ≈ 20 h] A test bench for expressive power.** Which models separate which hard pairs of graphs, and does every outcome match a statement of ch. 2 and ch. 4?
+    -   *Work*: implement 1-WL, 2-WL and 2-FWL by hashing, GCN, GIN, an ego-net subgraph GNN in the style of ESAN, and GIN with RWSE or LapEig + SignNet inputs.
+    -   *Data*: synthetic pairs built with NetworkX — C6 vs 2×C3, house vs pentagon, the $4 \times 4$ rook's graph vs the Shrikhande graph (both strongly regular with parameters (16, 6, 2, 2)) — and the CSL graphs of Murphy et al. (ICML 2019), 41-node 4-regular cycles with skip links, in 10 classes.
+    -   *Success criterion*: a models × pairs table in which each entry is predicted, before running, by a result of the page — including the negative ones: 2-FWL and RWSE must both fail on the strongly regular pair.
+    -   *Deliverables*: code, a 4–6 page report, a 10-minute talk; chapters 2 and 4, exercises 1, 3 and 5.
+2.  **[Solo · ≈ 25 h] Paper study: Path Neural Networks (Michel, Nikolentzos, Lutzeyer & Vazirgiannis, ICML 2023).** Do the three variants rank as their theory says, on synthetic pairs and on real benchmarks?
+    -   *Work*: reimplement PathNN-SP, SP+ and AP (path enumeration up to length $K$, LSTM path encoder of 9.1); check the separation claims on the pairs of solo project 1; then train on ZINC12K and two TU datasets.
+    -   *Data*: ZINC12K (Dwivedi et al.'s benchmarking subset) and PROTEINS and IMDB-B from TUDataset, with the 10-fold splits of Errica et al. (2020).
+    -   *Success criterion*: published numbers reproduced within one standard deviation, or the gap explained (budget, splits, $K$); the SP ≤ SP+ ≤ AP ordering tested, with its cost in time and memory.
+    -   *Deliverables*: code, report, talk; chapters 2 and 9, extending exercise 12.
+
+### Group projects {#projects-group}
+
+1.  **[Group of 3 · ≈ 30 h each] Diagnosing and curing over-squashing.** Do rewiring, deep propagation and global attention fix the long-range failures that the bound of Definition 3.1 predicts?
+    -   *Work*: measure the Jacobian sensitivity by autograd against distance, the spectral gap $\lambda_2$, the effective resistance and the edge curvatures; then compare SDRF, DIGL, APPNP, GCNII, GPS and Exphormer under one parameter budget.
+    -   *Data*: synthetic barbell graphs and the Tree-NeighborsMatch task of Alon & Yahav (2021), depths 2–6; then Peptides-func from the Long Range Graph Benchmark (Dwivedi et al., NeurIPS 2022), with its budget of about 500k parameters.
+    -   *Split*: diagnostics and rewiring; deep MPNNs; graph transformers — with one shared training harness.
+    -   *Success criterion*: average precision on Peptides-func with 95 % intervals over 5 seeds; $\lambda_2$ before and after each rewiring; a decision guide that confirms or corrects 5.4.
+    -   *Deliverables*: code, an 8–10 page joint report, a 20-minute talk; chapters 1, 3 and 5.
+2.  **[Group of 3 · ≈ 30 h each] Abuse detection on an event stream, under attack and under privacy.** How much do memory, a budgeted attacker and an edge-DP release each cost a temporal detector?
+    -   *Work*: TGN and TGAT for dynamic node classification with a chronological 70/15/15 split; the memory ablation of exercise 8; an evasion attack that injects $k$ events from attacker-controlled accounts, and a pruning or RGCN-style defense; a release of the training graph by randomized response (7.4) at several $\varepsilon$.
+    -   *Data*: the Wikipedia and Reddit interaction streams of JODIE (Kumar, Zhang & Leskovec, KDD 2019), with their banned-user labels; for a finance variant, the Elliptic Bitcoin graph (Weber et al., 2019) with snapshot models.
+    -   *Split*: temporal models and leakage checks; attack and defense; privacy release and evaluation.
+    -   *Success criterion*: AUC against attack budget and against $\varepsilon$, with intervals over 5 seeds; the leakage checklist of [Graph ML 5.6–5.8](../m1p2-graph-ml/index.html#ch5) passed.
+    -   *Deliverables*: code, joint report, talk; chapters 1, 6 and 7, exercises 8–10. It is a first version of [Y2.5](../../projects/index.html#y2-5) and links to [Security ch. 9](../m2-security-robustness/index.html#ch9) and [Privacy & UQ ch. 4](../m2-privacy-uncertainty/index.html#ch4).
+3.  **[Group of 3 · ≈ 30 h each] Graph tokens for an LLM.** For a small open LLM, which input answers graph-reasoning questions best as graphs grow: text, pseudo-code or soft tokens?
+    -   *Work*: three pipelines on the same questions — text serialization with the encodings of Talk like a Graph (Fatemi, Halcrow & Perozzi, ICLR 2024); pseudo-code prompting (Skianis, Nikolentzos & Vazirgiannis, 2024; 9.4); and a GPS + RWSE encoder whose outputs enter the LLM as soft tokens, after the symmetric InfoNCE alignment of 8.3, with LoRA on the LLM.
+    -   *Data*: synthetic questions in the style of GraphQA (edge existence, degree, cycle check, connectivity, shortest path) on random graphs of 5 to 50 nodes, and the NLGraph benchmark (Wang et al., NeurIPS 2023); a model of 0.5B to 1.5B parameters on a free GPU.
+    -   *Split*: prompting pipelines; encoder, projector and alignment; evaluation harness and size curves.
+    -   *Success criterion*: accuracy against the number of nodes for each task and pipeline, with intervals over 3 seeds and an equal training-data budget for the trained pipelines.
+    -   *Deliverables*: code, joint report, talk; chapters 4, 5, 8 and 9. It connects to [LLM 4.3](../m2-large-language-models/index.html#peft) (LoRA) and [LLM ch. 7](../m2-large-language-models/index.html#ch7) (retrieval), to [Graph ML 10.2](../m1p2-graph-ml/index.html#ch10), and is the graph-token option of [Y2.1](../../projects/index.html#y2-1).
+
+### Written exam (proposal) {#projects-exam}
+
+Two hours, one handwritten A4 sheet allowed, no calculator needed; four questions, 20 points.
+
+1.  **Question (5 points).** Define over-squashing with the Jacobian of Definition 3.1 and state the bound of Topping et al. Explain how a bottleneck, the Cheeger constant and the spectral gap are related. Then say how rewiring, APPNP/GCNII and graph transformers each act on the problem, and why over-squashing is not over-smoothing.
+    -   *Expected*: the sensitivity $|\partial h_v^{(r+1)} / \partial x_u|$ is at most $(\alpha\beta)^{r+1}(\hat A^{r+1})_{vu}$, small when few walks of $u$ reach $v$.
+    -   A bottleneck is a small $h_G$; by Cheeger, $\lambda_2/2 \leq h_G \leq \sqrt{2\lambda_2}$, so a small gap — not a large top eigenvalue.
+    -   Rewiring (SDRF) raises the curvature of negative edges and the gap; APPNP/GCNII change the propagation and anchor to the input; transformers make the channel all-to-all.
+    -   Over-smoothing is the collapse of representations with depth; over-squashing is the loss of distant inputs in the channel, even at moderate depth.
+2.  **Question (5 points).** Two triangles $\{0,1,2\}$ and $\{3,4,5\}$ are joined by the bridge $(2,3)$. (a) Compute the Ollivier-Ricci curvature of the bridge, with uniform measures on the neighbors. (b) Compute the Cheeger constant and deduce an upper bound on $\lambda_2$ of $L_{\mathrm{sym}}$. (c) Add the edge $(1,4)$ and recompute the Cheeger constant.
+    -   *Expected*: (a) mass $\frac13$ on each of the neighbors 0, 1, 3 of node 2 moves to the neighbors 2, 4, 5 of node 3. The best plan moves 3 to 4 and 0 to 2 at cost 1, and 1 to 5 at cost 3, so
+        $$
+        W_1 = \frac53, \qquad \kappa = 1 - \frac53 = -\frac23 .
+        $$
+    -   (b) The cut around one triangle: one edge over a volume $2 + 2 + 3 = 7$, so $h_G = \frac17$ (no cut does better), and $\lambda_2 \leq 2h_G = \frac27$; the true value is about 0.205.
+    -   (c) The same cut now has 2 edges for a volume of 8: $h_G = \frac14$, and the bound on $\lambda_2$ rises to $\frac12$ (the true value is about 0.423).
+3.  **Question (5 points).** (a) Compute the RWSE $\big[(P^k)_{vv}\big]_{k=1}^{6}$ of a node of C3 and of a node of C6. (b) Show that 1-WL gives the same color to every node of the disjoint union C3 ∪ C6. (c) Conclude on the power of a GIN with RWSE inputs, and name two graphs that this GIN still cannot separate.
+    -   *Expected*: (a) for C3, $(P^k)_{vv} = \frac13\big(1 + 2(-\frac12)^k\big)$; for C6, the odd terms vanish and the even ones agree with C3:
+        $$
+        \mathrm{C3}: \Big(0, \tfrac12, \tfrac14, \tfrac38, \tfrac{5}{16}, \tfrac{11}{32}\Big), \qquad \mathrm{C6}: \Big(0, \tfrac12, 0, \tfrac38, 0, \tfrac{11}{32}\Big) .
+        $$
+    -   (b) The graph is 2-regular: all nodes start with the same color and see two neighbors of that color at every round.
+    -   (c) GIN + RWSE separates what 1-WL cannot (here, through $k = 3$ or $k = 5$); it still fails on strongly regular graphs with the same parameters, such as the $4 \times 4$ rook's graph and the Shrikhande graph, whose return probabilities are fixed by the parameters.
+4.  **Question (5 points).** Randomized response releases each pair of nodes truthfully with probability $p > \frac12$ and flipped otherwise. (a) Prove that it is $\varepsilon$-edge-DP with $\varepsilon = \ln \frac{p}{1-p}$. (b) Give an unbiased estimator of the number $c$ of edges among $m$ given pairs, and its variance. (c) For $p = 0.75$ and 400 pairs, compare its standard deviation with that of the Laplace mechanism on the true count.
+    -   *Expected*: (a) neighboring graphs differ on one pair; all other pairs have the same output law, and on that pair the probabilities of each output are $p$ and $1 - p$ in some order, so every likelihood ratio is at most $\frac{p}{1-p}$.
+    -   (b) The released count $S$ has mean $m(1-p) + (2p-1)c$, so $\hat c = \big(S - m(1-p)\big)/(2p-1)$ is unbiased, with variance $m p (1 - p)/(2p - 1)^2$.
+    -   (c) With $p = 0.75$: variance $400 \times 0.1875 / 0.25 = 300$, standard deviation about 17.3; Laplace with $\varepsilon = \ln 3 \approx 1.10$ has standard deviation $\sqrt 2 / \varepsilon \approx 1.29$.
+
+### Grading rubric (proposal) {#projects-rubric}
+
+| Criterion | Weight | What earns the marks |
+|---|---|---|
+| Question and hypothesis | 15 % | a precise question, with the result of the page that predicts the outcome written down before the experiment |
+| Method and implementation | 25 % | models written from the chapters and checked on cases with a known answer (the hand computations of Examples 2.4 and 4.2, Proposition 3.2) |
+| Experimental protocol | 20 % | the ch. 1 protocol: equal parameter budgets, fixed splits, at least 5 seeds with intervals, temporal splits and leakage checks where relevant |
+| Analysis tied to the theory | 20 % | each result, failures included, explained by a statement of the course (1-WL bound, Cheeger, curvature, DP accounting) |
+| Critical reading | 10 % | the reference papers read for their assumptions and limits; published numbers compared honestly |
+| Report and presentation | 10 % | a clear report and a talk on time, with honest limits and reproducible code |
 
 ## References {#refs}
 
 -   K. Xu, W. Hu, J. Leskovec, S. Jegelka, [How Powerful are Graph Neural Networks?](https://arxiv.org/abs/1810.00826) (GIN), ICLR 2019.
 -   C. Morris et al., [Weisfeiler and Leman Go Neural: Higher-Order Graph Neural Networks](https://arxiv.org/abs/1810.02244), AAAI 2019.
--   C. Morris et al., [Weisfeiler and Lehman Go Machine Learning: The Story so far](https://arxiv.org/abs/2112.09992) (survey), Machine Learning journal 2023.
+-   C. Morris et al., [Weisfeiler and Leman go Machine Learning: The Story so far](https://arxiv.org/abs/2112.09992) (survey), JMLR 2023.
+-   H. Maron, H. Ben-Hamu, H. Serviansky, Y. Lipman, [Provably Powerful Graph Networks](https://arxiv.org/abs/1905.11136) (PPGN, 3-WL), NeurIPS 2019.
+-   G. Tinhofer, "Graph isomorphism and theorems of Birkhoff type", *Computing* 36, 1986; M. V. Ramana, E. R. Scheinerman, D. Ullman, "Fractional isomorphism of graphs", *Discrete Mathematics* 132, 1994 — the exact family of 1-WL-equivalent pairs (exercise 1).
 -   U. Alon, E. Yahav, [On the Bottleneck of Graph Neural Networks](https://arxiv.org/abs/2006.05205) (over-squashing), ICLR 2021.
--   J. Topping, F. Di Giovanni et al., [Understanding over-squashing and bottlenecks on graphs via curvature](https://arxiv.org/abs/2111.14522) (SDRF), ICLR 2022.
--   J. Gasteiger et al., [Diffusion Improves Graph Learning](https://arxiv.org/abs/1911.05485) (DIGL), NeurIPS 2021.
--   J. Klicpera et al., [Predict then Propagate: Graph Neural Networks Meet Personalized PageRank](https://arxiv.org/abs/1810.05397) (APPNP), ICLR 2019.
+-   J. Topping, F. Di Giovanni et al., [Understanding over-squashing and bottlenecks on graphs via curvature](https://arxiv.org/abs/2111.14522) (Jacobian bound, Balanced Forman curvature, SDRF), ICLR 2022.
+-   M. Black, Z. Wan, A. Nayyeri, Y. Wang, [Understanding Oversquashing in GNNs through the Lens of Effective Resistance](https://arxiv.org/abs/2302.06835), ICML 2023.
+-   J. Klicpera (now Gasteiger), S. Weißenberger, S. Günnemann, [Diffusion Improves Graph Learning](https://arxiv.org/abs/1911.05485) (DIGL), NeurIPS 2019.
+-   J. Klicpera et al., [Predict then Propagate: Graph Neural Networks Meet Personalized PageRank](https://arxiv.org/abs/1810.05997) (APPNP), ICLR 2019.
 -   M. Chen et al., [Simple and Deep Graph Convolutional Networks](https://arxiv.org/abs/2007.02133) (GCNII), ICML 2020.
 -   L. Rampasek et al., [Recipe for a General, Powerful, Scalable Graph Transformer](https://arxiv.org/abs/2205.12454) (GPS), NeurIPS 2022.
 -   C. Ying et al., [Do Transformers Really Perform Bad for Graph Representation?](https://arxiv.org/abs/2106.05234) (Graphormer), NeurIPS 2021.
--   H. Shirzad et al., [Exphormer: Sparse Transformers for Graphs](https://arxiv.org/abs/2303.08113), ICML 2023.
--   E. Lim et al., [Sign and Basis Invariant Networks for Spectral Graph Representation Learning](https://arxiv.org/abs/2202.13013) (SignNet), ICLR 2022.
+-   H. Shirzad et al., [Exphormer: Sparse Transformers for Graphs](https://arxiv.org/abs/2303.06147), ICML 2023.
+-   D. Lim, J. Robinson, L. Zhao, T. Smidt, S. Sra, H. Maron, S. Jegelka, [Sign and Basis Invariant Networks for Spectral Graph Representation Learning](https://arxiv.org/abs/2202.13013) (SignNet, BasisNet), ICLR 2023.
+-   M. Zaheer et al., [Deep Sets](https://arxiv.org/abs/1703.06114), NeurIPS 2017.
+-   V. P. Dwivedi, A. T. Luu, T. Laurent, Y. Bengio, X. Bresson, [Graph Neural Networks with Learnable Structural and Positional Representations](https://arxiv.org/abs/2110.07875) (LSPE, RWPE), ICLR 2022.
 -   R. Rossi et al., [Temporal Graph Networks](https://arxiv.org/abs/2006.10637) (TGN), ICML 2020 (workshop).
--   D. Xu et al., [Inductive Representation Learning on Temporal Graphs](https://arxiv.org/abs/2002.11698) (TGAT), ICLR 2020.
+-   D. Xu et al., [Inductive Representation Learning on Temporal Graphs](https://arxiv.org/abs/2002.07962) (TGAT), ICLR 2020.
 -   V. P. Dwivedi et al., [Benchmarking Graph Neural Networks](https://arxiv.org/abs/2003.00982), JMLR 2023 — experimental hygiene.
 -   M. Bronstein et al., [Geometric Deep Learning: Grids, Groups, Graphs, Geodesics, Gauges](https://arxiv.org/abs/2104.13478), 2021.
 -   D. Zügner, A. Akbarnejad, S. Günnemann, [Adversarial Attacks on Neural Networks for Graph Data](https://arxiv.org/abs/1805.07984) (Nettack), KDD 2018.
--   D. Zügner, S. Günnemann, [Adversarial Attacks on Graph Neural Networks via Meta Learning](https://arxiv.org/abs/1902.08412) (Meta-Self), ICLR 2019.
--   D. Zügner, S. Günnemann, [Certifiable Robustness and Stability for Graph Convolutional Networks](https://arxiv.org/abs/1901.00547) (robust RGCN), ICLR 2019.
+-   D. Zügner, S. Günnemann, [Adversarial Attacks on Graph Neural Networks via Meta Learning](https://arxiv.org/abs/1902.08412) (Metattack, Meta-Self), ICLR 2019.
+-   C. Finn, P. Abbeel, S. Levine, [Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks](https://arxiv.org/abs/1703.03400) (MAML), ICML 2017.
+-   J. Chen et al., [Fast Gradient Attack on Network Embedding](https://arxiv.org/abs/1809.02797) (FGA), 2018.
+-   D. Zhu, Z. Zhang, P. Cui, W. Zhu, "Robust Graph Convolutional Networks Against Adversarial Attacks" (RGCN), KDD 2019.
+-   D. Zügner, S. Günnemann, [Certifiable Robustness and Robust Training for Graph Convolutional Networks](https://arxiv.org/abs/1906.12269), KDD 2019 — certification, 7.3.
 -   V. Garcia Satorras, E. Hoogeboom, M. Welling, [E(n) Equivariant Graph Neural Networks](https://arxiv.org/abs/2102.09844) (EGNN), ICML 2021.
--   G. Michel, G. Nikolentzos, J. F. Lutzeyer, M. Vazirgiannis, [Path Neural Networks: Expressive and Accurate Graph Neural Networks](https://arxiv.org/abs/2306.05955), ICML 2023 — the "home" paper to present.
+-   E. Hoogeboom, V. Garcia Satorras, C. Vignac, M. Welling, [Equivariant Diffusion for Molecule Generation in 3D](https://arxiv.org/abs/2203.17003) (EDM), ICML 2022; M. Xu et al., [GeoDiff: a Geometric Diffusion Model for Molecular Conformation Generation](https://arxiv.org/abs/2203.02923), ICLR 2022.
+-   G. Michel, G. Nikolentzos, J. F. Lutzeyer, M. Vazirgiannis, [Path Neural Networks: Expressive and Accurate Graph Neural Networks](https://arxiv.org/abs/2306.05955) (PathNN-SP, SP+, AP), ICML 2023 — the "home" paper to present.
+-   F. Errica, M. Podda, D. Bacciu, A. Micheli, [A Fair Comparison of Graph Neural Networks for Graph Classification](https://arxiv.org/abs/1912.09893), ICLR 2020 — the TU protocol.
 -   M. Chatzianastasis, J. F. Lutzeyer, G. Dasoulas, M. Vazirgiannis, [Graph Ordering Attention Networks](https://arxiv.org/abs/2204.05351) (GOAT), AAAI 2023.
 -   I. Evdaimon et al., [Neural Graph Generator: Feature-Conditioned Graph Generation using Latent Diffusion](https://arxiv.org/abs/2403.01535) (NGG), 2024.
 -   K. Skianis, G. Nikolentzos, M. Vazirgiannis, [Graph Reasoning with Large Language Models via Pseudo-code Prompting](https://arxiv.org/abs/2409.17906), 2024.
--   P. Veličković et al., [The CLRS Algorithmic Reasoning Benchmark](https://arxiv.org/abs/2205.15659), ICML 2023.
+-   P. Veličković et al., [The CLRS Algorithmic Reasoning Benchmark](https://arxiv.org/abs/2205.15659), ICML 2022.
 -   H. Wang et al., [Can Language Models Solve Graph Problems in Natural Language?](https://arxiv.org/abs/2305.10037) (NLGraph), NeurIPS 2023.
 -   B. Fatemi, J. Halcrow, B. Perozzi, [Talk like a Graph: Encoding Graphs for Large Language Models](https://arxiv.org/abs/2310.04560), ICLR 2024.
--   G. Bevilacqua et al., [Equivariant Subgraph Aggregation Networks](https://arxiv.org/abs/2110.02910) (ESGNN), ICLR 2022.
+-   J. Tang et al., [GraphGPT: Graph Instruction Tuning for Large Language Models](https://arxiv.org/abs/2310.13023), SIGIR 2024; X. He et al., [G-Retriever: Retrieval-Augmented Generation for Textual Graph Understanding and Question Answering](https://arxiv.org/abs/2402.07630), NeurIPS 2024; X. He et al., [Harnessing Explanations: LLM-to-LM Interpreter for Enhanced Text-Attributed Graph Representation Learning](https://arxiv.org/abs/2305.19523) (TAPE), ICLR 2024 — the three architectures of 8.3.
+-   A. Radford et al., [Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020) (CLIP, symmetric InfoNCE), ICML 2021.
+-   B. Bevilacqua et al., [Equivariant Subgraph Aggregation Networks](https://arxiv.org/abs/2110.02910) (ESAN), ICLR 2022; F. Frasca, B. Bevilacqua, M. Bronstein, H. Maron, [Understanding and Extending Subgraph GNNs by Rethinking Their Symmetries](https://arxiv.org/abs/2206.11140), NeurIPS 2022.
 -   G. Bouritsas et al., [Improving Graph Neural Network Expressivity via Subgraph Isomorphism Counting](https://arxiv.org/abs/2006.09252), IEEE TPAMI 2022.
--   For the M1 reviews: T. Kipf, M. Welling, [GCN](https://arxiv.org/abs/1609.02907) ICLR 2017; J. Qiu et al., [NetMF](https://arxiv.org/abs/1710.02971) WSDM 2018; T. Kipf, M. Welling, [Variational Graph Auto-Encoders](https://arxiv.org/abs/1611.07308) 2016; W.-L. Chiang et al., [Cluster-GCN](https://arxiv.org/abs/1905.07953) KDD 2019; H. Zeng et al., [GraphSAINT](https://arxiv.org/abs/1907.04931) ICLR 2020; J. You et al., [GraphRNN](https://arxiv.org/abs/1802.08773) ICML 2018; B. Samanta et al., [NeVAE](https://arxiv.org/abs/1802.05283) AAAI 2019; C. Vignac et al., [DiGress](https://arxiv.org/abs/2210.13934) ICLR 2023.
+-   For the M1 reviews: T. Kipf, M. Welling, [GCN](https://arxiv.org/abs/1609.02907) ICLR 2017; J. Qiu et al., [NetMF](https://arxiv.org/abs/1710.02971) WSDM 2018; T. Kipf, M. Welling, [Variational Graph Auto-Encoders](https://arxiv.org/abs/1611.07308) 2016; W.-L. Chiang et al., [Cluster-GCN](https://arxiv.org/abs/1905.07953) KDD 2019; H. Zeng et al., [GraphSAINT](https://arxiv.org/abs/1907.04931) ICLR 2020; J. You et al., [GraphRNN](https://arxiv.org/abs/1802.08773) ICML 2018; B. Samanta et al., [NeVAE](https://arxiv.org/abs/1802.05283) AAAI 2019; C. Vignac et al., [DiGress](https://arxiv.org/abs/2209.14734) ICLR 2023.
+-   Project data: R. Murphy et al., [Relational Pooling for Graph Representations](https://arxiv.org/abs/1903.02541) (CSL graphs), ICML 2019; V. P. Dwivedi et al., [Long Range Graph Benchmark](https://arxiv.org/abs/2206.08164), NeurIPS 2022 Datasets and Benchmarks; S. Kumar, X. Zhang, J. Leskovec, [Predicting Dynamic Embedding Trajectory in Temporal Interaction Networks](https://arxiv.org/abs/1908.01207) (JODIE: Wikipedia and Reddit streams), KDD 2019; M. Weber et al., [Anti-Money Laundering in Bitcoin](https://arxiv.org/abs/1908.02591) (Elliptic), KDD workshop 2019.
 -   [PyTorch Geometric](https://www.pyg.org); [OGB](https://ogb.stanford.edu) — labs and benchmarks.
