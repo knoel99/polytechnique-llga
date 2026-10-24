@@ -838,7 +838,7 @@ The gradient of the loss with respect to the scale $c$ of the weights is then \~
 
 ### 3.6. Regularization: the complete tour
 
--   **Dropout** (Srivastava et al., 2014): during training, each activation is multiplied by an iid mask $M_j \sim \mathrm{Bernoulli}(1-p)$ then divided by $1-p$ ("inverted"); at inference, identity. *Proof that the expectation is preserved*: $\mathbb{E}[M_j/(1-p)] = 1$, hence $\mathbb{E}[\tilde h_j] = h_j$ — no scaling is needed at test time. Ensemble interpretation: each mask defines a sub-network; training samples $2^{n}$ architectures sharing their weights, and inference approximately averages their consensus (the exact "mean network" approximation holds for a single final linear block; Gal & Ghahramani, 2016, give it a Bayesian reading, cf. Emerging ML module).
+-   **Dropout** (Srivastava et al., 2014): during training, each activation is multiplied by an iid mask $M_j \sim \mathrm{Bernoulli}(1-p)$ then divided by $1-p$ ("inverted"); at inference, identity. *Proof that the expectation is preserved*: $\mathbb{E}[M_j/(1-p)] = 1$, hence $\mathbb{E}[\tilde h_j] = h_j$ — no scaling is needed at test time. Ensemble interpretation: each mask defines a sub-network; training samples $2^{n}$ architectures sharing their weights, and inference approximately averages their consensus (the exact "mean network" approximation holds for a single final linear block; Gal & Ghahramani, 2016, give it a Bayesian reading, used as MC dropout in [Privacy and Uncertainty Quantification, ch. 8](../m2-privacy-uncertainty/index.html#ch8), M2).
 -   **Weight decay** $\tfrac{\lambda}{2}\|\theta\|^2$: SGD + decay gives $\theta \leftarrow (1 - \eta\lambda)\theta - \eta \hat g$ — multiplicative shrinkage at each step (implicit ridge). **AdamW** (Loshchilov & Hutter, ICLR 2019) applies the decay *directly* to the weights and not through Adam's preconditioner: via $\hat m/\sqrt{\hat v}$, the decay would undergo a per-coordinate normalization that makes it uneven; decoupled, it becomes a homogeneous ridge again. It is the standard for transformers (typically $\lambda \sim 10^{-2}$, much larger than in the SGD era).
 -   **Label smoothing** $\varepsilon \in [0.05, 0.2]$: the target becomes $q_k = (1 - \varepsilon)\,\mathbf{1}[k = y] + \varepsilon/K$. The cross-entropy penalizes $-\log p_k \to \infty$ as $p_k \to 0$.
 
@@ -1162,7 +1162,7 @@ Consequence for saturation: the typical gaps between normalized scores are $\mat
     $$
     \langle R(m)\, q,\; R(n)\, k \rangle = q^\top R(m)^\top R(n)\, k = q^\top R(n-m)\, k,
     $$
-    the score depends only on the gap $n - m$: position is encoded *within* the interaction, with unbounded length support — this is the encoding of modern LLMs.
+    the score depends only on the gap $n - m$: position is encoded *within* the interaction — this is the encoding of modern LLMs. The rotation is defined at every position, but a model generalizes poorly beyond its training context; extending the window rescales the angles (interpolation, YaRN), usually with a short fine-tuning ([Advanced Topics in LLMs, ch. 3](../m2-advanced-topics-llms/index.html#ch3)).
 
 ### 6.3. Costs and efficient attention
 
@@ -1356,7 +1356,7 @@ Training "from scratch" has become the exception: the dominant practice consists
 
 ### 7.1. The three adaptation regimes
 
--   **Frozen features / linear probing**: freeze the whole backbone, train a linear classifier (or a small head) on the pre-trained representations. A valuable diagnostic: feature quality is measured by the performance of a simple softmax on top (see exercise 12).
+-   **Frozen features / linear probing**: freeze the whole backbone, train a linear classifier (or a small head) on the pre-trained representations. A valuable diagnostic: feature quality is measured by the performance of a simple softmax on top (exercise 12, step (d)).
 -   **Full fine-tuning**: retrain all the weights with a smaller step (typically 10 to 100× smaller than pre-training) — the risk of *catastrophic forgetting* (loss of pre-trained knowledge) is managed by a decaying step and few epochs.
 -   **Parameter-efficient fine-tuning (PEFT)**: train only a small fraction of new parameters, the rest staying frozen — all the more relevant as models grow.
 
@@ -1375,7 +1375,7 @@ Training "from scratch" has become the exception: the dominant practice consists
 
 -   **Partial fine-tuning is cheap in compute, not in parameters.** The last stage holds three quarters of the weights of a ResNet-18, but the backward pass stops there and the frozen stages store no activations.
 -   **The domain decides.** On a target close to ImageNet with a few hundred labels per class, the probe often comes within a few points of full fine-tuning and barely overfits. The further the domain moves (medical images, sketches), the more of the high layers must be retrained.
--   **Run the probe first.** It is the floor that any fine-tuning must beat, and it measures the quality of the features (exercise 12). Keep frozen BatchNorm layers in `eval()` mode, or their running statistics still move.
+-   **Run the probe first.** It is the floor that any fine-tuning must beat, and it measures the quality of the features (exercise 12, step (d)). Keep frozen BatchNorm layers in `eval()` mode, or their running statistics still move.
 :::
 
 ```python
@@ -1935,7 +1935,7 @@ This work directly extends ch. 9 and is expanded in the Multimodal Generative AI
     $$
     as a function of $\mu$ and $\sigma$, and locate the minimum.
 11. **★★ Gaussian GAN.** For $p_{\mathrm{data}} = \mathcal{N}(0, 1)$ and $p_G = \mathcal{N}(\mu, \sigma^2)$, write the logit of $D^\star$ (difference of the log-densities) and check that it is a trinomial in $x$. Where does the equilibrium lie?
-12. **★★★ Project.** In PyTorch: classify MNIST with (a) an MLP, (b) a small CNN, (c) a mini-transformer on patches (16 patches of 7×7, a 4 × 4 grid, as in the ViT of 6.6). Plot the train/val curves, compare the parameter counts and accuracy, comment with the bias-variance decomposition, then apply the protocol of chapter 8 (overfitting a batch, LR range test).
+12. **★★★ Project.** In PyTorch: classify MNIST with (a) an MLP, (b) a small CNN, (c) a mini-transformer on patches (16 patches of 7×7, a 4 × 4 grid, as in the ViT of 6.6). Plot the train/val curves, compare the parameter counts and accuracy, comment with the bias-variance decomposition, then apply the protocol of chapter 8 (overfitting a batch, LR range test). (d) Train the CNN of (b) on the digits 0–4, freeze it, and train a linear classifier on its features for the digits 5–9 (linear probing, section 7.1); compare with the CNN trained from scratch on 5–9.
 
 ::: note
 [Solutions (Ex. 2, 3, 5, 6, 11) and hints (the others)]{.tag}
