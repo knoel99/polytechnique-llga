@@ -404,7 +404,7 @@ F_w(x') = \sum_i w_i F_i(x') \leq \sum_i w_i F_i(x_w) = F_w(x_w),
 </span> and since <span class="math inline">w_j &gt; 0</span> the inequality is strict: <span class="math inline">F_w(x') &lt; F_w(x_w)</span> contradicts the minimality of <span class="math inline">x_w</span>.</p></li>
 <li><p>Suppose some <span class="math inline">x'</span> satisfies <span class="math inline">F_i(x') &lt; F_i(x_w)</span> for <em>every</em> index. Since <span class="math inline">w \neq 0</span>, some weight <span class="math inline">w_k</span> is positive; that term of the sum decreases strictly and no term increases, because <span class="math inline">w \geq 0</span>. Hence <span class="math display">
 F_w(x') &lt; F_w(x_w),
-</span> again a contradiction. With a zero weight, a solution that is better on one objective and equal on the others leaves <span class="math inline">F_w</span> unchanged: only weak optimality survives. <span class="qed">∎</span></p></li>
+</span> again a contradiction. With a zero weight on some objective, a solution that is better on that objective only, and equal on the others, leaves <span class="math inline">F_w</span> unchanged: only weak optimality survives. <span class="qed">∎</span></p></li>
 </ol>
 </div>
 </div>
@@ -635,7 +635,12 @@ q(x) = \mathrm{clip}\big(\mathrm{round}((x - x_{\min})/s),\, 0, 2^b-1\big),
 </tbody>
 </table>
 <p>Foundational references: Jacob et al.&nbsp;2018 (int8 PTQ/QAT, deployed); Han et al.&nbsp;2016 (Deep Compression: pruning + quantization + Huffman). Caution (ch.&nbsp;7): the “up to 10×” of brochures must be measured — the protocol of ch.&nbsp;6 is non-negotiable.</p>
-<p>Sources of the distillation range, the one also used by <a href="../m1p2-deep-learning-p2/index.html#ch5">Deep Learning (P2 variant), prop. 5.2</a>. On one targeted task, XtremeDistil compresses multilingual BERT up to 35× for named-entity recognition while keeping 95 % of its F1 score (Mukherjee and Awadallah, 2020); Tang et al.&nbsp;(2019) reach about 100× with a BiLSTM student that matches ELMo but stays below its BERT teacher. On a broad benchmark the ratio falls: DistilBERT keeps 97 % of BERT’s GLUE score with 40 % fewer parameters (Sanh et al., 2019).</p>
+<p>Sources of the distillation range, the one also used by <a href="../m1p2-deep-learning-p2/index.html#ch5">Deep Learning (P2 variant), prop. 5.2</a>:</p>
+<ul>
+<li>On one targeted task, XtremeDistil compresses multilingual BERT up to 35× for named-entity recognition while keeping 95 % of its F1 score (Mukherjee and Awadallah, 2020).</li>
+<li>Tang et al.&nbsp;(2019) distil BERT-large into a BiLSTM with 349 times fewer parameters. On SST-2 it matches ELMo, itself 98 times larger than the student (90.7 % against 90.4 % accuracy), but stays about 4 points below its teacher (94.9 %). The “about 100×” quoted from this paper is the ratio to ELMo, not to the teacher.</li>
+<li>On a broad benchmark the ratio falls: DistilBERT keeps 97 % of BERT’s GLUE score with 40 % fewer parameters (Sanh et al., 2019).</li>
+</ul>
 </div>
 <div class="def">
 <p><span class="tag">Definition 3.4 — Magnitude pruning</span> Given trained weights <span class="math inline">W</span> and a target sparsity <span class="math inline">\rho \in (0,1)</span>, magnitude pruning sets to zero the fraction <span class="math inline">\rho</span> of weights with the smallest absolute values <span class="math inline">|W_{ij}|</span>, then usually fine-tunes the remaining ones. It is <em>unstructured</em> when individual weights are removed, <em>structured</em> when the score is computed per channel, head or layer (for instance the norm of a whole filter) and whole blocks are removed. Only the structured version shrinks the dense matrices that ordinary hardware multiplies, which is why it is the one that delivers measured speedups.</p>
@@ -1066,7 +1071,7 @@ def distill_loss(zs, zt, y, T=4.0, lam=0.7):   # def. 3.1
 <ol type="1">
 <li><strong>[Solo · ≈ 20 h] Pareto front of a small-LLM fine-tune: accuracy, kWh and latency.</strong> Which LoRA rank, weight precision and model size are Pareto-rational for one task, and which of them can no weighted sum of the objectives ever select?
 <ul>
-<li><em>Implement:</em> LoRA and QLoRA fine-tunes (<a href="../m2-large-language-models/index.html#peft">Large Language Models</a>, 4.3) of SmolLM2-135M and SmolLM2-360M, or Qwen2.5-0.5B, on SST-2 (GLUE) on a free-tier GPU; sweep the rank <span class="math inline">r \in \{4, 8, 16, 32\}</span> and the precision of the frozen base (16-bit, int8, 4-bit NF4), with 3 seeds per configuration.</li>
+<li><em>Implement:</em> LoRA and QLoRA fine-tunes (<a href="../m2-large-language-models/index.html#peft">Large Language Models</a>, 4.3) of SmolLM2-135M and SmolLM2-360M, or Qwen2.5-0.5B, on a 10 000-sentence subset of SST-2 (GLUE) on a free-tier GPU, so that the 72 runs fit the budget; sweep the rank <span class="math inline">r \in \{4, 8, 16, 32\}</span> and the precision of the frozen base (16-bit, int8, 4-bit NF4), with 3 seeds per configuration.</li>
 <li><em>Measure:</em> validation accuracy, training and inference energy with CodeCarbon under the protocol sheet of ch.&nbsp;6, latency per query, and an uncertainty range for every energy figure (prop. 6.4).</li>
 <li><em>Analyse:</em> the non-dominated set; its supported points (on the convex hull of the front), the only ones a weighted sum can return (theorem 1.2, prop. 1.3), against the others; a selection by <span class="math inline">\varepsilon</span>-constraint (def. 1.4) at a stated kWh budget; the training–inference break-even (def. 6.6) at <span class="math inline">10^4</span> and <span class="math inline">10^6</span> queries a day.</li>
 <li><em>Deliverables:</em> code, 4–6 page report with the protocol sheet, 10-minute talk. <em>Chapters:</em> ch.&nbsp;1, 3, 6.</li>
@@ -1078,7 +1083,7 @@ def distill_loss(zs, zt, y, T=4.0, lam=0.7):   # def. 3.1
 <li><em>Measure:</em> accuracy, parameters, memory, throughput and energy per query on a CPU (RAPL through CodeCarbon) at batch sizes 1 and 64; test whether the memory-bound reasoning of example 3.5 predicts the int8 speedup at batch 1.</li>
 <li><em>Account:</em> the energy of the teacher’s fine-tuning and of every distillation run, discarded ones included (ch.&nbsp;3, common mistake 3), and the number of queries that repays it (def. 6.6).</li>
 <li><em>Deliverables:</em> code, 4–6 page report, 10-minute talk. <em>Chapters:</em> ch.&nbsp;1, 3, 6.</li>
-<li><em>Success criterion:</em> both students sit on the (energy per query, accuracy) plot of example 1.6 with error bars over 3 seeds; their compression ratios and accuracy gaps are compared with the paper and with the range of the ch.&nbsp;3 table.</li>
+<li><em>Success criterion:</em> both students sit on the (energy per query, accuracy) plot of example 1.6 with error bars over 3 seeds; their compression ratios and accuracy gaps are compared with the paper, whose teacher is the larger BERT-large (335M parameters), and with the range of the ch.&nbsp;3 table.</li>
 </ul></li>
 <li><strong>[Solo · ≈ 15 h] Auditing a published footprint: BLOOM.</strong> A paper study of Luccioni, Viguier and Ligozat, “Estimating the carbon footprint of BLOOM, a 176B parameter language model”, <em>JMLR</em> 24(253), 2023, which reports 24.7 t CO<sub>2</sub>eq for the dynamic power of the final training and 50.5 t when every process, from equipment manufacturing to operation, is counted.
 <ul>

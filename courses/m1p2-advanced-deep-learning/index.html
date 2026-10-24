@@ -773,7 +773,7 @@ y = \sum_{i=1}^{n_E} \mathbb{1}[i \in \mathrm{TopK}(g(x), k)]\; g_i(x)\; \mathrm
 <div class="proof">
 <p><span class="proof-title"><em>Proof</em>. </span>An MLP <span class="math inline">d \to r d \to d</span> has <span class="math inline">2 r d^2</span> parameters and <span class="math inline">4 r d^2</span> FLOPs per token (two matrix products).</p>
 <p>With <span class="math inline">n_E</span> experts, the parameters are multiplied by <span class="math inline">n_E</span>; the computation executes only the <span class="math inline">k</span> selected experts — the factor is <span class="math inline">k</span>.</p>
-<p>The routing (a <span class="math inline">d \times n_E</span> matrix) costs <span class="math inline">2 n_E d</span>, below <span class="math inline">4krd^2</span> as soon as <span class="math inline">r \geq 1</span>. <span class="qed">∎</span></p>
+<p>The routing (a <span class="math inline">d \times n_E</span> matrix) costs <span class="math inline">2 n_E d</span>, below <span class="math inline">4krd^2</span> as soon as <span class="math inline">n_E &lt; 2krd</span>, which holds by a wide margin in practice. <span class="qed">∎</span></p>
 </div>
 </div>
 <h3 id="balancing-the-load">6.1. Balancing the load</h3>
@@ -787,7 +787,7 @@ y = \sum_{i=1}^{n_E} \mathbb{1}[i \in \mathrm{TopK}(g(x), k)]\; g_i(x)\; \mathrm
 <p>Each token fills <span class="math inline">k</span> slots, so dividing by <span class="math inline">k</span> makes the <span class="math inline">f_i</span> sum to 1; with Switch’s top-1 routing it is the plain token fraction.</p>
 <p>Under uniform routing, <span class="math inline">f_i = P_i = 1/n_E</span>, so <span class="math inline">\sum_i f_i P_i = 1/n_E</span> and the loss equals <span class="math inline">\alpha_{\mathrm{aux}}</span> whatever the number of experts. The gradient flows only through the <span class="math inline">P_i</span>, each weighted by <span class="math inline">f_i</span>: it lowers the gate probability of the experts that already receive more than their share of tokens, which pushes the routing towards balance.</p>
 <p>Added to this are the <strong>capacity</strong> per expert, <span class="math inline">k \times (\text{tokens}/n_E) \times</span> a capacity factor — beyond it, tokens “overflow” (passed on to the rest of the network) — and per-expert parallelization (expert parallelism: each device holds experts).</p>
-<p>The M2 <a href="../m2-large-language-models/index.html#moe">Large Language Models</a> module states the same layer and the same loss with the same symbols, and its exercise 9 derives the minimum of the loss; this chapter keeps the statements and reads them on vision and character-level models.</p>
+<p>The M2 <a href="../m2-large-language-models/index.html#moe">Large Language Models</a> module states the same layer and the same loss with the same symbols, and its exercise 9 asks for the minimum of the loss: balance is the minimum when <span class="math inline">f_i = P_i</span>, but not in general (exercise 7 (b) below); this chapter keeps the statements and reads them on vision and character-level models.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> torch, torch.nn <span class="im">as</span> nn, torch.nn.functional <span class="im">as</span> F</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MoE(nn.Module):</span>
@@ -881,7 +881,7 @@ S_{ij} = u_i^\top v_j / \tau
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    mask <span class="op">=</span> <span class="op">~</span>torch.eye(<span class="dv">2</span> <span class="op">*</span> N, dtype<span class="op">=</span>torch.<span class="bu">bool</span>, device<span class="op">=</span>z.device)</span>
 <span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    sim_i <span class="op">=</span> sim.masked_fill(<span class="op">~</span>mask, <span class="bu">float</span>(<span class="st">"-inf"</span>))</span>
 <span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    target <span class="op">=</span> (torch.arange(<span class="dv">2</span> <span class="op">*</span> N, device<span class="op">=</span>z.device) <span class="op">+</span> N) <span class="op">%</span> (<span class="dv">2</span> <span class="op">*</span> N)   <span class="co"># positive of i</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> F.cross_entropy(sim_i, target)           <span class="co"># softmax over the negatives</span></span></code></pre></div>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> F.cross_entropy(sim_i, target)           <span class="co"># softmax over the 2N - 1 other views</span></span></code></pre></div>
 <h2 id="ch8">8. Self-supervision II: masking (MAE, BEiT, DINOv2)</h2>
 <p>Contrastive learning needs carefully designed augmentations and many negatives. This chapter presents the other route to label-free pre-training, borrowed from BERT: hide most of the image and train the network to fill in what is missing.</p>
 <h3 id="masked-autoencoders-mae">8.1. Masked Autoencoders (MAE)</h3>
@@ -911,7 +911,7 @@ p = \mathrm{softmax}\big((h_\xi(x_1) - c)/T_{\mathrm{te}}\big).
 \mathcal{L}_{\mathrm{DINO}} = -\sum_{k=1}^{K} p_k \log \mathrm{softmax}\big(h_\theta(x_2)/T_{\mathrm{st}}\big)_k .
 </span> No gradient reaches the teacher: its weights are a moving average of the student’s, <span class="math inline">\xi \leftarrow m\,\xi + (1 - m)\,\theta</span>, and <span class="math inline">c</span> is a moving average of the teacher’s outputs over the batches.</p>
 </div>
-<p>Centering alone would push the target towards the uniform distribution, and sharpening alone (<span class="math inline">T_{\mathrm{te}} \approx 0.04</span> against <span class="math inline">T_{\mathrm{st}} = 0.1</span>) towards a one-hot one; together they avoid the collapse of proposition 7.3, in either form, without any negative. The views are two large crops, seen by both networks, and several small crops seen by the student only (multi-crop).</p>
+<p>Centering alone would push the target towards the uniform distribution, and sharpening alone (<span class="math inline">T_{\mathrm{te}} \approx 0.04</span> against <span class="math inline">T_{\mathrm{st}} = 0.1</span>) towards a one-hot one; together they avoid both collapses, two forms of the constant encoder of proposition 7.3, without any negative. The views are two large crops, seen by both networks, and several small crops seen by the student only (multi-crop).</p>
 <p>DINOv2 adds three ingredients to this loss: an <strong>iBOT</strong> term, the same cross-entropy applied to the patch tokens that are masked in the student’s input (the masking of section 8.1, inside a distillation); a <strong>KoLeo</strong> regularizer that spreads the features of a batch over the sphere; and Sinkhorn–Knopp centering of the teacher in place of the moving average.</p>
 <table class="caption-top">
 <thead>
@@ -924,7 +924,7 @@ p = \mathrm{softmax}\big((h_\xi(x_1) - c)/T_{\mathrm{te}}\big).
 </thead>
 <tbody>
 <tr class="odd">
-<td style="text-align: left;">Contrastive (SimCLR, MoCo, DINO)</td>
+<td style="text-align: left;">Contrastive (SimCLR, MoCo)</td>
 <td style="text-align: left;">view matching</td>
 <td style="text-align: left;">highly discriminative representations</td>
 <td style="text-align: left;">sensitive to augmentations; negatives to manage</td>
@@ -936,7 +936,7 @@ p = \mathrm{softmax}\big((h_\xi(x_1) - c)/T_{\mathrm{te}}\big).
 <td style="text-align: left;">weaker in “global” linear probing</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">Self-distillation (DINOv2)</td>
+<td style="text-align: left;">Self-distillation (DINO, DINOv2)</td>
 <td style="text-align: left;">self-improved teacher-target</td>
 <td style="text-align: left;">best of both worlds, curated data</td>
 <td style="text-align: left;">complex recipes</td>
@@ -1146,7 +1146,7 @@ q_i \propto \|\nabla f_i\|,
 </ul>
 <p>Gradient norms are unknown before computing them, so practical schemes use cheap proxies (the loss, a stale norm) and must reweight to stay unbiased (Katharopoulos &amp; Fleuret 2018).</p>
 <p><em>Generation.</em> For a diffusion model (recall box above), <strong>classifier-free guidance</strong> (Ho &amp; Salimans 2022) samples with <span class="math display">
-\tilde\varepsilon = \varepsilon_\theta(x_t, \varnothing) + w\,\big(\varepsilon_\theta(x_t, c) - \varepsilon_\theta(x_t, \varnothing)\big).
+\tilde\varepsilon = \varepsilon_\theta(x_t, t, \varnothing) + w\,\big(\varepsilon_\theta(x_t, t, c) - \varepsilon_\theta(x_t, t, \varnothing)\big).
 </span> The weight <span class="math inline">w = 0</span> gives the unconditional model and <span class="math inline">w = 1</span> the conditional one; a weight <span class="math inline">w &gt; 1</span> trades diversity for fidelity to the condition <span class="math inline">c</span>, so the distribution actually sampled is no longer the learned one.</p>
 <p>The original paper writes the same rule with <span class="math inline">w' = w - 1</span>, so its <span class="math inline">w' = 0</span> is our <span class="math inline">w = 1</span>; the Multimodal and Control modules use our form.</p>
 <p>The deterministic <strong>DDIM</strong> sampler (Song, Meng &amp; Ermon 2021) reuses the same trained network with <span class="math inline">10</span> to <span class="math inline">50</span> steps instead of <span class="math inline">1\,000</span>: <span class="math display">
@@ -1241,8 +1241,8 @@ N^\star \propto C^{\beta/(\alpha+\beta)}, \qquad D^\star \propto C^{\alpha/(\alp
 <li><strong>★★★ Paper critique.</strong> Take the main table of DeiT: identify the baselines, seeds, budgets; what additional experiment would you ask the authors for; write a one-page “review” (structure: summary, strengths, weaknesses, questions).</li>
 </ol>
 <h2 id="projects">Projects and assessment</h2>
-<p><strong>Official assessment.</strong> The fiche above quotes the SynapseS 2026–2027 sheet: “a combination of homework, quizzes and team projects”, with “more details later”, and a numerical grade out of 20. The assessment section of the sheet for the LLGA track is <strong>not displayed</strong> (empty). Everything below is our proposal. The subjects follow the format of chapter 2 — one number, one replication, one budget, the deliverables of section 2.3 — and the written exam can serve as the quiz part.</p>
-<p>The projects exercise the master objectives <strong>O1</strong> (deep learning foundations: architectures, objectives, scaling), <strong>O7</strong> (hands-on practice under the replication protocol of definition 1.1) and <strong>O8</strong> (trustworthy AI, through the robustness of section 4.5), with <strong>O3</strong> (large language models) through the MoE and scaling subjects and <strong>O2</strong> (generative modelling) through neural fields.</p>
+<p><strong>Official assessment.</strong> The fiche above quotes the SynapseS 2026–2027 sheet: “a combination of homework, quizzes and team projects”, with “more details later”, and a numerical grade out of 20. The assessment section of the sheet for the LLGA track is <strong>not displayed</strong> (empty). Everything below is our proposal. The subjects follow the format of chapter 2 — one number, one replication, one budget, the deliverables of section 2.3 (shorter for solo subjects) — and the written exam can serve as the quiz part.</p>
+<p>The projects exercise the master objectives <strong>O1</strong> (deep learning foundations: architectures, objectives, scaling), <strong>O7</strong> (hands-on practice under the replication protocol of definition 1.1) and <strong>O8</strong> (trustworthy AI, through the robustness of section 4.5), with <strong>O3</strong> (large language models) through the MoE and scaling subjects.</p>
 <p>No end-of-year capstone uses this elective as a graded work package, but two group subjects double as ablations there: the self-supervised image tower of group project 2 for <a href="../../projects/index.html#y2-3">Y2.3</a>, and the distilled edge model of group project 3 for the efficient-inference part of <a href="../../projects/index.html#y1-5">Y1.5</a>.</p>
 <h3 id="projects-solo">Solo projects</h3>
 <ol type="1">
@@ -1258,7 +1258,7 @@ N^\star \propto C^{\beta/(\alpha+\beta)}, \qquad D^\star \propto C^{\alpha/(\alp
 <ul>
 <li><em>Implement</em>: an MLP (and, as a stretch, a 4-layer transformer) at widths 128 to 4 096, parametrized with the table of section 9.3 by hand or with Microsoft’s <code>mup</code> package; sweep Adam’s learning rate over powers of 2 at every width, in both parametrizations.</li>
 <li><em>Data and hardware</em>: CIFAR-10 (Krizhevsky 2009) for the MLP, WikiText-2 (Merity et al.&nbsp;2017) for the transformer; a laptop or one free T4.</li>
-<li><em>Deliverables</em>: code, a 4–6 page report with loss-versus-learning-rate curves per width (the paper’s figure 1, redone), a 10-minute talk.</li>
+<li><em>Deliverables</em>: code, a 4–6 page report with loss-versus-learning-rate curves per width (the format of the paper’s figures 1 and 3), a 10-minute talk.</li>
 <li><em>Chapters</em>: ch.&nbsp;1, 9 (exercise 11).</li>
 <li><em>Success</em>: three seeds per point; the optimal learning rate located with an interval at each width; the drift under SP and the stability under µP measured in octaves, or an honest explanation if they do not appear.</li>
 </ul></li>
@@ -1276,9 +1276,9 @@ N^\star \propto C^{\beta/(\alpha+\beta)}, \qquad D^\star \propto C^{\alpha/(\alp
 <li><strong>[Group of 3 · ≈ 30 h each] Recipe or architecture? A fair small-budget ResNet, ConvNeXt and ViT study.</strong> Question: once the training recipe is the same, how much of the gap between the three families — in accuracy and in robustness — is left?
 <ul>
 <li><em>Implement</em>: a ResNet-18, a small ConvNeXt and a ViT with 4 × 4 patches, at about 11 M parameters each, trained on CIFAR-100 under one shared modern recipe (AdamW, RandAugment, mixup, label smoothing) and under their native recipes; replay steps 1–3 of the ConvNeXt table (ch.&nbsp;5) at this scale.</li>
-<li><em>Robustness</em>: PGD-10 and AutoAttack at <span class="math inline">\epsilon = 8/255</span> on 1 000 test images, mean accuracy on CIFAR-100-C (Hendrycks &amp; Dietterich 2019), to test the claim of Bai et al.&nbsp;(2021).</li>
+<li><em>Robustness</em>, to test the claims of Bai et al.&nbsp;(2021): AutoAttack at <span class="math inline">\epsilon = 1/255</span> on the standard-trained models (at <span class="math inline">8/255</span> they all fall to about 0 %); single-step adversarial training at <span class="math inline">\epsilon = 8/255</span> (FGSM with a random start, Wong, Rice &amp; Kolter 2020) of the ResNet and the ViT under the shared recipe, evaluated with PGD-10 and AutoAttack on 1 000 test images; mean accuracy on CIFAR-100-C (Hendrycks &amp; Dietterich 2019).</li>
 <li><em>Split</em>: member A, ResNet and the shared recipe; member B, ViT; member C, ConvNeXt steps and the robustness harness.</li>
-<li><em>Data and hardware</em>: CIFAR-100 and CIFAR-100-C; about 40 T4-hours in all, on the free Kaggle quota of the three members.</li>
+<li><em>Data and hardware</em>: CIFAR-100 and CIFAR-100-C; about 60 T4-hours in all, within the free Kaggle quota of the three members.</li>
 <li><em>Deliverables</em>: code, a 6–8 page report (section 2.3), a 15-minute talk.</li>
 <li><em>Chapters</em>: ch.&nbsp;1, 4, 4.5, 5.</li>
 <li><em>Success</em>: five seeds per configuration with Welch <span class="math inline">t</span>-tests; the recipe effect and the architecture effect reported separately; every robustness claim backed by AutoAttack.</li>
@@ -1344,7 +1344,7 @@ N^{\alpha+\beta} = \frac{\alpha A}{\beta B}\,(C/6)^{\beta},
 <tr class="odd">
 <td>Protocol and statistics</td>
 <td>25 %</td>
-<td>the eight points of definition 1.1: question, hypothesis, fixed split, metric declared in advance, retrained baseline, at least three seeds with intervals and a named test</td>
+<td>definition 1.1 applied: question, hypothesis, fixed split, metric declared in advance, retrained baseline, ablations, at least three seeds with intervals and a named test, compute budget</td>
 </tr>
 <tr class="even">
 <td>Correct implementation and derivations</td>
@@ -1382,6 +1382,7 @@ N^{\alpha+\beta} = \frac{\alpha A}{\beta B}\,(C/6)^{\beta},
 <li>T. Wang, P. Isola, “Understanding Contrastive Representation Learning through Alignment and Uniformity on the Hypersphere”, ICML 2020.</li>
 <li>K. He, X. Chen, S. Xie, Y. Li, P. Dollár, R. Girshick, <a href="https://arxiv.org/abs/2111.06377">Masked Autoencoders Are Scalable Vision Learners</a> (MAE), CVPR 2022.</li>
 <li>H. Bao, L. Dong, F. Wei, <a href="https://arxiv.org/abs/2106.08254">BEiT: BERT Pre-Training of Image Transformers</a>, ICLR 2022.</li>
+<li>M. Caron, H. Touvron, I. Misra, H. Jégou, J. Mairal, P. Bojanowski, A. Joulin, <a href="https://arxiv.org/abs/2104.14294">Emerging Properties in Self-Supervised Vision Transformers</a> (DINO), ICCV 2021.</li>
 <li>M. Oquab et al., <a href="https://arxiv.org/abs/2304.07193">DINOv2: Learning Robust Visual Features without Supervision</a>, 2023.</li>
 <li>A. Howard et al., <a href="https://arxiv.org/abs/1704.04861">MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications</a>, 2017; M. Sandler et al., <a href="https://arxiv.org/abs/1801.04381">MobileNetV2: Inverted Residuals and Linear Bottlenecks</a>, CVPR 2018.</li>
 <li>M. Tan, Q. Le, <a href="https://arxiv.org/abs/1905.11946">EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks</a>, ICML 2019.</li>
@@ -1391,7 +1392,7 @@ N^{\alpha+\beta} = \frac{\alpha A}{\beta B}\,(C/6)^{\beta},
 <li>G. Yang, E. J. Hu et al., <a href="https://arxiv.org/abs/2203.03466">Tensor Programs V: Tuning Large Neural Networks via Zero-Shot Hyperparameter Transfer</a> (µP/muTransfer), NeurIPS 2021.</li>
 <li>D. Picard, <a href="https://arxiv.org/abs/2109.08203">torch.manual_seed(3407) is all you need: On the influence of random seeds in deep learning architectures for computer vision</a>, NeurIPS 2021 (workshop) — an author from l’X; X. Bouthillier et al., “Accounting for Variance in Machine Learning Benchmarks”, MLSys 2021.</li>
 <li>A. Radford et al., <a href="https://arxiv.org/abs/2103.00020">Learning Transferable Visual Models From Natural Language Supervision</a> (CLIP), ICML 2021 — detailed in the Multimodal GenAI module, ch.&nbsp;5.</li>
-<li><strong>Symmetry and robustness (sections 4.4–4.5)</strong>: T. Cohen, M. Welling, <a href="https://arxiv.org/abs/1602.07576">Group Equivariant Convolutional Networks</a>, ICML 2016; S. Kornblith, M. Norouzi, H. Lee, G. Hinton, <a href="https://arxiv.org/abs/1905.00414">Similarity of Neural Network Representations Revisited</a> (CKA), ICML 2019; S. Ainsworth, J. Hayase, S. Srinivasa, <a href="https://arxiv.org/abs/2209.04836">Git Re-Basin: Merging Models modulo Permutation Symmetries</a>, ICLR 2023; I. Goodfellow, J. Shlens, C. Szegedy, <a href="https://arxiv.org/abs/1412.6572">Explaining and Harnessing Adversarial Examples</a>, ICLR 2015; A. Madry et al., <a href="https://arxiv.org/abs/1706.06083">Towards Deep Learning Models Resistant to Adversarial Attacks</a>, ICLR 2018; F. Croce, M. Hein, <a href="https://arxiv.org/abs/2003.01690">Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks</a> (AutoAttack), ICML 2020; D. Hendrycks, T. Dietterich, <a href="https://arxiv.org/abs/1903.12261">Benchmarking Neural Network Robustness to Common Corruptions and Perturbations</a>, ICLR 2019; Y. Bai, J. Mei, A. Yuille, C. Xie, <a href="https://arxiv.org/abs/2111.05464">Are Transformers More Robust Than CNNs?</a>, NeurIPS 2021.</li>
+<li><strong>Symmetry and robustness (sections 4.4–4.5)</strong>: T. Cohen, M. Welling, <a href="https://arxiv.org/abs/1602.07576">Group Equivariant Convolutional Networks</a>, ICML 2016; S. Kornblith, M. Norouzi, H. Lee, G. Hinton, <a href="https://arxiv.org/abs/1905.00414">Similarity of Neural Network Representations Revisited</a> (CKA), ICML 2019; S. Ainsworth, J. Hayase, S. Srinivasa, <a href="https://arxiv.org/abs/2209.04836">Git Re-Basin: Merging Models modulo Permutation Symmetries</a>, ICLR 2023; I. Goodfellow, J. Shlens, C. Szegedy, <a href="https://arxiv.org/abs/1412.6572">Explaining and Harnessing Adversarial Examples</a>, ICLR 2015; A. Madry et al., <a href="https://arxiv.org/abs/1706.06083">Towards Deep Learning Models Resistant to Adversarial Attacks</a>, ICLR 2018; F. Croce, M. Hein, <a href="https://arxiv.org/abs/2003.01690">Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks</a> (AutoAttack), ICML 2020; D. Hendrycks, T. Dietterich, <a href="https://arxiv.org/abs/1903.12261">Benchmarking Neural Network Robustness to Common Corruptions and Perturbations</a>, ICLR 2019; Y. Bai, J. Mei, A. Yuille, C. Xie, <a href="https://arxiv.org/abs/2111.05464">Are Transformers More Robust Than CNNs?</a>, NeurIPS 2021; E. Wong, L. Rice, J. Z. Kolter, <a href="https://arxiv.org/abs/2001.03994">Fast is better than free: Revisiting adversarial training</a>, ICLR 2020.</li>
 <li><strong>Neural fields and analysis-by-synthesis (sections 10.1–10.2)</strong>: B. Mildenhall et al., <a href="https://arxiv.org/abs/2003.08934">NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis</a>, ECCV 2020; M. Tancik et al., <a href="https://arxiv.org/abs/2006.10739">Fourier Features Let Networks Learn High Frequency Functions in Low Dimensional Domains</a>, NeurIPS 2020; V. Sitzmann et al., <a href="https://arxiv.org/abs/2006.09661">Implicit Neural Representations with Periodic Activation Functions</a> (SIREN), NeurIPS 2020; S. Liu, T. Li, W. Chen, H. Li, <a href="https://arxiv.org/abs/1904.01786">Soft Rasterizer: A Differentiable Renderer for Image-based 3D Reasoning</a>, ICCV 2019.</li>
 <li><strong>Amortized inference and sampling (sections 10.3–10.4)</strong>: C. Cremer, X. Li, D. Duvenaud, <a href="https://arxiv.org/abs/1801.03558">Inference Suboptimality in Variational Autoencoders</a>, ICML 2018; Y. Kim et al., <a href="https://arxiv.org/abs/1802.02550">Semi-Amortized Variational Autoencoders</a>, ICML 2018; A. Katharopoulos, F. Fleuret, <a href="https://arxiv.org/abs/1803.00942">Not All Samples Are Created Equal: Deep Learning with Importance Sampling</a>, ICML 2018; J. Ho, T. Salimans, <a href="https://arxiv.org/abs/2207.12598">Classifier-Free Diffusion Guidance</a>, 2022; J. Song, C. Meng, S. Ermon, <a href="https://arxiv.org/abs/2010.02502">Denoising Diffusion Implicit Models</a>, ICLR 2021.</li>
 <li><strong>Deep learning and physics (section 10.5)</strong>: M. Raissi, P. Perdikaris, G. E. Karniadakis, “Physics-informed neural networks”, <em>Journal of Computational Physics</em> 378, 2019; J. Sohl-Dickstein et al., <a href="https://arxiv.org/abs/1503.03585">Deep Unsupervised Learning using Nonequilibrium Thermodynamics</a>, ICML 2015.</li>
