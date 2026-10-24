@@ -221,17 +221,22 @@ A linear probe reads "sentiment" from layer 6 with 95% accuracy, and a slide con
 :::
 
 ```python
-import torch, torch.nn.functional as F
+import torch
+from transformers import GPT2Model, GPT2TokenizerFast
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
-model = GPT2.from_pretrained("gpt2").eval()          # frozen
+tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+tokenizer.pad_token = tokenizer.eos_token            # GPT-2 has no pad token
+model = GPT2Model.from_pretrained("gpt2").eval()     # frozen
 
 @torch.no_grad()
 def states(texts, layer=6):                          # residual stream activations
-    out = model(input_ids=tokenizer(texts, return_tensors="pt").input_ids,
-                output_hidden_states=True)
-    return out.hidden_states[layer][:, -1].numpy()   # last token
+    batch = tokenizer(texts, return_tensors="pt", padding=True)   # right padding
+    out = model(**batch, output_hidden_states=True)
+    last = batch["attention_mask"].sum(1) - 1        # last real token, not a pad
+    h = out.hidden_states[layer]                     # (n, T, d)
+    return h[torch.arange(h.shape[0]), last].numpy()
 
 X = states(phrases)                                  # (n, d=768)
 Xtr, Xte, ytr, yte = train_test_split(X, pos_tags, test_size=.2)
@@ -241,7 +246,9 @@ print("probe accuracy:", probe.score(Xte, yte))          # ~0.9 on POS in layer 
 
 ### 1.1. What probes have revealed
 
-Alain & Bengio (2016) launched the method: the loss of a linear probe per layer decreases with depth, then rises again toward the output layer — the model "solves" the task at intermediate layers then projects onto the vocabulary. Since then, probes have mapped: early syntactic positions, named entities, world-fact relations ("the Eiffel Tower is in Paris") manipulated by *subspace edits*, linearly decodable language and sentiment... The emerging hypothesis: the residual stream is a communication channel where each head writes to and reads from relatively linear subspaces.
+Alain & Bengio (2016) launched the method on image classifiers: the linear separability of the classes increases monotonically with depth. Probes of transformer language models later found another profile: linguistic properties peak at intermediate layers and fade toward the output, whose layers specialize in predicting the next token (Liu et al., NAACL 2019; Tenney, Das & Pavlick, ACL 2019, for the order in which properties appear).
+
+Since then, probes have mapped: early syntactic positions, named entities, world-fact relations ("the Eiffel Tower is in Paris") manipulated by *subspace edits*, linearly decodable language and sentiment... The emerging hypothesis: the residual stream is a communication channel where each head writes to and reads from relatively linear subspaces.
 
 ### 1.2. The trap: information ≠ use
 
@@ -256,7 +263,17 @@ High accuracy with low selectivity = the probe memorizes, not the model; only a 
 :::
 
 ::: note
-[Correlation is not causation — and the causal proof]{.tag} To take the step, one *intervenes*: **amnesia** (remove the information from $h$ by projection, re-measure the model's performance — if it drops, the information was *used*), head ablation, patching of activations between runs (activation patching). Rule of the module: an interpretability case is closed only when the intervention confirms the correlation. See Belinkov (2022) for a survey of the promises and failures of the method.
+[Correlation is not causation — and the causal proof]{.tag} To take the step, one *intervenes*: **amnesic probing** (remove the information from $h$ by projection, re-measure the model's performance — if it drops, the information was *used*; Elazar et al., 2021), head ablation, or activation patching (Definition 1.3). Rule of the module: an interpretability case is closed only when the intervention confirms the correlation. See Belinkov (2022) for a survey of the promises and failures of the method.
+:::
+
+::: def
+[Definition 1.3 — Activation patching (Meng et al., 2022; Wang et al., 2023)]{.tag} Run the model on a *clean* prompt $x$ and on a *corrupted* prompt $\tilde x$ that differs only in the information studied ("The Eiffel Tower is in" against "The Colosseum is in").
+
+Cache the activation $a(x)$ of one component — a head, an MLP output, or the residual stream at a given layer and position — then rerun on $\tilde x$ with that activation overwritten by $a(x)$. With $m$ a metric of the output, such as the logit difference between the two answers, the restored fraction is
+$$
+\mathrm{effect}(a) \;=\; \frac{m(\tilde x;\ a \leftarrow a(x)) - m(\tilde x)}{m(x) - m(\tilde x)} .
+$$
+An effect near 1 says that the component carries the information *and* that the model uses it at that place; scanning every layer and position gives a causal map of the computation.
 :::
 
 ## 2. Reading the layers: logit lens, attention and its limits {#ch2}
