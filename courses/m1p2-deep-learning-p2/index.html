@@ -288,6 +288,7 @@ window.Quarto = {
 <li><strong>Theoretical complexity of training</strong> — the lower bounds that say what no trick will ever beat, once the systems side is known.</li>
 <li><strong>Research readings: lower bounds and Lipschitz regularity</strong> — the papers of K. Scaman and co-authors behind chapter 8 and section 7.1 (not the works of the official team), read with the module’s tools.</li>
 <li><strong>Exercises</strong> — counts, bounds and parallelism choices to defend.</li>
+<li><strong>Projects and assessment</strong> — solo and group subjects that measure what the course counts, a written-exam proposal and a grading rubric.</li>
 <li><strong>References</strong> — the systems and theory papers underlying each chapter.</li>
 </ul>
 <h3 id="sessions">Session plan</h3>
@@ -337,7 +338,7 @@ window.Quarto = {
 <td>4</td>
 <td>3 h</td>
 <td>2</td>
-<td>ch.&nbsp;1 Training memory, scaling laws, the GPU memory hierarchy; convolutional networks and translation equivariance (official 4)</td>
+<td>ch.&nbsp;1 Training memory, the GPU memory hierarchy, scaling laws; convolutional networks and translation equivariance (official 4)</td>
 <td>lab: counting a ResNet stage; Ex. 8</td>
 </tr>
 <tr class="odd">
@@ -650,7 +651,7 @@ m_k = \beta_1 m_{k-1} + (1-\beta_1)\, g_k, \qquad v_k = \beta_2 v_{k-1} + (1-\be
 <div class="prop">
 <p><span class="tag">Proposition 0.11 — Gradient descent versus Nesterov acceleration (Nesterov 1983, 2004; stated)</span> Let <span class="math inline">f</span> be <span class="math inline">L</span>-smooth and <span class="math inline">\mu</span>-strongly convex, with condition number <span class="math inline">\kappa = L/\mu</span>.</p>
 <ul>
-<li>Gradient descent with step <span class="math inline">1/L</span> needs <span class="math inline">O(\kappa\ln(1/\varepsilon))</span> gradient evaluations to reach accuracy <span class="math inline">\varepsilon</span> (proved in the <a href="../m1p1-machine-learning/index.html#gd-sgd">Machine Learning</a> course, theorem 0.5, with the convex SGD rate).</li>
+<li>Gradient descent with step <span class="math inline">1/L</span> needs <span class="math inline">O(\kappa\ln(1/\varepsilon))</span> gradient evaluations to reach accuracy <span class="math inline">\varepsilon</span> (theorem 0.5 of the <a href="../m1p1-machine-learning/index.html#gd-sgd">Machine Learning</a> course, proved there for quadratics, next to the convex SGD rate).</li>
 <li>Nesterov’s accelerated gradient needs only <span class="math inline">O(\sqrt{\kappa}\ln(1/\varepsilon))</span>: <span class="math display">
 y_k = x_k + \frac{\sqrt\kappa - 1}{\sqrt\kappa + 1}\,(x_k - x_{k-1}), \qquad x_{k+1} = y_k - \frac1L\nabla f(y_k).
 </span></li>
@@ -743,7 +744,7 @@ H = X + \mathrm{MHA}\big(\mathrm{LN}(X)\big), \qquad Y = H + \mathrm{MLP}\big(\m
 <span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="bu">sum</span>(p.numel() <span class="cf">for</span> p <span class="kw">in</span> Block().parameters()))   <span class="co"># 7,087,872 = 12 d^2 + 13 d</span></span></code></pre></div>
 <p><strong>LoRA in five lines</strong> (Hu et al.&nbsp;2022). Fine-tuning all the weights costs the full 16 bytes per parameter of ch.&nbsp;1 (definition 1.4). LoRA freezes each pretrained matrix <span class="math inline">W_0</span>, of size <span class="math inline">d_\mathrm{out} \times d_\mathrm{in}</span>, and learns a low-rank correction: <span class="math display">
-W = W_0 + BA, \qquad B \in \mathbb{R}^{d_\mathrm{out} \times r}, \quad A \in \mathbb{R}^{r \times d_\mathrm{in}}, \quad r \ll d .
+W = W_0 + BA, \qquad B \in \mathbb{R}^{d_\mathrm{out} \times r}, \quad A \in \mathbb{R}^{r \times d_\mathrm{in}}, \quad r \ll \min(d_\mathrm{in}, d_\mathrm{out}) .
 </span></p>
 <p><span class="math inline">B</span> starts at zero, so training starts from the pretrained model. Only <span class="math inline">r(d_\mathrm{in} + d_\mathrm{out})</span> parameters per matrix receive gradients and Adam states. After training, <span class="math inline">BA</span> is added into <span class="math inline">W_0</span>, so inference costs nothing extra.</p>
 <p>For <span class="math inline">d_\mathrm{in} = d_\mathrm{out} = 4096</span> and <span class="math inline">r = 8</span>: <span class="math inline">65\,536</span> trainable parameters instead of <span class="math inline">16.8</span> M per matrix, <span class="math inline">256</span> times fewer.</p>
@@ -753,10 +754,6 @@ W = W_0 + BA, \qquad B \in \mathbb{R}^{d_\mathrm{out} \times r}, \quad A \in \ma
 <p><span class="tag">What breaks</span> Three confusions cost the most: mixing up a FLOP count and a FLOP/s throughput, forgetting that memory bandwidth (not compute) often sets the speed, and adding GPUs without checking what Amdahl’s law allows.</p>
 </div>
 <p>The point of counting by hand: An engineer who can estimate the FLOPs of a training run by hand saves GPU-days — and catches configuration errors before they explode.</p>
-<div class="note">
-<p><span class="tag">The GPU memory hierarchy, in one box</span> A GPU computes in its streaming multiprocessors, each with registers and a small on-chip SRAM: 192 KB per multiprocessor on an A100, about 20 MB in all, read at roughly 19 TB/s. Behind them sit a 40 MB L2 cache and the HBM, the “GPU memory” of <code>nvidia-smi</code>: 80 GB at about 2 TB/s (figures of Dao et al.&nbsp;2022).</p>
-<p>Beyond the card, NVLink joins the GPUs of a node (600 GB/s per A100), InfiniBand joins nodes (about 25 GB/s per link) and PCIe reaches the host memory (about 32 GB/s). Each step down is roughly ten times slower and much larger. Every count of this module — the 16 bytes per parameter, the KV cache, the all-reduce, the roofline of ch.&nbsp;6 — asks at which level the bytes live and how often they cross a boundary.</p>
-</div>
 <div class="def">
 <p><span class="tag">Definition 1.1 — Units: FLOP, FLOPs, FLOP/s</span> A <strong>FLOP</strong> (floating-point operation) = one elementary operation (+, ×); we count a multiply-add <span class="math inline">a \cdot b + c</span> as <strong>2 FLOPs</strong> (the module’s convention, aligned with the systems literature); <strong>FLOP/s</strong> = throughput.</p>
 <p>An A100 GPU: ≈ 19.5 TFLOP/s fp32, 312 TFLOP/s tensor-core bf16; an H100: ≈ 1000 TFLOP/s bf16 (sparse modes excluded).</p>
@@ -853,6 +850,10 @@ C \;\approx\; 6\,N\,D \;\;\text{FLOPs} \qquad (\text{forward} \approx 2ND,\; \te
 </table>
 <p>The activation line follows Korthikanti et al.&nbsp;(2022): a transformer layer keeps about <span class="math inline">34\,d</span> bytes per token in bf16, plus a term that grows with the context length when the attention scores are stored.</p>
 <p>Order of magnitude to remember: <strong>16 bytes per parameter</strong> of states + activations. A 7B model with Adam: <span class="math inline">7\times10^9 \times 16</span> ≈ 112&nbsp;GB — before any activation: a single 80&nbsp;GB GPU is not enough (ch.&nbsp;4 and 6).</p>
+</div>
+<div class="note">
+<p><span class="tag">The GPU memory hierarchy, in one box</span> A GPU computes in its streaming multiprocessors, each with registers and a small on-chip SRAM: 192 KB per multiprocessor on an A100, about 20 MB in all, read at roughly 19 TB/s. Behind them sit a 40 MB L2 cache and the HBM, the “GPU memory” of <code>nvidia-smi</code>: 80 GB at about 2 TB/s (figures of Dao et al.&nbsp;2022).</p>
+<p>Beyond the card, NVLink joins the GPUs of a node (600 GB/s per A100), InfiniBand joins nodes (about 25 GB/s per link) and PCIe reaches the host memory (about 32 GB/s). Each step down is several to tens of times slower, and much larger. Every count of this module — the 16 bytes per parameter, the KV cache, the all-reduce, the roofline of ch.&nbsp;6 — asks at which level the bytes live and how often they cross a boundary.</p>
 </div>
 <div class="note">
 <p><span class="tag">Scaling laws: from Kaplan to Chinchilla (the budget as a primary dimension)</span> <strong>Kaplan et al.&nbsp;2020</strong>: over decades, the loss follows a power law <span class="math display">
@@ -1452,7 +1453,7 @@ Q^\star(s, a) = r(s, a) + \gamma\,\mathbb{E}_{s' \sim P(\cdot \mid s, a)}\max_{a
 <li><strong>Deep Q-networks</strong> (Mnih et al.&nbsp;2015; <a href="../m1p2-reinforcement-learning/index.html#ch6">RL, algorithm 6.1</a>) fit a network <span class="math inline">Q_\theta</span> by minimizing, over transitions <span class="math inline">(s, a, r, s')</span> drawn from a <strong>replay buffer</strong>, <span class="math display">
 \big(r + \gamma\max_{a'}Q_{\theta^-}(s', a') - Q_\theta(s, a)\big)^2 ,
 </span> where the <strong>target network</strong> <span class="math inline">\theta^-</span> is a copy of <span class="math inline">\theta</span> refreshed every few thousand steps.</li>
-<li><strong>Theorem 7.5 — Policy gradient</strong> (REINFORCE, Williams 1992; <a href="../m1p2-reinforcement-learning/index.html#ch5">RL, theorem 5.1</a>). For a differentiable policy <span class="math inline">\pi_\theta</span>, a horizon <span class="math inline">H</span> and <span class="math inline">J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[G(\tau)]</span>, for any constant baseline <span class="math inline">b</span>, <span class="math display">
+<li><strong>Theorem 7.5 — Policy gradient</strong> (REINFORCE, Williams 1992; <a href="../m1p2-reinforcement-learning/index.html#ch5">RL, theorem 5.1</a>). For a differentiable policy <span class="math inline">\pi_\theta</span>, trajectories of <span class="math inline">H</span> steps (the return <span class="math inline">G(\tau)</span> then sums over <span class="math inline">t &lt; H</span>) and <span class="math inline">J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}[G(\tau)]</span>, for any constant baseline <span class="math inline">b</span>, <span class="math display">
 \nabla J(\theta) = \mathbb{E}_{\tau \sim \pi_\theta}\Big[\big(G(\tau) - b\big)\sum_{t=0}^{H-1}\nabla_\theta\log\pi_\theta(a_t \mid s_t)\Big].
 </span> The dynamics are neither known nor differentiated: only <span class="math inline">\log \pi_\theta</span> is (the log-derivative trick).</li>
 </ul>
@@ -1768,7 +1769,7 @@ T \;=\; \Omega\!\Big(\sqrt{\kappa}\,\Big(1 + \frac{\tau}{\sqrt{\delta_W}}\Big)\l
 \varepsilon^\star(x_t, t) = \frac{\sqrt{1 - \bar\alpha_t}}{\bar\alpha_t s^2 + 1 - \bar\alpha_t}\,x_t .
 </span></p>
 <p><strong>(b)</strong> Implement the ancestral sampler of definition 7.13 with <span class="math inline">\varepsilon^\star</span>, 100 steps, <span class="math inline">\beta_t</span> linear from 0.001 to 0.2 and <span class="math inline">\sigma_t^2 = \beta_t</span>. From 100 000 noise draws, compare the standard deviation of the samples with <span class="math inline">s</span>, for <span class="math inline">s = 0.5</span> and <span class="math inline">s = 2</span>.</p>
-<p><strong>(c)</strong> Train an MLP <span class="math inline">\varepsilon_\theta(x_t, t)</span> (three hidden layers of <span class="math inline">128</span> units, input <span class="math inline">(x_t, t/T_\mathrm{diff})</span>) on scikit-learn’s <code>make_moons</code> (noise <span class="math inline">0.05</span>, standardized), then sample <span class="math inline">2\,000</span> points and compare them with the data.</p>
+<p><strong>(c)</strong> With the schedule of (b), train an MLP <span class="math inline">\varepsilon_\theta(x_t, t)</span> (three hidden layers of <span class="math inline">128</span> units, input <span class="math inline">(x_t, t/T_\mathrm{diff})</span>) on scikit-learn’s <code>make_moons</code> (noise <span class="math inline">0.05</span>, standardized), then sample <span class="math inline">2\,000</span> points and compare them with the data.</p>
 <p><em>Solution</em>: (a) the minimizer is the conditional mean <span class="math inline">\mathbb{E}[\varepsilon \mid x_t]</span>. The pair <span class="math inline">(\varepsilon, x_t)</span> is Gaussian, with covariance <span class="math inline">\sqrt{1 - \bar\alpha_t}</span> and <span class="math inline">\mathrm{Var}\,x_t = \bar\alpha_t s^2 + 1 - \bar\alpha_t</span>.</p>
 <ol start="2" type="a">
 <li><p>About 0.51 and 1.98 (0.47 and 1.94 with <span class="math inline">\sigma_t^2 = \tilde\beta_t</span>): each reverse mean is exact for Gaussian data, its variance only approximately.</p></li>
@@ -1791,7 +1792,7 @@ T \;=\; \Omega\!\Big(\sqrt{\kappa}\,\Big(1 + \frac{\tau}{\sqrt{\delta_W}}\Big)\l
 </ol>
 <h2 id="projects">Projects and assessment</h2>
 <p><strong>Official assessment.</strong> The fiche above quotes the SynapseS 2026–2027 sheet: a numerical grade out of 20, “validation by project” stated for the engineering degree and the exchange programmes, a resit allowed (the better of the two grades is kept), and the course unit earned at 10/20. The modalities specific to the LLGA track are <strong>not displayed</strong>: that section of the sheet is empty. Everything below is our proposal, built to fit a validation by project: subjects, a written exam and a rubric.</p>
-<p>The projects exercise the master objectives <strong>O1</strong> (deep learning foundations), <strong>O3</strong> (large language models, through their training and serving budgets) and <strong>O7</strong> (hands-on practice: profiling, distributed training, serving), and <strong>O2</strong> (generative modelling) through the diffusion sampler of section 7.3. Their measured numbers are meant to fill the compute-budget line of the end-of-year capstone projects.</p>
+<p>The projects exercise the master objectives <strong>O1</strong> (deep learning foundations), <strong>O3</strong> (large language models, through their training and serving budgets) and <strong>O7</strong> (hands-on practice: profiling, distributed training, serving), and <strong>O2</strong> (generative modelling) through the diffusion sampler of section 7.3. Their measured numbers are meant to fill the compute-budget line of the charter of the <a href="../../projects/index.html#charter">end-of-year projects</a>.</p>
 <h3 id="projects-solo">Solo projects</h3>
 <ol type="1">
 <li><strong>[Solo · ≈ 25 h] Count, then measure: 6ND, memory and the roofline on GPT-2 small.</strong> Question: how close do the counts of ch.&nbsp;1 come to a profiler on a real model, and why do they miss where they miss?
@@ -1823,16 +1824,16 @@ T \;=\; \Omega\!\Big(\sqrt{\kappa}\,\Big(1 + \frac{\tau}{\sqrt{\delta_W}}\Big)\l
 <ol type="1">
 <li><strong>[Group of 3 · ≈ 30 h each] From DDP to ZeRO-3: measuring the all-reduce term and Amdahl’s ceiling.</strong> Question: does the ring formula of theorem 3.2 predict the step time of real data-parallel training, and when does sharding pay?
 <ul>
-<li><em>Implement</em>: train GPT-2 small (or the ResNet-18 of ch.&nbsp;0) with DDP, ZeRO-2 (<code>ZeroRedundancyOptimizer</code> or DeepSpeed) and FSDP full sharding (Zhao et al.&nbsp;2023), on 1 and 2 GPUs (Kaggle’s free 2 × T4), and on 2 to 8 CPU processes with the <code>gloo</code> backend for the communication fit.</li>
+<li><em>Implement</em>: train GPT-2 small (or the ResNet-18 of ch.&nbsp;0) with DDP, ZeRO-1 (PyTorch’s <code>ZeroRedundancyOptimizer</code>), ZeRO-2 (FSDP’s <code>SHARD_GRAD_OP</code> or DeepSpeed) and FSDP full sharding (Zhao et al.&nbsp;2023), on 1 and 2 GPUs (Kaggle’s free 2 × T4), and on 2 to 8 CPU processes with the <code>gloo</code> backend for the communication fit.</li>
 <li><em>Measure</em>: step time with error bars; the bandwidth term of theorem 3.2, fitted from all-reduce micro-benchmarks; the gain of overlap and of the bucket size; an Amdahl serial fraction (prop. 6.3); memory per GPU against definition 4.2.</li>
-<li><em>Split</em>: member A, DDP and the all-reduce benchmarks; member B, ZeRO-2 and FSDP memory; member C, the fits, Amdahl and the decision tree.</li>
+<li><em>Split</em>: member A, DDP and the all-reduce benchmarks; member B, ZeRO-1, ZeRO-2 and FSDP memory; member C, the fits, Amdahl and the decision tree.</li>
 <li><em>Deliverables</em>: code, a 6-page report, the decision tree of ch.&nbsp;2 annotated with the group’s own numbers, a 15-minute talk.</li>
 <li><em>Chapters</em>: ch.&nbsp;2, 3, 4, 6; extends exercise 11.</li>
 <li><em>Success</em>: a fitted bandwidth within a factor 2 of the nominal link, and memory per GPU within 10 % of definition 4.2 plus the measured activations.</li>
 </ul></li>
 <li><strong>[Group of 3 · ≈ 30 h each] Serving a small LLM under a budget: quantization, speculative decoding, batching.</strong> It connects this course to <a href="../m2-large-language-models/index.html#ch6">Large Language Models</a> (ch.&nbsp;6) and <a href="../m2-mlops-llm-engineering/index.html#ch3">ML Ops and LLM Engineering</a> (ch.&nbsp;3). Question: which combination of levers gives the best quality–latency–throughput–energy trade-off on one free GPU?
 <ul>
-<li><em>Implement</em>: serve Qwen2.5-1.5B-Instruct with Hugging Face <code>transformers</code>, separating time to first token (prefill) from time per output token (decode); int8 and 4-bit weights (<code>bitsandbytes</code>, Dettmers et al.&nbsp;2022); speculative decoding with Qwen2.5-0.5B-Instruct as draft model; static batches of 1 to 32 requests.</li>
+<li><em>Implement</em>: serve Qwen2.5-1.5B-Instruct with Hugging Face <code>transformers</code>, separating time to first token (prefill) from time per output token (decode); int8 and 4-bit weights (<code>bitsandbytes</code>: LLM.int8() of Dettmers et al.&nbsp;2022, NF4 of Dettmers et al.&nbsp;2023); speculative decoding with Qwen2.5-0.5B-Instruct as draft model; static batches of 1 to 32 requests.</li>
 <li><em>Measure</em>: the acceptance rate against example 5.3, and the four columns of example 5.4 — perplexity on WikiText-2 and accuracy on 500 HellaSwag questions, p50 and p99 latency, tokens per second, energy from <code>nvidia-smi</code> power readings.</li>
 <li><em>Split</em>: member A, quantization; member B, speculative decoding; member C, batching, the measurement harness and energy.</li>
 <li><em>Deliverables</em>: code, a 6-page report, a 15-minute talk built on the four-column table.</li>
@@ -1841,8 +1842,8 @@ T \;=\; \Omega\!\Big(\sqrt{\kappa}\,\Big(1 + \frac{\tau}{\sqrt{\delta_W}}\Big)\l
 </ul></li>
 <li><strong>[Group of 4 · ≈ 30 h each] Paper study: a Chinchilla sweep at small scale (Hoffmann et al.&nbsp;2022).</strong> Question: does the compute-optimal ratio of ch.&nbsp;1, about 20 tokens per parameter, hold for tiny language models trained on simple text?
 <ul>
-<li><em>Implement</em>: a family of causal transformers built from the block of ch.&nbsp;0, from 1 to 30 M parameters. At three budgets of about <span class="math inline">10^{15}</span>, <span class="math inline">10^{16}</span> and <span class="math inline">5 \times 10^{16}</span> FLOPs (counted as <span class="math inline">6ND</span>), train five or six models of different sizes each; fit the IsoFLOP minima and the law <span class="math inline">L(N, D) = E + A/N^\alpha + B/D^\beta</span>.</li>
-<li><em>Data and hardware</em>: TinyStories (Eldan &amp; Li 2023); one or two free T4 GPUs, under 10 GPU-hours in all.</li>
+<li><em>Implement</em>: a family of causal transformers built from the block of ch.&nbsp;0, from 1 to 60 M parameters, so that each budget’s optimum (about 3, 9 and 20 M at 20 tokens per parameter) is bracketed. At three budgets of about <span class="math inline">10^{15}</span>, <span class="math inline">10^{16}</span> and <span class="math inline">5 \times 10^{16}</span> FLOPs (counted as <span class="math inline">6ND</span>), train five or six models of different sizes each; fit the IsoFLOP minima and the law <span class="math inline">L(N, D) = E + A/N^\alpha + B/D^\beta</span>.</li>
+<li><em>Data and hardware</em>: TinyStories (Eldan &amp; Li 2023); one or two free T4 GPUs, about <span class="math inline">4 \times 10^{17}</span> FLOPs and 10 GPU-hours in all.</li>
 <li><em>Split</em>: member A, data and tokenizer; member B, model family and training loop; member C, the sweep and the fits; member D, evaluation and sampling.</li>
 <li><em>Deliverables</em>: code, a 6-page report with perplexities and samples under temperature and nucleus sampling (example 1.16), a 15-minute talk.</li>
 <li><em>Chapters</em>: ch.&nbsp;0, 1, 6.</li>
@@ -1953,7 +1954,7 @@ T \;=\; \Omega\!\Big(\sqrt{\kappa}\,\Big(1 + \frac{\tau}{\sqrt{\delta_W}}\Big)\l
 <li>V. Sanh, L. Debut, J. Chaumond, T. Wolf, <a href="https://arxiv.org/abs/1910.01108">DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter</a>, 2019 — distillation figures of prop. 5.2.</li>
 <li>T. Miyato, T. Kataoka, M. Koyama, Y. Yoshida, <a href="https://arxiv.org/abs/1802.05957">Spectral Normalization for Generative Adversarial Networks</a>, ICLR 2018; D. Hendrycks, T. Dietterich, <a href="https://arxiv.org/abs/1903.12261">Benchmarking Neural Network Robustness to Common Corruptions and Perturbations</a>, ICLR 2019 — CIFAR-10-C (projects).</li>
 <li>R. Eldan, Y. Li, <a href="https://arxiv.org/abs/2305.07759">TinyStories: How Small Can Language Models Be and Still Speak Coherent English?</a>, 2023; A. Radford et al., <a href="https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf">Language Models are Unsupervised Multitask Learners</a> (GPT-2), 2019 — projects.</li>
-<li>Y. Zhao et al., <a href="https://arxiv.org/abs/2304.11277">PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel</a>, VLDB 2023; T. Dettmers et al., <a href="https://arxiv.org/abs/2208.07339">LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale</a>, NeurIPS 2022 — projects.</li>
+<li>Y. Zhao et al., <a href="https://arxiv.org/abs/2304.11277">PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel</a>, VLDB 2023; T. Dettmers et al., <a href="https://arxiv.org/abs/2208.07339">LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale</a>, NeurIPS 2022; T. Dettmers, A. Pagnoni, A. Holtzman, L. Zettlemoyer, <a href="https://arxiv.org/abs/2305.14314">QLoRA: Efficient Finetuning of Quantized LLMs</a>, NeurIPS 2023 — projects.</li>
 <li><a href="https://pytorch.org/tutorials/distributed.html">PyTorch Distributed (DDP/FSDP)</a> and <a href="https://developer.nvidia.com/nccl-guide">NCCL</a> — the lab tools.</li>
 </ul>
 
